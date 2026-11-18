@@ -1,18 +1,62 @@
 ---
 name: fix-issue
 description: >-
-  이슈 번호를 받아 코딩부터 브랜치 생성, PR 작성, 2단계 적대적 코드리뷰, 수정, 후속 이슈 생성 문의, 커밋까지 일괄 처리하는 워크플로우를 실행합니다.
+  이슈 번호를 받아 마일스톤 이슈와 서브이슈를 구분하여 자동 처리합니다.
+  마일스톤 이슈는 main에서 브랜치 및 PR을 생성하며,
+  서브이슈는 코딩, 브랜치 생성, PR 작성, 2단계 적대적 코드리뷰, 수정, 후속 이슈 문의, 커밋까지 일괄 처리합니다.
   사용자가 `/fix-issue <번호>` 또는 `fix-issue <번호>`를 입력하거나 특정 이슈 해결을 요청할 때 사용합니다.
 ---
 
 # 이슈 처리 및 적대적 코드리뷰 자동화 워크플로우 (`/fix-issue <번호>`)
 
 이 스킬은 GitHub 이슈를 처리할 때 엄격한 품질 보증 및 표준 프로세스를 준수하기 위한 절차를 정의합니다.
-명령어 형태: `/fix-issue <번호>` (예: `/fix-issue 7`)
+명령어 형태: `/fix-issue <번호>` (예: `/fix-issue 1`, `/fix-issue 7`)
 
 ---
 
-## 🔄 워크플로우 진행 순서
+## 🔀 분기 기준: 마일스톤 이슈 vs 서브이슈
+
+이슈 번호 조회 시 라벨(`labels`)과 제목을 확인하여 두 가지 모드 중 하나로 자동 분기합니다:
+
+- **모드 A: 마일스톤 이슈 (`milestone` 라벨 보유 시)**
+  - `main`에서 마일스톤 통합 브랜치 생성 ➡️ 빈 커밋 추가 ➡️ 원격 푸시 ➡️ `main` 대상 PR 생성 ➡️ **코딩/리뷰 없이 즉시 종료**
+- **모드 B: 일반 서브이슈 (`sub-issue` 라벨 또는 Parent 이슈 보유 시)**
+  - 코딩 ➡️ 브랜치 생성 ➡️ PR 작성 ➡️ 적대적 코드리뷰 1R ➡️ 수정 ➡️ 적대적 코드리뷰 2R ➡️ 수정 ➡️ 후속 이슈 문의 ➡️ 커밋/푸시
+
+---
+
+## 🅰️ 모드 A: 마일스톤 이슈 처리 절차 (코딩/리뷰 불필요)
+
+1. **이슈 정보 조회**:
+   ```bash
+   gh issue view <번호> --json number,title,body,labels,milestone
+   ```
+2. **마일스톤 브랜치 이름 결정**:
+   - 예: M1 이슈(#1)인 경우 `milestone/m1`, M2(#2)인 경우 `milestone/m2`
+3. **`main`에서 마일스톤 브랜치 생성 및 초기 커밋**:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b milestone/m<번호>
+   git commit --allow-empty -m "chore: Initialize milestone M<번호> integration branch (#<번호>)"
+   git push -u origin milestone/m<번호>
+   ```
+4. **마일스톤 PR 생성**:
+   - **Target (Base)**: `main`
+   - **Head**: `milestone/m<번호>`
+   - **Title**: `<이슈 제목> (#<번호>)`
+   - **Body**: 마일스톤 목표 요약 및 `Closes #<번호>` 포함
+   - **Label**: `milestone`
+   - **Milestone**: 해당 마일스톤 설정
+   - **Project**: `AltCalc FX-991` 등록
+   ```bash
+   gh pr create --base main --head milestone/m<번호> --title "<이슈 제목> (#<번호>)" --body "## 마일스톤 통합 PR%0A%0ACloses #<번호>" --label "milestone" --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+   ```
+5. **완료 보고**: 마일스톤 PR 생성 결과(URL 및 전체 플랫폼 CI 연동 상황)를 사용자에게 보고하고 종료합니다.
+
+---
+
+## 🅱️ 모드 B: 서브이슈 처리 절차 (코딩 & 2단계 적대적 리뷰)
 
 ```
 [1. 이슈 정보 분석]
