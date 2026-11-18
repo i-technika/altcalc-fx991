@@ -1,14 +1,13 @@
 ---
 name: open-ms
 description: >-
-  마일스톤 에픽 번호를 받아 main 브랜치를 베이스로 마일스톤 브랜치를 분기하고 원격에 푸시합니다.
-  별도의 CI는 수행하지 않으며 프로젝트 보드 상태를 갱신합니다.
+  마일스톤 에픽 번호를 받아 main 브랜치를 베이스로 마일스톤 브랜치를 분기하고, 마일스톤 PR(Draft)을 생성하여 라벨, 프로젝트, 마일스톤, Development를 연결합니다.
   사용자가 `/open-ms <번호>` 또는 `open-ms <번호>`를 입력할 때 사용합니다.
 ---
 
-# 마일스톤 착수 및 브랜치 생성 스킬 (`/open-ms <번호>`)
+# 마일스톤 착수 및 PR 생성 스킬 (`/open-ms <번호>`)
 
-이 스킬은 새로운 마일스톤을 시작할 때 `main` 브랜치로부터 마일스톤 전용 통합 브랜치를 분기하고 원격에 설정하는 역할을 담당합니다.
+이 스킬은 새로운 마일스톤을 시작할 때 `main` 브랜치로부터 마일스톤 전용 통합 브랜치를 분기하고, 마일스톤 통합 PR(Draft)을 생성하여 이슈 및 프로젝트 메타데이터를 연결하는 역할을 담당합니다.
 
 명령어 형태: `/open-ms <번호>` (예: `/open-ms 1`)
 
@@ -23,13 +22,22 @@ description: >-
 [2. main 최신화 및 마일스톤 브랜치 생성 (milestone/m<번호>)]
        │
        ▼
-[3. 초기 빈 커밋 생성 & 원격 푸시 (CI 미수행)]
+[3. 초기 빈 커밋 생성 & 원격 푸시]
        │
        ▼
-[4. 프로젝트 보드 상태를 In Progress로 갱신]
+[4. 마일스톤 PR(Draft) 생성 및 메타데이터 연결]
+    - Base: main / Head: milestone/m<번호>
+    - Label: milestone
+    - Milestone: 해당 마일스톤
+    - Project: AltCalc FX-991
+    - Development 연결: Closes #<번호>
+    - Draft 모드 (마일스톤 CI 미수행)
        │
        ▼
-[5. 완료 보고 및 서브이슈 안내]
+[5. 프로젝트 보드 상태를 In Progress로 갱신]
+       │
+       ▼
+[6. 완료 보고 및 서브이슈 안내]
 ```
 
 ---
@@ -55,18 +63,37 @@ description: >-
    ```
 
 ### 3단계: 초기 커밋 생성 및 원격 푸시
-1. 브랜치 존재를 명확히 하기 위해 초기 빈 커밋을 생성하고 원격에 푸시합니다:
+1. 마일스톤 PR 생성을 위한 초기 빈 커밋을 생성하고 원격에 푸시합니다:
    ```bash
    git commit --allow-empty -m "chore: Open milestone M<번호> (#<번호>)"
    git push -u origin milestone/m<번호>
    ```
-   > 💡 마일스톤 브랜치 자체 푸시 시에는 CI가 트리거되지 않습니다.
 
-### 4단계: 프로젝트 보드 상태 업데이트
+### 4단계: 마일스톤 PR(Draft) 생성 및 메타데이터 연결
+1. `main` 브랜치를 타겟으로 마일스톤 PR을 생성합니다:
+   - **Base**: `main`
+   - **Head**: `milestone/m<번호>`
+   - **Draft**: `--draft` (서브이슈 개발 단계 중 불필요한 마일스톤 전체 CI 실행 방지)
+   - **Title**: `[M<번호>] <이슈 제목> (#<번호>)`
+   - **Body**: 마일스톤 목표 및 `Closes #<번호>` 포함 (GitHub Development 섹션 자동 연결)
+   - **Label**: `milestone`
+   - **Milestone**: 해당 마일스톤 지정
+   - **Project**: `AltCalc FX-991` 지정
+   ```bash
+   gh pr create --base main --head milestone/m<번호> \
+     --title "[M<번호>] <이슈 제목> (#<번호>)" \
+     --body "## 마일스톤 통합 PR%0A%0AM<번호> 마일스톤의 세부 서브이슈들을 통합하는 PR입니다.%0A%0ACloses #<번호>" \
+     --label "milestone" \
+     --milestone "<마일스톤 이름>" \
+     --project "AltCalc FX-991" \
+     --draft
+   ```
+
+### 5단계: 프로젝트 보드 상태 업데이트
 1. GitHub Project #7(AltCalc FX-991)에서 해당 마일스톤 이슈의 Status를 `In Progress`로 설정합니다:
    ```bash
    gh project item-edit 7 --owner i-technika --url "https://github.com/i-technika/altcalc-fx991/issues/<번호>" --field "Status" --value "In Progress"
    ```
 
-### 5단계: 완료 보고
-1. 마일스톤 브랜치 생성 완료 및 서브이슈 개발 착수 가능 상태임을 사용자에게 보고합니다.
+### 6단계: 완료 보고
+1. 마일스톤 브랜치 및 연결된 PR URL을 사용자에게 보고하고, 서브이슈 개발(`/fix-issue`) 착수 가능 상태임을 안내합니다.

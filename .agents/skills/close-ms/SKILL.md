@@ -1,13 +1,13 @@
 ---
 name: close-ms
 description: >-
-  마일스톤 번호를 받아 마일스톤 통합 PR을 생성하고, 플러터 멀티플랫폼 전체 CI를 수행하여 통과를 검증한 뒤 main에 머지하고 마일스톤을 닫습니다.
+  마일스톤 번호를 받아 기존 마일스톤 PR을 Ready 상태로 전환하고, 플러터 멀티플랫폼 전체 CI를 수행/검증한 뒤 main에 머지하고 마일스톤을 닫습니다.
   사용자가 `/close-ms <번호>` 또는 `close-ms <번호>`를 입력할 때 사용합니다.
 ---
 
 # 마일스톤 완료 및 main 머지 스킬 (`/close-ms <번호>`)
 
-이 스킬은 마일스톤 하위의 모든 서브이슈가 완료된 후, 마일스톤 브랜치를 `main`에 통합하고 전체 플랫폼 CI 검증을 거쳐 마일스톤을 성공적으로 닫는 절차를 수행합니다.
+이 스킬은 마일스톤 하위의 모든 서브이슈가 완료된 후, `/open-ms`로 열어두었던 마일스톤 PR을 Ready for review 상태로 전환하여 전체 멀티플랫폼 CI를 수행하고, 성공 검증 후 `main`에 최종 머지하는 절차를 수행합니다.
 
 명령어 형태: `/close-ms <번호>` (예: `/close-ms 1`)
 
@@ -19,7 +19,7 @@ description: >-
 [1. 마일스톤 및 서브이슈 완료 상태 확인]
        │
        ▼
-[2. 마일스톤 통합 PR 생성 (milestone/m<번호> -> main)]
+[2. 기존 마일스톤 PR 조회 및 Ready 상태 전환 (gh pr ready)]
        │
        ▼
 [3. 마일스톤 전체 플랫폼 CI 수행 및 통과 대기 (gh pr checks)]
@@ -45,31 +45,30 @@ description: >-
    ```
 2. 모든 하위 서브이슈가 `CLOSED` 상태인지 검증합니다. 아직 열려 있는 서브이슈가 있다면 사용자에게 알리고 진행 여부를 확인합니다.
 
-### 2단계: 마일스톤 통합 PR 생성
-1. 최신 마일스톤 브랜치(`milestone/m<번호>`)를 원격에 푸시된 상태로 두고, `main`을 타겟으로 PR을 생성합니다:
+### 2단계: 기존 마일스톤 PR 조회 및 Ready 상태 전환
+1. `milestone/m<번호>` 브랜치에 대응하는 마일스톤 PR을 조회합니다:
    ```bash
-   gh pr create --base main --head milestone/m<번호> \
-     --title "[M<번호>] <이슈 제목> (#<번호>)" \
-     --body "## 마일스톤 완료 통합 PR%0A%0A본 PR은 M<번호>의 모든 서브이슈를 통합하여 main에 병합합니다.%0A%0ACloses #<번호>" \
-     --label "milestone" \
-     --milestone "<마일스톤 이름>" \
-     --project "AltCalc FX-991"
+   gh pr list --head milestone/m<번호> --json number,url,isDraft
+   ```
+2. Draft 상태인 마일스톤 PR을 Ready 상태로 전환하여 전체 멀티플랫폼 CI를 트리거합니다:
+   ```bash
+   gh pr ready <PR번호>
    ```
 
 ### 3단계: 마일스톤 전체 플랫폼 CI 수행 및 검증
-1. PR 생성 시 `.github/workflows/milestone-full-ci.yml`이 자동으로 트리거됩니다.
-2. `gh pr checks` 명령어로 멀티플랫폼 빌드 결과들을 모니터링합니다:
+1. `.github/workflows/milestone-full-ci.yml` 파이프라인이 구동됩니다.
+2. `gh pr checks <PR번호>` 명령어로 멀티플랫폼 빌드 결과들을 모니터링합니다:
    - `Code Quality & Linux Build`
    - `Android Build`
    - `Web Build`
    - `Windows Build`
    - `macOS & iOS Build`
-3. 모든 CI Job이 녹색(Pass)으로 완료되었음을 확인합니다. (실패 시 원인 파악 및 수정 커밋 후 재검증)
+3. 모든 CI Job이 성공(Pass)으로 완료되었음을 확인합니다.
 
 ### 4단계: main 브랜치로 머지
 1. CI가 모두 통과하면 PR을 `main`에 머지합니다:
    ```bash
-   gh pr merge --merge --delete-branch
+   gh pr merge <PR번호> --merge --delete-branch
    ```
 
 ### 5단계: 이슈 Close 및 프로젝트 보드 Done 갱신
