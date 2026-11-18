@@ -1,9 +1,10 @@
 ---
 name: fix-issue
 description: >-
-  서브이슈 번호를 받아 코딩, 브랜치 생성, PR 작성, 2단계 적대적 코드리뷰, 수정, 후속 이슈 문의, 커밋까지 일괄 처리합니다.
+  서브이슈 번호를 받아 코딩, 브랜치 생성, PR 작성, 2단계 적대적 코드리뷰, 수정, 후속 이슈 문의, 최종 커밋 및 마일스톤 브랜치 머지까지 일괄 처리합니다.
+  서브이슈 PR 및 머지 시에는 리눅스 CI만 수행하며 마일스톤 CI는 수행하지 않습니다.
   마일스톤 에픽 이슈가 입력되면 수행할 수 없음을 안내하고 중단합니다.
-  사용자가 `/fix-issue <번호>` 또는 `fix-issue <번호>`를 입력하거나 특정 서브이슈 해결을 요청할 때 사용합니다.
+  사용자가 `/fix-issue <번호>` 또는 `fix-issue <번호>`를 입력할 때 사용합니다.
 ---
 
 # 서브이슈 처리 및 2단계 적대적 코드리뷰 자동화 워크플로우 (`/fix-issue <번호>`)
@@ -18,7 +19,7 @@ description: >-
 - `/fix-issue`는 마일스톤 에픽에 대해 직접 수행하지 않습니다.
 - 사용자에게 다음과 같이 안내하고 즉시 작업을 중단합니다:
   > ⚠️ **안내**: 이슈 `#<번호>`는 마일스톤 에픽 이슈이므로 `/fix-issue`로 직접 수행할 수 없습니다.  
-  > 해당 마일스톤에 속한 세부 서브이슈 번호(예: `#7`, `#8` 등)를 지정해 주세요.
+  > 마일스톤 브랜치 분기는 `/open-ms <번호>`를 사용하시고, 개발 작업은 세부 서브이슈 번호(예: `#7`, `#8` 등)를 지정해 주세요.
 
 ---
 
@@ -31,7 +32,7 @@ description: >-
 [2. 코딩 및 로컬 검증 (Analyze/Test)]
        │
        ▼
-[3. 베이스 브랜치 확인 & 작업 브랜치 생성]
+[3. 마일스톤 베이스 브랜치 확인 & 작업 브랜치 생성]
        │
        ▼
 [4. 1차 커밋 & 푸시]
@@ -51,7 +52,10 @@ description: >-
 [10. 후속 이슈 도출 여부 점검 & 사용자 문의]
        │
        ▼
-[11. 최종 커밋, 푸시 및 CI 확인]
+[11. 최종 커밋, 푸시 및 Linux CI 확인]
+       │
+       ▼
+[12. 마일스톤 브랜치로 머지 (마일스톤 CI 미수행) & 프로젝트 보드 완료 갱신]
 ```
 
 ---
@@ -65,7 +69,7 @@ description: >-
    ```
 2. **마일스톤 에픽 이슈 여부 확인**:
    - `labels`에 `milestone`이 포함되어 있다면 상단 거절 규칙에 따라 중단하고 사용자에게 안내합니다.
-3. 서브이슈의 목표, 체크리스트, 상위(Parent) 마일스톤 이슈 및 소속 마일스톤을 파악합니다.
+3. 서브이슈의 목표, 체크리스트, 상위(Parent) 마일스톤 번호(예: #1) 및 베이스 마일스톤 브랜치(`milestone/m1`)를 확인합니다.
 
 ### 2단계: 코딩 및 로컬 검증
 1. `GEMINI.md` 및 프로젝트 규칙을 엄격히 준수하여 코드를 구현합니다:
@@ -79,11 +83,10 @@ description: >-
    ```
 
 ### 3단계: 베이스 브랜치 확인 및 작업 브랜치 생성
-1. 서브이슈의 상위 마일스톤 브랜치(예: M1 에픽의 경우 `milestone/m1`)가 원격/로컬에 있는지 확인하고, 없으면 생성합니다.
-2. 최신 베이스 브랜치로부터 작업 브랜치를 생성하고 전환합니다:
+1. 서브이슈의 상위 마일스톤 브랜치(예: `milestone/m1`)로 이동하고 최신화합니다:
    ```bash
-   git checkout <base_branch>
-   git pull origin <base_branch>
+   git checkout milestone/m<마일스톤번호>
+   git pull origin milestone/m<마일스톤번호>
    git checkout -b issue/<번호>-<간략키워드>
    ```
 
@@ -96,19 +99,20 @@ description: >-
    ```
 
 ### 5단계: PR 작성 및 메타데이터 연동
-1. 상위 마일스톤 브랜치(`milestone/m1` 등)를 베이스로 PR을 작성합니다:
+1. 상위 마일스톤 브랜치(`milestone/m<마일스톤번호>`)를 베이스로 PR을 작성합니다:
+   - **Base**: `milestone/m<마일스톤번호>`
    - **제목**: `feat/fix: <이슈 제목> (#<번호>)`
    - **본문**: `Closes #<번호>`를 반드시 포함하여 Development 링크 자동 연결
    - **라벨(`--label`)**: `sub-issue`
    - **마일스톤(`--milestone`)**: 해당 마일스톤 설정
    - **프로젝트(`--project`)**: `AltCalc FX-991` 프로젝트 등록
    ```bash
-   gh pr create --base <base_branch> --title "feat: <제목> (#<번호>)" --body "## 작업 요약%0A...%0A%0ACloses #<번호>" --label "sub-issue" --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+   gh pr create --base milestone/m<마일스톤번호> --title "feat: <제목> (#<번호>)" --body "## 작업 요약%0A...%0A%0ACloses #<번호>" --label "sub-issue" --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
    ```
 
 ### 6단계 & 7단계: 적대적 코드리뷰 1라운드 및 수정
 1. **적대적 코드리뷰 1라운드 (Adversarial Review Round 1)**:
-   - 변경 사항(`git diff <base_branch>...HEAD`)을 회의적이고 비판적인 시각에서 심층 점검합니다.
+   - 변경 사항(`git diff milestone/m<마일스톤번호>...HEAD`)을 회의적이고 비판적인 시각에서 심층 점검합니다.
    - 점검 항목: Null Safety, 예외 처리, 부동소수점 오차(`Decimal` 준수), 반응형 레이아웃 오버플로우, 불필요한 리빌드, 햅틱 피드백 누락 등.
 2. **1차 수정**:
    - 지적된 모든 사항을 코드로 보완하고 `flutter analyze` 및 `flutter test`로 검증합니다.
@@ -132,11 +136,19 @@ description: >-
    - `Milestone`: 현재 마일스톤
    - `Parent`: 현재 마일스톤 에픽 이슈
 
-### 11단계: 최종 커밋, 푸시 및 CI 확인
+### 11단계: 최종 커밋, 푸시 및 Linux CI 확인
 1. 1차/2차 수정 내용을 커밋하고 푸시합니다:
    ```bash
    git add .
    git commit -m "refactor: Address adversarial code review feedback (R1 & R2) for #<번호>"
    git push
    ```
-2. 서브이슈 PR의 **Linux CI** 동작 상태를 점검하고 최종 완료 보고를 수행합니다.
+2. PR의 **Linux CI**(`Sub-issue Linux CI`)가 통과했는지 확인합니다 (`gh pr checks`).
+
+### 12단계: 마일스톤 브랜치로 머지 및 프로젝트 보드 갱신
+1. 서브이슈 PR을 마일스톤 브랜치에 머지합니다:
+   ```bash
+   gh pr merge --squash --delete-branch
+   ```
+   > ⚠️ **중요**: 마일스톤 브랜치로 머지될 때는 **마일스톤 CI(Milestone Full Multi-Platform CI)가 실행되지 않고**, 오직 서브이슈 리눅스 CI만 거치며 즉시 머지됩니다.
+2. 머지 후 GitHub Project #7에서 해당 서브이슈 Status를 `Done`으로 갱신합니다.
