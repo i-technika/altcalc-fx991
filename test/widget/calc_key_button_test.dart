@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -111,7 +112,11 @@ void main() {
         ),
       );
 
-      expect(tester.getSize(_keycap(CalcKeyId.cursorUp)).height, 50);
+      // 눌림 이동 여유만큼 아래를 비운다.
+      expect(
+        tester.getSize(_keycap(CalcKeyId.cursorUp)).height,
+        50 - CalcTheme.keyPressedOffset,
+      );
     });
   });
 
@@ -204,19 +209,45 @@ void main() {
       expect(tester.widget<Text>(find.text('sin')).style!.fontSize, 13);
     });
 
-    testWidgets('한 축이라도 제약이 무한하면 fallbackSize를 쓴다', (tester) async {
+    testWidgets('제약이 무한한 축에만 fallbackSize를 쓴다', (tester) async {
+      // 너비 무한(Row) + 높이 80 고정
       await tester.pumpWidget(
         MaterialApp(
-          home: Row(
-            children: [CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num1))],
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: 80,
+              child: Row(
+                children: [CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num1))],
+              ),
+            ),
           ),
         ),
       );
-
       expect(
         tester.getSize(find.byType(CalcKeyButton)),
-        CalcKeyButton.fallbackSize,
+        Size(CalcKeyButton.fallbackSize.width, 80),
       );
+
+      // 너비 90 고정 + 높이 무한(Column)
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 90,
+              child: Column(
+                children: [CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num1))],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(
+        tester.getSize(find.byType(CalcKeyButton)),
+        Size(90, CalcKeyButton.fallbackSize.height),
+      );
+      expect(tester.getSize(_keycap(CalcKeyId.num1)).width, 90);
     });
   });
 
@@ -395,68 +426,372 @@ void main() {
     });
   });
 
-  group('자동 반복', () {
-    Widget repeating(List<CalcKeyId> log, {bool autoRepeat = true}) => _host(
-      CalcKeyButton(
-        keyDef: keyDefOf(CalcKeyId.cursorRight),
-        onPressed: log.add,
-        autoRepeat: autoRepeat,
-      ),
-    );
+  group('입력 경계 조건', () {
+    testWidgets('포인터가 취소되면 눌림이 풀리고 이후 다시 입력할 수 있다', (tester) async {
+      _recordHaptics(tester);
+      final pressed = <CalcKeyId>[];
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.del),
+            onPressed: pressed.add,
+            onRepeat: repeats.add,
+          ),
+        ),
+      );
+      final center = tester.getCenter(_keycap(CalcKeyId.del));
 
-    testWidgets('누르고 있으면 지연 후 간격마다 반복 입력되고, 떼면 멈춘다', (tester) async {
+      final gesture = await tester.startGesture(center);
+      await tester.pump();
+      await gesture.cancel();
+      await tester.pump();
+      expect(_isPressed(tester, CalcKeyId.del), isFalse);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(repeats, isEmpty, reason: '취소 후에는 반복하지 않는다');
+
+      await tester.tap(_keycap(CalcKeyId.del));
+      await tester.pump();
+      expect(pressed, [CalcKeyId.del, CalcKeyId.del]);
+    });
+
+    testWidgets('마우스 보조 버튼과 스타일러스 지우개 끝은 입력하지 않는다', (tester) async {
       final haptics = _recordHaptics(tester);
       final pressed = <CalcKeyId>[];
-      await tester.pumpWidget(repeating(pressed));
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.num7),
+            onPressed: pressed.add,
+          ),
+        ),
+      );
+      final center = tester.getCenter(_keycap(CalcKeyId.num7));
 
+      for (final (kind, buttons) in [
+        (PointerDeviceKind.mouse, kSecondaryMouseButton),
+        (PointerDeviceKind.mouse, kMiddleMouseButton),
+        (PointerDeviceKind.invertedStylus, kPrimaryButton),
+      ]) {
+        final g = await tester.startGesture(
+          center,
+          kind: kind,
+          buttons: buttons,
+        );
+        await g.up();
+        await tester.pump();
+      }
+      expect(pressed, isEmpty);
+      expect(haptics, isEmpty);
+
+      final g = await tester.startGesture(
+        center,
+        kind: PointerDeviceKind.mouse,
+      );
+      await g.up();
+      await tester.pump();
+      expect(pressed, [CalcKeyId.num7], reason: '마우스 주 버튼은 입력된다');
+    });
+
+    group('시스템 제스처 영역', () {
+      Widget edgeHost(List<CalcKeyId> log) => MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(800, 600),
+            systemGestureInsets: EdgeInsets.symmetric(horizontal: 30),
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 64,
+              height: 72,
+              child: CalcKeyButton(
+                keyDef: keyDefOf(CalcKeyId.num1),
+                onPressed: log.add,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      testWidgets('가장자리에서 시작한 터치는 손을 뗄 때 확정된다', (tester) async {
+        final haptics = _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(edgeHost(pressed));
+
+        final gesture = await tester.startGesture(const Offset(10, 300));
+        await tester.pump();
+        expect(pressed, isEmpty, reason: '시스템 뒤로가기일 수 있으므로 보류');
+        expect(haptics, isEmpty);
+        expect(_isPressed(tester, CalcKeyId.num1), isTrue);
+
+        await gesture.up();
+        await tester.pump();
+        expect(pressed, [CalcKeyId.num1]);
+        expect(haptics, [_light]);
+      });
+
+      testWidgets('가장자리에서 시작한 터치가 취소되거나 키 밖으로 나가면 버린다', (tester) async {
+        final haptics = _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(edgeHost(pressed));
+
+        final g1 = await tester.startGesture(const Offset(10, 300));
+        await g1.cancel();
+        await tester.pump();
+
+        final g2 = await tester.startGesture(const Offset(10, 300));
+        await g2.moveTo(const Offset(200, 300)); // 뒤로가기 스와이프처럼 안쪽으로 이동
+        await g2.up();
+        await tester.pump();
+
+        expect(pressed, isEmpty);
+        expect(haptics, isEmpty);
+        expect(_isPressed(tester, CalcKeyId.num1), isFalse);
+      });
+
+      testWidgets('가장자리 밖(안쪽)의 터치는 즉시 입력된다', (tester) async {
+        _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(edgeHost(pressed));
+
+        final gesture = await tester.startGesture(const Offset(50, 300));
+        await tester.pump();
+        expect(pressed, [CalcKeyId.num1]);
+        await gesture.up();
+      });
+    });
+
+    testWidgets('extendHitAreaToLegend이면 각인 띠를 눌러도 입력된다', (tester) async {
+      _recordHaptics(tester);
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.calc),
+            onPressed: pressed.add,
+            extendHitAreaToLegend: true,
+          ),
+        ),
+      );
+
+      final topLeft = tester.getTopLeft(find.byType(CalcKeyButton));
+      await tester.tapAt(topLeft + const Offset(2, 2));
+      await tester.pump();
+      expect(pressed, [CalcKeyId.calc]);
+    });
+
+    testWidgets('눌린 키캡도 셀 안에 그려진다', (tester) async {
+      _recordHaptics(tester);
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num7), onPressed: (_) {}),
+        ),
+      );
+      final cell = tester.getRect(find.byType(CalcKeyButton));
+
+      final gesture = await tester.startGesture(cell.center);
+      await tester.pump();
+      final cap = tester.getRect(_keycap(CalcKeyId.num7));
+      expect(cap.bottom, lessThanOrEqualTo(cell.bottom + 0.001));
+      await gesture.up();
+    });
+
+    testWidgets('누른 채 다른 키로 바뀌면 눌림·반복이 해제되어 새 ID로 반복되지 않는다', (tester) async {
+      _recordHaptics(tester);
+      final repeats = <CalcKeyId>[];
+      Widget build(CalcKeyId id) => _host(
+        CalcKeyButton(
+          keyDef: keyDefOf(id),
+          onPressed: (_) {},
+          onRepeat: repeats.add,
+        ),
+      );
+
+      await tester.pumpWidget(build(CalcKeyId.cursorRight));
       final gesture = await tester.startGesture(
         tester.getCenter(_keycap(CalcKeyId.cursorRight)),
       );
+      await tester.pump();
+      await tester.pumpWidget(build(CalcKeyId.cursorLeft));
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+
+      expect(repeats, isEmpty);
+      expect(_isPressed(tester, CalcKeyId.cursorLeft), isFalse);
+    });
+  });
+
+  group('글자 배율', () {
+    testWidgets('시스템 글자 배율은 1.3배까지만 반영된다 (공간이 남는 한 글자 라벨 기준)', (tester) async {
+      Future<double> heightAt(double scale) async {
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num7)),
+            size: const Size(120, 96),
+            textScale: scale,
+          ),
+        );
+        return tester.getRect(find.text('7')).height;
+      }
+
+      final base = await heightAt(1.0);
+      final at13 = await heightAt(CalcTheme.keyMaxTextScaleFactor);
+      final at20 = await heightAt(2.0);
+      expect(at13, greaterThan(base));
+      expect(at20, closeTo(at13, 0.01));
+    });
+  });
+
+  group('자동 반복', () {
+    Widget repeating(
+      List<CalcKeyId> presses,
+      List<CalcKeyId>? repeats, {
+      Duration delay = CalcKeyButton.defaultRepeatDelay,
+      Duration interval = CalcKeyButton.defaultRepeatInterval,
+    }) => _host(
+      CalcKeyButton(
+        keyDef: keyDefOf(CalcKeyId.cursorRight),
+        onPressed: presses.add,
+        onRepeat: repeats?.add,
+        repeatDelay: delay,
+        repeatInterval: interval,
+      ),
+    );
+
+    Future<TestGesture> press(WidgetTester tester) =>
+        tester.startGesture(tester.getCenter(_keycap(CalcKeyId.cursorRight)));
+
+    testWidgets('누르고 있으면 지연 후 간격마다 onRepeat이 호출되고, 떼면 멈춘다', (tester) async {
+      final haptics = _recordHaptics(tester);
+      final presses = <CalcKeyId>[];
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(repeating(presses, repeats));
+
+      final gesture = await press(tester);
       await tester.pump(
         CalcKeyButton.defaultRepeatDelay - const Duration(milliseconds: 1),
       );
-      expect(pressed.length, 1);
+      expect((presses.length, repeats.length), (1, 0));
 
       await tester.pump(const Duration(milliseconds: 1));
-      expect(pressed.length, 2);
+      expect(repeats.length, 1);
 
       await tester.pump(CalcKeyButton.defaultRepeatInterval * 3);
-      expect(pressed.length, 5);
+      expect(repeats.length, 4);
+      expect(presses.length, 1, reason: '반복은 onPressed가 아닌 onRepeat으로만 전달된다');
       expect(haptics.length, 1, reason: '반복 입력에는 햅틱을 내지 않는다');
 
       await gesture.up();
       await tester.pump(const Duration(seconds: 1));
-      expect(pressed.length, 5);
+      expect(repeats.length, 4);
     });
 
-    testWidgets('autoRepeat가 꺼져 있으면 오래 눌러도 한 번만 입력된다', (tester) async {
+    testWidgets('지정한 지연·간격을 따른다 (200ms / 50ms)', (tester) async {
       _recordHaptics(tester);
-      final pressed = <CalcKeyId>[];
-      await tester.pumpWidget(repeating(pressed, autoRepeat: false));
-
-      final gesture = await tester.startGesture(
-        tester.getCenter(_keycap(CalcKeyId.cursorRight)),
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(
+        repeating(
+          [],
+          repeats,
+          delay: const Duration(milliseconds: 200),
+          interval: const Duration(milliseconds: 50),
+        ),
       );
+
+      final gesture = await press(tester);
+      await tester.pump(const Duration(milliseconds: 199));
+      expect(repeats, isEmpty);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(repeats.length, 1);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(repeats.length, 4);
+      await gesture.up();
+    });
+
+    testWidgets('onRepeat이 없으면 오래 눌러도 반복하지 않는다', (tester) async {
+      _recordHaptics(tester);
+      final presses = <CalcKeyId>[];
+      await tester.pumpWidget(repeating(presses, null));
+
+      final gesture = await press(tester);
       await tester.pump(const Duration(seconds: 2));
       await gesture.up();
 
-      expect(pressed.length, 1);
+      expect(presses.length, 1);
     });
 
-    testWidgets('누른 채 위젯이 제거되면 반복 타이머가 정리된다', (tester) async {
+    testWidgets('누른 채 onRepeat이 제거되면 반복이 멈춘다', (tester) async {
       _recordHaptics(tester);
-      final pressed = <CalcKeyId>[];
-      await tester.pumpWidget(repeating(pressed));
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(repeating([], repeats));
 
-      final gesture = await tester.startGesture(
-        tester.getCenter(_keycap(CalcKeyId.cursorRight)),
-      );
+      final gesture = await press(tester);
+      await tester.pump(CalcKeyButton.defaultRepeatDelay);
+      expect(repeats.length, 1);
+
+      await tester.pumpWidget(repeating([], null));
+      await tester.pump(const Duration(seconds: 1));
+      expect(repeats.length, 1);
+      await gesture.up();
+    });
+
+    testWidgets('손가락이 키 밖으로 벗어나면 반복을 멈춘다 (첫 입력은 유지)', (tester) async {
+      _recordHaptics(tester);
+      final presses = <CalcKeyId>[];
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(repeating(presses, repeats));
+
+      final gesture = await press(tester);
+      await tester.pump(CalcKeyButton.defaultRepeatDelay);
+      expect(repeats.length, 1);
+
+      await gesture.moveBy(const Offset(0, 300));
+      await tester.pump(const Duration(seconds: 1));
+      expect(repeats.length, 1);
+      expect(presses.length, 1);
+      await gesture.up();
+    });
+
+    testWidgets('누른 채 onRepeat을 뺐다가 다시 넣어도 그 누름에서는 반복이 재개되지 않는다', (
+      tester,
+    ) async {
+      _recordHaptics(tester);
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(repeating([], repeats));
+
+      final gesture = await press(tester);
+      await tester.pump(CalcKeyButton.defaultRepeatDelay); // 주기 반복 시작
+      expect(repeats.length, 1);
+
+      await tester.pumpWidget(repeating([], null));
+      await tester.pumpWidget(repeating([], repeats));
+      await tester.pump(const Duration(seconds: 1));
+      expect(repeats.length, 1, reason: '지연·간격·콜백 변경은 다음 누름부터 적용된다');
+      await gesture.up();
+    });
+
+    // 아래 두 테스트는 시간을 흘려보내지 않고 끝난다. 타이머가 정리되지 않으면
+    // testWidgets의 종료 검증("A Timer is still pending")이 실패한다.
+    testWidgets('누른 채 위젯이 제거되면 반복 타이머가 즉시 정리된다', (tester) async {
+      _recordHaptics(tester);
+      await tester.pumpWidget(repeating([], []));
+
+      final gesture = await press(tester);
       await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(seconds: 2));
       await gesture.up();
-
-      expect(pressed.length, 1);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('반복 중 위젯이 제거되면 주기 타이머도 정리된다', (tester) async {
+      _recordHaptics(tester);
+      await tester.pumpWidget(repeating([], []));
+
+      final gesture = await press(tester);
+      await tester.pump(CalcKeyButton.defaultRepeatDelay); // 주기 타이머로 전환
+      await tester.pumpWidget(const SizedBox());
+      await gesture.up();
     });
   });
 
@@ -479,14 +814,14 @@ void main() {
       expect(main.style!.color!.a, CalcTheme.keyDisabledLabelOpacity);
     });
 
-    testWidgets('누른 채 비활성으로 바뀌면 눌림·반복이 즉시 해제된다', (tester) async {
+    testWidgets('누른 채 비활성으로 바뀌면 눌림·반복 타이머가 즉시 해제된다', (tester) async {
       _recordHaptics(tester);
-      final pressed = <CalcKeyId>[];
+      final presses = <CalcKeyId>[];
       Widget build(bool enabled) => _host(
         CalcKeyButton(
           keyDef: keyDefOf(CalcKeyId.del),
-          onPressed: enabled ? pressed.add : null,
-          autoRepeat: true,
+          onPressed: enabled ? presses.add : null,
+          onRepeat: (_) {},
         ),
       );
 
@@ -499,12 +834,40 @@ void main() {
 
       await tester.pumpWidget(build(false));
       expect(_isPressed(tester, CalcKeyId.del), isFalse);
-      await tester.pump(const Duration(seconds: 2));
       await gesture.up();
       await tester.pump();
 
-      expect(pressed, [CalcKeyId.del]);
-      expect(tester.takeException(), isNull);
+      // 시간을 흘리지 않고 종료 — 타이머가 남아 있으면 종료 검증에서 실패한다.
+      expect(presses, [CalcKeyId.del]);
+    });
+
+    testWidgets('비활성 전환으로 버려진 반복 타이머가 다음 누름의 반복을 앞당기지 않는다', (tester) async {
+      _recordHaptics(tester);
+      final repeats = <CalcKeyId>[];
+      Widget build(bool enabled) => _host(
+        CalcKeyButton(
+          keyDef: keyDefOf(CalcKeyId.del),
+          onPressed: enabled ? (_) {} : null,
+          onRepeat: repeats.add,
+        ),
+      );
+      Offset center() => tester.getCenter(_keycap(CalcKeyId.del));
+
+      await tester.pumpWidget(build(true));
+      final g1 = await tester.startGesture(center(), pointer: 1);
+      await tester.pumpWidget(build(false)); // t=0에 시작한 타이머는 정리되어야 한다
+      await g1.up();
+      await tester.pumpWidget(build(true));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final g2 = await tester.startGesture(center(), pointer: 2); // t=300
+      await tester.pump(
+        const Duration(milliseconds: 250),
+      ); // t=550 (첫 타이머 예정 시각 지남)
+      expect(repeats, isEmpty, reason: '두 번째 누름의 반복은 t=800부터');
+      await tester.pump(const Duration(milliseconds: 250)); // t=800
+      expect(repeats.length, 1);
+      await g2.up();
     });
 
     testWidgets('비활성에서 활성으로 바뀌면 다시 입력된다', (tester) async {

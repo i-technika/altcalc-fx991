@@ -120,6 +120,13 @@ void main() {
       expect(ops.map((k) => k.mainLabel).toSet(), {'+', '−', '×', '÷'});
     });
 
+    test('반복 입력 키는 커서 패드 4방향과 DEL뿐이다', () {
+      expect(autoRepeatKeys, {
+        for (final k in cursorPad.all) k.id,
+        CalcKeyId.del,
+      });
+    });
+
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
