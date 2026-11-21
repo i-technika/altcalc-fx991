@@ -25,8 +25,13 @@ Future<void> lockPortraitOrientation() =>
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
 
 /// 앱 루트. 상태 관리를 위해 [ProviderScope] 아래에 둔다.
+///
+/// [home]으로 첫 화면을 바꿔 끼울 수 있다 — 테스트·개발 도구가 앱과 같은 테마·로캘 범위에서 자기 화면을 띄울 때 쓴다.
 class AltCalcApp extends StatelessWidget {
-  const AltCalcApp({super.key});
+  /// 첫 화면 (기본: [CalculatorScreen])
+  final Widget home;
+
+  const AltCalcApp({super.key, this.home = const CalculatorScreen()});
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +45,7 @@ class AltCalcApp extends StatelessWidget {
       // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
       builder: (context, child) =>
           DeviceLocaleScope(child: child ?? const SizedBox.shrink()),
-      home: const CalculatorScreen(),
+      home: home,
     );
   }
 }
