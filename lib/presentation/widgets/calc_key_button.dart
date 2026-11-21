@@ -1,0 +1,544 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../core/constants/key_definitions.dart';
+import '../../core/theme/calc_theme.dart';
+
+/// fx-991EX 스타일의 단일 키 버튼.
+///
+/// 구성 (위 → 아래):
+/// ```
+///  ┌──────────────────────┐
+///  │ SOLVE            =   │  ← 각인 띠: SHIFT(금색, 좌) / ALPHA(빨강, 우), 본체 배경 위
+///  │ ┌──────────────────┐ │
+///  │ │       CALC       │ │  ← 키캡: 카테고리 색 + 메인 라벨 (터치 영역)
+///  │ └──────────────────┘ │
+///  └──────────────────────┘
+/// ```
+///
+/// ## 크기 계약
+/// - 크기는 부모(그리드 셀)가 정한다. 제약이 무한한 축에만 [fallbackSize]의 해당 축 값을 쓴다.
+/// - 글자 크기는 [CalcTheme]의 비율 상수로 계산하며, 키패드 전체의 글자 크기를 맞추려면
+///   부모가 [legendFontSize]/[mainLabelFontSize]를 주입한다. 넘치는 라벨은 [FittedBox]로 축소한다.
+/// - 시스템 글자 배율은 [CalcTheme.keyMaxTextScaleFactor]까지 반영하지만, 이미 폭이 꽉 찬
+///   여러 글자 라벨은 [FittedBox]가 다시 줄이므로 사실상 공간이 남는 라벨(주로 한 글자)에만 효과가 있다.
+///   키패드 전체를 고르게 키우려면 부모가 배율을 반영한 글자 크기를 주입한다.
+/// - 눌림 이동([CalcTheme.keyPressedOffset])만큼 키캡 아래에 여유를 두어 셀 밖으로 그려지지 않는다.
+///
+/// ## 입력 계약
+/// - 실물 키처럼 **누르는 순간** [onPressed]를 호출하고 [HapticFeedback.lightImpact]를 실행한다.
+///   손가락을 미끄러뜨려도 첫 입력은 취소되지 않는다.
+/// - 단, 시스템 제스처 영역([MediaQueryData.systemGestureInsets], Android 뒤로가기 등)에서 시작된
+///   터치는 시스템이 가로챌 수 있으므로 **손을 뗄 때** 확정하고, 취소되거나 키 밖으로 벗어나면 버린다.
+/// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
+/// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다.
+/// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
+///   키패드는 스크롤 영역 밖에 배치한다.
+/// - [onRepeat]이 있으면 누르고 있는 동안 [repeatDelay] 후 [repeatInterval]마다 [onRepeat]을
+///   호출한다(반복 입력에는 햅틱 없음). 손가락이 터치 영역을 벗어나면 반복을 멈춘다.
+///   반복 대상 키는 [autoRepeatKeys] 참고. 지연·간격 변경은 다음 누름부터 적용된다.
+/// - [onPressed]가 `null`이면 비활성이다(반응·햅틱 없음, 라벨 흐림). 누른 채 비활성이 되거나
+///   [keyDef]가 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
+///
+/// SHIFT/ALPHA 래치 상태는 실물처럼 LCD 상태 표시줄(S/A)로 보여주며, 키 자체에는 표시하지 않는다.
+class CalcKeyButton extends StatefulWidget {
+  /// 표시할 키 명세
+  final CalcKeyDef keyDef;
+
+  /// 키 입력 콜백 (누르는 순간 1회). `null`이면 비활성.
+  final ValueChanged<CalcKeyId>? onPressed;
+
+  /// 길게 누를 때의 반복 입력 콜백. `null`이면 반복하지 않는다.
+  final ValueChanged<CalcKeyId>? onRepeat;
+
+  /// 햅틱 피드백 사용 여부 (설정 연동용)
+  final bool enableHaptics;
+
+  /// 반복 입력 시작까지의 지연
+  final Duration repeatDelay;
+
+  /// 반복 입력 간격
+  final Duration repeatInterval;
+
+  /// 상단 각인 띠 표시 여부. `false`면 키캡이 셀 전체를 쓴다(커서 패드 등).
+  final bool showLegendBand;
+
+  /// 터치 영역을 각인 띠까지 넓힐지 여부 (작은 화면에서 터치 영역 확보용)
+  final bool extendHitAreaToLegend;
+
+  /// 각인 글자 크기 (dp). `null`이면 셀 높이 비율로 계산.
+  final double? legendFontSize;
+
+  /// 메인 라벨 글자 크기 (dp). `null`이면 키캡 높이 비율로 계산.
+  final double? mainLabelFontSize;
+
+  /// 키 모양 — 버튼 상자 크기를 받아 버튼 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
+  ///
+  /// 지정하면 그리기, 누름 판정(히트 테스트), 누른 채 이동할 때의 이탈 판정(반복 중단)을
+  /// 모두 이 경로 안으로 제한한다(커서 패드 부채꼴 등).
+  final Path Function(Size size)? shape;
+
+  const CalcKeyButton({
+    super.key,
+    required this.keyDef,
+    this.onPressed,
+    this.onRepeat,
+    this.enableHaptics = true,
+    this.repeatDelay = defaultRepeatDelay,
+    this.repeatInterval = defaultRepeatInterval,
+    this.showLegendBand = true,
+    this.extendHitAreaToLegend = false,
+    this.legendFontSize,
+    this.mainLabelFontSize,
+    this.shape,
+  });
+
+  /// 기본 반복 시작 지연
+  static const Duration defaultRepeatDelay = Duration(milliseconds: 500);
+
+  /// 기본 반복 간격
+  static const Duration defaultRepeatInterval = Duration(milliseconds: 100);
+
+  /// 부모 제약이 무한할 때 사용하는 기본 크기 (dp)
+  static const Size fallbackSize = Size(56, 64);
+
+  /// [id] 키의 키캡 위젯 식별용 키 (화면 테스트에서 특정 키캡을 찾을 때 사용)
+  static Key keycapKeyOf(CalcKeyId id) => ValueKey(('calc_keycap', id));
+
+  @override
+  State<CalcKeyButton> createState() => _CalcKeyButtonState();
+}
+
+class _CalcKeyButtonState extends State<CalcKeyButton> {
+  /// 현재 이 키를 누르고 있는 포인터 ID (없으면 null)
+  int? _activePointer;
+
+  /// 시스템 제스처 영역에서 시작되어 손을 뗄 때 확정할 누름인지 여부
+  bool _deferred = false;
+
+  Timer? _repeatTimer;
+
+  /// 터치 영역 크기 (Listener 로컬 좌표 기준, 레이아웃마다 갱신)
+  Size _hitSize = Size.zero;
+
+  /// 버튼 좌표에서 터치 영역(Listener)의 원점 (각인 띠를 빼면 띠 높이만큼 아래)
+  Offset _hitOrigin = Offset.zero;
+
+  /// 버튼 상자 크기 ([CalcKeyButton.shape] 판정용, 레이아웃마다 갱신)
+  Size _size = Size.zero;
+
+  /// Listener 로컬 좌표가 터치 영역(사각형 ∩ 키 모양) 안인지 판정한다.
+  bool _hitAreaContains(Offset localPosition) {
+    if (!(Offset.zero & _hitSize).contains(localPosition)) return false;
+    final shape = widget.shape;
+    return shape == null || shape(_size).contains(localPosition + _hitOrigin);
+  }
+
+  bool get _enabled => widget.onPressed != null;
+  bool get _pressed => _activePointer != null;
+
+  @override
+  void didUpdateWidget(covariant CalcKeyButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_pressed && (!_enabled || oldWidget.keyDef.id != widget.keyDef.id)) {
+      // 누른 채 비활성이 되거나 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
+      _release();
+    } else if (widget.onRepeat == null) {
+      _cancelRepeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelRepeat();
+    super.dispose();
+  }
+
+  void _cancelRepeat() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  /// 눌림 상태를 해제한다 (setState 없이 — 호출부에서 필요 시 감싼다).
+  void _release() {
+    _cancelRepeat();
+    _activePointer = null;
+    _deferred = false;
+  }
+
+  void _commitPress() {
+    if (widget.enableHaptics) HapticFeedback.lightImpact();
+    widget.onPressed?.call(widget.keyDef.id);
+  }
+
+  void _startRepeat() {
+    if (widget.onRepeat == null) return;
+    _repeatTimer = Timer(widget.repeatDelay, () {
+      if (!mounted || !_pressed) return;
+      widget.onRepeat?.call(widget.keyDef.id);
+      _repeatTimer = Timer.periodic(widget.repeatInterval, (_) {
+        if (mounted && _pressed) widget.onRepeat?.call(widget.keyDef.id);
+      });
+    });
+  }
+
+  /// 마우스 보조 버튼, 스타일러스 지우개 끝 등 입력으로 취급하지 않을 포인터인지 판정한다.
+  bool _isIgnoredPointer(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.invertedStylus) return true;
+    return (event.buttons & kPrimaryButton) == 0;
+  }
+
+  /// 전역 좌표가 시스템 제스처 영역(화면 가장자리) 안인지 판정한다.
+  bool _inSystemGestureZone(Offset globalPosition) {
+    final insets = MediaQuery.systemGestureInsetsOf(context);
+    if (insets == EdgeInsets.zero) return false;
+    final screen = MediaQuery.sizeOf(context);
+    return globalPosition.dx < insets.left ||
+        globalPosition.dx > screen.width - insets.right ||
+        globalPosition.dy < insets.top ||
+        globalPosition.dy > screen.height - insets.bottom;
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    // 비활성, 이미 다른 손가락이 누르는 중, 입력으로 취급하지 않는 포인터는 무시한다.
+    if (!_enabled || _pressed || _isIgnoredPointer(event)) return;
+    final deferred = _inSystemGestureZone(event.position);
+    setState(() {
+      _activePointer = event.pointer;
+      _deferred = deferred;
+    });
+    if (deferred) return; // 손을 뗄 때 확정
+    _commitPress();
+    _startRepeat();
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!mounted || event.pointer != _activePointer) return;
+    if (_hitAreaContains(event.localPosition)) return;
+    if (_deferred) {
+      // 시스템 제스처일 가능성이 높으므로 확정하지 않고 버린다.
+      setState(_release);
+    } else {
+      _cancelRepeat();
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    // 누른 채 위젯이 제거된 뒤에도 기존 히트 테스트 경로로 up 이벤트가 올 수 있다.
+    if (!mounted || event.pointer != _activePointer) return;
+    final commit = _deferred;
+    setState(_release);
+    if (commit) _commitPress();
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (!mounted || event.pointer != _activePointer) return;
+    setState(_release);
+  }
+
+  /// 접근성(스크린리더) 활성화 시 호출 — 포인터 다운이 없으므로 햅틱 후 바로 입력한다.
+  void _handleSemanticTap() => _commitPress();
+
+  String get _semanticLabel {
+    final def = widget.keyDef;
+    return [
+      def.mainLabel,
+      if (def.hasShift) 'SHIFT ${def.shiftLabel}',
+      if (def.hasAlpha) 'ALPHA ${def.alphaLabel}',
+    ].join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: _enabled,
+      label: _semanticLabel,
+      onTap: _enabled ? _handleSemanticTap : null,
+      excludeSemantics: true,
+      child: LayoutBuilder(builder: _buildLayout),
+    );
+  }
+
+  Widget _wrapHitArea(Widget child) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
+      child: child,
+    );
+  }
+
+  Widget _buildLayout(BuildContext context, BoxConstraints constraints) {
+    final size = constraints.constrain(
+      Size(
+        constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : CalcKeyButton.fallbackSize.width,
+        constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : CalcKeyButton.fallbackSize.height,
+      ),
+    );
+    final width = size.width;
+    final height = size.height;
+
+    final legendHeight = widget.showLegendBand
+        ? height * CalcTheme.keyLegendHeightRatio
+        : 0.0;
+    final capHeight = height - legendHeight;
+    // 눌림 이동이 셀 밖으로 나가지 않도록 키캡 아래에 이동량만큼 여유를 둔다.
+    final pressRoom = math.min(CalcTheme.keyPressedOffset, capHeight);
+    final textScaler = MediaQuery.textScalerOf(context)
+        .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
+
+    _size = Size(width, height);
+    _hitSize = widget.extendHitAreaToLegend
+        ? Size(width, height)
+        : Size(width, capHeight);
+    _hitOrigin = widget.extendHitAreaToLegend
+        ? Offset.zero
+        : Offset(0, legendHeight);
+
+    Widget keycap = Padding(
+      padding: EdgeInsets.only(bottom: pressRoom),
+      child: _Keycap(
+        keyDef: widget.keyDef,
+        pressed: _pressed,
+        enabled: _enabled,
+        fontSize:
+            widget.mainLabelFontSize ??
+            capHeight * CalcTheme.keyMainLabelFontRatio,
+        horizontalPadding: width * CalcTheme.keyCapHorizontalPaddingRatio,
+        textScaler: textScaler,
+      ),
+    );
+    if (!widget.extendHitAreaToLegend) keycap = _wrapHitArea(keycap);
+
+    final column = Column(
+      children: [
+        if (widget.showLegendBand)
+          SizedBox(
+            height: legendHeight,
+            width: width,
+            child: _LegendRow(
+              shiftLabel: widget.keyDef.shiftLabel,
+              alphaLabel: widget.keyDef.alphaLabel,
+              width: width,
+              fontSize:
+                  widget.legendFontSize ??
+                  legendHeight * CalcTheme.keyLegendFontRatio,
+              maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
+              textScaler: textScaler,
+            ),
+          ),
+        SizedBox(height: capHeight, width: width, child: keycap),
+      ],
+    );
+
+    final body = SizedBox(
+      width: width,
+      height: height,
+      child: widget.extendHitAreaToLegend ? _wrapHitArea(column) : column,
+    );
+    final shape = widget.shape;
+    // ClipPath는 그림과 히트 테스트를 함께 경로 안으로 제한한다.
+    return shape == null
+        ? body
+        : ClipPath(clipper: _ShapeClipper(shape), child: body);
+  }
+}
+
+/// [CalcKeyButton.shape]를 적용하는 클리퍼
+class _ShapeClipper extends CustomClipper<Path> {
+  final Path Function(Size size) shape;
+
+  const _ShapeClipper(this.shape);
+
+  @override
+  Path getClip(Size size) => shape(size);
+
+  @override
+  bool shouldReclip(_ShapeClipper oldClipper) => oldClipper.shape != shape;
+}
+
+/// 키캡 위 본체 영역의 SHIFT/ALPHA 각인 띠.
+///
+/// 두 각인이 모두 있으면 글자 수에 비례해 폭을 나눠, 넘치면 함께 같은 비율로 줄어든다.
+/// 단, 짧은 쪽이 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름 `A`~`F`, `y` 등)면
+/// 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
+/// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
+class _LegendRow extends StatelessWidget {
+  final String? shiftLabel;
+  final String? alphaLabel;
+  final double width;
+  final double fontSize;
+  final double maxGap;
+  final TextScaler textScaler;
+
+  const _LegendRow({
+    required this.shiftLabel,
+    required this.alphaLabel,
+    required this.width,
+    required this.fontSize,
+    required this.maxGap,
+    required this.textScaler,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final shift = shiftLabel;
+    final alpha = alphaLabel;
+    if (shift == null && alpha == null) return const SizedBox.shrink();
+
+    final gap = shift != null && alpha != null
+        ? math.min(fontSize * CalcTheme.keyLegendGapRatio, maxGap)
+        : 0.0;
+    // 자연 폭 우선 배분을 받을 짧은 각인 (둘 다 있고, 짧은 쪽이 충분히 짧을 때만)
+    final shiftRunes = shift?.runes.length ?? 0;
+    final alphaRunes = alpha?.runes.length ?? 0;
+    final both = shift != null && alpha != null;
+    final shiftIsShort =
+        both &&
+        shiftRunes <= alphaRunes &&
+        shiftRunes <= CalcTheme.keyLegendPriorityMaxRunes;
+    final alphaIsShort =
+        both &&
+        alphaRunes < shiftRunes &&
+        alphaRunes <= CalcTheme.keyLegendPriorityMaxRunes;
+    final shortMaxWidth = math.max(0.0, (width - gap) / 2);
+
+    Widget legend(
+      String text,
+      TextStyle style,
+      Alignment alignment, {
+      required bool short,
+      required bool priorityLayout,
+    }) {
+      final label = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: alignment,
+        child: Text(
+          text,
+          maxLines: 1,
+          softWrap: false,
+          textScaler: textScaler,
+          style: style.copyWith(fontSize: fontSize),
+        ),
+      );
+      if (short) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: shortMaxWidth),
+          child: Align(alignment: alignment, widthFactor: 1, child: label),
+        );
+      }
+      return Expanded(
+        // 우선 배분이면 긴 쪽이 남은 폭 전부, 아니면 글자 수 비례
+        flex: priorityLayout ? 1 : math.max(1, text.runes.length),
+        child: Align(alignment: alignment, child: label),
+      );
+    }
+
+    final priority = shiftIsShort || alphaIsShort;
+    return Row(
+      children: [
+        if (shift != null)
+          legend(
+            shift,
+            CalcTheme.keyShiftLabelStyle,
+            Alignment.bottomLeft,
+            short: shiftIsShort,
+            priorityLayout: priority,
+          ),
+        if (both) SizedBox(width: gap),
+        if (alpha != null)
+          legend(
+            alpha,
+            CalcTheme.keyAlphaLabelStyle,
+            Alignment.bottomRight,
+            short: alphaIsShort,
+            priorityLayout: priority,
+          ),
+      ],
+    );
+  }
+}
+
+/// 카테고리 색과 눌림 반응을 가진 키캡 본체.
+class _Keycap extends StatelessWidget {
+  final CalcKeyDef keyDef;
+  final bool pressed;
+  final bool enabled;
+  final double fontSize;
+  final double horizontalPadding;
+  final TextScaler textScaler;
+
+  const _Keycap({
+    required this.keyDef,
+    required this.pressed,
+    required this.enabled,
+    required this.fontSize,
+    required this.horizontalPadding,
+    required this.textScaler,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final category = keyDef.category;
+    final background = pressed
+        ? Color.alphaBlend(CalcTheme.keyPressedOverlay, category.background)
+        : category.background;
+    final labelColor = enabled
+        ? category.foreground
+        : category.foreground.withValues(
+            alpha: CalcTheme.keyDisabledLabelOpacity,
+          );
+
+    // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 낸다.
+    return Transform.translate(
+      offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
+      child: AnimatedContainer(
+        key: CalcKeyButton.keycapKeyOf(keyDef.id),
+        duration: CalcTheme.keyPressAnimationDuration,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(CalcTheme.keyBorderRadius),
+          border: Border.all(
+            color: CalcTheme.keyBorder,
+            width: CalcTheme.keyBorderWidth,
+          ),
+          boxShadow: pressed
+              ? const []
+              : const [
+                  BoxShadow(
+                    color: CalcTheme.keyShadow,
+                    blurRadius: CalcTheme.keyElevation,
+                    offset: Offset(0, CalcTheme.keyElevation),
+                  ),
+                ],
+        ),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        alignment: Alignment.center,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            keyDef.mainLabel,
+            maxLines: 1,
+            softWrap: false,
+            textScaler: textScaler,
+            style: CalcTheme.keyMainLabelStyle.copyWith(
+              fontSize: fontSize,
+              color: labelColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
