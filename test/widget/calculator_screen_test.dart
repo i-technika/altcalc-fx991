@@ -544,103 +544,147 @@ void main() {
       await tester.pump();
     }
 
-    /// 알림 메시지만 꺼낸다 (방향·정중함 수준도 함께 확인)
-    List<String> takeMessages(WidgetTester tester) => [
-      for (final a in tester.takeAnnouncements())
-        if (a.textDirection == TextDirection.ltr &&
-            a.assertiveness == Assertiveness.polite)
-          a.message,
-    ];
+    /// 알림 메시지를 꺼낸다. 모든 알림은 왼쪽→오른쪽·정중함(polite) 수준이어야 한다.
+    List<String> takeMessages(WidgetTester tester) {
+      final announcements = tester.takeAnnouncements();
+      for (final a in announcements) {
+        expect(a.textDirection, TextDirection.ltr, reason: a.message);
+        expect(a.assertiveness, Assertiveness.polite, reason: a.message);
+      }
+      return [for (final a in announcements) a.message];
+    }
 
-    group('알림을 지원하는 플랫폼(iOS)·스크린리더 켜짐', () {
-      Future<void> pumpIos(WidgetTester tester) async {
-        useKoreanLocale(tester);
-        await _pumpScreen(
-          tester,
-          supportsAnnounce: true,
-          accessibleNavigation: true,
-        );
-        tester.takeAnnouncements(); // 시작 전 알림 비우기
+    final announcer = find.byKey(const ValueKey('screen-reader-announcer'));
+
+    group('알림을 지원하는 플랫폼(iOS)', () {
+      Future<SemanticsHandle> pumpIos(
+        WidgetTester tester, {
+        bool korean = true,
+      }) async {
+        final handle = tester.ensureSemantics(); // 스크린리더 켜짐
+        if (korean) useKoreanLocale(tester);
+        await _pumpScreen(tester, supportsAnnounce: true);
+        tester.takeAnnouncements();
+        return handle;
       }
 
       testWidgets('SHIFT/ALPHA가 켜지면 알리고, 같은 키로 끄면 꺼짐을 알린다', (tester) async {
-        await pumpIos(tester);
+        final handle = await pumpIos(tester);
         await press(tester, CalcKeyId.shift);
         await press(tester, CalcKeyId.shift);
         await press(tester, CalcKeyId.alpha);
         await press(tester, CalcKeyId.alpha);
         expect(takeMessages(tester), ['시프트 켜짐', '시프트 꺼짐', '알파 켜짐', '알파 꺼짐']);
+        handle.dispose();
       });
 
       testWidgets('SHIFT → ALPHA → ALPHA: 알파 켜짐, 알파 꺼짐', (tester) async {
-        await pumpIos(tester);
+        final handle = await pumpIos(tester);
         await press(tester, CalcKeyId.shift);
         await press(tester, CalcKeyId.alpha);
         await press(tester, CalcKeyId.alpha);
         expect(takeMessages(tester), ['시프트 켜짐', '알파 켜짐', '알파 꺼짐']);
+        handle.dispose();
       });
 
-      testWidgets('입력된 기능 이름을 알리고, 기능 없는 층의 키로 풀리면 꺼짐을 알린다', (tester) async {
-        await pumpIos(tester);
+      testWidgets('입력된 기능 이름을 알리고(같은 입력 반복도), 기능 없는 층의 키로 풀리면 꺼짐을 알린다', (
+        tester,
+      ) async {
+        final handle = await pumpIos(tester);
         await press(tester, CalcKeyId.shift);
         await press(tester, CalcKeyId.sin); // SHIFT sin = sin⁻¹
         await press(tester, CalcKeyId.num7);
+        await press(tester, CalcKeyId.num7);
         await press(tester, CalcKeyId.alpha);
         await press(tester, CalcKeyId.num4); // ALPHA 4 = 기능 없음 (무시)
-        expect(takeMessages(tester), ['시프트 켜짐', '아크사인', '7', '알파 켜짐', '알파 꺼짐']);
+        expect(takeMessages(tester), [
+          '시프트 켜짐',
+          '아크사인',
+          '7',
+          '7',
+          '알파 켜짐',
+          '알파 꺼짐',
+        ]);
+        // 알림을 지원하는 플랫폼에서는 liveRegion 알림 노드를 두지 않는다 (중복 낭독 방지).
+        expect(announcer, findsNothing);
+        handle.dispose();
       });
-    });
 
-    testWidgets('스크린리더가 꺼져 있으면 알리지 않는다', (tester) async {
-      useKoreanLocale(tester);
-      await _pumpScreen(tester, supportsAnnounce: true);
-      tester.takeAnnouncements();
-      await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.sin);
-      expect(tester.takeAnnouncements(), isEmpty);
-    });
+      testWidgets('영어 기기에서는 영어로 알린다', (tester) async {
+        final handle = await pumpIos(tester, korean: false);
+        await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.sin);
+        expect(takeMessages(tester), ['Shift on', 'Arcsine']);
+        handle.dispose();
+      });
 
-    testWidgets(
-      '알림을 지원하지 않는 플랫폼(Android)은 알림 대신 상태 표시줄·입력 줄 liveRegion으로 읽는다',
-      (tester) async {
-        final handle = tester.ensureSemantics();
+      testWidgets('스크린리더가 꺼져 있으면 알리지 않는다', (tester) async {
         useKoreanLocale(tester);
-        await _pumpScreen(tester, accessibleNavigation: true);
+        await _pumpScreen(tester, supportsAnnounce: true);
         tester.takeAnnouncements();
         await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.sin);
         expect(tester.takeAnnouncements(), isEmpty);
-        expect(
-          tester.getSemantics(find.byType(LcdStatusBar)),
-          matchesSemantics(label: '시프트, 각도 단위 도, 수학 입출력', isLiveRegion: true),
-        );
-        final input = tester.getSemantics(
-          find.byKey(const ValueKey('lcd-input-line')),
-        );
-        expect(input.flagsCollection.isLiveRegion, isTrue);
-        handle.dispose();
-      },
-    );
+      }, semanticsEnabled: false);
+    });
 
-    testWidgets('알림을 지원하는 플랫폼에서는 liveRegion을 쓰지 않는다 (중복 낭독 방지)', (
-      tester,
-    ) async {
-      final handle = tester.ensureSemantics();
-      await _pumpScreen(tester, supportsAnnounce: true);
-      expect(
-        tester
-            .getSemantics(find.byType(LcdStatusBar))
-            .flagsCollection
-            .isLiveRegion,
-        isFalse,
-      );
-      expect(
-        tester
-            .getSemantics(find.byKey(const ValueKey('lcd-input-line')))
-            .flagsCollection
-            .isLiveRegion,
-        isFalse,
-      );
-      handle.dispose();
+    group('알림을 지원하지 않는 플랫폼(Android)', () {
+      /// 알림 노드 라벨 (반복 구분 글자 제거 전)
+      String rawLabel(WidgetTester tester) =>
+          tester.getSemantics(announcer).label;
+
+      testWidgets('알림 노드 하나의 liveRegion 라벨로 알리고, 같은 말이 이어져도 라벨이 매번 바뀐다', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester);
+        expect(
+          tester.getSemantics(announcer).flagsCollection.isLiveRegion,
+          isTrue,
+        );
+        final heard = <String>[];
+        var previous = rawLabel(tester);
+        for (final id in [
+          CalcKeyId.num7,
+          CalcKeyId.num7, // 같은 입력 반복
+          CalcKeyId.shift,
+          CalcKeyId.sin,
+          CalcKeyId.shift,
+          CalcKeyId.sin, // 같은 기능 반복
+        ]) {
+          await press(tester, id);
+          final label = rawLabel(tester);
+          expect(label, isNot(previous), reason: '라벨이 같으면 Android가 읽지 않는다');
+          previous = label;
+          heard.add(label.replaceAll(ScreenReaderAnnouncer.repeatMarker, ''));
+        }
+        expect(heard, ['7', '7', '시프트 켜짐', '아크사인', '시프트 켜짐', '아크사인']);
+        expect(tester.takeAnnouncements(), isEmpty);
+        handle.dispose();
+      });
+
+      testWidgets('상태 표시줄·입력 줄은 liveRegion이 아니다 (상태 표시줄 전체 반복 낭독 방지)', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await _pumpScreen(tester);
+        expect(
+          tester
+              .getSemantics(find.byType(LcdStatusBar))
+              .flagsCollection
+              .isLiveRegion,
+          isFalse,
+        );
+        expect(
+          tester
+              .getSemantics(find.byKey(const ValueKey('lcd-input-line')))
+              .flagsCollection
+              .isLiveRegion,
+          isFalse,
+        );
+        handle.dispose();
+      });
     });
 
     testWidgets('LCD 입력 줄은 각인 기호가 아니라 기능 이름으로 읽힌다', (tester) async {
@@ -658,14 +702,38 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('영어 기기에서는 영어로 읽는다', (tester) async {
+    testWidgets('영어 기기에서는 키·힌트·상태 표시줄·입력 줄을 영어로 읽는다', (tester) async {
       final handle = tester.ensureSemantics();
       await _pumpScreen(tester);
-      expect(find.semantics.byLabel('Calculate with variables'), findsOne);
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)).label,
         'Degrees, Math input output',
       );
+      final sin = tester.getSemantics(
+        find.byWidgetPredicate(
+          (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+        ),
+      );
+      expect(sin.label, 'Sine');
+      expect(sin.hint, 'Shift Arcsine, Alpha Variable D');
+      await press(tester, CalcKeyId.shift);
+      await press(tester, CalcKeyId.sin);
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('lcd-input-line'))).label,
+        contains('Arcsine'),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('실행 중 기기 언어를 바꾸면 키 라벨이 새 언어로 바뀐다', (tester) async {
+      final handle = tester.ensureSemantics();
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await tester.pumpWidget(const ProviderScope(child: AltCalcApp()));
+      expect(find.semantics.byLabel('Sine'), findsOne);
+      tester.platformDispatcher.localeTestValue = const Locale('ko', 'KR');
+      await tester.pump();
+      expect(find.semantics.byLabel('사인'), findsOne);
+      expect(find.semantics.byLabel('Sine'), findsNothing);
       handle.dispose();
     });
   });

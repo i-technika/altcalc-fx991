@@ -187,10 +187,7 @@ void main() {
       );
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)),
-        matchesSemantics(
-          label: '알파, 메모리, 각도 단위 도, 수학 입출력',
-          isLiveRegion: true, // 테스트 MediaQuery는 알림 미지원(Android와 같다)
-        ),
+        matchesSemantics(label: '알파, 메모리, 각도 단위 도, 수학 입출력'),
       );
       handle.dispose();
     });

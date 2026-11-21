@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/key_definitions.dart';
 import '../../domain/models/calc_state.dart';
 import '../../domain/models/lcd_status.dart';
+import 'device_locale_scope.dart';
 
 /// 키 하나의 음성 라벨 (스크린리더용). 표시 라벨([CalcKeyDef])과 같은 층 구성을 갖는다.
 @immutable
@@ -34,8 +35,9 @@ class KeySpeech {
 /// ## 언어 선택
 /// 기기(플랫폼) 로캘로 고른다: 한국어 기기는 [KoSemanticStrings], 그 밖에는 [EnSemanticStrings].
 /// 앱(`MaterialApp`)은 `supportedLocales`를 지정하지 않아 `Localizations` 로캘이 항상 en_US이므로
-/// 그것을 쓰지 않는다. 앱 전체 다국어(`flutter_localizations`·ARB)를 도입하면 그 체계로 옮긴다.
-/// 실행 중 기기 언어를 바꾸면 다음 빌드부터 반영된다(대부분의 플랫폼은 이때 화면을 다시 그린다).
+/// 그것을 쓰지 않는다. 실행 중 기기 언어가 바뀌면 앱 루트의 [DeviceLocaleScope]가 다시 빌드시킨다.
+/// 한국어·영어가 아닌 기기는 영어 문구를 그 기기 언어의 TTS가 읽는다(예: 독일어 TTS가 "Sine"을 읽음).
+/// 앱 전체 다국어(`flutter_localizations`·ARB)를 도입할 때 언어를 늘리거나 문구에 로캘 표식을 붙인다.
 abstract class CalcSemanticStrings {
   const CalcSemanticStrings();
 
@@ -52,11 +54,13 @@ abstract class CalcSemanticStrings {
         _ => const EnSemanticStrings(),
       };
 
-  /// [context]가 그려지는 화면(기기)의 로캘에 맞는 문구.
+  /// 기기 로캘에 맞는 문구. [DeviceLocaleScope] 아래면 기기 언어가 바뀔 때 다시 빌드된다.
+  /// (범위 밖 — 위젯 단독 테스트 등 — 에서는 플랫폼 로캘을 직접 읽는다.)
   static CalcSemanticStrings of(BuildContext context) => forLocale(
-    (View.maybeOf(context)?.platformDispatcher ??
-            WidgetsBinding.instance.platformDispatcher)
-        .locale,
+    DeviceLocaleScope.maybeOf(context) ??
+        (View.maybeOf(context)?.platformDispatcher ??
+                WidgetsBinding.instance.platformDispatcher)
+            .locale,
   );
 
   /// 50키의 음성 라벨. 모든 [CalcKeyId]를 담는다(테스트로 검증).
@@ -76,8 +80,8 @@ abstract class CalcSemanticStrings {
 
   /// 키 버튼의 시맨틱 힌트 — SHIFT·ALPHA 기능 (예: "시프트 아크사인, 알파 변수 D"). 없으면 `null`.
   ///
-  /// 라벨과 나눠 두면 스크린리더가 메인 기능을 먼저 읽고, 잠시 뒤 힌트로 나머지를 읽는다
-  /// (키를 훑을 때 매번 긴 문장을 다 듣지 않아도 된다).
+  /// iOS VoiceOver는 라벨을 먼저 읽고 잠시 뒤 힌트를 읽는다(힌트를 끈 사용자는 듣지 않는다).
+  /// Android TalkBack은 라벨과 힌트를 이어 한 번에 읽는다 — 키를 훑을 때 낭독이 긴 문제는 #2에서 다룬다.
   String? keyButtonHint(CalcKeyId id) {
     final speech = keys[id]!;
     final parts = [
@@ -346,7 +350,7 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   CalcKeyId.calc: KeySpeech(
     'Calculate with variables',
     shift: 'Solve',
-    alpha: 'Equals sign',
+    alpha: 'Insert equals sign',
   ),
   CalcKeyId.integral: KeySpeech(
     'Integral',
@@ -372,7 +376,7 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   // ── 함수부 2행 ──
   CalcKeyId.negative: KeySpeech(
     'Negative',
-    shift: 'Logarithm',
+    shift: 'Log function',
     alpha: 'Variable A',
   ),
   CalcKeyId.degMinSec: KeySpeech(
@@ -393,7 +397,7 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   CalcKeyId.sto: KeySpeech('Store', shift: 'Recall'),
   CalcKeyId.eng: KeySpeech(
     'Engineering notation',
-    shift: 'Engineering notation, decimal point left',
+    shift: 'Engineering shift left',
   ),
   CalcKeyId.parenOpen: KeySpeech('Open parenthesis', shift: 'Absolute value'),
   CalcKeyId.parenClose: KeySpeech(
@@ -402,7 +406,7 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
     alpha: 'Variable x',
   ),
   CalcKeyId.sdToggle: KeySpeech(
-    'Standard or decimal',
+    'Standard to decimal',
     shift: 'Mixed or improper fraction',
     alpha: 'Variable y',
   ),
@@ -435,10 +439,10 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
     alpha: 'Random integer',
   ),
   CalcKeyId.exp10: KeySpeech(
-    'Exponent entry',
+    'Times ten to the power',
     shift: 'Pi',
-    alpha: 'Euler number e',
+    alpha: "Euler's number",
   ),
   CalcKeyId.ans: KeySpeech('Previous answer', shift: 'Percent'),
-  CalcKeyId.equals: KeySpeech('Calculate', shift: 'Approximate'),
+  CalcKeyId.equals: KeySpeech('Equals', shift: 'Approximate'),
 };

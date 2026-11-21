@@ -158,36 +158,96 @@ class _LcdPanel extends ConsumerWidget {
     final status = ref.watch(lcdStatusProvider);
     final lastInput = ref.watch(calcProvider.select((s) => s.lastInput));
     final strings = CalcSemanticStrings.of(context);
-    // 스크린리더 알림: 알림(announcement)을 지원하는 플랫폼(iOS)에서 스크린리더가 켜져 있을 때만 보낸다.
-    // Android는 알림 대신 LCD의 liveRegion(상태 표시줄·입력 줄)이 바뀐 내용을 읽는다
-    // (`LcdDisplay` 참고 — Android 16부터 알림 API가 폐기 예정이라 Flutter도 liveRegion을 권장한다).
-    if (MediaQuery.supportsAnnounceOf(context) &&
-        MediaQuery.accessibleNavigationOf(context)) {
-      final view = View.of(context);
-      final direction = Directionality.of(context);
-      ref.listen(
-        calcProvider.select((s) => (s.modifier, s.inputCount, s.lastInput)),
-        (previous, next) {
-          // select 구독은 첫 값으로 콜백하지 않으므로 previous는 항상 있다.
-          final message = announcementFor(strings, previous!, next);
-          if (message == null) return;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        LcdDisplay(
+          status: status,
+          fitFontsToSize: true,
+          input: Text(
+            lastInput?.label ?? '',
+            key: const ValueKey('lcd-input-text'),
+            // 각인 기호 대신 기능 이름을 읽는다 (#20)
+            semanticsLabel: lastInput == null
+                ? null
+                : strings.keyFunction(lastInput.id, lastInput.layer),
+          ),
+        ),
+        // 스크린리더 알림 전용 노드 (LCD 왼쪽 위 1dp — 화면에 보이지 않고 터치를 가로채지 않는다)
+        const Positioned(
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+          child: IgnorePointer(child: ScreenReaderAnnouncer()),
+        ),
+      ],
+    );
+  }
+}
+
+/// 계산기 상태 변화를 스크린리더로 알린다 (#20). 무엇을 알릴지는 [announcementFor]가 정한다.
+///
+/// 플랫폼마다 알리는 방법이 다르다 — Flutter 자체 위젯(InputDecorator)과 같은 기준
+/// (`MediaQuery.supportsAnnounceOf`)으로 나눈다.
+/// - **알림 지원(iOS 등)**: `SemanticsService.sendAnnouncement`. 스크린리더가 꺼져 있으면 보내지 않는다.
+/// - **알림 미지원(Android)**: 이 위젯의 liveRegion 노드 라벨을 바꾼다. Android 엔진은 알림을 지원하지 않고
+///   (Android 16부터 API 폐기 예정), liveRegion 노드는 **라벨이 바뀔 때만** 읽힌다. 같은 말이 이어져도
+///   ("7" → "7") 읽히도록 매번 보이지 않는 문자(U+200B)를 붙였다 뗐다 해 라벨을 바꾼다.
+///
+/// 상태 표시줄·입력 줄을 liveRegion으로 두지 않는 이유: 상태 표시줄 전체가 매번 다시 읽히고, 켜짐/꺼짐
+/// 의미가 전달되지 않으며, 같은 입력이 이어지면 입력 줄 라벨이 그대로라 읽히지 않는다(리뷰 R2).
+@visibleForTesting
+class ScreenReaderAnnouncer extends ConsumerStatefulWidget {
+  const ScreenReaderAnnouncer({super.key});
+
+  /// 연속된 같은 말을 구분하려고 번갈아 붙이는 글자 (스크린리더는 읽지 않는다)
+  static const String repeatMarker = '\u200B';
+
+  @override
+  ConsumerState<ScreenReaderAnnouncer> createState() =>
+      _ScreenReaderAnnouncerState();
+}
+
+class _ScreenReaderAnnouncerState extends ConsumerState<ScreenReaderAnnouncer> {
+  String _message = '';
+  bool _marked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = CalcSemanticStrings.of(context);
+    final supportsAnnounce = MediaQuery.supportsAnnounceOf(context);
+    final view = View.of(context);
+    final direction = Directionality.of(context);
+    ref.listen(
+      calcProvider.select((s) => (s.modifier, s.inputCount, s.lastInput)),
+      (previous, next) {
+        // 직전 선택 값이 없으면(오류 등) 비교할 수 없으므로 알리지 않는다.
+        if (previous == null) return;
+        final message = announcementFor(strings, previous, next);
+        if (message == null) return;
+        if (supportsAnnounce) {
+          if (!SemanticsBinding.instance.semanticsEnabled) return;
           unawaited(
             SemanticsService.sendAnnouncement(view, message, direction),
           );
-        },
-      );
-    }
-    return LcdDisplay(
-      status: status,
-      fitFontsToSize: true,
-      input: Text(
-        lastInput?.label ?? '',
-        key: const ValueKey('lcd-input-text'),
-        // 각인 기호 대신 기능 이름을 읽는다 (#20)
-        semanticsLabel: lastInput == null
-            ? null
-            : strings.keyFunction(lastInput.id, lastInput.layer),
-      ),
+        } else {
+          setState(() {
+            _marked = !_marked;
+            _message = _marked
+                ? message
+                : '$message${ScreenReaderAnnouncer.repeatMarker}';
+          });
+        }
+      },
+    );
+    if (supportsAnnounce) return const SizedBox.shrink();
+    return Semantics(
+      key: const ValueKey('screen-reader-announcer'),
+      container: true,
+      liveRegion: true,
+      label: _message,
+      child: const SizedBox.expand(),
     );
   }
 }

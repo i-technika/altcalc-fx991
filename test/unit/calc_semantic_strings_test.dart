@@ -7,9 +7,22 @@ import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 
-/// 음성 라벨에 허용하는 글자: 한글 음절, 영문, 숫자, 공백, 쉼표(쉼).
+/// 음성 라벨에 허용하는 글자: 한글 음절, 영문, 숫자, 공백, 아포스트로피(Euler's).
+/// 쉼표는 키 힌트에서 시프트·알파 기능을 나누는 구분자로만 쓰므로 기능 이름에는 넣지 않는다.
 /// 표시용 기호(`◼`·`◻`·`◄`·`▲`·`⁻¹`·`²`·`√`·`∫`·`=` 등)는 기호 이름으로 읽히므로 넣지 않는다.
-final _speakable = RegExp(r'^[가-힣A-Za-z0-9 ,]+$');
+final _speakable = RegExp(r"^[가-힣A-Za-z0-9 ']+$");
+
+/// 실제 영단어라 영어 음성 라벨이 각인과 같은 철자여도 되는 각인
+const _realWordLegends = {
+  'SHIFT',
+  'ALPHA',
+  'MENU',
+  'SETUP',
+  'SOLVE',
+  'RECALL',
+  'RESET',
+  'UNDO',
+};
 
 /// [slot] 표시기를 켠 상태 목록 (값이 여러 개인 슬롯은 값마다)
 List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
@@ -77,9 +90,13 @@ void main() {
             if (display == null || RegExp(r'^[0-9]$').hasMatch(display)) {
               continue;
             }
+            // 대소문자만 다른 경우(OPTN/Optn)도 철자로 읽히므로 막는다. 각인 자체가 실제 영단어라
+            // 그대로 읽어도 되는 것만 허용한다.
+            if (_realWordLegends.contains(display)) continue;
+            final speech = strings.keyFunction(def.id, layer)!;
             expect(
-              strings.keyFunction(def.id, layer),
-              isNot(display),
+              speech.toLowerCase(),
+              isNot(display.toLowerCase()),
               reason: '${def.id.name} ${layer.name}',
             );
           }

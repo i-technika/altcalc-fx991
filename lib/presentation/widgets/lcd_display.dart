@@ -380,8 +380,6 @@ class LcdDisplay extends StatelessWidget {
                         child: _LcdLine(
                           key: const ValueKey('lcd-input-line'),
                           semanticLabel: strings.inputLine,
-                          // 입력이 바뀌면 읽어 준다 (Android — 상태 표시줄과 같은 규칙)
-                          liveRegion: !MediaQuery.supportsAnnounceOf(context),
                           alignment: Alignment.topLeft,
                           style: inputStyle,
                           overflow: inputOverflow,
@@ -493,10 +491,8 @@ class LcdStatusBar extends StatelessWidget {
 
     return Semantics(
       label: CalcSemanticStrings.of(context).statusBar(status),
-      // 상태(SHIFT·ALPHA 등)가 바뀌면 읽어 준다. 알림(announcement)을 지원하지 않는 플랫폼(Android)에서만
-      // liveRegion을 쓰고, 지원하는 플랫폼(iOS)은 화면(CalculatorScreen)이 직접 알린다
-      // — Flutter 자체 위젯(InputDecorator)과 같은 방식.
-      liveRegion: !MediaQuery.supportsAnnounceOf(context),
+      // 상태 변화 알림은 화면(CalculatorScreen)의 알림 전용 노드가 맡는다. 여기를 liveRegion으로 두면
+      // Android에서 상태 표시줄 전체를 매번 다시 읽고 켜짐/꺼짐 의미도 전달되지 않는다(#20 리뷰 R2).
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -576,8 +572,6 @@ class _LcdLine extends StatelessWidget {
   /// 스크린리더가 줄 내용 앞에 읽는 줄 이름 ("입력"/"결과")
   final String semanticLabel;
 
-  /// 내용이 바뀌면 스크린리더가 읽어 주는 영역인지
-  final bool liveRegion;
   final Alignment alignment;
   final TextStyle style;
   final LcdLineOverflow overflow;
@@ -587,7 +581,6 @@ class _LcdLine extends StatelessWidget {
   const _LcdLine({
     super.key,
     required this.semanticLabel,
-    this.liveRegion = false,
     required this.alignment,
     required this.style,
     required this.overflow,
@@ -607,11 +600,7 @@ class _LcdLine extends StatelessWidget {
     // M2에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
     // 그것까지 흡수하므로 이 병합 방식을 다시 정한다.
     return MergeSemantics(
-      child: Semantics(
-        label: semanticLabel,
-        liveRegion: liveRegion,
-        child: _buildRow(arrowStyle),
-      ),
+      child: Semantics(label: semanticLabel, child: _buildRow(arrowStyle)),
     );
   }
 
