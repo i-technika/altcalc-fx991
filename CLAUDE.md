@@ -12,7 +12,11 @@
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
 - **상태 관리:** `flutter_riverpod` (현재 2.x)
-- **수학 연산 엔진:** 커스텀 AST(추상 구문 트리) + `decimal` 패키지 (내부 유효숫자 20자리 고정밀도 연산, LCD 출력 시 유효숫자 10자리 반올림 포맷팅)
+- **수학 연산 엔진:** 커스텀 AST(추상 구문 트리) + `decimal` 패키지. **정밀도는 실물 fx-991EX와 동일하게** 맞춘다 (출처: User's Guide "Calculation Range and Precision").
+  - 내부 연산: 유효숫자 **15자리** / LCD 표시: 유효숫자 **10자리** 반올림 (단일 계산 정밀도는 10번째 자리 ±1)
+  - 계산 범위: ±1×10⁻⁹⁹ ~ ±9.999999999×10⁹⁹ 또는 0 — 범위를 벗어나면 Math ERROR
+  - 상수: π = 3.14159265358980, e = 2.71828182845904 (가이드 기재값)
+  - 연산 단계별 반올림 방식·언더플로 처리 등 세부 규칙은 #30에서 실물 대조로 확정한다.
 - **2D 자연어 수식 렌더링 (Natural Textbook Display):** `IntrinsicWidth`, `Row`, `Column` 등을 활용한 재귀 위젯 트리(`MathNodeWidget`)로 분수, 루트, 지수, 정적분, 시그마 기호를 렌더링한다.
 - **수익화 및 서버리스 인앱결제:**
   - 하단 적응형 배너 광고(`google_mobile_ads`): 최하단 키패드 행 아래 `8dp~12dp` 오터치 방지 안전 여백 확보
