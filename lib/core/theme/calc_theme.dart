@@ -202,11 +202,15 @@ abstract final class CalcTheme {
   /// 키캡 메인 라벨 텍스트 스타일 (기준 크기). `CalcKeyButton`은 [keyMainLabelFontRatio]로
   /// 키캡 높이에 맞춰 `fontSize`를 덮어쓴다.
   /// 색은 카테고리마다 다르므로 [KeyCategoryColors.foreground]로 지정한다.
+  ///
+  /// 키 라벨 스타일은 `letterSpacing`을 명시한다. 생략하면 테마의 [DefaultTextStyle] 자간을
+  /// 물려받아, 키패드가 측정한 라벨 폭(`KeypadMetrics`)과 실제 렌더링 폭이 어긋난다.
   static const TextStyle keyMainLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
     fontSize: 16,
     fontWeight: FontWeight.w600,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -217,6 +221,7 @@ abstract final class CalcTheme {
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: shiftLabel,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -227,6 +232,7 @@ abstract final class CalcTheme {
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: alphaLabel,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -268,6 +274,10 @@ abstract final class CalcTheme {
 
   /// SHIFT·ALPHA 각인 사이 간격 (각인 글자 크기 대비)
   static const double keyLegendGapRatio = 0.3;
+
+  /// 자연 폭 우선 배분을 받는 짧은 각인의 최대 글자 수 (변수 이름 `A`~`F`, `X`, `Y`, `M` 등).
+  /// 이보다 긴 각인 쌍은 글자 수 비례로 폭을 나눈다.
+  static const int keyLegendPriorityMaxRunes = 2;
 
   /// SHIFT·ALPHA 각인 사이 간격 상한 (키 너비 대비) — 좁고 긴 셀에서 넘침 방지
   static const double keyLegendGapMaxWidthRatio = 0.05;
@@ -349,6 +359,48 @@ abstract final class CalcTheme {
 
   /// [adSlotMaxHeight]를 기본값으로 쓰는 대형 화면 기준 (화면 짧은 변, dp)
   static const double adSlotLargeScreenShortestSide = 600.0;
+
+  // ───────────────────────────────────────────
+  // 키패드 배치 (Keypad Layout)
+  // ───────────────────────────────────────────
+
+  /// 숫자부 행 높이 (함수부·상단 조작부 행 높이 대비) — 실물처럼 숫자 키가 더 크다.
+  static const double keypadNumberRowHeightRatio = 1.2;
+
+  /// 함수부와 숫자부 사이 간격 (키패드 높이 대비)
+  static const double keypadSectionGapRatio = 0.02;
+
+  /// 키패드 최소 가로/세로 비 — 세로로 긴 화면에서 키가 과도하게 길어지지 않게 높이를 제한한다.
+  static const double keypadMinAspectRatio = 0.75;
+
+  /// 키패드 최대 가로/세로 비 — 가로로 넓은 화면에서 키가 과도하게 넓어지지 않게 폭을 제한한다.
+  static const double keypadMaxAspectRatio = 1.25;
+
+  /// 키캡 터치 영역 최소 높이 (dp). 키캡이 이보다 낮으면 각인 띠까지 터치 영역을 넓힌다.
+  /// (Material·Android 접근성 권장 터치 대상 48dp)
+  static const double keyMinTouchTargetHeight = 48.0;
+
+  /// 키패드 통일 글자 크기 하한 (높이 기준 크기 대비). 이보다 긴 라벨은 키마다 따로 줄어든다.
+  static const double keypadUniformFontMinRatio = 0.75;
+
+  /// 커서 패드 부채꼴 경계선·테두리 두께 (dp). 색은 [keyBorder](본체 대비 3:1 이상).
+  static const double cursorPadDividerWidth = 2.0;
+
+  // ───────────────────────────────────────────
+  // 화면 배치 (Screen Layout) — 잠정값, TODO(#23): LCD : 키패드 : 광고 비율 기준 확정
+  // ───────────────────────────────────────────
+
+  /// 화면 가장자리 여백 (dp)
+  static const double screenPadding = 8.0;
+
+  /// LCD와 키패드 사이 간격 (dp)
+  static const double screenLcdKeypadGap = 8.0;
+
+  /// LCD 높이 (광고 슬롯을 뺀 본체 높이 대비)
+  static const double screenLcdHeightRatio = 0.26;
+
+  /// LCD 최소 높이 (dp)
+  static const double screenLcdMinHeight = 96.0;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

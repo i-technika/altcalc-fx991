@@ -59,6 +59,7 @@ bool _isPressed(WidgetTester tester, CalcKeyId id) =>
 const _light = 'HapticFeedbackType.lightImpact';
 
 void main() {
+  _shapeAndLegendTests();
   group('3단 라벨 레이아웃', () {
     testWidgets('메인·SHIFT·ALPHA 라벨을 모두 표시한다 (CALC / SOLVE / =)', (
       tester,
@@ -945,6 +946,104 @@ void main() {
         ),
       );
       handle.dispose();
+    });
+  });
+}
+
+void _shapeAndLegendTests() {
+  /// 왼쪽 위 → 오른쪽 위 → 아래 가운데 삼각형 (커서 패드 ▲ 부채꼴과 같은 모양)
+  Path triangle(Size s) => Path()
+    ..addPolygon([
+      Offset.zero,
+      Offset(s.width, 0),
+      Offset(s.width / 2, s.height),
+    ], true);
+
+  group('키 모양 (shape)', () {
+    testWidgets('모양 밖을 누르면 입력되지 않고, 안을 누르면 입력된다', (tester) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.cursorUp),
+            showLegendBand: false,
+            enableHaptics: false,
+            shape: triangle,
+            onPressed: pressed.add,
+          ),
+          size: const Size(100, 60),
+        ),
+      );
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      await tester.tapAt(box.topLeft + const Offset(5, 50)); // 왼쪽 아래 모서리: 삼각형 밖
+      expect(pressed, isEmpty);
+      await tester.tapAt(box.topLeft + const Offset(50, 10));
+      expect(pressed, [CalcKeyId.cursorUp]);
+    });
+
+    testWidgets('누른 채 모양 밖으로 나가면 (상자 안이어도) 반복이 멈춘다', (tester) async {
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.cursorUp),
+            showLegendBand: false,
+            enableHaptics: false,
+            shape: triangle,
+            onPressed: (_) {},
+            onRepeat: repeats.add,
+          ),
+          size: const Size(100, 60),
+        ),
+      );
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      final g = await tester.startGesture(box.topLeft + const Offset(50, 10));
+      await tester.pump(CalcKeyButton.defaultRepeatDelay);
+      expect(repeats, hasLength(1));
+      await g.moveTo(box.topLeft + const Offset(8, 50)); // 상자 안, 삼각형 밖
+      await tester.pump(CalcKeyButton.defaultRepeatInterval * 5);
+      expect(repeats, hasLength(1));
+      await g.up();
+    });
+  });
+
+  group('각인 배분', () {
+    testWidgets('긴 각인 옆의 한 글자 각인은 줄어들지 않는다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sdToggle)),
+          size: const Size(55, 38),
+        ),
+      );
+      final y = find.text('Y');
+      expect(
+        tester.getRect(y).height,
+        moreOrLessEquals(tester.getSize(y).height, epsilon: 0.01),
+      );
+      // 긴 각인은 남은 폭 안에 들어가도록 줄어든다 (띠 밖으로 넘치지 않는다).
+      final band = tester.getRect(find.byType(CalcKeyButton));
+      final long = tester.getRect(find.text('a b/c⇔d/c'));
+      expect(long.left, greaterThanOrEqualTo(band.left - 0.01));
+      expect(long.right, lessThan(tester.getRect(y).left));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('둘 다 긴 각인 쌍은 글자 수 비례로 나눠 함께 줄어든다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.dot)), // Ran# / RanInt
+          size: const Size(55, 38),
+        ),
+      );
+      double scaleOf(String text) {
+        final f = find.text(text);
+        return tester.getRect(f).height / tester.getSize(f).height;
+      }
+
+      expect(
+        scaleOf('Ran#'),
+        moreOrLessEquals(scaleOf('RanInt'), epsilon: 0.02),
+      );
     });
   });
 }

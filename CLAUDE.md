@@ -29,7 +29,7 @@
 - `domain/engine/`: `cursor_navigator.dart` (방향키 커서 이동), `ast_evaluator.dart` (수식 계산기), `numerical_methods.dart` (수치해석)
 - `presentation/providers/`: `calc_provider.dart`, `iap_provider.dart`
 - `presentation/screens/`: `calculator_screen.dart`
-- `presentation/widgets/`: `lcd_display.dart`, `math_node_widget.dart`, `calc_key_button.dart`, `banner_ad_slot.dart`
+- `presentation/widgets/`: `lcd_display.dart`, `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일), `banner_ad_slot.dart`, `text_fit.dart` (글자 배율 반영 높이 맞춤)
 - 테스트: `test/unit/` (순수 Dart 로직), `test/widget/` (위젯 테스트)
 
 ## 3. 코딩 원칙
