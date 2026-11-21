@@ -179,15 +179,15 @@ void main() {
       });
     });
 
-    test('템플릿 라벨은 첫 입력 칸 ■를 정확히 하나 갖고, ▭는 쓰지 않는다', () {
-      // key_definitions.dart 머리 주석 "라벨 표기" (#16): ■ = 커서가 처음 들어가는 칸, □ = 나머지 칸.
+    test('템플릿 라벨은 첫 입력 칸 ◼를 정확히 하나 갖고, ▭는 쓰지 않는다', () {
+      // key_definitions.dart 머리 주석 "라벨 표기" (#16): ◼ = 커서가 처음 들어가는 칸, ◻ = 나머지 칸.
       final labels = [
         for (final k in allKeys) ...[k.mainLabel, k.shiftLabel, k.alphaLabel],
       ].whereType<String>();
       for (final label in labels) {
         expect(label, isNot(contains('▭')), reason: label);
-        if (label.contains('■') || label.contains('□')) {
-          expect('■'.allMatches(label).length, 1, reason: label);
+        if (label.contains('◼') || label.contains('◻')) {
+          expect('◼'.allMatches(label).length, 1, reason: label);
         }
       }
     });
@@ -229,20 +229,20 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.on: ('ON', null, null),
   CalcKeyId.optn: ('OPTN', 'QR', null), // G7
   CalcKeyId.calc: ('CALC', 'SOLVE', '='),
-  CalcKeyId.integral: ('∫□□■', 'd/dx■', ':'), // G15 d/dx, G11 :
-  CalcKeyId.variableX: ('x', '∑□□■', null), // G16 ∑ 예제
+  CalcKeyId.integral: ('∫◻◻◼', 'd/dx◼', ':'), // G15 d/dx, G11 :
+  CalcKeyId.variableX: ('x', '∑◻◻◼', null), // G16 ∑ 예제
   // 커서 패드
   CalcKeyId.cursorUp: ('▲', null, null),
   CalcKeyId.cursorDown: ('▼', null, null),
   CalcKeyId.cursorLeft: ('◄', null, null),
   CalcKeyId.cursorRight: ('►', null, null),
   // 함수부 1행
-  CalcKeyId.fraction: ('■/□', '■□/□', null),
-  CalcKeyId.sqrt: ('√■', '∛■', null),
+  CalcKeyId.fraction: ('◼/◻', '◼◻/◻', null),
+  CalcKeyId.sqrt: ('√◼', '∛◼', null),
   CalcKeyId.square: ('x²', 'x³', null), // G14
-  CalcKeyId.power: ('x^■', '■√□', null), // G15
-  CalcKeyId.logBase: ('log■□', '10^■', null),
-  CalcKeyId.ln: ('ln', 'e^■', null), // G14
+  CalcKeyId.power: ('x^◼', '◼√◻', null), // G15
+  CalcKeyId.logBase: ('log◼◻', '10^◼', null),
+  CalcKeyId.ln: ('ln', 'e^◼', null), // G14
   // 함수부 2행
   CalcKeyId.negative: ('(−)', 'log', 'A'), // G14 log 예제, G13 변수
   CalcKeyId.degMinSec: ('°\'"', 'FACT', 'B'),

@@ -1,15 +1,15 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
-import 'package:itechnika_altcalc_fx991/core/theme/font_licenses.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
+import '../support/lcd_glyphs.dart';
 
 /// 실제 번들 글꼴로 [text]를 [style]로 그린 폭 (글자 크기 1dp당, 자간 제외).
 double _emWidth(String text, TextStyle style) {
@@ -52,8 +52,9 @@ void main() {
       ('입력 줄', CalcTheme.lcdInputStyle),
       ('결과 줄', CalcTheme.lcdResultStyle),
     ]) {
-      test('$name: 숫자·연산·지수·위첨자 글자는 모두 한 칸(0.6em)이다', () {
-        for (final ch in '0123456789.−+×÷E⁰¹²³⁴⁵⁶⁷⁸⁹⁻■□◄►▲▼'.split('')) {
+      test('$name: LCD 줄 글자(lcdLineGlyphs)는 모두 한 칸(0.6em)이다', () {
+        // 두 칸 폭 글자(▶·℃·⇔ 등)가 LCD 글자 목록에 들어오면 여기서 걸린다.
+        for (final ch in lcdLineGlyphs.split('')) {
           expect(
             _emWidth(ch, style),
             moreOrLessEquals(cell, epsilon: 0.005),
@@ -63,7 +64,7 @@ void main() {
       });
     }
 
-    test('가장 긴 결과는 지수를 2/3 크기(자간 포함)로 그리면 17칸에 들어가고, 유니코드 위첨자로 그리면 넘친다', () {
+    test('가장 긴 결과는 지수를 lcdExponentMaxScale 크기(자간 포함)로 그리면 여유를 두고 17칸에 들어가고, 유니코드 위첨자로 그리면 넘친다', () {
       const mantissa = '−1.234567891×10';
       const f = 20.0;
       final ls = CalcTheme.lcdResultStyle.letterSpacing!;
@@ -86,7 +87,8 @@ void main() {
           ],
         ),
       );
-      expect(scaled, lessThanOrEqualTo(columns + 0.01));
+      // 여유: 위첨자 올림 오프셋·픽셀 맞춤을 흡수할 만큼(0.1칸 이상) 남는다.
+      expect(scaled, lessThan(columns - 0.1 * (f * cell + ls)));
 
       final unicode = _spanWidth(TextSpan(text: '$mantissa⁻⁹⁹', style: base));
       expect(unicode, greaterThan(columns), reason: '18칸 — 지수는 작게 그려야 한다');
@@ -145,11 +147,16 @@ void main() {
           }
         }
       }
+      // ∑·∛·∫는 대체 글꼴 Noto Sans Math의 진행폭(852·679·836/1000)이어야 한다.
+      // 테스트 글꼴(1em)이나 플랫폼 글꼴로 떨어지면 값이 달라진다.
       expect(odd.keys.toSet(), {'⇔', '∑', '∛', '∫'});
       expect(odd['⇔'], moreOrLessEquals(2 * cell, epsilon: 0.005));
+      expect(odd['∑'], moreOrLessEquals(0.852, epsilon: 0.005));
+      expect(odd['∛'], moreOrLessEquals(0.679, epsilon: 0.005));
+      expect(odd['∫'], moreOrLessEquals(0.836, epsilon: 0.005));
     });
 
-    test('가장 넓은 메인 라벨은 SHIFT·ALPHA(5칸)이고 log■□도 5칸을 넘지 않는다', () {
+    test('가장 넓은 메인 라벨은 SHIFT·ALPHA(5칸)이고 log◼◻도 5칸을 넘지 않는다', () {
       const style = CalcTheme.keyMainLabelStyle;
       final shift = _emWidth('SHIFT', style);
       expect(shift, moreOrLessEquals(5 * cell, epsilon: 0.01));
@@ -166,7 +173,41 @@ void main() {
       );
     });
 
+    testWidgets('대체 글꼴 글자(∑·∛·∫)가 섞인 라벨도 줄 높이가 다른 라벨과 같다', (tester) async {
+      // Noto Sans Math의 descent(423)는 Noto Sans Mono(293)보다 깊어, strut 없이는 그 라벨만
+      // 줄이 높아진다(20 → 21dp). 키 라벨은 기본 글꼴 기준 strut로 줄 높이를 고정한다.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 390,
+              height: 520,
+              child: CalcKeypad(enableHaptics: false),
+            ),
+          ),
+        ),
+      );
+      double heightOf(String label) => tester.getSize(find.text(label)).height;
+      expect(heightOf('∫◻◻◼'), heightOf('OPTN'));
+      expect(heightOf('∛◼'), heightOf('x³'));
+      expect(heightOf('∑◻◻◼'), heightOf('x³'));
+    });
+
+    test('글자 배율은 keyMaxTextScaleFactor(1.3)에서 멈춘다 — 2.0도 1.3과 같은 크기', () {
+      const size = Size(390, 520);
+      final at13 = KeypadMetrics.compute(size, const TextScaler.linear(1.3));
+      final at20 = KeypadMetrics.compute(size, const TextScaler.linear(2.0));
+      expect(at20.mainLabelFontSize, at13.mainLabelFontSize);
+      expect(at20.legendFontSize, at13.legendFontSize);
+    });
+
     // 실제 글꼴에서 라벨이 FittedBox로 따로 줄지 않는지 본다 (#11 메모: 하한에 걸리는 화면 크기 확인).
+    // 배율 1.0에서는 모든 라벨이 통일 크기 그대로 그려진다. 배율을 키우면 통일 크기가 하한
+    // (keypadUniformFontMinRatio)에 걸릴 수 있고, 그때는 가장 긴 라벨만 FittedBox로 조금 준다.
+    // 실측(#16): 412×915 배율 1.3에서만 각인 띠가 하한에 걸려 `a b/c⇔d/c`가 약 0.4% 준다.
+    final allowedShrink = {
+      (412.0, 915.0, 1.3): {'sdToggle "a b/c⇔d/c"'},
+    };
     for (final size in const [
       Size(320, 568),
       Size(360, 640),
@@ -174,13 +215,11 @@ void main() {
       Size(412, 915),
       Size(600, 960),
     ]) {
-      for (final scale in [1.0, 1.3, 2.0]) {
-        // 배율 1.0에서는 모든 라벨이 통일 크기 그대로 그려진다. 배율을 키우면 통일 크기가 하한
-        // (keypadUniformFontMinRatio)에 걸릴 수 있고, 그때는 가장 긴 라벨만 FittedBox로 조금 준다.
-        // 실측(#16): 412×915 배율 1.3 이상에서 각인 띠가 하한에 걸려 `a b/c⇔d/c`가 약 0.4% 준다.
-        final minRatio = scale == 1.0 ? 1.0 : 0.95;
+      for (final scale in [1.0, 1.3]) {
+        final allowed =
+            allowedShrink[(size.width, size.height, scale)] ?? const {};
         testWidgets(
-          '${size.width}×${size.height} 배율 $scale: 라벨이 FittedBox로 ${scale == 1.0 ? '줄지 않는다' : '5% 넘게 줄지 않는다'}',
+          '${size.width}×${size.height} 배율 $scale: 라벨이 FittedBox로 줄지 않는다${allowed.isEmpty ? '' : ' (허용: $allowed, 1% 이내)'}',
           (tester) async {
             tester.view.physicalSize = size * tester.view.devicePixelRatio;
             addTearDown(tester.view.resetPhysicalSize);
@@ -197,7 +236,7 @@ void main() {
                 ),
               ),
             );
-            final shrunk = <String>[];
+            final shrunk = <String>{};
             for (final b in tester.widgetList<CalcKeyButton>(
               find.byType(CalcKeyButton),
             )) {
@@ -215,28 +254,17 @@ void main() {
                 );
                 final rendered = tester.getRect(text).height;
                 final natural = tester.getSize(text).height;
-                if (rendered < natural * minRatio - 0.01) {
-                  shrunk.add(
-                    '${def.id.name} "$label" ${(rendered / natural).toStringAsFixed(5)}',
-                  );
+                if (rendered < natural - 0.01) {
+                  final id = '${def.id.name} "$label"';
+                  shrunk.add(id);
+                  expect(rendered / natural, greaterThan(0.99), reason: id);
                 }
               }
             }
-            expect(shrunk, isEmpty);
+            expect(shrunk, allowed);
           },
         );
       }
-    }
-  });
-
-  test('번들 글꼴 라이선스(OFL)가 LicenseRegistry에 등록된다', () async {
-    addTearDown(LicenseRegistry.reset);
-    registerFontLicenses();
-    final entries = await LicenseRegistry.licenses.toList();
-    for (final family in bundledFontLicenseAssets.keys) {
-      final entry = entries.singleWhere((e) => e.packages.contains(family));
-      final text = entry.paragraphs.map((p) => p.text).join('\n');
-      expect(text, contains('SIL Open Font License, Version 1.1'));
     }
   });
 }

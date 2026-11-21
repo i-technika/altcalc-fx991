@@ -590,7 +590,7 @@ class _LcdLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ScrollArrow(
-          symbol: '◄',
+          isLeft: true,
           visible: overflow.left,
           style: arrowStyle,
           textScaler: textScaler,
@@ -621,7 +621,7 @@ class _LcdLine extends StatelessWidget {
           ),
         ),
         _ScrollArrow(
-          symbol: '►',
+          isLeft: false,
           visible: overflow.right,
           style: arrowStyle,
           textScaler: textScaler,
@@ -651,13 +651,18 @@ class LcdLineScope extends InheritedWidget {
 
 /// 줄 양끝의 스크롤 표시(◄/►). 꺼져도 자리를 유지해 내용 위치가 흔들리지 않는다.
 class _ScrollArrow extends StatelessWidget {
-  final String symbol;
+  /// 왼쪽(◄) 표시인지. 글자 대신 방향으로 구분해, 글리프를 바꿔도 음성 라벨이 뒤바뀌지 않는다.
+  final bool isLeft;
   final bool visible;
   final TextStyle style;
   final TextScaler textScaler;
 
+  /// 화살표 글자. 한 칸 폭인 `◄`·`►`를 쓴다 (`◀`·`▶`는 두 칸 폭 — [CalcTheme.lcdScrollArrowWidthRatio]).
+  static const String leftSymbol = '◄';
+  static const String rightSymbol = '►';
+
   const _ScrollArrow({
-    required this.symbol,
+    required this.isLeft,
     required this.visible,
     required this.style,
     required this.textScaler,
@@ -674,15 +679,13 @@ class _ScrollArrow extends StatelessWidget {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  symbol,
+                  isLeft ? leftSymbol : rightSymbol,
                   style: style.copyWith(color: CalcTheme.lcdText),
                   textScaler: textScaler,
                   maxLines: 1,
                   softWrap: false,
                   // TODO(#20): 스크린리더 라벨 다국어 처리
-                  semanticsLabel: symbol == '◄'
-                      ? '왼쪽에 내용 더 있음'
-                      : '오른쪽에 내용 더 있음',
+                  semanticsLabel: isLeft ? '왼쪽에 내용 더 있음' : '오른쪽에 내용 더 있음',
                 ),
               ),
             )

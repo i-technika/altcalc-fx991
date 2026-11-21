@@ -70,7 +70,7 @@ abstract final class CalcTheme {
   /// 연산자 키 텍스트
   static const Color keyOperatorText = Color(0xFFFFFFFF);
 
-  /// 함수 키 (sin, cos, log■□ 등) — 중간 회색
+  /// 함수 키 (sin, cos, log◼◻ 등) — 중간 회색
   static const Color keyFunction = Color(0xFF4A4A4A);
 
   /// 함수 키 텍스트
@@ -369,15 +369,19 @@ abstract final class CalcTheme {
   /// 자간([lcdInputStyle]·[lcdResultStyle]의 `letterSpacing`)은 따로 더한다.
   ///
   /// 실측(#16, `test/widget/bundled_font_test.dart`): 숫자·`.`·`−`·`×`·`E`·유니코드 위첨자가 모두 한 칸이다.
-  /// 그래서 [lcdLineColumns]의 17칸은 **지수를 줄 글자의 2/3 이하 크기로 그린다**는 전제가 필요하다.
+  /// 그래서 [lcdLineColumns]의 17칸은 **지수를 [lcdExponentMaxScale] 이하 크기로 그린다**는 전제가 필요하다.
   /// `×10⁻⁹⁹`를 유니코드 위첨자 글자로 그리면 지수 3글자가 3칸을 차지해 18칸이 되어 넘친다.
+  /// LCD 줄에는 두 칸 폭 글자(`▶`·`℃`·`⇔` 등)를 쓰지 않는다 — `assets/fonts/README.md` "글리프 선택 규칙".
   static const double lcdLineCharWidthRatio = 0.6;
 
   /// [lcdLineColumns]가 전제하는 결과 줄 지수(위첨자) 글자 크기 상한 (줄 글자 크기 대비).
-  /// 지수 3글자(`−99`) × 2/3 = 2칸. 실제 위첨자 비율은 자연 표기 렌더링(M2)에서 정하되 이 값을 넘지 않는다.
+  ///
+  /// 지수 3글자(`−99`)가 2칸(= 3 × 2/3)에 들어가야 17칸이 성립한다. 2/3 그대로면 여유가 0이라
+  /// 위첨자 올림 오프셋·픽셀 맞춤 하나에도 넘치므로, 0.6(지수 1.8칸, 여유 0.2칸)을 상한으로 둔다.
   /// 지수의 자간도 같은 비율로 줄여야 한다 — 자간은 글자 크기와 무관한 dp 값이라 그대로 두면
-  /// 지수 3글자가 자간 3개를 온전히 더해 17칸을 넘는다(실측 #16).
-  static const double lcdExponentMaxScale = 2 / 3;
+  /// 지수 3글자가 자간 3개를 온전히 더해 넘친다(실측 #16).
+  /// 실제 위첨자 비율은 자연 표기 렌더링(M2)에서 정하되 이 값을 넘지 않는다.
+  static const double lcdExponentMaxScale = 0.6;
 
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)
