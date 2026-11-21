@@ -102,10 +102,14 @@ void main() {
         lessThanOrEqualTo(CalcTheme.adSlotMaxHeight),
       );
       expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
-      expect(CalcTheme.adSlotMinSafetyMargin, inInclusiveRange(8, 12));
+      expect(CalcTheme.adSlotMinSafetyMargin, 8);
+      expect(CalcTheme.adSlotMaxSafetyMargin, 12);
       expect(
-        CalcTheme.adSlotMinSafetyMargin,
-        lessThanOrEqualTo(CalcTheme.adSlotSafetyMargin),
+        CalcTheme.adSlotSafetyMargin,
+        inInclusiveRange(
+          CalcTheme.adSlotMinSafetyMargin,
+          CalcTheme.adSlotMaxSafetyMargin,
+        ),
       );
       expect(CalcTheme.adSlotLargeScreenShortestSide, greaterThan(0));
     });

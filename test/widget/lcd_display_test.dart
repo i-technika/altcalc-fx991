@@ -334,11 +334,15 @@ void main() {
       expect(tester.getRect(find.text('12')), before);
     });
 
-    testWidgets('줄 내용은 줄 폭·높이를 최대값으로 하는 느슨한 제약을 받는다 (M2 연동)', (tester) async {
-      final seen = <String, BoxConstraints>{};
+    testWidgets('줄 내용은 제약 없이 그려지고 줄 크기는 LcdLineScope로 안다 (M2 연동)', (
+      tester,
+    ) async {
+      final constraints = <String, BoxConstraints>{};
+      final scopes = <String, Size?>{};
       Widget probe(String name) => LayoutBuilder(
         builder: (context, c) {
-          seen[name] = c;
+          constraints[name] = c;
+          scopes[name] = LcdLineScope.maybeOf(context);
           return const SizedBox.shrink();
         },
       );
@@ -351,12 +355,40 @@ void main() {
         ('result', _resultLine),
       ]) {
         final area = tester.getSize(_content(line));
-        final c = seen[name]!;
-        expect(c.hasBoundedWidth, isTrue, reason: name);
-        expect(c.maxWidth, closeTo(area.width, 0.01), reason: name);
-        expect(c.maxHeight, closeTo(area.height, 0.01), reason: name);
-        expect(c.minWidth, 0, reason: name);
+        expect(constraints[name]!.hasBoundedWidth, isFalse, reason: name);
+        expect(constraints[name]!.hasBoundedHeight, isFalse, reason: name);
+        expect(scopes[name], area, reason: name);
       }
+    });
+
+    testWidgets('줄보다 큰 Row·Column(2D 수식 모양)도 넘침 오류 없이 잘린다', (tester) async {
+      await _pump(
+        tester,
+        LcdDisplay(
+          input: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [for (var i = 0; i < 40; i++) const Text('12')],
+          ),
+          result: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [Text('1'), Text('-'), Text('2')],
+          ),
+        ),
+        height: 120,
+      );
+      expect(tester.takeException(), isNull);
+      final inputArea = tester.getRect(_content(_inputLine));
+      final row = tester.getRect(
+        find.descendant(of: _inputLine, matching: find.byType(Row)).last,
+      );
+      expect(row.width, greaterThan(inputArea.width));
+      expect(row.left, closeTo(inputArea.left, 0.01));
+      final resultArea = tester.getRect(_content(_resultLine));
+      final column = tester.getRect(
+        find.descendant(of: _resultLine, matching: find.byType(Column)),
+      );
+      expect(column.height, greaterThan(resultArea.height));
+      expect(column.center.dy, closeTo(resultArea.center.dy, 0.01));
     });
 
     testWidgets('가로 스크롤 내용을 넣으면 줄 폭 기준으로 스크롤되어 끝(커서 쪽)을 보여줄 수 있다', (
@@ -368,11 +400,16 @@ void main() {
       await _pump(
         tester,
         LcdDisplay(
-          input: SingleChildScrollView(
-            controller: controller,
-            scrollDirection: Axis.horizontal,
-            reverse: true,
-            child: Text(long),
+          input: Builder(
+            builder: (context) => SizedBox.fromSize(
+              size: LcdLineScope.maybeOf(context),
+              child: SingleChildScrollView(
+                controller: controller,
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: Text(long),
+              ),
+            ),
           ),
         ),
       );
@@ -385,19 +422,29 @@ void main() {
       );
     });
 
-    testWidgets('긴 Text는 축소 없이 줄 폭에서 잘리고 넘침 오류가 없다', (tester) async {
+    testWidgets('긴 입력 Text는 축소 없이 앞부분이 보이고 나머지는 잘린다', (tester) async {
       final long = '1234567890' * 10;
       await _pump(tester, LcdDisplay(input: Text(long)));
       expect(tester.takeException(), isNull);
       final area = tester.getRect(_content(_inputLine));
       final text = tester.getRect(find.text(long));
-      expect(text.width, closeTo(area.width, 0.01));
-      expect(text.left, area.left);
+      expect(text.width, greaterThan(area.width));
+      expect(text.left, closeTo(area.left, 0.01));
       // 축소하지 않았다: 글자 크기는 그대로다.
       expect(
         DefaultTextStyle.of(tester.element(find.text(long))).style.fontSize,
         CalcTheme.lcdInputStyle.fontSize,
       );
+    });
+
+    testWidgets('긴 결과 Text는 오른쪽 정렬을 지켜 끝부분이 보인다', (tester) async {
+      final long = '9876543210' * 6;
+      await _pump(tester, LcdDisplay(result: Text(long)));
+      expect(tester.takeException(), isNull);
+      final area = tester.getRect(_content(_resultLine));
+      final text = tester.getRect(find.text(long));
+      expect(text.width, greaterThan(area.width));
+      expect(text.right, closeTo(area.right, 0.01));
     });
   });
 
@@ -450,11 +497,20 @@ void main() {
           (_resultLine, '0.5'),
         ]) {
           final lineRect = tester.getRect(line);
+          // 줄 내용은 제약 없이 그려지므로 rect 높이가 곧 글자의 실제 높이다.
           final textRect = tester.getRect(find.text(text));
           expect(
             textRect.height,
             lessThanOrEqualTo(lineRect.height + 0.01),
             reason: '$text 높이가 줄 높이를 넘는다',
+          );
+          final element = tester.element(find.text(text));
+          final style = DefaultTextStyle.of(element).style;
+          expect(
+            MediaQuery.textScalerOf(element).scale(style.fontSize!) *
+                style.height!,
+            lessThanOrEqualTo(lineRect.height + 0.01),
+            reason: '$text 스타일 높이가 줄 높이를 넘는다',
           );
           expect(_containsRect(inner, lineRect), isTrue, reason: text);
         }
@@ -503,13 +559,50 @@ void main() {
       expect(s.fontSize, 20);
     });
 
+    /// 렌더링 높이(TextPainter처럼 정수 올림)
+    double rendered(TextStyle s, TextScaler scaler) =>
+        (scaler.scale(s.fontSize!) * hf).ceilToDouble();
+
     test('배율 반영 높이가 줄 높이를 넘으면 줄 높이에 맞춰 줄인다', () {
+      const scaler = TextScaler.linear(1.3);
       final s = LcdDisplay.fitLineStyle(
         base,
         lineHeight: 30,
-        textScaler: const TextScaler.linear(1.3),
+        textScaler: scaler,
       );
-      expect(s.fontSize! * 1.3 * hf, closeTo(30, 1e-9));
+      expect(s.fontSize, lessThan(base.fontSize!));
+      expect(rendered(s, scaler), lessThanOrEqualTo(30));
+      // 지나치게 줄이지 않는다: 1dp만 커져도 줄을 넘는다.
+      expect(
+        rendered(s.copyWith(fontSize: s.fontSize! + 1), scaler),
+        greaterThan(30),
+      );
+    });
+
+    test('비선형 배율(작은 글자일수록 크게 확대)에서도 줄 높이를 넘지 않는다', () {
+      const scaler = _NonLinearScaler();
+      for (final lineHeight in [10.0, 25.0, 30.0, 45.0, 60.0]) {
+        final s = LcdDisplay.fitLineStyle(
+          base,
+          lineHeight: lineHeight,
+          textScaler: scaler,
+        );
+        expect(
+          rendered(s, scaler),
+          lessThanOrEqualTo(lineHeight),
+          reason: '$lineHeight',
+        );
+        if (s.fontSize! < base.fontSize!) {
+          // 줄였다면 지나치게 줄이지 않는다: 1dp만 커져도 줄을 넘는다.
+          expect(
+            rendered(s.copyWith(fontSize: s.fontSize! + 1), scaler),
+            greaterThan(lineHeight),
+            reason: '$lineHeight',
+          );
+        } else {
+          expect(s.fontSize, base.fontSize, reason: '$lineHeight');
+        }
+      }
     });
 
     test('줄 높이가 0 이하여도 양수 글자 크기를 준다', () {
@@ -520,6 +613,14 @@ void main() {
       );
       expect(s.fontSize, greaterThan(0));
     });
+  });
+
+  test('글자 크기 주입값이 0 이하·무한대·NaN이면 assert로 막는다', () {
+    for (final bad in [0.0, -1.0, double.infinity, double.nan]) {
+      expect(() => LcdDisplay(statusFontSize: bad), throwsAssertionError);
+      expect(() => LcdDisplay(inputFontSize: bad), throwsAssertionError);
+      expect(() => LcdDisplay(resultFontSize: bad), throwsAssertionError);
+    }
   });
 
   group('LcdLineOverflow', () {
@@ -535,4 +636,18 @@ void main() {
       );
     });
   });
+}
+
+/// 안드로이드 14 비선형 글꼴 배율 흉내: 작은 글자는 1.3배, 큰 글자는 1.1배까지 줄어든다.
+class _NonLinearScaler extends TextScaler {
+  const _NonLinearScaler();
+
+  @override
+  double scale(double fontSize) {
+    final t = ((fontSize - 10) / 30).clamp(0.0, 1.0);
+    return fontSize * (1.3 - 0.2 * t);
+  }
+
+  @override
+  double get textScaleFactor => 1.3;
 }

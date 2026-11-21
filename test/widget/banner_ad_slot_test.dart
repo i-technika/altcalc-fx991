@@ -86,15 +86,25 @@ void main() {
       expect(bg.top - whole.top, 12);
     });
 
-    test('안전 여백이 하한보다 작으면 assert로 막는다', () {
+    test('안전 여백이 8~12dp 범위를 벗어나면 assert로 막는다', () {
       expect(
         () => BannerAdSlot(safetyMargin: CalcTheme.adSlotMinSafetyMargin - 1),
         throwsAssertionError,
       );
+      expect(
+        () => BannerAdSlot(safetyMargin: CalcTheme.adSlotMaxSafetyMargin + 1),
+        throwsAssertionError,
+      );
+      expect(
+        () => BannerAdSlot(safetyMargin: CalcTheme.adSlotMaxSafetyMargin),
+        returnsNormally,
+      );
     });
 
-    test('높이가 0 이하면 assert로 막는다', () {
+    test('높이가 0 이하·무한대·NaN이면 assert로 막는다', () {
       expect(() => BannerAdSlot(height: 0), throwsAssertionError);
+      expect(() => BannerAdSlot(height: double.infinity), throwsAssertionError);
+      expect(() => BannerAdSlot(height: double.nan), throwsAssertionError);
     });
   });
 
@@ -124,7 +134,9 @@ void main() {
       expect(bg.right - slot.right, 48);
     });
 
-    testWidgets('광고는 슬롯 가운데에 놓이고 슬롯 크기를 넘지 않으며 잘리지 않는다', (tester) async {
+    testWidgets('광고는 슬롯 가운데에 놓이고 ClipRect 없이 슬롯 크기로 제약된다 (높이 계약 위반 시 찌그러짐)', (
+      tester,
+    ) async {
       const adKey = ValueKey('ad');
       await _pump(
         tester,
@@ -134,7 +146,8 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(tester.getCenter(find.byKey(adKey)), tester.getCenter(_slot));
-      // 큰 광고는 자르지 않고 슬롯 크기로 제약한다 (AdMob 정책: 광고를 잘라 가리지 않는다).
+      // 슬롯은 ClipRect로 자르지 않고 슬롯 크기로 제약만 한다. 슬롯보다 큰 광고는 찌그러지므로
+      // 호출자가 실제 광고 높이를 height로 넘겨야 한다 (#18).
       expect(tester.getSize(find.byKey(adKey)).height, CalcTheme.adSlotHeight);
       expect(
         find.ancestor(of: find.byKey(adKey), matching: find.byType(ClipRect)),
@@ -142,9 +155,8 @@ void main() {
       );
     });
 
-    testWidgets('안전 여백을 누른 터치는 뒤쪽 위젯이나 광고로 전달되지 않는다', (tester) async {
+    testWidgets('안전 여백을 누른 터치는 겹쳐 있는 뒤쪽 위젯으로 전달되지 않는다', (tester) async {
       var behindTaps = 0;
-      var adTaps = 0;
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(size: Size(400, 800)),
@@ -160,13 +172,7 @@ void main() {
                 ),
                 Align(
                   alignment: Alignment.bottomCenter,
-                  child: BannerAdSlot(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => adTaps++,
-                      child: const SizedBox(width: 320, height: 50),
-                    ),
-                  ),
+                  child: const BannerAdSlot(),
                 ),
               ],
             ),
@@ -177,7 +183,6 @@ void main() {
       await tester.tapAt(tester.getCenter(margin));
       await tester.pump();
       expect(behindTaps, 0);
-      expect(adTaps, 0);
       // 대조: 여백 밖(위쪽)은 뒤쪽 위젯이 받는다.
       await tester.tapAt(const Offset(200, 100));
       await tester.pump();

@@ -344,6 +344,9 @@ abstract final class CalcTheme {
   /// 광고 슬롯 상단 안전 여백 하한 (dp) — 이보다 좁히면 키패드 오터치로 광고가 눌릴 수 있다
   static const double adSlotMinSafetyMargin = 8.0;
 
+  /// 광고 슬롯 상단 안전 여백 상한 (dp) — CLAUDE.md 규칙(8~12dp)
+  static const double adSlotMaxSafetyMargin = 12.0;
+
   /// [adSlotMaxHeight]를 기본값으로 쓰는 대형 화면 기준 (화면 짧은 변, dp)
   static const double adSlotLargeScreenShortestSide = 600.0;
 }

@@ -54,11 +54,14 @@ class LcdLineOverflow {
 /// - LCD는 실물처럼 항상 왼쪽 → 오른쪽(LTR)으로 배치한다.
 ///
 /// ## 줄 내용 계약 (M2 `MathNodeWidget` 연동)
-/// - [input]/[result]는 **줄 영역 크기를 최대값으로 하는 느슨한 제약**(`maxWidth` = 줄 폭,
-///   `maxHeight` = 줄 높이)을 받는다. 따라서 내용 위젯이 `LayoutBuilder`로 줄 폭을 알 수 있고,
-///   가로 스크롤(커서 따라가기)과 넘침 판정을 스스로 할 수 있다.
-/// - 줄 영역 밖으로 그려지는 부분은 잘린다(축소하지 않음). 가려진 쪽이 있으면 호출자가
-///   [inputOverflow]/[resultOverflow]로 ◀/▶를 켠다. ◀/▶ 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다.
+/// - [input]/[result]는 **제약 없이**(가로·세로 무한) 자기 크기대로 그려진다. 그 뒤 줄 영역에 맞춰
+///   입력은 왼쪽, 결과는 오른쪽, 세로는 가운데로 정렬하고, 줄 밖으로 나간 부분은 잘라낸다(축소하지 않음).
+///   그래서 `Row`/`Column` 재귀 트리(2D 수식)가 줄보다 커도 넘침 오류 없이 실물 LCD처럼 잘려 보인다.
+/// - 줄 크기는 [LcdLineScope.maybeOf]로 알 수 있다. 커서 따라가기 같은 가로 스크롤은 내용 위젯이
+///   이 크기를 기준으로 스스로 처리한다. 스크롤 뷰를 쓰려면 이 크기의 `SizedBox`로 감싼다.
+///   줄보다 세로로 큰 수식(분수·적분 등)을 축소할지, 줄 높이를 늘릴지는 M2에서 정한다.
+/// - 가려진 쪽이 있으면 호출자가 [inputOverflow]/[resultOverflow]로 ◀/▶를 켠다.
+///   ◀/▶ 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M2 스크롤 구현과 함께 정한다.
 /// - 일반 [Text]를 넘기면 입력 줄은 [CalcTheme.lcdInputStyle], 결과 줄은 [CalcTheme.lcdResultStyle]
 ///   (글자 크기는 위 규칙으로 조정)이 적용된다.
 class LcdDisplay extends StatelessWidget {
@@ -108,16 +111,19 @@ class LcdDisplay extends StatelessWidget {
     this.showInactiveIndicators = true,
     this.showDotMatrix = true,
   }) : assert(
-         statusFontSize == null || statusFontSize > 0,
-         'statusFontSize는 양수여야 한다',
+         statusFontSize == null ||
+             (statusFontSize > 0 && statusFontSize < double.infinity),
+         'statusFontSize는 유한한 양수여야 한다',
        ),
        assert(
-         inputFontSize == null || inputFontSize > 0,
-         'inputFontSize는 양수여야 한다',
+         inputFontSize == null ||
+             (inputFontSize > 0 && inputFontSize < double.infinity),
+         'inputFontSize는 유한한 양수여야 한다',
        ),
        assert(
-         resultFontSize == null || resultFontSize > 0,
-         'resultFontSize는 양수여야 한다',
+         resultFontSize == null ||
+             (resultFontSize > 0 && resultFontSize < double.infinity),
+         'resultFontSize는 유한한 양수여야 한다',
        );
 
   @override
@@ -242,7 +248,7 @@ class LcdDisplay extends StatelessWidget {
   }
 
   /// [base] 스타일에 요청 글자 크기([fontSize], 없으면 [base]의 크기)를 적용하되,
-  /// 배율을 반영한 한 줄 높이가 [lineHeight]를 넘으면 그 안에 들어오도록 줄인다.
+  /// 배율을 반영한 한 줄 높이(렌더링 시 정수로 올림)가 [lineHeight]를 넘으면 그 안에 들어오도록 줄인다.
   @visibleForTesting
   static TextStyle fitLineStyle(
     TextStyle base, {
@@ -252,11 +258,26 @@ class LcdDisplay extends StatelessWidget {
   }) {
     final requested = fontSize ?? base.fontSize!;
     final heightFactor = base.height ?? 1.0;
-    final rendered = textScaler.scale(requested) * heightFactor;
-    if (rendered <= lineHeight) return base.copyWith(fontSize: requested);
-    // 배율이 선형이라는 가정으로 비례 축소한다(상한 적용된 배율은 선형).
-    final fitted = requested * math.max(0.0, lineHeight) / rendered;
-    return base.copyWith(fontSize: math.max(fitted, _minLineFontSize));
+    // TextPainter는 문단 높이를 정수로 올림하므로 올림한 높이로 판정한다.
+    bool fits(double size) =>
+        (textScaler.scale(size) * heightFactor).ceilToDouble() <= lineHeight;
+    if (fits(requested)) return base.copyWith(fontSize: requested);
+    if (!fits(_minLineFontSize)) {
+      return base.copyWith(fontSize: _minLineFontSize);
+    }
+    // 시스템 글자 배율이 비선형(안드로이드 14 이상)일 수 있으므로 비례 계산 대신 이분 탐색으로
+    // 줄 높이에 들어가는 가장 큰 글자 크기를 찾는다. lo는 항상 줄 높이에 들어간다.
+    var lo = _minLineFontSize;
+    var hi = requested;
+    for (var i = 0; i < 24; i++) {
+      final mid = (lo + hi) / 2;
+      if (fits(mid)) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    return base.copyWith(fontSize: lo);
   }
 
   /// 줄 글자 크기 하한 (dp) — 0 크기 글꼴을 피하기 위한 값. 이보다 낮은 줄은 잘린다.
@@ -432,15 +453,27 @@ class _LcdLine extends StatelessWidget {
           textScaler: textScaler,
         ),
         Expanded(
-          child: ClipRect(
-            key: const ValueKey('lcd-line-content'),
-            child: DefaultTextStyle(
-              style: style,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.clip,
-              // 줄 영역을 최대값으로 하는 느슨한 제약을 넘긴다 (줄 폭을 알 수 있게).
-              child: Align(alignment: alignment, child: child),
+          child: LayoutBuilder(
+            builder: (context, constraints) => LcdLineScope(
+              size: constraints.biggest,
+              child: ClipRect(
+                key: const ValueKey('lcd-line-content'),
+                child: DefaultTextStyle(
+                  style: style,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  // 내용은 제약 없이 자기 크기로 그리고, 줄 영역에 정렬한 뒤 넘친 부분만 자른다.
+                  child: OverflowBox(
+                    alignment: alignment,
+                    minWidth: 0,
+                    maxWidth: double.infinity,
+                    minHeight: 0,
+                    maxHeight: double.infinity,
+                    child: child,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -453,6 +486,24 @@ class _LcdLine extends StatelessWidget {
       ],
     );
   }
+}
+
+/// LCD 입력·결과 줄의 크기를 줄 내용 위젯에 알려 준다.
+///
+/// 줄 내용은 제약 없이 그려지므로 `LayoutBuilder`로는 줄 크기를 알 수 없다.
+/// 가로 스크롤이나 넘침 판정이 필요한 내용 위젯(M2 `MathNodeWidget`)은 이 값을 기준으로 삼는다.
+class LcdLineScope extends InheritedWidget {
+  /// 줄 내용 영역 크기 (◀/▶ 자리 제외)
+  final Size size;
+
+  const LcdLineScope({super.key, required this.size, required super.child});
+
+  /// 가장 가까운 LCD 줄의 크기. LCD 줄 밖이면 `null`.
+  static Size? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<LcdLineScope>()?.size;
+
+  @override
+  bool updateShouldNotify(LcdLineScope oldWidget) => oldWidget.size != size;
 }
 
 /// 줄 양끝의 스크롤 표시(◀/▶). 꺼져도 자리를 유지해 내용 위치가 흔들리지 않는다.
