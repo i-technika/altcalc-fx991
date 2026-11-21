@@ -25,7 +25,7 @@ import 'package:meta/meta.dart';
 //
 // ※ 실물 대조가 끝나지 않은 각인: `x` 키의 SHIFT(∑▭), log▭▭ 입력 경로,
 //   ENG 키의 ALPHA(i), 숫자 4~6/1~3 키의 SHIFT 각인.
-//   M6 실물 대조 검증 시 확정한다.
+//   TODO(#15): 실물/공식 매뉴얼 대조 후 확정한다.
 
 // ═══════════════════════════════════════════════════════════════
 // 키 식별자
@@ -240,7 +240,7 @@ const List<List<CalcKeyDef>> controlRightRows = [
     CalcKeyDef(
       id: CalcKeyId.variableX,
       mainLabel: 'x',
-      shiftLabel: '∑▭', // 실물 대조 필요
+      shiftLabel: '∑▭', // TODO(#15): 실물 대조 필요
       category: KeyCategory.function,
     ),
   ],
@@ -393,7 +393,7 @@ const List<List<CalcKeyDef>> functionRows = [
     CalcKeyDef(
       id: CalcKeyId.eng,
       mainLabel: 'ENG',
-      shiftLabel: '←', // ALPHA(i) 각인 여부 실물 대조 필요
+      shiftLabel: '←', // TODO(#15): ALPHA(i) 각인 여부 실물 대조 필요
       category: KeyCategory.function,
     ),
     CalcKeyDef(

@@ -148,7 +148,7 @@ abstract final class CalcTheme {
 
   /// LCD·키캡 고정폭 폰트 패밀리 이름.
   /// 아직 폰트 에셋을 번들하지 않아 현재는 항상 [monoFontFallback]으로 대체된다
-  /// (폰트 번들은 후속 이슈에서 처리).
+  /// (TODO(#16): 수학 기호 글리프 폰트 번들).
   static const String monoFontFamily = 'RobotoMono';
 
   /// [monoFontFamily]가 없을 때 순서대로 시도하는 대체 폰트
