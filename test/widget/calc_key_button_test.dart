@@ -55,6 +55,14 @@ BoxDecoration _decoration(WidgetTester tester, CalcKeyId id) {
   return container.decoration! as BoxDecoration;
 }
 
+/// 실제로 그려지고 있는 키캡 장식 (AnimatedContainer의 목표값이 아니라 애니메이션 현재값)
+BoxDecoration _renderedDecoration(WidgetTester tester, CalcKeyId id) {
+  final box = tester.widget<DecoratedBox>(
+    find.descendant(of: _keycap(id), matching: find.byType(DecoratedBox)).first,
+  );
+  return box.decoration as BoxDecoration;
+}
+
 bool _isPressed(WidgetTester tester, CalcKeyId id) =>
     _decoration(tester, id).boxShadow!.isEmpty;
 
@@ -142,7 +150,9 @@ void main() {
   });
 
   group('눌림 색 (#22)', () {
-    testWidgets('모든 키가 누르는 동안 카테고리 눌림 색이 되고, 떼면 원래 색으로 돌아온다', (tester) async {
+    testWidgets('모든 키: 누르는 즉시 눌림 색·테두리로 그려지고, 떼면 애니메이션 뒤 원래대로 돌아온다', (
+      tester,
+    ) async {
       for (final def in allKeys) {
         await tester.pumpWidget(
           _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
@@ -150,18 +160,24 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(_keycap(def.id)),
         );
+        // 다음 한 프레임에 이미 목표 색이다 (누를 때는 애니메이션하지 않는다).
         await tester.pump();
+        var drawn = _renderedDecoration(tester, def.id);
+        expect(drawn.color, def.category.pressedBackground, reason: '$def');
         expect(
-          _decoration(tester, def.id).color,
-          def.category.pressedBackground,
+          (drawn.border! as Border).top.color,
+          CalcTheme.keyPressedBorder,
           reason: '$def',
         );
 
         await gesture.up();
         await tester.pump();
+        await tester.pump(CalcTheme.keyPressAnimationDuration);
+        drawn = _renderedDecoration(tester, def.id);
+        expect(drawn.color, def.category.background, reason: '$def');
         expect(
-          _decoration(tester, def.id).color,
-          def.category.background,
+          (drawn.border! as Border).top.color,
+          CalcTheme.keyBorder,
           reason: '$def',
         );
       }
@@ -174,7 +190,10 @@ void main() {
         tester.getCenter(_keycap(def.id)),
       );
       await tester.pump();
-      expect(_decoration(tester, def.id).color, def.category.background);
+      expect(
+        _renderedDecoration(tester, def.id).color,
+        def.category.background,
+      );
       await gesture.up();
     });
   });

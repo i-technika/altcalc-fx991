@@ -107,16 +107,29 @@ void main() {
       }
     });
 
-    test('방향: 가장 어두운 키(L* 35 미만)는 밝아지고, 나머지는 어두워진다', () {
+    test('모든 카테고리: 눌린 키캡이 본체 배경에 묻히지 않는다', () {
+      final body = lightness(CalcTheme.bodyBackground);
       for (final c in KeyCategory.values) {
-        final before = lightness(c.background);
-        final after = lightness(c.pressedBackground);
+        final delta = (lightness(c.pressedBackground) - body).abs();
         expect(
-          after > before,
-          before < 35,
-          reason:
-              '${c.name}: L* ${before.toStringAsFixed(1)} → '
-              '${after.toStringAsFixed(1)}',
+          delta,
+          greaterThanOrEqualTo(CalcTheme.keyPressedMinBodyLightnessDelta),
+          reason: '${c.name}: 본체와 ΔL*=${delta.toStringAsFixed(1)}',
+        );
+      }
+    });
+
+    test('눌림 테두리: 평소 테두리와 확연히 다르고(ΔL* 30 이상), 모든 눌린 키캡 위에서 보인다(1.5:1 이상)', () {
+      expect(
+        (lightness(CalcTheme.keyPressedBorder) - lightness(CalcTheme.keyBorder))
+            .abs(),
+        greaterThanOrEqualTo(30),
+      );
+      for (final c in KeyCategory.values) {
+        expect(
+          contrastRatio(CalcTheme.keyPressedBorder, c.pressedBackground),
+          greaterThanOrEqualTo(1.5),
+          reason: c.name,
         );
       }
     });
@@ -125,6 +138,7 @@ void main() {
       for (final c in KeyCategory.values) {
         expect(c.pressedBackground.a, 1.0, reason: c.name);
       }
+      expect(CalcTheme.keyPressedBorder.a, 1.0);
     });
   });
 
