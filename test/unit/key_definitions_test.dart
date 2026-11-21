@@ -202,7 +202,9 @@ void main() {
 /// 실물 대조표 (#15).
 ///
 /// 모든 행은 fx-991EX Quick Start Guide 1쪽 제품 사진과 한 줄씩 대조했다. User's Guide
-/// (RJA532432-001V01) 예제로도 확인된 행은 `G<인쇄 쪽>`을 덧붙였다. 표시가 없는 행은 사진만 근거다.
+/// (RJA532432-001V01)의 키 조작 예제에서 그 각인을 찾은 행에는 `G<인쇄 쪽>`을 덧붙였다.
+/// `G` 표시가 없다고 가이드에 없다는 뜻은 아니다(쪽수를 이 표에 정리하지 않았을 뿐). "없음" 판정은
+/// 사진이 근거다(예: Ans·ENG의 ALPHA 없음, 숫자 1~6 무각인).
 ///
 /// `(메인, SHIFT, ALPHA)` — 각인이 없으면 `null`. 이 표는 명세의 사본이라 출처 없이 둘을 함께 고치면
 /// 통과한다. 명세를 바꿀 때는 반드시 위 출처를 다시 확인하고 행 주석도 고친다.
@@ -210,11 +212,11 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   // 상단 조작부
   CalcKeyId.shift: ('SHIFT', null, null),
   CalcKeyId.alpha: ('ALPHA', null, null),
-  CalcKeyId.menu: ('MENU', 'SETUP', null),
+  CalcKeyId.menu: ('MENU', 'SETUP', null), // G3
   CalcKeyId.on: ('ON', null, null),
-  CalcKeyId.optn: ('OPTN', 'QR', null),
+  CalcKeyId.optn: ('OPTN', 'QR', null), // G7
   CalcKeyId.calc: ('CALC', 'SOLVE', '='),
-  CalcKeyId.integral: ('∫▭', 'd/dx▭', ':'),
+  CalcKeyId.integral: ('∫▭', 'd/dx▭', ':'), // G15 d/dx, G11 :
   CalcKeyId.variableX: ('x', '∑▭', null), // G16 ∑ 예제
   // 커서 패드
   CalcKeyId.cursorUp: ('▲', null, null),
@@ -224,43 +226,43 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   // 함수부 1행
   CalcKeyId.fraction: ('▭/▭', '▭▭/▭', null),
   CalcKeyId.sqrt: ('√▭', '∛▭', null),
-  CalcKeyId.square: ('x²', 'x³', null),
-  CalcKeyId.power: ('x^▭', '▭√▭', null),
+  CalcKeyId.square: ('x²', 'x³', null), // G14
+  CalcKeyId.power: ('x^▭', '▭√▭', null), // G15
   CalcKeyId.logBase: ('log▭▭', '10^▭', null),
-  CalcKeyId.ln: ('ln', 'e^▭', null),
+  CalcKeyId.ln: ('ln', 'e^▭', null), // G14
   // 함수부 2행
   CalcKeyId.negative: ('(−)', 'log', 'A'), // G14 log 예제, G13 변수
   CalcKeyId.degMinSec: ('°\'"', 'FACT', 'B'),
-  CalcKeyId.reciprocal: ('x⁻¹', 'x!', 'C'),
+  CalcKeyId.reciprocal: ('x⁻¹', 'x!', 'C'), // G16 x!
   CalcKeyId.sin: ('sin', 'sin⁻¹', 'D'),
   CalcKeyId.cos: ('cos', 'cos⁻¹', 'E'),
   CalcKeyId.tan: ('tan', 'tan⁻¹', 'F'),
   // 함수부 3행
   CalcKeyId.sto: ('STO', 'RECALL', null), // G13 변수 저장·호출
-  CalcKeyId.eng: ('ENG', '←', null),
+  CalcKeyId.eng: ('ENG', '←', null), // G11 ←, ALPHA 없음은 사진
   CalcKeyId.parenOpen: ('(', 'Abs', null), // G16 Abs 예제
-  CalcKeyId.parenClose: (')', ',', 'x'), // G14 log(2,16), G13 변수 x
-  CalcKeyId.sdToggle: ('S⇔D', 'a b/c⇔d/c', 'y'), // G13 변수 y
-  CalcKeyId.mPlus: ('M+', 'M−', 'M'),
+  CalcKeyId.parenClose: (')', ',', 'x'), // G14·G15 ,  G13 변수 x
+  CalcKeyId.sdToggle: ('S⇔D', 'a b/c⇔d/c', 'y'), // G11 a b/c⇔d/c, G13 변수 y
+  CalcKeyId.mPlus: ('M+', 'M−', 'M'), // G13
   // 숫자부
   CalcKeyId.num7: ('7', 'CONST', null),
   CalcKeyId.num8: ('8', 'CONV', null),
-  CalcKeyId.num9: ('9', 'RESET', null),
+  CalcKeyId.num9: ('9', 'RESET', null), // G7
   CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
   CalcKeyId.ac: ('AC', 'OFF', null), // G3 전원
   CalcKeyId.num4: ('4', null, null),
   CalcKeyId.num5: ('5', null, null),
   CalcKeyId.num6: ('6', null, null),
-  CalcKeyId.multiply: ('×', 'nPr', null),
-  CalcKeyId.divide: ('÷', 'nCr', null),
+  CalcKeyId.multiply: ('×', 'nPr', null), // G16
+  CalcKeyId.divide: ('÷', 'nCr', null), // G16
   CalcKeyId.num1: ('1', null, null),
   CalcKeyId.num2: ('2', null, null),
   CalcKeyId.num3: ('3', null, null),
-  CalcKeyId.add: ('+', 'Pol', null),
-  CalcKeyId.subtract: ('−', 'Rec', null),
+  CalcKeyId.add: ('+', 'Pol', null), // G16
+  CalcKeyId.subtract: ('−', 'Rec', null), // G16
   CalcKeyId.num0: ('0', 'Rnd', null),
-  CalcKeyId.dot: ('.', 'Ran#', 'RanInt'),
-  CalcKeyId.exp10: ('×10ˣ', 'π', 'e'),
-  CalcKeyId.ans: ('Ans', '%', null), // 사진만 (가이드에 PreAns 없음)
-  CalcKeyId.equals: ('=', '≈', null),
+  CalcKeyId.dot: ('.', 'Ran#', 'RanInt'), // G16
+  CalcKeyId.exp10: ('×10ˣ', 'π', 'e'), // G15
+  CalcKeyId.ans: ('Ans', '%', null), // G11 %, ALPHA 없음은 사진 (가이드에 PreAns 없음)
+  CalcKeyId.equals: ('=', '≈', null), // G7
 };
