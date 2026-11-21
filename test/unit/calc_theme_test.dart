@@ -110,6 +110,9 @@ void main() {
         CalcTheme.keyLegendFontRatio,
         CalcTheme.keyMainLabelFontRatio,
         CalcTheme.keyCapHorizontalPaddingRatio,
+        CalcTheme.keyLegendGapRatio,
+        CalcTheme.keyLegendGapMaxWidthRatio,
+        CalcTheme.keyDisabledLabelOpacity,
       ]) {
         expect(ratio, inExclusiveRange(0, 1));
       }
@@ -117,6 +120,11 @@ void main() {
       expect(CalcTheme.keyCapHorizontalPaddingRatio, lessThan(0.25));
       expect(CalcTheme.keyBorderWidth, greaterThan(0));
       expect(CalcTheme.keyPressedOffset, greaterThanOrEqualTo(0));
+      expect(CalcTheme.keyMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));
+      expect(
+        CalcTheme.keyPressAnimationDuration,
+        lessThanOrEqualTo(const Duration(milliseconds: 100)),
+      );
     });
 
     test('키 간격 비율은 0~0.1 사이의 양수다', () {

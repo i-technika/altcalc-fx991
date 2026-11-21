@@ -263,6 +263,24 @@ abstract final class CalcTheme {
   /// 키캡 안쪽 좌우 여백 비율 (키캡 너비 대비)
   static const double keyCapHorizontalPaddingRatio = 0.08;
 
+  /// SHIFT·ALPHA 각인 사이 간격 (각인 글자 크기 대비)
+  static const double keyLegendGapRatio = 0.3;
+
+  /// SHIFT·ALPHA 각인 사이 간격 상한 (키 너비 대비) — 좁고 긴 셀에서 넘침 방지
+  static const double keyLegendGapMaxWidthRatio = 0.05;
+
+  /// 키 라벨에 반영하는 시스템 글자 크기 배율 상한 (넘침은 FittedBox가 추가로 막는다)
+  static const double keyMaxTextScaleFactor = 1.3;
+
+  /// 키캡 그림자 색
+  static const Color keyShadow = Color(0x66000000);
+
+  /// 비활성 키 메인 라벨 불투명도
+  static const double keyDisabledLabelOpacity = 0.5;
+
+  /// 키 눌림 색·그림자 전환 시간
+  static const Duration keyPressAnimationDuration = Duration(milliseconds: 60);
+
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)
   // ───────────────────────────────────────────
