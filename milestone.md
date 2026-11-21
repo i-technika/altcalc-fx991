@@ -23,10 +23,19 @@
 - [ ] 가우스-크론로드 구적법(정적분), 중심차분법(수치미분), 뉴턴-랩슨법(`SOLVE`) 알고리즘 구현
 
 ## [ ] M5: 특수 연산 모드 확장 (`MODE` 메뉴)
-- [ ] 계산 모드 선택 오버레이 화면 구현 (`COMP`, `CMPLX`, `EQN`, `MATRIX`, `VECTOR`, `BASE-N`)
+- [ ] MENU 아이콘 메뉴 구현 — v1.0 앱 9개: `Calculate`, `Complex`, `Base-N`, `Matrix`, `Vector`, `Equation/Func`, `Table`, `Inequality`, `Ratio`
 - [ ] 복소수 연산/극좌표 변환, 2~4원 연립·다항방정식 풀이, 행렬/벡터 연산, 진법 변환 구현
+- [ ] 함수 값 표(`Table`, f(x)·g(x)), 4차까지 다항 부등식(`Inequality`), 비례식(`Ratio`) 구현
 
-## [ ] M6: AdMob 배너, 서버리스 인앱결제 및 출시 QA
+## [ ] M6: AdMob 배너, 서버리스 인앱결제 및 출시 QA (v1.0)
 - [ ] `google_mobile_ads` 하단 적응형 배너 광고 연동
 - [ ] `in_app_purchase` 비소모성 상품(`remove_ads`) 결제 + 로컬 캐싱 + 앱 실행 시 자동 구매 복원 + 명시적 '구매 복원' 버튼 구현
 - [ ] 실물 fx-991EX/CW 계산기와 주요 수식 테스트 케이스 100종 대조 검증 및 스토어 빌드 생성
+
+## [ ] M7: 데이터 분석 앱 (`Statistics` · `Distribution` · `Spreadsheet`) — v1.1 업데이트
+> v1.0(M6) 출시 후 업데이트로 제공한다. 이 마일스톤 완료로 실물과 같은 MENU 앱 12개 구성이 완성된다. (결정: #32)
+- [ ] 표 형태 데이터 편집기 공용 컴포넌트 (Statistics 데이터 편집기·Spreadsheet 공용)
+- [ ] `Statistics`: 1변수 통계 13종, 회귀 분석(선형·2차·로그·지수·거듭제곱 등)
+- [ ] `Distribution`: 정규·역정규·이항·푸아송 확률/누적 분포 (특수함수 10자리 정확도)
+- [ ] `Spreadsheet`: 5열×45행, 수식·상대/절대 셀 참조·채우기·잘라내기/복사/붙여넣기·자동 재계산
+- [ ] MENU에 데이터 앱 3종 추가 및 실물 대조 검증
