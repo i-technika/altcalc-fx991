@@ -11,7 +11,7 @@
 ## [ ] M2: 2D 수식 AST 및 커서 내비게이션 엔진
 - [ ] 수식 AST 모델 정의 (`NumberNode`, `OperatorNode`, `FractionNode`, `SqrtNode`, `PowerNode`, `ParenNode`, `CursorNode`)
 - [ ] 트리 깊이(depth)에 따라 폰트 크기가 자동 축소되는 재귀 위젯 렌더러(`MathNodeWidget`) 구현
-- [ ] 방향키(`◀`, `▶`, `▲`, `▼`) 및 삭제(`DEL`, `AC`) 커서 탐색 로직(`CursorNavigator`) 구현
+- [ ] 방향키(`◄`, `►`, `▲`, `▼`) 및 삭제(`DEL`, `AC`) 커서 탐색 로직(`CursorNavigator`) 구현
 
 ## [ ] M3: 코어 공학 연산 엔진 (`COMP` 모드)
 - [ ] `Decimal` 기반 실물 동일 정밀도(내부 15자리, 표시 10자리) `AstEvaluator` 구현

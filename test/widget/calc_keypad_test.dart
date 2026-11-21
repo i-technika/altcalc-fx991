@@ -518,7 +518,7 @@ void main() {
 
 void _cursorPadR2Tests() {
   group('커서 패드 (이동·시맨틱)', () {
-    testWidgets('▲를 누른 채 ◀ 부채꼴이나 타원 밖으로 미끄러지면 ▲ 반복이 멈춘다', (tester) async {
+    testWidgets('▲를 누른 채 ◄ 부채꼴이나 타원 밖으로 미끄러지면 ▲ 반복이 멈춘다', (tester) async {
       final repeats = <CalcKeyId>[];
       await tester.pumpWidget(
         _host(

@@ -188,7 +188,7 @@ void main() {
       }
     });
 
-    test('기능 없는 층으로 누른 커서 키(SHIFT + ◀)는 반복하지 않는다', () {
+    test('기능 없는 층으로 누른 커서 키(SHIFT + ◄)는 반복하지 않는다', () {
       final s = _press([
         CalcKeyId.cursorLeft,
         CalcKeyId.shift,

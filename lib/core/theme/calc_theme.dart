@@ -70,7 +70,7 @@ abstract final class CalcTheme {
   /// 연산자 키 텍스트
   static const Color keyOperatorText = Color(0xFFFFFFFF);
 
-  /// 함수 키 (sin, cos, log▭▭ 등) — 중간 회색
+  /// 함수 키 (sin, cos, log◼◻ 등) — 중간 회색
   static const Color keyFunction = Color(0xFF4A4A4A);
 
   /// 함수 키 텍스트
@@ -149,18 +149,22 @@ abstract final class CalcTheme {
   // 폰트 (Fonts)
   // ───────────────────────────────────────────
 
-  /// LCD·키캡 고정폭 폰트 패밀리 이름.
-  /// 아직 폰트 에셋을 번들하지 않아 현재는 항상 [monoFontFallback]으로 대체된다
-  /// (TODO(#16): 수학 기호 글리프 폰트 번들).
-  static const String monoFontFamily = 'RobotoMono';
+  /// LCD·키캡 고정폭 폰트 패밀리 이름 (번들 글꼴 Noto Sans Mono, `assets/fonts/`).
+  ///
+  /// 모든 글자 폭이 0.6em인 고정폭 글꼴이라 LCD 칸 수([lcdLineCharWidthRatio])와 키 라벨 폭 측정이
+  /// 플랫폼과 무관하게 같다. LCD와 키캡은 같은 패밀리를 쓴다 — 키캡도 고정폭이어야 라벨 폭이 글자 수에
+  /// 비례해 각인 배분 규칙(`_LegendRow`)과 폭 측정(`KeypadMetrics`)이 단순해지기 때문이다.
+  /// 실물 LCD의 도트 매트릭스 글꼴을 따로 쓸지는 LCD 렌더링(M2)에서 정한다.
+  static const String monoFontFamily = 'NotoSansMono';
 
-  /// [monoFontFamily]가 없을 때 순서대로 시도하는 대체 폰트
-  /// (Apple 계열은 Menlo/Courier, Android는 monospace가 해석된다)
-  static const List<String> monoFontFallback = [
-    'Menlo',
-    'Courier',
-    'monospace',
-  ];
+  /// 수학 기호 대체 폰트 패밀리 이름 (번들 글꼴 Noto Sans Math).
+  /// [monoFontFamily]에 없는 `∑`·`∛`·`∫`를 채운다. 고정폭이 아니므로 LCD 줄 글자에는 쓰지 않는다.
+  static const String mathFontFamily = 'NotoSansMath';
+
+  /// [monoFontFamily]에 없는 글자를 찾을 대체 폰트 (모두 번들 글꼴이다).
+  /// 라벨·LCD 템플릿의 모든 글자가 여기까지 안에서 찾아지는지 테스트로 검증한다
+  /// (`test/unit/font_glyph_coverage_test.dart`).
+  static const List<String> monoFontFallback = [mathFontFamily];
 
   // ───────────────────────────────────────────
   // LCD 텍스트 스타일 (LCD Text Styles)
@@ -323,10 +327,14 @@ abstract final class CalcTheme {
   /// 상태 표시 슬롯 너비 산정용 글자당 폭 (글자 크기 대비, 고정폭 폰트 기준)
   static const double lcdStatusCharWidthRatio = 0.65;
 
-  /// 스크롤 표시(◀/▶) 글자 크기 (해당 줄 글자 크기 대비)
+  /// 스크롤 표시(◄/►) 글자 크기 (해당 줄 글자 크기 대비)
   static const double lcdScrollArrowFontRatio = 0.6;
 
-  /// 스크롤 표시(◀/▶) 자리 너비 (스크롤 표시 글자 크기 대비)
+  /// 스크롤 표시(◄/►) 자리 너비 (스크롤 표시 글자 크기 대비)
+  ///
+  /// 화살표는 `◄`(U+25C4)·`►`(U+25BA)를 쓴다. 번들 글꼴 Noto Sans Mono에서 한 칸(0.6em) 폭이라
+  /// 이 자리에 줄지 않고 들어간다. `◀`·`▶`(U+25C0·U+25B6)는 모양은 같지만 글자 폭이 두 칸(1.2em)이라
+  /// `FittedBox`가 75%로 줄여 버린다(#16 실측).
   static const double lcdScrollArrowWidthRatio = 0.9;
 
   /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한.
@@ -357,11 +365,23 @@ abstract final class CalcTheme {
   /// 가장 긴 결과 `−1.234567891×10⁻⁹⁹` = 부호 1 + 가수 11 + `×10` 3 + 위첨자 지수 약 2칸.
   static const int lcdLineColumns = 17;
 
-  /// 줄 글자 한 칸 폭 (글자 크기 대비). 고정폭 글꼴(Roboto Mono·Menlo·Courier)의 글자 폭은 0.6em이다.
+  /// 줄 글자 한 칸 폭 (글자 크기 대비). 번들 글꼴 Noto Sans Mono의 글자 폭(600/1000)과 같다.
   /// 자간([lcdInputStyle]·[lcdResultStyle]의 `letterSpacing`)은 따로 더한다.
-  /// TODO(#16): 글꼴 번들 전에는 `−`·`×`·위첨자가 폴백 글꼴에 없으면 비례폭 글꼴로 그려져
-  /// 이 가정이 어긋날 수 있다. 번들한 글꼴로 17칸이 들어가는지 확인한다.
+  ///
+  /// 실측(#16, `test/widget/bundled_font_test.dart`): 숫자·`.`·`−`·`×`·`E`·유니코드 위첨자가 모두 한 칸이다.
+  /// 그래서 [lcdLineColumns]의 17칸은 **지수를 [lcdExponentMaxScale] 이하 크기로 그린다**는 전제가 필요하다.
+  /// `×10⁻⁹⁹`를 유니코드 위첨자 글자로 그리면 지수 3글자가 3칸을 차지해 18칸이 되어 넘친다.
+  /// LCD 줄에는 두 칸 폭 글자(`▶`·`℃`·`⇔` 등)를 쓰지 않는다 — `assets/fonts/README.md` "글리프 선택 규칙".
   static const double lcdLineCharWidthRatio = 0.6;
+
+  /// [lcdLineColumns]가 전제하는 결과 줄 지수(위첨자) 글자 크기 상한 (줄 글자 크기 대비).
+  ///
+  /// 지수 3글자(`−99`)가 2칸(= 3 × 2/3)에 들어가야 17칸이 성립한다. 2/3 그대로면 여유가 0이라
+  /// 위첨자 올림 오프셋·픽셀 맞춤 하나에도 넘치므로, 0.6(지수 1.8칸, 여유 0.2칸)을 상한으로 둔다.
+  /// 지수의 자간도 같은 비율로 줄여야 한다 — 자간은 글자 크기와 무관한 dp 값이라 그대로 두면
+  /// 지수 3글자가 자간 3개를 온전히 더해 넘친다(실측 #16).
+  /// 실제 위첨자 비율은 자연 표기 렌더링(M2)에서 정하되 이 값을 넘지 않는다.
+  static const double lcdExponentMaxScale = 0.6;
 
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)
