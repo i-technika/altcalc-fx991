@@ -120,6 +120,7 @@ class CalculatorScreen extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // TODO(#41): 상단 띠 활용 (장식·설정 진입 등)
                         SizedBox(height: layout.top),
                         SizedBox(
                           height: layout.lcdHeight,

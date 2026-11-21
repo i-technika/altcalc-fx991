@@ -420,7 +420,7 @@ abstract final class CalcTheme {
   //   [screenLcdMinHeight] ~ (LCD 폭 / [screenLcdMinAspectRatio]) 범위로 제한한다.
   // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio]) 때문에 키패드가 다 쓰지 못하는
   //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
-  //   (실물의 로고·태양전지 자리). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
+  //   (실물의 로고·태양전지 자리, 활용은 TODO(#41)). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
   // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38), 대화면 좌우 분할은 #24·#25.
 
   /// 화면 가장자리 여백 (dp)
