@@ -1,28 +1,34 @@
 // 개발용 키패드·화면 미리보기 실행기 (#21).
 //
 // 실제 앱 화면([CalculatorScreen])을 기기 크기 틀 안에 띄우고, 키 입력 로그를 옆에 보여준다.
-// 키패드 배열을 따로 구현하지 않고 앱과 같은 위젯·상태(provider)를 그대로 쓰므로 앱과 어긋나지 않는다.
+// 키패드 배열을 따로 구현하지 않고 앱과 같은 루트([AltCalcApp])·위젯·상태(provider)를 그대로 쓴다.
 //
 // 실행: flutter run -d chrome -t preview/key_preview_main.dart  (VS Code: "Key Preview (Chrome)")
 //
-// 릴리스 빌드에 포함되지 않는다 — 앱 진입점은 lib/main.dart이고, lib/의 어떤 파일도 이 파일을
-// import하지 않는다(test/widget/key_preview_test.dart가 검증).
+// 앱 릴리스 빌드에 포함되지 않는다 — 앱 진입점은 lib/main.dart이고 lib/에서 이 파일로 가는 import가 없으며
+// pubspec 에셋에도 preview/가 없다(test/widget/key_preview_test.dart가 검증).
+//
+// TODO(#18): M6의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 슬롯을 빈 슬롯으로
+// 덮어쓸 수 있게(provider 주입 등) 연결 구조를 정한다. CI가 이 파일을 웹으로 빌드한다(Sub-issue Linux CI).
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
-import 'package:itechnika_altcalc_fx991/presentation/l10n/device_locale_scope.dart';
+import 'package:itechnika_altcalc_fx991/main.dart' show AltCalcApp;
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:material_ui/material_ui.dart';
 
-void main() => runApp(const ProviderScope(child: KeyPreviewApp()));
+void main() =>
+    runApp(const ProviderScope(child: AltCalcApp(home: KeyPreviewScreen())));
 
 /// 미리보기 화면 크기 프리셋 (논리 픽셀, dp).
 ///
-/// 대표 기기의 화면 크기를 근사한 값이다. [padding]은 상태 표시줄·홈 표시줄 등 시스템 인셋이다.
+/// 대표 기기의 화면 크기를 근사한 값이다. [padding]은 시스템 인셋이다 — 상태 표시줄(위),
+/// 홈 표시줄·내비게이션 바·작업 표시줄(아래). Android 15 이상은 edge-to-edge가 강제되어
+/// 내비게이션 바 높이(3버튼 48dp, 제스처 약 24dp)가 아래 인셋으로 들어온다.
 @immutable
 class PreviewDevice {
   /// 표시 이름
@@ -43,38 +49,75 @@ class PreviewDevice {
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
 const List<PreviewDevice> previewDevices = [
+  // iPhone 14·15 (상태 표시줄 47, 홈 표시줄 34)
   PreviewDevice(
     '일반 폰',
     Size(390, 844),
     padding: EdgeInsets.only(top: 47, bottom: 34),
   ),
-  PreviewDevice('소형 폰', Size(360, 640), padding: EdgeInsets.only(top: 24)),
+  // 소형 Android, 3버튼 내비게이션 (키패드가 가장 압박받는 경우)
+  PreviewDevice(
+    '소형 폰',
+    Size(360, 640),
+    padding: EdgeInsets.only(top: 24, bottom: 48),
+  ),
+  // iPhone 15 Pro Max
   PreviewDevice(
     '대형 폰',
     Size(430, 932),
     padding: EdgeInsets.only(top: 59, bottom: 34),
   ),
+  // Galaxy Z Fold5 커버, 제스처 내비게이션
   PreviewDevice(
     '폴더블 커버',
     Size(344, 882),
     padding: EdgeInsets.only(top: 24, bottom: 24),
   ),
   // 대화면 좌우 분할은 #24·#25, 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
-  PreviewDevice('폴더블 내부', Size(690, 829), padding: EdgeInsets.only(top: 24)),
-  PreviewDevice('태블릿 세로', Size(800, 1280), padding: EdgeInsets.only(top: 24)),
-  PreviewDevice('분할 화면(짧은 창)', Size(390, 420)),
+  // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다)
+  PreviewDevice(
+    '폴더블 내부',
+    Size(690, 829),
+    padding: EdgeInsets.only(top: 24, bottom: 24),
+  ),
+  // 10인치급 Android 태블릿, 작업 표시줄 48dp
+  PreviewDevice(
+    '태블릿 세로',
+    Size(800, 1280),
+    padding: EdgeInsets.only(top: 24, bottom: 48),
+  ),
+  // Android 16 대화면은 방향 고정을 무시하므로 가로 화면도 확인 대상이다 (lib/main.dart 참조)
+  PreviewDevice(
+    '태블릿 가로',
+    Size(1280, 800),
+    padding: EdgeInsets.only(top: 24, bottom: 48),
+  ),
+  // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다)
+  PreviewDevice('분할 화면 위', Size(390, 420), padding: EdgeInsets.only(top: 24)),
 ];
 
-/// 미리보기 시스템 글자 배율 선택지 (Android 최대 200%)
-const List<double> previewTextScales = [1.0, 1.3, 2.0];
+/// 기본 시스템 글자 배율
+const double previewDefaultTextScale = 1.0;
 
-/// 입력 로그 최대 보관 개수 (오래된 것부터 버린다)
+/// 미리보기 시스템 글자 배율 선택지 (Android 최소 85% ~ 최대 200%, 선형 근사).
+///
+/// 키패드·LCD는 [CalcTheme.keyMaxTextScaleFactor]·[CalcTheme.lcdMaxTextScaleFactor](130%)에서 배율을
+/// 자르므로, 200%는 그 잘림이 지켜지는지 확인하는 용도다. Android 14 이상의 비선형 배율은 흉내 내지 않는다.
+const List<double> previewTextScales = [0.85, 1.0, 1.3, 2.0];
+
+/// 입력 로그 기본 최대 보관 줄 수 (오래된 것부터 버린다)
 const int previewLogCapacity = 500;
 
-/// 입력 로그 한 항목. [number]는 초기화 이후 몇 번째 입력인지(1부터)이다.
-typedef PreviewLogEntry = ({int number, KeyInput input});
+/// 미리보기가 구독하는 상태 조각: (모디파이어 대기, 입력 수, 마지막 입력)
+typedef PreviewWatch = (KeyModifier, int, KeyInput?);
 
-/// 입력 로그 한 줄 문구 (예: `SOLVE  ← SHIFT + CALC`, `◀ (반복)`)
+PreviewWatch _watchOf(CalcState s) => (s.modifier, s.inputCount, s.lastInput);
+
+/// 입력 로그 한 줄. 기능 입력이면 [number](초기화 이후 몇 번째 입력, 1부터)와 [layer]가 있고,
+/// 모디파이어 대기 변화면 둘 다 `null`이다.
+typedef PreviewLogEntry = ({int? number, String text, KeyLayer? layer});
+
+/// 기능 입력 문구 (예: `SOLVE  ← SHIFT + CALC`, `◄ (반복)`)
 String describePreviewInput(KeyInput input) {
   final key = keyDefOf(input.id).mainLabel;
   return switch (input.layer) {
@@ -84,32 +127,29 @@ String describePreviewInput(KeyInput input) {
   };
 }
 
-/// 미리보기 앱 루트. 앱([AltCalcApp])과 같은 테마·로캘 범위를 쓴다.
-class KeyPreviewApp extends StatelessWidget {
-  const KeyPreviewApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AltCalc 개발용 미리보기',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: CalcTheme.bodyBackground,
-      ),
-      builder: (context, child) =>
-          DeviceLocaleScope(child: child ?? const SizedBox.shrink()),
-      home: const KeyPreviewScreen(),
-    );
-  }
+/// 입력 없이 모디파이어 대기만 바뀐 경우의 문구. 바뀌지 않았으면 `null`.
+/// (예: `[SHIFT 대기]`, SHIFT → ALPHA는 `[ALPHA 대기]`, 기능 없는 층의 키·같은 키 다시 누름은 `[SHIFT 해제]`)
+String? describePreviewModifierChange(KeyModifier before, KeyModifier after) {
+  String name(KeyModifier m) => m == KeyModifier.shift ? 'SHIFT' : 'ALPHA';
+  if (before == after) return null;
+  if (after != KeyModifier.none) return '[${name(after)} 대기]';
+  return '[${name(before)} 해제]';
 }
 
-/// 왼쪽 조작 패널(기기·글자 배율·입력 로그) + 오른쪽 기기 틀 속 실제 계산기 화면.
+/// 조작 패널(기기·글자 배율·입력 로그) + 기기 틀 속 실제 계산기 화면.
+/// 넓은 창은 좌우, 좁은 창([narrowWidth] 미만)은 위아래로 배치한다.
 class KeyPreviewScreen extends ConsumerStatefulWidget {
-  const KeyPreviewScreen({super.key});
+  /// 입력 로그 최대 보관 줄 수
+  final int logCapacity;
 
-  /// 조작 패널 폭 (dp)
+  const KeyPreviewScreen({super.key, this.logCapacity = previewLogCapacity})
+    : assert(logCapacity > 0, 'logCapacity는 양수여야 한다');
+
+  /// 좌우 배치에서 조작 패널 폭 (dp)
   static const double panelWidth = 280;
+
+  /// 이 폭보다 좁은 창은 위아래로 배치한다 (dp)
+  static const double narrowWidth = 640;
 
   @override
   ConsumerState<KeyPreviewScreen> createState() => _KeyPreviewScreenState();
@@ -117,55 +157,96 @@ class KeyPreviewScreen extends ConsumerStatefulWidget {
 
 class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   PreviewDevice _device = previewDevices.first;
-  double _textScale = previewTextScales.first;
+  double _textScale = previewDefaultTextScale;
   final List<PreviewLogEntry> _log = [];
   int _inputTotal = 0;
+  bool _trimmed = false;
+
+  /// 초기화 직후 상태가 처음으로 돌아가며 오는 알림(예: SHIFT 대기 → 해제)을 로그에 남기지 않는다.
+  bool _skipResetEcho = false;
 
   /// 상태를 처음으로 되돌리고 로그를 비운다.
   void _reset() {
+    // 상태가 이미 처음과 같으면 알림이 오지 않으므로 건너뛸 것도 없다.
+    _skipResetEcho =
+        _watchOf(ref.read(calcProvider)) != _watchOf(CalcState.initial);
     ref.invalidate(calcProvider);
     setState(() {
       _log.clear();
       _inputTotal = 0;
+      _trimmed = false;
+    });
+  }
+
+  void _onChanged(PreviewWatch? previous, PreviewWatch next) {
+    if (previous == null) return;
+    if (_skipResetEcho && next == _watchOf(CalcState.initial)) {
+      _skipResetEcho = false;
+      return;
+    }
+    final (before, countBefore, _) = previous;
+    final (after, count, input) = next;
+    final PreviewLogEntry entry;
+    if (count != countBefore) {
+      // 기능 입력 (반복 입력 포함). 모디파이어 해제는 입력의 층 표기로 드러난다.
+      if (input == null) return;
+      entry = (
+        number: ++_inputTotal,
+        text: describePreviewInput(input),
+        layer: input.layer,
+      );
+    } else {
+      final text = describePreviewModifierChange(before, after);
+      if (text == null) return;
+      entry = (number: null, text: text, layer: null);
+    }
+    setState(() {
+      _log.add(entry);
+      if (_log.length > widget.logCapacity) {
+        _log.removeRange(0, _log.length - widget.logCapacity);
+        _trimmed = true;
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // 입력 수가 늘 때마다(반복 입력 포함) 마지막 입력을 기록한다.
-    ref.listen(calcProvider.select((s) => (s.inputCount, s.lastInput)), (
-      previous,
-      next,
-    ) {
-      final (count, input) = next;
-      if (input == null || count == previous?.$1) return;
-      setState(() {
-        _log.add((number: ++_inputTotal, input: input));
-        if (_log.length > previewLogCapacity) _log.removeAt(0);
-      });
-    });
+    ref.listen(calcProvider.select(_watchOf), _onChanged);
+
+    final panel = _ControlPanel(
+      device: _device,
+      textScale: _textScale,
+      log: _log,
+      inputTotal: _inputTotal,
+      trimmed: _trimmed,
+      onDeviceChanged: (d) => setState(() => _device = d),
+      onTextScaleChanged: (s) => setState(() => _textScale = s),
+      onReset: _reset,
+    );
+    final frame = _DeviceFrame(device: _device, textScale: _textScale);
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: KeyPreviewScreen.panelWidth,
-              child: _ControlPanel(
-                device: _device,
-                textScale: _textScale,
-                log: _log,
-                onDeviceChanged: (d) => setState(() => _device = d),
-                onTextScaleChanged: (s) => setState(() => _textScale = s),
-                onReset: _reset,
-              ),
-            ),
-            Expanded(
-              child: _DeviceFrame(device: _device, textScale: _textScale),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < KeyPreviewScreen.narrowWidth) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 3, child: frame),
+                  Expanded(flex: 2, child: panel),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: KeyPreviewScreen.panelWidth, child: panel),
+                Expanded(child: frame),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -174,7 +255,11 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 
 /// 선택한 기기 크기로 [CalculatorScreen]을 그린다. 창보다 크면 비율을 유지해 축소한다.
 ///
-/// 화면 크기·인셋·글자 배율은 `MediaQuery`로 전달해, 화면이 실제 기기에서처럼 배치를 산출하게 한다.
+/// 화면 크기·인셋·글자 배율은 `MediaQuery`로 전달해 화면이 실제 기기에서처럼 배치를 산출하게 한다.
+/// 실제 기기와 다르게 남는 값:
+/// - `devicePixelRatio`·`displayFeatures`(폴더블 힌지)·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다.
+/// - `systemGestureInsets`는 **반드시 0**이다. `CalcKeyButton`의 시스템 제스처 영역 판정은 전역 터치 좌표를
+///   `MediaQuery.sizeOf`와 비교하는데, 미리보기에서는 화면이 패널 폭만큼 밀리고 축소되어 좌표계가 맞지 않는다.
 class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
@@ -216,13 +301,21 @@ class _DeviceFrame extends StatelessWidget {
                   '${device.label} · 글자 ${(textScale * 100).round()}% · '
                   '표시 배율 ${(scale * 100).round()}%',
                   key: const ValueKey('preview-frame-caption'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ),
               Expanded(
                 child: Center(
                   child: scale <= 0
-                      ? const SizedBox.shrink()
+                      ? const Text(
+                          '창이 너무 작아 기기 화면을 표시할 수 없습니다.',
+                          key: ValueKey('preview-frame-too-small'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        )
                       : DecoratedBox(
                           position: DecorationPosition.foreground,
                           decoration: BoxDecoration(
@@ -260,11 +353,13 @@ class _DeviceFrame extends StatelessWidget {
   }
 }
 
-/// 기기·글자 배율 선택, 초기화 버튼, 입력 로그.
+/// 기기·글자 배율 선택, 초기화 버튼, 입력 로그. 창이 낮으면 패널 전체가 스크롤된다.
 class _ControlPanel extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
   final List<PreviewLogEntry> log;
+  final int inputTotal;
+  final bool trimmed;
   final ValueChanged<PreviewDevice> onDeviceChanged;
   final ValueChanged<double> onTextScaleChanged;
   final VoidCallback onReset;
@@ -273,6 +368,8 @@ class _ControlPanel extends StatelessWidget {
     required this.device,
     required this.textScale,
     required this.log,
+    required this.inputTotal,
+    required this.trimmed,
     required this.onDeviceChanged,
     required this.onTextScaleChanged,
     required this.onReset,
@@ -284,73 +381,14 @@ class _ControlPanel extends StatelessWidget {
     fontWeight: FontWeight.w600,
   );
 
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: CalcTheme.adSlotBackground,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('기기 크기', style: _heading),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final (i, d) in previewDevices.indexed)
-                  ChoiceChip(
-                    key: ValueKey('preview-device-$i'),
-                    label: Text(d.label, style: const TextStyle(fontSize: 11)),
-                    selected: d == device,
-                    onSelected: (_) => onDeviceChanged(d),
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text('시스템 글자 배율', style: _heading),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: [
-                for (final s in previewTextScales)
-                  ChoiceChip(
-                    key: ValueKey('preview-text-scale-$s'),
-                    label: Text('${(s * 100).round()}%'),
-                    selected: s == textScale,
-                    onSelected: (_) => onTextScaleChanged(s),
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: Text('입력 로그 (${log.length})', style: _heading)),
-                TextButton(
-                  key: const ValueKey('preview-reset'),
-                  onPressed: onReset,
-                  child: const Text('초기화'),
-                ),
-              ],
-            ),
-            Expanded(child: _InputLogView(log: log)),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  static const TextStyle _logStyle = TextStyle(
+    fontFamily: CalcTheme.monoFontFamily,
+    fontFamilyFallback: CalcTheme.monoFontFallback,
+    fontSize: 12,
+  );
 
-/// 입력 로그. 최근 입력이 맨 위에 온다. SHIFT/ALPHA 층은 각인 색으로 구분한다.
-class _InputLogView extends StatelessWidget {
-  final List<PreviewLogEntry> log;
-
-  const _InputLogView({required this.log});
-
-  static Color _colorOf(KeyLayer layer) => switch (layer) {
+  static Color _colorOf(KeyLayer? layer) => switch (layer) {
+    null => Colors.white54,
     KeyLayer.main => Colors.white,
     KeyLayer.shift => CalcTheme.shiftLabel,
     KeyLayer.alpha => CalcTheme.alphaLabel,
@@ -358,29 +396,91 @@ class _InputLogView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (log.isEmpty) {
-      return const Align(
-        alignment: Alignment.topLeft,
-        child: Text(
-          '키를 누르면 여기에 기록됩니다.',
-          style: TextStyle(color: Colors.white38, fontSize: 12),
-        ),
-      );
-    }
-    return ListView.builder(
-      key: const ValueKey('preview-log'),
-      itemCount: log.length,
-      itemBuilder: (context, i) {
-        final (:number, :input) = log[log.length - 1 - i];
-        return Text(
-          '$number. ${describePreviewInput(input)}',
-          style: TextStyle(
-            color: _colorOf(input.layer),
-            fontFamily: CalcTheme.monoFontFamily,
-            fontSize: 12,
+    final settings = <Widget>[
+      const Text('기기 크기', style: _heading),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final (i, d) in previewDevices.indexed)
+            ChoiceChip(
+              key: ValueKey('preview-device-$i'),
+              label: Text(d.label, style: const TextStyle(fontSize: 11)),
+              selected: d == device,
+              onSelected: (_) => onDeviceChanged(d),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      const Text('시스템 글자 배율', style: _heading),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final s in previewTextScales)
+            ChoiceChip(
+              key: ValueKey('preview-text-scale-$s'),
+              label: Text('${(s * 100).round()}%'),
+              selected: s == textScale,
+              onSelected: (_) => onTextScaleChanged(s),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              '입력 로그 · 입력 $inputTotal회'
+              '${trimmed ? ' (최근 ${log.length}줄만 표시)' : ''}',
+              key: const ValueKey('preview-log-header'),
+              style: _heading,
+            ),
           ),
-        );
-      },
+          TextButton(
+            key: const ValueKey('preview-reset'),
+            onPressed: onReset,
+            child: const Text('초기화'),
+          ),
+        ],
+      ),
+    ];
+
+    return ColoredBox(
+      color: CalcTheme.adSlotBackground,
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            sliver: SliverList.list(children: settings),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            sliver: log.isEmpty
+                ? const SliverToBoxAdapter(
+                    child: Text(
+                      '키를 누르면 여기에 최근 순으로 기록됩니다.',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  )
+                : SliverList.builder(
+                    key: const ValueKey('preview-log'),
+                    itemCount: log.length,
+                    itemBuilder: (context, i) {
+                      final (:number, :text, :layer) = log[log.length - 1 - i];
+                      return Text(
+                        number == null ? text : '$number. $text',
+                        style: _logStyle.copyWith(color: _colorOf(layer)),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

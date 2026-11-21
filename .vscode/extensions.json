@@ -1,0 +1,4 @@
+{
+  // launch.json의 "type": "dart" 구성을 실행하는 데 필요한 확장 (#21)
+  "recommendations": ["dart-code.dart-code", "dart-code.flutter"]
+}
