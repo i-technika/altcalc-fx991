@@ -227,15 +227,12 @@ void main() {
 
   group('화면 배치 기준 (CalcScreenLayout)', () {
     void expectSumsToBody(Size body, CalcScreenLayout l) {
-      for (final v in [l.top, l.lcdHeight, l.keypadHeight]) {
+      for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
         expect(v, greaterThanOrEqualTo(0), reason: '$body $l');
       }
       expect(
-        l.top + l.lcdHeight + CalcTheme.screenLcdKeypadGap + l.keypadHeight,
-        moreOrLessEquals(
-          math.max(body.height, CalcTheme.screenLcdKeypadGap),
-          epsilon: 1e-9,
-        ),
+        l.top + l.lcdHeight + l.gap + l.keypadHeight,
+        moreOrLessEquals(body.height, epsilon: 1e-9),
         reason: '$body $l',
       );
     }
@@ -243,46 +240,37 @@ void main() {
     test('기본은 본체 높이 비율이고 상단 띠가 없다', () {
       const body = Size(390, 700);
       final l = CalcScreenLayout.of(body);
-      expect(
-        l.lcdHeight,
-        moreOrLessEquals(700 * CalcTheme.screenLcdHeightRatio),
-      );
+      expect(l.lcdHeight, moreOrLessEquals(175)); // 700 × 0.25
       expect(l.top, 0);
+      expect(l.gap, CalcTheme.screenLcdKeypadGap);
       expectSumsToBody(body, l);
     });
 
     test('낮은 본체에서도 LCD 최소 높이를 지킨다', () {
-      final l = CalcScreenLayout.of(const Size(390, 200));
+      const body = Size(390, 200);
+      final l = CalcScreenLayout.of(body);
       expect(l.lcdHeight, CalcTheme.screenLcdMinHeight);
       expect(l.top, 0);
+      expectSumsToBody(body, l);
     });
 
     test('키패드가 비율 하한에 걸려 남는 높이는 LCD 최대 높이까지 LCD가 받는다', () {
+      // 키패드 최대 390 / 0.75 = 520, LCD = 712 − 520 = 192 (최대 390 / 1.75 ≈ 222.9 미만)
       const body = Size(390, 720);
       final l = CalcScreenLayout.of(body);
-      final keypadMax = body.width / CalcTheme.keypadMinAspectRatio;
-      expect(l.keypadHeight, moreOrLessEquals(keypadMax));
-      expect(l.lcdHeight, greaterThan(720 * CalcTheme.screenLcdHeightRatio));
-      expect(
-        l.lcdHeight,
-        lessThan(body.width / CalcTheme.screenLcdMinAspectRatio),
-      );
+      expect(l.keypadHeight, moreOrLessEquals(520));
+      expect(l.lcdHeight, moreOrLessEquals(192));
       expect(l.top, moreOrLessEquals(0));
       expectSumsToBody(body, l);
     });
 
     test('LCD 최대 높이를 넘어 남는 높이는 LCD 위 상단 띠가 된다', () {
+      // LCD 최대 320 / 1.75 ≈ 182.86, 키패드 최대 320 / 0.75 ≈ 426.67
       const body = Size(320, 1000);
       final l = CalcScreenLayout.of(body);
-      expect(
-        l.lcdHeight,
-        moreOrLessEquals(body.width / CalcTheme.screenLcdMinAspectRatio),
-      );
-      expect(
-        l.keypadHeight,
-        moreOrLessEquals(body.width / CalcTheme.keypadMinAspectRatio),
-      );
-      expect(l.top, greaterThan(0));
+      expect(l.lcdHeight, moreOrLessEquals(320 / 1.75));
+      expect(l.keypadHeight, moreOrLessEquals(320 / 0.75));
+      expect(l.top, moreOrLessEquals(992 - 320 / 1.75 - 320 / 0.75));
       expectSumsToBody(body, l);
     });
 
@@ -291,7 +279,7 @@ void main() {
       expect(l.lcdHeight, CalcTheme.screenLcdMinHeight);
     });
 
-    test('본체가 아주 낮거나 좁아도 음수 없이 본체를 넘지 않는다', () {
+    test('본체가 아주 낮거나(간격 미만 포함) 좁아도 음수 없이 합계가 본체 높이다', () {
       for (final body in const [
         Size(360, 0),
         Size(360, 4),
@@ -303,12 +291,91 @@ void main() {
       ]) {
         expectSumsToBody(body, CalcScreenLayout.of(body));
       }
+      expect(CalcScreenLayout.of(const Size(360, 4)).gap, 4);
+    });
+
+    test('무한·NaN 크기는 0으로 본다', () {
+      for (final body in const [
+        Size.infinite,
+        Size(double.nan, double.nan),
+        Size(-10, -10),
+      ]) {
+        final l = CalcScreenLayout.of(body);
+        for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
+          expect(v, 0, reason: '$body $l');
+        }
+      }
     });
   });
 
   group('폰 화면비별 LCD 확인', () {
+    final input = find.byKey(const ValueKey('lcd-input-line'));
+    final result = find.byKey(const ValueKey('lcd-result-line'));
+    final keypadFinder = find.byKey(const ValueKey('calc-keypad'));
+    final adFinder = find.byKey(const ValueKey('banner-ad-slot'));
+
+    // 독립 계산한 기대값 (배율 반영 후 줄 글자 크기)
+    // 390×844 인셋 0: 본체 776·폭 374 → LCD 374/1.75, 키패드 374/0.75, 띠 768 − 둘,
+    //   글자 = 폭 기준 (356 − 17·1.2) / 11.28
+    // 390×844 iPhone 인셋(47/34): 본체 695 → LCD = 687 − 498.67 (최대 미만), 띠 0,
+    //   글자 = 높이 기준 (LCD − 18 − 4) / 6.288
+    // 412×915 Android 인셋(24/24): 본체 799·폭 396 → LCD 396/1.75, 띠 791 − LCD − 528,
+    //   글자 = 폭 기준 (378 − 20.4) / 11.28
+    for (final (size, padding, lcd, top, font) in [
+      (
+        const Size(390, 844),
+        EdgeInsets.zero,
+        374 / 1.75,
+        768 - 374 / 1.75 - 374 / 0.75,
+        335.6 / 11.28,
+      ),
+      (
+        const Size(390, 844),
+        const EdgeInsets.only(top: 47, bottom: 34),
+        687 - 374 / 0.75,
+        0.0,
+        (687 - 374 / 0.75 - 22) / 6.288,
+      ),
+      (
+        const Size(412, 915),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        396 / 1.75,
+        791 - 396 / 1.75 - 396 / 0.75,
+        357.6 / 11.28,
+      ),
+    ]) {
+      for (final scale in [1.0, 1.3]) {
+        testWidgets('$size·인셋 ${padding.top}/${padding.bottom}·배율 $scale: '
+            'LCD ${lcd.toStringAsFixed(1)}dp, 띠 ${top.toStringAsFixed(1)}dp, '
+            '줄 글자 ${font.toStringAsFixed(1)}dp', (tester) async {
+          await _pumpScreen(
+            tester,
+            size: size,
+            padding: padding,
+            textScale: scale,
+          );
+          expect(tester.takeException(), isNull);
+          final lcdRect = tester.getRect(find.byType(LcdDisplay));
+          expect(lcdRect.height, moreOrLessEquals(lcd, epsilon: 0.01));
+          expect(
+            lcdRect.top,
+            moreOrLessEquals(
+              padding.top + CalcTheme.screenPadding + top,
+              epsilon: 0.01,
+            ),
+          );
+          final text = tester.element(
+            find.byKey(const ValueKey('lcd-input-text')),
+          );
+          final scaled = MediaQuery.textScalerOf(text)
+              .scale(DefaultTextStyle.of(text).style.fontSize!);
+          expect(scaled, moreOrLessEquals(font, epsilon: 0.01));
+        });
+      }
+    }
+
     // 소형(4", 16:9) ~ 대형(6.7", 19.5:9)·초장형(21:9) 세로 폰
-    const phones = [
+    for (final size in const [
       Size(320, 568),
       Size(360, 640),
       Size(360, 800),
@@ -316,15 +383,7 @@ void main() {
       Size(412, 915),
       Size(430, 932),
       Size(411, 960),
-    ];
-    final input = find.byKey(const ValueKey('lcd-input-line'));
-    final result = find.byKey(const ValueKey('lcd-result-line'));
-    Finder content(Finder line) => find.descendant(
-      of: line,
-      matching: find.byKey(const ValueKey('lcd-line-content')),
-    );
-
-    for (final size in phones) {
+    ]) {
       for (final scale in [1.0, 1.3]) {
         testWidgets('${size.width}×${size.height}, 글자 배율 $scale', (
           tester,
@@ -332,63 +391,57 @@ void main() {
           await _pumpScreen(tester, size: size, textScale: scale);
           expect(tester.takeException(), isNull);
           final lcdRect = tester.getRect(find.byType(LcdDisplay));
-          final keypad = tester.getRect(
-            find.byKey(const ValueKey('calc-keypad')),
-          );
-          final ad = tester.getRect(
-            find.byKey(const ValueKey('banner-ad-slot')),
-          );
+          final keypad = tester.getRect(keypadFinder);
+          final ad = tester.getRect(adFinder);
 
-          // LCD는 본체(광고 슬롯 위)의 목표 비율 근처를 차지하고, 키패드는 광고 슬롯 바로 위에 붙는다.
-          final body = ad.top - CalcTheme.adSlotSafetyMargin;
-          expect(lcdRect.height / body, inInclusiveRange(0.2, 0.3));
+          // 본체 = 광고 슬롯 안전 여백 위 ~ 상단 화면 여백 아래
+          final body =
+              ad.top - CalcTheme.adSlotSafetyMargin - CalcTheme.screenPadding;
+          // LCD는 본체의 목표 비율 이상 (키패드 잉여분을 받으면 그보다 크다), LCD 최대 이하
+          expect(
+            lcdRect.height,
+            greaterThanOrEqualTo(
+              math.max(
+                    body * CalcTheme.screenLcdHeightRatio,
+                    CalcTheme.screenLcdMinHeight,
+                  ) -
+                  0.01,
+            ),
+          );
+          expect(
+            lcdRect.height,
+            lessThanOrEqualTo(
+              lcdRect.width / CalcTheme.screenLcdMinAspectRatio + 0.01,
+            ),
+          );
+          // 키패드는 광고 슬롯 바로 위에 붙고, LCD는 키패드 바로 위에 붙는다.
           expect(
             ad.top - keypad.bottom,
             moreOrLessEquals(CalcTheme.adSlotSafetyMargin, epsilon: 0.01),
           );
-          expect(lcdRect.bottom, lessThanOrEqualTo(keypad.top));
-
-          // 주입된 글자 크기는 LCD 크기에서 산출한 값이고 줄 높이 맞춤으로 다시 줄지 않는다.
-          final lcd = tester.widget<LcdDisplay>(find.byType(LcdDisplay));
-          final scaler = TextScaler.linear(scale)
-              .clamp(maxScaleFactor: CalcTheme.lcdMaxTextScaleFactor);
-          final fonts = LcdFontSizes.forSize(lcdRect.size, scaler);
-          expect(lcd.inputFontSize, fonts.input);
-          expect(lcd.resultFontSize, fonts.result);
-          expect(lcd.statusFontSize, fonts.status);
-          final rendered = DefaultTextStyle.of(
-            tester.element(find.byKey(const ValueKey('lcd-input-text'))),
-          ).style;
-          expect(rendered.fontSize, fonts.input);
-
-          // 배율 반영 줄 글자는 폰에서 20dp 이상이고, 배율을 키워도 LCD 크기로 정해진 값을 넘지 않는다.
-          final scaledLine = scaler.scale(fonts.input);
-          expect(scaledLine, greaterThanOrEqualTo(20));
           expect(
-            scaledLine,
-            moreOrLessEquals(
-              LcdFontSizes.forSize(lcdRect.size, TextScaler.noScaling).input,
-              epsilon: 0.01,
-            ),
+            keypad.top - lcdRect.bottom,
+            moreOrLessEquals(CalcTheme.screenLcdKeypadGap, epsilon: 0.01),
           );
 
-          // 입력 줄은 2행 템플릿, 결과 줄은 1행을 담고, 결과 줄은 최대 결과 칸 수를 담는다.
-          final row = (scaledLine * CalcTheme.lcdInputStyle.height!)
-              .ceilToDouble();
-          expect(
-            tester.getSize(input).height,
-            greaterThanOrEqualTo(CalcTheme.lcdInputLineFlex * row),
+          // 배율 반영 줄 글자는 가장 작은 폰에서도 16dp 이상이다.
+          final text = tester.element(
+            find.byKey(const ValueKey('lcd-input-text')),
           );
-          expect(tester.getSize(result).height, greaterThanOrEqualTo(row));
-          expect(
-            tester.getSize(content(result)).width,
-            greaterThanOrEqualTo(
-              CalcTheme.lcdLineColumns *
-                      (scaledLine * CalcTheme.lcdLineCharWidthRatio +
-                          CalcTheme.lcdResultStyle.letterSpacing!) -
-                  0.01,
-            ),
-          );
+          final line = MediaQuery.textScalerOf(text)
+              .scale(DefaultTextStyle.of(text).style.fontSize!);
+          expect(line, greaterThanOrEqualTo(16));
+
+          // 입력·결과 줄은 각각 분수(2행 + 막대)를 담는다.
+          final fractionHeight =
+              2 * (line * CalcTheme.lcdInputStyle.height!).ceilToDouble() +
+              line * CalcTheme.lcdFractionBarRatio;
+          for (final l in [input, result]) {
+            expect(
+              tester.getSize(l).height,
+              greaterThanOrEqualTo(fractionHeight - 0.01),
+            );
+          }
         });
       }
     }

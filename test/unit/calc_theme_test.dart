@@ -140,9 +140,12 @@ void main() {
       expect(CalcTheme.lcdMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));
     });
 
-    test('LCD 내부 구성: 입력 줄은 2D 템플릿 2행 이상, 결과 줄은 1행 이상이다', () {
+    test('LCD 내부 구성: 입력·결과 줄은 각각 분수(2D) 2행 이상을 담는다', () {
       expect(CalcTheme.lcdInputLineFlex, greaterThanOrEqualTo(2));
-      expect(CalcTheme.lcdResultLineFlex, greaterThanOrEqualTo(1));
+      // MathO 결과도 분수(⅓ 등)로 표시된다.
+      expect(CalcTheme.lcdResultLineFlex, greaterThanOrEqualTo(2));
+      // 분수 막대·여백은 한 행보다 얇다.
+      expect(CalcTheme.lcdFractionBarRatio, inExclusiveRange(0, 1));
       // 상태 표시는 줄 글자보다 작다.
       expect(CalcTheme.lcdStatusFontRatio, inExclusiveRange(0, 1));
       // 고정폭 글꼴 글자 폭은 1em보다 좁다.
@@ -150,7 +153,7 @@ void main() {
     });
 
     test('결과 줄 칸 수는 가장 긴 10자리 결과(부호·가수·×10 + 위첨자 지수)를 담는다', () {
-      // 위첨자 지수(−99)는 작은 글자라 약 2칸으로 본다.
+      // 위첨자 지수(−99)는 작은 글자라 약 2칸으로 본다 (가정의 기록 — 위첨자 비율은 M2에서 정한다).
       const mantissa = '−1.234567891×10';
       expect(
         CalcTheme.lcdLineColumns,

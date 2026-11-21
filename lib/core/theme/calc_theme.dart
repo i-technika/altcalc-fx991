@@ -178,11 +178,11 @@ abstract final class CalcTheme {
     height: 1.3,
   );
 
-  /// LCD 결과줄 텍스트 스타일 (입력줄보다 약간 큼).
+  /// LCD 결과줄 텍스트 스타일 (실물 Natural 표시처럼 입력줄과 같은 크기, 굵게).
   static const TextStyle lcdResultStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: FontWeight.bold,
     color: lcdText,
     letterSpacing: 1.0,
@@ -334,15 +334,19 @@ abstract final class CalcTheme {
 
   // ── LCD 내부 구성 (#23) ──
   // 위 → 아래: 상태 표시줄 + 입력 줄(행 [lcdInputLineFlex]개) + 결과 줄(행 [lcdResultLineFlex]개).
-  // 한 "행"은 줄 글자 하나의 줄 높이(글자 크기 × 스타일 height)다. 줄 글자 크기는 LCD 크기에서
-  // `LcdFontSizes.forSize`가 산출한다 (높이 기준과 폭 기준 중 작은 값).
+  // 한 "행"은 줄 글자 하나의 줄 높이(글자 크기 × 스타일 height)다. 2행 줄에는 분수 막대·여백
+  // ([lcdFractionBarRatio])을 더한다. 줄 글자 크기는 LCD 크기에서 `LcdFontSizes.forSize`가
+  // 높이 기준과 폭 기준([lcdLineColumns])을 모두 만족하는 가장 큰 값으로 산출한다.
 
   /// 입력 줄 높이 (행 수) — 자연 표기(Natural Textbook Display) 2D 수식 템플릿을 담는 2행.
   /// 분수의 분자·분모, 정적분·시그마의 위·아래 끝이 각각 한 행을 차지한다.
   static const int lcdInputLineFlex = 2;
 
-  /// 결과 줄 높이 (행 수) — 결과 1행.
-  static const int lcdResultLineFlex = 1;
+  /// 결과 줄 높이 (행 수) — MathO 결과도 자연 표기(⅓, √2/2 같은 분수 결과)이므로 2행.
+  static const int lcdResultLineFlex = 2;
+
+  /// 2행 줄의 분수 막대 두께 + 막대 위아래 여백 (줄 글자 크기 대비)
+  static const double lcdFractionBarRatio = 0.25;
 
   /// 상태 표시 글자 크기 (줄 글자 크기 대비)
   static const double lcdStatusFontRatio = 0.42;
@@ -353,6 +357,8 @@ abstract final class CalcTheme {
 
   /// 줄 글자 한 칸 폭 (글자 크기 대비). 고정폭 글꼴(Roboto Mono·Menlo·Courier)의 글자 폭은 0.6em이다.
   /// 자간([lcdInputStyle]·[lcdResultStyle]의 `letterSpacing`)은 따로 더한다.
+  /// TODO(#16): 글꼴 번들 전에는 `−`·`×`·위첨자가 폴백 글꼴에 없으면 비례폭 글꼴로 그려져
+  /// 이 가정이 어긋날 수 있다. 번들한 글꼴로 17칸이 들어가는지 확인한다.
   static const double lcdLineCharWidthRatio = 0.6;
 
   // ───────────────────────────────────────────
@@ -421,16 +427,17 @@ abstract final class CalcTheme {
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;
 
-  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX에서 LCD 창 : 키 영역 높이가 약 1 : 3이다.
+  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX 앞면에서 LCD 창 : 키 영역 높이가 대략 1 : 3인 데서
+  /// 잡은 대략값이다 (정밀 실측값 아님).
   static const double screenLcdHeightRatio = 0.25;
 
-  /// LCD 최소 높이 (dp). 이 높이에서도 상태 표시줄 + 입력 2행 + 결과 1행이 줄 글자 약 17dp로 들어간다.
-  static const double screenLcdMinHeight = 96.0;
+  /// LCD 최소 높이 (dp). 이 높이에서도 상태 표시줄 + 입력 2행 + 결과 2행이 줄 글자 약 14dp로 들어간다.
+  static const double screenLcdMinHeight = 112.0;
 
   /// LCD 최소 가로/세로 비 — LCD 최대 높이는 LCD 폭 / 이 값이다.
-  /// 실물 LCD 창(192×63 도트 + 상태 표시 행)이 약 2:1보다 납작하므로 그보다 세로로 길어지지 않게 한다.
-  /// 폰 폭에서는 줄 글자가 이미 폭 기준([lcdLineColumns])에 걸리므로 더 높여도 글자가 커지지 않는다.
-  static const double screenLcdMinAspectRatio = 2.0;
+  /// 폰 폭(304~414dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
+  /// 4행 + 분수 막대)를 담는 높이다. 이보다 높여도 글자는 커지지 않고 빈 줄 여백만 늘어난다.
+  static const double screenLcdMinAspectRatio = 1.75;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

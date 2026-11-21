@@ -33,15 +33,15 @@ class LcdLineOverflow {
 
 /// LCD 크기에서 산출한 상태 표시·입력 줄·결과 줄 글자 크기 (#23). 모두 배율 반영 **전** 크기다.
 ///
-/// [LcdDisplay]는 상태 표시줄을 뺀 높이를 입력 줄 [CalcTheme.lcdInputLineFlex]행 + 결과 줄
-/// [CalcTheme.lcdResultLineFlex]행으로 나눈다. 줄 글자 크기는 배율을 반영한 크기가 다음 둘을 모두
-/// 만족하는 가장 큰 값이다.
-/// - **높이 기준**: 상태 표시줄(줄 글자 × [CalcTheme.lcdStatusFontRatio] × [CalcTheme.lcdStatusBarHeightRatio])과
-///   전체 행이 LCD 안쪽 높이에 들어간다. 그래서 입력 줄은 2행 템플릿(분수·적분)을 담을 수 있다.
-/// - **폭 기준**: 결과 줄에 [CalcTheme.lcdLineColumns]칸(◀/▶ 자리 제외)이 들어간다.
+/// [LcdDisplay]는 상태 표시줄을 뺀 높이를 입력 줄 [CalcTheme.lcdInputLineFlex]행 : 결과 줄
+/// [CalcTheme.lcdResultLineFlex]행으로 나눈다. 줄 글자 크기는 [LcdDisplay]가 실제로 그리는 방식
+/// (배율 반영·정수 올림)으로 계산해 다음 둘을 모두 만족하는 가장 큰 값이다.
+/// - **높이 기준**: 상태 표시줄 + 전체 행 + 2행 줄마다 분수 막대·여백([CalcTheme.lcdFractionBarRatio])이
+///   LCD 안쪽 높이에 들어간다. 그래서 입력·결과 줄이 각각 분수(분자·막대·분모)를 잘림 없이 담는다.
+/// - **폭 기준**: 결과 줄에 [CalcTheme.lcdLineColumns]칸과 양쪽 ◀/▶ 자리가 들어간다.
 ///
-/// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다. LCD를 꽉 채우는 크기이므로 시스템 글자 배율을
-/// 키워도 더 커지지 않고(넘치지 않도록 맞춘다), 배율이 1보다 작으면 그만큼 작아진다.
+/// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다. LCD 글자는 LCD를 채우는 크기이므로
+/// 시스템 글자 배율과 무관하게 **배율 반영 후** 크기가 LCD 크기로 정해진다 (배율은 넘침 방지에만 쓰인다).
 @immutable
 class LcdFontSizes {
   /// 상태 표시 글자 크기 (dp)
@@ -60,38 +60,68 @@ class LcdFontSizes {
   });
 
   /// [size] 크기의 LCD(베젤 포함)에 [textScaler]로 그릴 때의 글자 크기.
-  /// [textScaler]는 [LcdDisplay]가 실제로 쓰는 배율([CalcTheme.lcdMaxTextScaleFactor]로 제한한 값)을 넘긴다.
+  ///
+  /// [textScaler]는 [LcdDisplay]가 실제로 쓰는 배율([CalcTheme.lcdMaxTextScaleFactor]로 제한한 값)이다.
+  /// 크기가 무한·NaN인 축은 [LcdDisplay.fallbackSize]의 값을 쓴다.
   factory LcdFontSizes.forSize(Size size, TextScaler textScaler) {
+    double finite(double v, double fallback) =>
+        v.isFinite ? math.max(0.0, v) : fallback;
     const chrome = 2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
-    final innerWidth = math.max(0.0, size.width - chrome);
-    final innerHeight = math.max(0.0, size.height - chrome);
-
-    // 높이 기준: 상태 표시줄 + 전체 행 (배율 반영 크기 기준). 렌더링 시 행 높이를 정수로 올림하므로
-    // (`fitLineStyle`) 행마다 1dp를 남겨, 주입한 크기가 줄 높이 맞춤으로 다시 줄지 않게 한다.
-    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
-    final byHeight =
-        math.max(0.0, innerHeight - rowCount) /
-        (CalcTheme.lcdStatusFontRatio * CalcTheme.lcdStatusBarHeightRatio +
-            rowCount * _lineHeightFactor);
-
-    // 폭 기준: 결과 줄 칸 수 + 양쪽 ◀/▶ 자리. 자간은 배율과 무관한 고정 dp다.
-    const columns = CalcTheme.lcdLineColumns;
-    const arrowWidth =
-        CalcTheme.lcdScrollArrowFontRatio * CalcTheme.lcdScrollArrowWidthRatio;
-    final byWidth =
-        (innerWidth - columns * _maxLetterSpacing) /
-        (columns * CalcTheme.lcdLineCharWidthRatio + 2 * arrowWidth);
-
-    final scaledLine = math.max(minFittedFontSize, math.min(byHeight, byWidth));
-    final scaledStatus = math.max(
-      minFittedFontSize,
-      scaledLine * CalcTheme.lcdStatusFontRatio,
+    final innerWidth = math.max(
+      0.0,
+      finite(size.width, LcdDisplay.fallbackSize.width) - chrome,
     );
-    double unscale(double scaled) =>
-        fitFontSize(scaled, textScaler: textScaler, fits: (s) => s <= scaled);
-    final line = unscale(scaledLine);
+    final innerHeight = math.max(
+      0.0,
+      finite(size.height, LcdDisplay.fallbackSize.height) - chrome,
+    );
+
+    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
+    const fractionLines =
+        (CalcTheme.lcdInputLineFlex >= 2 ? 1 : 0) +
+        (CalcTheme.lcdResultLineFlex >= 2 ? 1 : 0);
+    const columns = CalcTheme.lcdLineColumns;
+
+    // [line]: 배율 반영 전 줄 글자 크기
+    bool fits(double line) {
+      final scaledLine = textScaler.scale(line);
+      final scaledStatus = textScaler.scale(
+        line * CalcTheme.lcdStatusFontRatio,
+      );
+      // 높이: LcdDisplay의 상태 표시줄 높이 식과 같고, 렌더링 시 행 높이를 정수로 올림하므로
+      // (`fitLineStyle`) 행마다 1dp를 더해 주입한 크기가 줄 높이 맞춤으로 다시 줄지 않게 한다.
+      final height =
+          scaledStatus * CalcTheme.lcdStatusBarHeightRatio +
+          rowCount * (scaledLine * _lineHeightFactor + 1) +
+          fractionLines * scaledLine * CalcTheme.lcdFractionBarRatio;
+      // 폭: ◀/▶ 자리는 _ScrollArrow와 같은 식(줄 글자 × 비율을 배율 반영). 자간은 배율과 무관하다.
+      final arrow =
+          textScaler.scale(line * CalcTheme.lcdScrollArrowFontRatio) *
+          CalcTheme.lcdScrollArrowWidthRatio;
+      final width =
+          columns *
+              (scaledLine * CalcTheme.lcdLineCharWidthRatio +
+                  _maxLetterSpacing) +
+          2 * arrow;
+      return height <= innerHeight && width <= innerWidth;
+    }
+
+    // 탐색 상한은 폭 기준만으로 정한 값(자간·◀/▶ 무시)을 배율 반영 전 크기로 되돌린 값이다.
+    // 높이와 무관하게 두어, 폭 기준에 걸리는 LCD는 높이가 달라도 같은 탐색 경로로 정확히 같은 값을 얻는다.
+    final widthBound = math.max(
+      minFittedFontSize,
+      innerWidth / (columns * CalcTheme.lcdLineCharWidthRatio),
+    );
+    final scaleAtBound = textScaler.scale(widthBound) / widthBound;
+    final line = fitFontSize(
+      scaleAtBound < 1 && scaleAtBound > 0
+          ? widthBound / scaleAtBound
+          : widthBound,
+      textScaler: TextScaler.noScaling,
+      fits: fits,
+    );
     return LcdFontSizes(
-      status: unscale(scaledStatus),
+      status: math.max(minFittedFontSize, line * CalcTheme.lcdStatusFontRatio),
       input: line,
       result: line,
     );
@@ -137,8 +167,10 @@ class LcdFontSizes {
 ///
 /// ## 크기 계약
 /// - 크기는 부모가 정한다. 제약이 무한한 축에만 [fallbackSize]의 해당 축 값을 쓴다.
-///   LCD : 키패드 비율은 `CalculatorScreen`이 정하고, 부모가 [LcdFontSizes.forSize]로 산출한
-///   [statusFontSize]·[inputFontSize]·[resultFontSize]를 주입한다. 주입하지 않으면 테마 기본 크기다.
+///   LCD : 키패드 비율은 `CalculatorScreen`이 정한다.
+/// - 글자 크기: [fitFontsToSize]가 `true`면 실제 LCD 크기·배율로 [LcdFontSizes.forSize]를 산출해 쓴다
+///   (계산기 화면). 아니면 [statusFontSize]·[inputFontSize]·[resultFontSize]를 쓰고, 주입하지 않으면
+///   테마 기본 크기다.
 /// - 상태 표시줄 높이는 상태 글자 크기 × [CalcTheme.lcdStatusBarHeightRatio]이고,
 ///   남은 높이를 입력 줄과 결과 줄이 [CalcTheme.lcdInputLineFlex] : [CalcTheme.lcdResultLineFlex]행으로 나눈다.
 /// - 상태 표시줄은 폭이 남으면 슬롯을 고르게 펼치고, 모자라면 통째로 축소한다.
@@ -153,7 +185,8 @@ class LcdFontSizes {
 ///   그래서 `Row`/`Column` 재귀 트리(2D 수식)가 줄보다 커도 넘침 오류 없이 실물 LCD처럼 잘려 보인다.
 /// - 줄 크기는 [LcdLineScope.maybeOf]로 알 수 있다. 커서 따라가기 같은 가로 스크롤은 내용 위젯이
 ///   이 크기를 기준으로 스스로 처리한다. 스크롤 뷰를 쓰려면 이 크기의 `SizedBox`로 감싼다.
-///   줄보다 세로로 큰 수식(분수·적분 등)을 축소할지, 줄 높이를 늘릴지는 M2에서 정한다.
+///   [fitFontsToSize]이면 입력·결과 줄은 각각 분수 하나(분자·막대·분모)를 잘림 없이 담는다.
+///   그보다 세로로 큰 수식(겹분수 등)을 축소할지, 세로 스크롤할지는 M2에서 정한다.
 /// - 가려진 쪽이 있으면 호출자가 [inputOverflow]/[resultOverflow]로 ◀/▶를 켠다.
 ///   ◀/▶ 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M2 스크롤 구현과 함께 정한다.
 /// - 일반 [Text]를 넘기면 입력 줄은 [CalcTheme.lcdInputStyle], 결과 줄은 [CalcTheme.lcdResultStyle]
@@ -189,6 +222,10 @@ class LcdDisplay extends StatelessWidget {
   /// 도트 매트릭스 격자 표시 여부
   final bool showDotMatrix;
 
+  /// `true`면 글자 크기를 LCD 크기에서 [LcdFontSizes.forSize]로 산출한다.
+  /// 이때 [statusFontSize]·[inputFontSize]·[resultFontSize]는 주입할 수 없다.
+  final bool fitFontsToSize;
+
   /// 제약이 무한한 축에 쓰는 기본 크기
   static const Size fallbackSize = Size(360, 160);
 
@@ -204,7 +241,15 @@ class LcdDisplay extends StatelessWidget {
     this.resultFontSize,
     this.showInactiveIndicators = true,
     this.showDotMatrix = true,
+    this.fitFontsToSize = false,
   }) : assert(
+         !fitFontsToSize ||
+             (statusFontSize == null &&
+                 inputFontSize == null &&
+                 resultFontSize == null),
+         'fitFontsToSize와 글자 크기 주입은 함께 쓸 수 없다',
+       ),
+       assert(
          statusFontSize == null ||
              (statusFontSize > 0 && statusFontSize < double.infinity),
          'statusFontSize는 유한한 양수여야 한다',
@@ -241,6 +286,13 @@ class LcdDisplay extends StatelessWidget {
     final height = constraints.hasBoundedHeight
         ? constraints.maxHeight
         : fallbackSize.height;
+
+    final fitted = fitFontsToSize
+        ? LcdFontSizes.forSize(Size(width, height), textScaler)
+        : null;
+    final statusFontSize = fitted?.status ?? this.statusFontSize;
+    final inputFontSize = fitted?.input ?? this.inputFontSize;
+    final resultFontSize = fitted?.result ?? this.resultFontSize;
 
     // LCD가 아주 낮아도 Column이 넘치지 않도록 상태 표시줄을 안쪽 높이 이내로 제한한다.
     const chrome = 2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
