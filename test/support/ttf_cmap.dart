@@ -1,13 +1,11 @@
-import 'dart:io';
 import 'dart:typed_data';
 
-/// TrueType/OpenType 글꼴 파일의 `cmap` 테이블에서 글리프가 있는 코드 포인트 집합을 읽는다.
+/// TrueType/OpenType 글꼴 데이터의 `cmap` 테이블에서 글리프가 있는 코드 포인트 집합을 읽는다.
+/// (글꼴 데이터는 `rootBundle.load`로 읽어 넘긴다 — 파일 경로·작업 디렉터리에 기대지 않는다.)
 ///
 /// 테스트 전용 최소 구현이다. 유니코드 BMP(format 4)와 전체 범위(format 12) 서브테이블만 읽는다.
 /// 글리프 0(`.notdef`)으로 매핑된 코드 포인트는 "글리프 없음"으로 보고 제외한다.
-Set<int> readCmapCodePoints(String path) {
-  final data = ByteData.sublistView(File(path).readAsBytesSync());
-
+Set<int> readCmapCodePoints(ByteData data) {
   // 테이블 디렉터리에서 cmap 위치를 찾는다.
   final numTables = data.getUint16(4);
   int? cmapOffset;
@@ -18,7 +16,7 @@ Set<int> readCmapCodePoints(String path) {
     ]);
     if (tag == 'cmap') cmapOffset = data.getUint32(record + 8);
   }
-  if (cmapOffset == null) throw FormatException('cmap 테이블 없음: $path');
+  if (cmapOffset == null) throw const FormatException('cmap 테이블 없음');
 
   // 유니코드 서브테이블을 우선순위대로 고른다: (3,10) format 12 → (0,4) → (3,1) → (0,3).
   final subtables = <(int, int), int>{};
@@ -37,7 +35,7 @@ Set<int> readCmapCodePoints(String path) {
       final format => throw FormatException('지원하지 않는 cmap format $format'),
     };
   }
-  throw FormatException('유니코드 cmap 서브테이블 없음: $path');
+  throw const FormatException('유니코드 cmap 서브테이블 없음');
 }
 
 Set<int> _readFormat4(ByteData data, int offset) {

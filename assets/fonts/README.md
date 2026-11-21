@@ -1,7 +1,7 @@
 # 번들 글꼴 (#16)
 
 LCD·키캡 라벨의 수학 기호(`◼`, `◻`, `∛`, `⇔`, `∑`, `∫`, `≈`, `⁻¹`, `ˣ` 등)가 모든 플랫폼에서
-같은 모양·같은 폭으로 그려지도록 글꼴을 앱에 넣는다. 합계 약 950KB.
+같은 모양·같은 폭으로 그려지도록 글꼴을 앱에 넣는다. 합계 약 1.04MB.
 
 | 파일 | 패밀리 | 원본 | 라이선스 |
 |---|---|---|---|
@@ -32,6 +32,8 @@ LCD·키캡 라벨의 수학 기호(`◼`, `◻`, `∛`, `⇔`, `∑`, `∫`, `�
   `fontWeight`로 자동 조절하지 않으므로 정적 글꼴을 쓴다).
 - **Noto Sans Math**: Noto Sans Mono에 없는 `∑`(U+2211), `∛`(U+221B), `∫`(U+222B)를 채운다.
   고정폭이 아니고 Regular 한 굵기뿐이라, 굵은 라벨 옆에서는 조금 가늘게 보인다.
+  Line 표시(LineI/LineO)의 분수 구분 기호 `⌟`(U+231F)도 Noto Sans Mono에 없어 여기에만 있다 —
+  LCD 줄에서 고정폭이 아니므로 Line 표시 렌더링(M2)에서 폭 처리를 정한다(#2).
   LCD 줄에 들어갈 글자(숫자·`−`·`×`·위첨자 등)는 반드시 Noto Sans Mono에 있어야 한다.
 
 ## 글리프 선택 규칙 (실측 #16)
@@ -49,13 +51,14 @@ Noto Sans Mono에도 **두 칸 폭(1200)** 글자가 있다. 라벨·LCD에는 �
 
 ## 서브셋 재현 방법
 
-[fontTools](https://github.com/fonttools/fonttools)의 `pyftsubset`으로 아래 범위만 남겼다.
-Latin 확장(ħ, ȳ, ŷ 등)·블록 요소(█)는 M2 이후 LCD 표시를 위해 미리 넣었다.
+[fontTools](https://github.com/fonttools/fonttools) **4.68.0**의 `pyftsubset`으로 아래 범위만 남겼다
+(이 버전으로 위 원본에서 다시 만들면 커밋된 파일과 비트 단위로 같다 — #16 리뷰 R2에서 확인).
+Latin 확장(ħ, ȳ, ŷ 등)·위첨자 수식 문자(ᵍ 등)·블록 요소(█)·기술 기호(⌟ 등)는 M2 이후 LCD 표시를 위해 미리 넣었다.
 
 ```bash
 # 원본은 src/, 결과는 out/ (같은 이름으로 덮어쓰지 않는다)
-MONO="U+0020-007E,U+00A0-00FF,U+0100-024F,U+02B0-02FF,U+0300-036F,U+0370-03FF,U+2000-206F,U+2070-209F,U+2100-214F,U+2190-21FF,U+2200-22FF,U+2300-23FF,U+2580-259F,U+25A0-25FF"
-MATH="U+0020,U+2190-22FF"
+MONO="U+0020-007E,U+00A0-00FF,U+0100-024F,U+02B0-02FF,U+0300-036F,U+0370-03FF,U+1D2C-1D6A,U+2000-206F,U+2070-209F,U+2100-214F,U+2190-21FF,U+2200-22FF,U+2300-23FF,U+2580-259F,U+25A0-25FF"
+MATH="U+0020,U+2190-23FF"
 for w in Regular Medium SemiBold Bold; do
   pyftsubset src/NotoSansMono-$w.ttf --unicodes="$MONO" --output-file=out/NotoSansMono-$w.ttf \
     --name-IDs='*' --name-languages='*' --notdef-outline

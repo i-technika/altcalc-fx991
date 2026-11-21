@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,10 +26,14 @@ Future<Map<String, List<String>>> _manifestFonts() async {
 }
 
 /// 패밀리의 모든 굵기 파일에 공통으로 있는 코드 포인트 (굵기마다 글리프가 같아야 한다).
-/// 에셋 경로는 프로젝트 루트 기준이다(`flutter test`는 프로젝트 루트에서 실행된다).
-Set<int> _familyCodePoints(List<String> assets) => assets
-    .map((asset) => readCmapCodePoints(File(asset).absolute.path))
-    .reduce((a, b) => a.intersection(b));
+/// 글꼴은 앱 번들(`rootBundle`)에서 읽는다 — 엔진이 실제로 로드하는 데이터와 같다.
+Future<Set<int>> _familyCodePoints(List<String> assets) async {
+  final sets = [
+    for (final asset in assets)
+      readCmapCodePoints(await rootBundle.load(asset)),
+  ];
+  return sets.reduce((a, b) => a.intersection(b));
+}
 
 String _describe(int code) =>
     '"${String.fromCharCode(code)}" U+${code.toRadixString(16).toUpperCase().padLeft(4, '0')}';
@@ -52,15 +55,15 @@ void main() {
   late Set<int> fallback;
   setUpAll(() async {
     fonts = await _manifestFonts();
-    mono = _familyCodePoints(fonts[CalcTheme.monoFontFamily]!);
+    mono = await _familyCodePoints(fonts[CalcTheme.monoFontFamily]!);
     fallback = {
       for (final family in CalcTheme.monoFontFallback)
-        ..._familyCodePoints(fonts[family]!),
+        ...await _familyCodePoints(fonts[family]!),
     };
   });
 
   group('번들 글꼴 등록', () {
-    test('테마가 쓰는 패밀리가 모두 FontManifest에 있고 파일이 있다', () {
+    test('테마가 쓰는 패밀리가 모두 FontManifest에 있고 번들에서 읽힌다', () async {
       for (final family in [
         CalcTheme.monoFontFamily,
         ...CalcTheme.monoFontFallback,
@@ -68,7 +71,7 @@ void main() {
         expect(fonts.keys, contains(family));
         expect(fonts[family], isNotEmpty, reason: family);
         for (final asset in fonts[family]!) {
-          expect(File(asset).existsSync(), isTrue, reason: asset);
+          expect((await rootBundle.load(asset)).lengthInBytes, greaterThan(0));
         }
       }
     });
@@ -146,15 +149,18 @@ void main() {
 
     test('M2 이후 LCD 표시에 쓸 글자도 서브셋에 남아 있다', () {
       // 서브셋 범위(assets/fonts/README.md)를 줄일 때 빠뜨리지 않도록 고정한다.
-      // ħ(CONST), ȳ·ŷ·결합 매크론(통계), μ(공학 기호), σ·θ, █(커서 블록), 부등식
+      // 고정폭 기본 글꼴: ħ(CONST), ȳ·ŷ·결합 매크론/서컴플렉스(x̄·x̂ 통계), μ(공학 기호), σ·θ,
+      // ᵍ(그라디안 위첨자), █(커서 블록), 부등식
       for (final ch in [
         'ħ',
         'ȳ',
         'ŷ',
-        '̄',
+        '\u0304',
+        '\u0302',
         'μ',
         'σ',
         'θ',
+        'ᵍ',
         '█',
         '≤',
         '≥',
@@ -162,6 +168,9 @@ void main() {
       ]) {
         expect(mono, contains(ch.runes.single), reason: ch);
       }
+      // Line 표시의 분수 구분 기호 ⌟는 기본 글꼴에 없어 대체 글꼴에만 있다(고정폭 아님 — #2에서 처리).
+      expect(mono, isNot(contains('⌟'.runes.single)));
+      expect(fallback, contains('⌟'.runes.single));
     });
   });
 }

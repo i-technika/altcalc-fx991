@@ -552,5 +552,9 @@ class _Keycap extends StatelessWidget {
 /// 대체 글꼴(Noto Sans Math — `∑`·`∛`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 그대로 두면 그 글자가
 /// 섞인 라벨만 줄이 약 7% 높아진다(#16 실측: 20 → 21dp). 키패드 글자 크기 계산(`KeypadMetrics`의
 /// `fitFontSizeToHeight`)이 전제하는 줄 높이와 맞추고, 라벨 사이 기준선을 같게 한다.
+///
+/// strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다. `∛`는 줄 상자 위로 약 0.27em,
+/// `∫`·`∑`는 아래로 약 0.025em 넘쳐 그려진다(#16 리뷰 R2 실측). 각인은 아래 정렬이라 `∛◼`의 윗부분이
+/// 키 사이 간격 쪽으로 나오며, 실기기에서 위 행 키캡에 닿지 않는지 확인한다(에픽 #1 실기기 점검).
 StrutStyle _labelStrut(TextStyle style) =>
     StrutStyle.fromTextStyle(style, forceStrutHeight: true);

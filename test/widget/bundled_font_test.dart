@@ -134,6 +134,13 @@ void main() {
     }
   });
 
+  test('통계 표기용 결합 문자(x̄·x̂)는 폭이 0이라 한 칸에 겹치고, 위첨자 문자 ᵍ는 한 칸이다', () {
+    const style = CalcTheme.lcdResultStyle;
+    expect(_emWidth('x\u0304', style), moreOrLessEquals(cell, epsilon: 0.005));
+    expect(_emWidth('x\u0302', style), moreOrLessEquals(cell, epsilon: 0.005));
+    expect(_emWidth('ᵍ', style), moreOrLessEquals(cell, epsilon: 0.005));
+  });
+
   group('키 라벨 폭 실측', () {
     test('라벨 글자는 두 칸 폭 ⇔와 대체 글꼴 기호(∑·∛·∫)를 빼면 모두 한 칸이다', () {
       // 글자 폭이 글자 수에 비례한다는 가정(각인 배분)이 실제 글꼴에서도 성립하는지 본다.
@@ -173,25 +180,34 @@ void main() {
       );
     });
 
-    testWidgets('대체 글꼴 글자(∑·∛·∫)가 섞인 라벨도 줄 높이가 다른 라벨과 같다', (tester) async {
-      // Noto Sans Math의 descent(423)는 Noto Sans Mono(293)보다 깊어, strut 없이는 그 라벨만
-      // 줄이 높아진다(20 → 21dp). 키 라벨은 기본 글꼴 기준 strut로 줄 높이를 고정한다.
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Center(
-            child: SizedBox(
-              width: 390,
-              height: 520,
-              child: CalcKeypad(enableHaptics: false),
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('배율 $scale: 대체 글꼴 글자(∑·∛·∫)가 섞인 라벨도 줄 높이가 다른 라벨과 같다', (
+        tester,
+      ) async {
+        // Noto Sans Math의 descent(423)는 Noto Sans Mono(293)보다 깊어, strut 없이는 그 라벨만
+        // 줄이 높아진다(20 → 21dp). 키 라벨은 기본 글꼴 기준 strut로 줄 높이를 고정한다.
+        // strut 글자 크기도 textScaler를 따르므로 배율을 바꿔도 같아야 한다.
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: const Center(
+                child: SizedBox(
+                  width: 390,
+                  height: 520,
+                  child: CalcKeypad(enableHaptics: false),
+                ),
+              ),
             ),
           ),
-        ),
-      );
-      double heightOf(String label) => tester.getSize(find.text(label)).height;
-      expect(heightOf('∫◻◻◼'), heightOf('OPTN'));
-      expect(heightOf('∛◼'), heightOf('x³'));
-      expect(heightOf('∑◻◻◼'), heightOf('x³'));
-    });
+        );
+        double heightOf(String label) =>
+            tester.getSize(find.text(label)).height;
+        expect(heightOf('∫◻◻◼'), heightOf('OPTN'));
+        expect(heightOf('∛◼'), heightOf('x³'));
+        expect(heightOf('∑◻◻◼'), heightOf('x³'));
+      });
+    }
 
     test('글자 배율은 keyMaxTextScaleFactor(1.3)에서 멈춘다 — 2.0도 1.3과 같은 크기', () {
       const size = Size(390, 520);
@@ -205,6 +221,8 @@ void main() {
     // 배율 1.0에서는 모든 라벨이 통일 크기 그대로 그려진다. 배율을 키우면 통일 크기가 하한
     // (keypadUniformFontMinRatio)에 걸릴 수 있고, 그때는 가장 긴 라벨만 FittedBox로 조금 준다.
     // 실측(#16): 412×915 배율 1.3에서만 각인 띠가 하한에 걸려 `a b/c⇔d/c`가 약 0.4% 준다.
+    // 이 표는 레이아웃 상수(각인 띠 비율·하한 비율·간격 등)에 대한 실측 스냅샷이다. 상수를 바꾸면
+    // 다시 실측해 갱신한다. 허용 항목도 1% 넘게 줄면 실패한다.
     final allowedShrink = {
       (412.0, 915.0, 1.3): {'sdToggle "a b/c⇔d/c"'},
     };
