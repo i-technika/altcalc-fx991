@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/calc_theme.dart';
+import '../../domain/models/calc_state.dart';
+import '../l10n/calc_semantic_strings.dart';
 import '../providers/calc_provider.dart';
 import '../widgets/banner_ad_slot.dart';
 import '../widgets/calc_keypad.dart';
@@ -152,13 +156,125 @@ class _LcdPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(lcdStatusProvider);
-    final lastLabel = ref.watch(calcProvider.select((s) => s.lastInput?.label));
-    return LcdDisplay(
-      status: status,
-      fitFontsToSize: true,
-      input: Text(lastLabel ?? '', key: const ValueKey('lcd-input-text')),
+    final lastInput = ref.watch(calcProvider.select((s) => s.lastInput));
+    final strings = CalcSemanticStrings.of(context);
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        LcdDisplay(
+          status: status,
+          fitFontsToSize: true,
+          input: Text(
+            lastInput?.label ?? '',
+            key: const ValueKey('lcd-input-text'),
+            // 각인 기호 대신 기능 이름을 읽는다 (#20)
+            semanticsLabel: lastInput == null
+                ? null
+                : strings.keyFunction(lastInput.id, lastInput.layer),
+          ),
+        ),
+        // 스크린리더 알림 전용 노드 (LCD 왼쪽 위 1dp — 화면에 보이지 않고 터치를 가로채지 않는다)
+        const Positioned(
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+          child: IgnorePointer(child: ScreenReaderAnnouncer()),
+        ),
+      ],
     );
   }
+}
+
+/// 계산기 상태 변화를 스크린리더로 알린다 (#20). 무엇을 알릴지는 [announcementFor]가 정한다.
+///
+/// 플랫폼마다 알리는 방법이 다르다 — Flutter 자체 위젯(InputDecorator)과 같은 기준
+/// (`MediaQuery.supportsAnnounceOf`)으로 나눈다.
+/// - **알림 지원(iOS 등)**: `SemanticsService.sendAnnouncement`. 스크린리더가 꺼져 있으면 보내지 않는다.
+/// - **알림 미지원(Android)**: 이 위젯의 liveRegion 노드 라벨을 바꾼다. Android 엔진은 알림을 지원하지 않고
+///   (Android 16부터 API 폐기 예정), liveRegion 노드는 **라벨이 바뀔 때만** 읽힌다. 같은 말이 이어져도
+///   ("7" → "7") 읽히도록 매번 보이지 않는 문자(U+200B)를 붙였다 뗐다 해 라벨을 바꾼다.
+///
+/// 상태 표시줄·입력 줄을 liveRegion으로 두지 않는 이유: 상태 표시줄 전체가 매번 다시 읽히고, 켜짐/꺼짐
+/// 의미가 전달되지 않으며, 같은 입력이 이어지면 입력 줄 라벨이 그대로라 읽히지 않는다(리뷰 R2).
+@visibleForTesting
+class ScreenReaderAnnouncer extends ConsumerStatefulWidget {
+  const ScreenReaderAnnouncer({super.key});
+
+  /// 연속된 같은 말을 구분하려고 번갈아 붙이는 글자 (스크린리더는 읽지 않는다)
+  static const String repeatMarker = '\u200B';
+
+  @override
+  ConsumerState<ScreenReaderAnnouncer> createState() =>
+      _ScreenReaderAnnouncerState();
+}
+
+class _ScreenReaderAnnouncerState extends ConsumerState<ScreenReaderAnnouncer> {
+  String _message = '';
+  bool _marked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = CalcSemanticStrings.of(context);
+    final supportsAnnounce = MediaQuery.supportsAnnounceOf(context);
+    final view = View.of(context);
+    final direction = Directionality.of(context);
+    ref.listen(
+      calcProvider.select((s) => (s.modifier, s.inputCount, s.lastInput)),
+      (previous, next) {
+        // 직전 선택 값이 없으면(오류 등) 비교할 수 없으므로 알리지 않는다.
+        if (previous == null) return;
+        final message = announcementFor(strings, previous, next);
+        if (message == null) return;
+        if (supportsAnnounce) {
+          if (!SemanticsBinding.instance.semanticsEnabled) return;
+          unawaited(
+            SemanticsService.sendAnnouncement(view, message, direction),
+          );
+        } else {
+          setState(() {
+            _marked = !_marked;
+            _message = _marked
+                ? message
+                : '$message${ScreenReaderAnnouncer.repeatMarker}';
+          });
+        }
+      },
+    );
+    if (supportsAnnounce) return const SizedBox.shrink();
+    return Semantics(
+      key: const ValueKey('screen-reader-announcer'),
+      container: true,
+      liveRegion: true,
+      label: _message,
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+/// 상태 변화([previous] → [next])에 대해 스크린리더로 알릴 말. 알릴 것이 없으면 `null`. (#20)
+///
+/// 상태는 `(모디파이어 대기, 입력 수, 마지막 입력)`이다.
+/// - 기능이 입력되면(입력 수 증가) 그 기능 이름을 알린다. 시프트·알파 대기가 그 입력으로 풀렸다는 것도
+///   이것으로 전달된다(예: 시프트 → sin → "아크사인"). 길게 눌러 반복되는 입력은 알리지 않는다.
+/// - 입력 없이 대기만 바뀌면: 켜짐("시프트 켜짐"), 또는 꺼짐(같은 키를 다시 누름, 기능 없는 층의 키).
+@visibleForTesting
+String? announcementFor(
+  CalcSemanticStrings strings,
+  (KeyModifier, int, KeyInput?) previous,
+  (KeyModifier, int, KeyInput?) next,
+) {
+  final (before, countBefore, _) = previous;
+  final (after, countAfter, input) = next;
+  if (countAfter != countBefore) {
+    if (input == null || input.isRepeat) return null;
+    return strings.keyFunction(input.id, input.layer);
+  }
+  if (before == after) return null;
+  if (after != KeyModifier.none) {
+    return strings.modifierChanged(after, on: true);
+  }
+  return strings.modifierChanged(before, on: false);
 }
 
 /// 키 입력을 notifier로 전달하는 키패드. 상태를 구독하지 않는다.

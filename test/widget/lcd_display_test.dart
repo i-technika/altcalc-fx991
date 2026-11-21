@@ -4,6 +4,8 @@ import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/korean_locale.dart';
+
 /// 크기를 지정한 LCD를 띄운다. [width]/[height]가 `null`이면 그 축은 무한 제약.
 Future<void> _pump(
   WidgetTester tester,
@@ -176,15 +178,16 @@ void main() {
       expect(tester.getCenter(find.text('◄')).dx, lessThan(lcd.center.dx));
     });
 
-    testWidgets('스크린리더에는 켜진 표시기만 읽힌다', (tester) async {
+    testWidgets('스크린리더에는 켜진 표시기의 의미만 읽힌다 (기호가 아니라 말로)', (tester) async {
       final handle = tester.ensureSemantics();
+      useKoreanLocale(tester);
       await _pump(
         tester,
         const LcdDisplay(status: LcdStatus(alpha: true, memory: true)),
       );
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)),
-        matchesSemantics(label: 'A M D Math'),
+        matchesSemantics(label: '알파, 메모리, 각도 단위 도, 수학 입출력'),
       );
       handle.dispose();
     });
@@ -325,6 +328,28 @@ void main() {
         arrow.style?.fontSize,
         CalcTheme.lcdInputStyle.fontSize! * CalcTheme.lcdScrollArrowFontRatio,
       );
+    });
+
+    testWidgets('스크린리더: 줄 이름("입력"/"결과")·스크롤 방향·내용을 한 덩어리로 읽는다', (tester) async {
+      final handle = tester.ensureSemantics();
+      useKoreanLocale(tester);
+      await _pump(
+        tester,
+        const LcdDisplay(
+          input: Text('12+3'),
+          result: Text('15'),
+          inputOverflow: LcdLineOverflow(left: true),
+          resultOverflow: LcdLineOverflow(right: true),
+        ),
+      );
+      final input = tester.getSemantics(_inputLine).label;
+      final result = tester.getSemantics(_resultLine).label;
+      expect(input.split('\n'), ['입력', '왼쪽에 내용 더 있음', '12+3']);
+      expect(result.split('\n'), ['결과', '15', '오른쪽에 내용 더 있음']);
+      // 화살표 기호 자체는 읽히지 않는다.
+      expect(input, isNot(contains('◄')));
+      expect(result, isNot(contains('►')));
+      handle.dispose();
     });
 
     testWidgets('스크롤 표시가 켜져도 내용 위치가 흔들리지 않는다', (tester) async {

@@ -6,6 +6,8 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/korean_locale.dart';
+
 /// 지정한 크기의 셀 하나에 위젯을 배치한다.
 Widget _host(
   Widget child, {
@@ -895,39 +897,42 @@ void main() {
   });
 
   group('접근성', () {
-    testWidgets('버튼 시맨틱과 3단 라벨을 읽어 주고, 시맨틱 탭으로 햅틱과 함께 입력된다', (tester) async {
-      final handle = tester.ensureSemantics();
-      final haptics = _recordHaptics(tester);
-      final pressed = <CalcKeyId>[];
-      await tester.pumpWidget(
-        _host(
-          CalcKeyButton(
-            keyDef: keyDefOf(CalcKeyId.calc),
-            onPressed: pressed.add,
+    testWidgets(
+      '버튼 시맨틱과 3단 기능(라벨: 메인, 힌트: 시프트·알파)을 읽어 주고, 시맨틱 탭으로 햅틱과 함께 입력된다',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        final haptics = _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(
+              keyDef: keyDefOf(CalcKeyId.calc),
+              onPressed: pressed.add,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(
-        tester.getSemantics(find.byType(CalcKeyButton)),
-        matchesSemantics(
-          label: 'CALC, SHIFT SOLVE, ALPHA =',
-          isButton: true,
-          hasEnabledState: true,
-          isEnabled: true,
-          hasTapAction: true,
-        ),
-      );
+        expect(
+          tester.getSemantics(find.byType(CalcKeyButton)),
+          matchesSemantics(
+            label: '변수 대입 계산',
+            hint: '시프트 방정식 풀기, 알파 등호 입력',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            hasTapAction: true,
+          ),
+        );
 
-      tester.semantics.tap(
-        find.semantics.byLabel('CALC, SHIFT SOLVE, ALPHA ='),
-      );
-      await tester.pump();
-      expect(pressed, [CalcKeyId.calc]);
-      expect(haptics, [_light]);
-      // testWidgets는 tearDown 전에 handle 해제를 검증하므로 본문 끝에서 해제한다.
-      handle.dispose();
-    });
+        tester.semantics.tap(find.semantics.byLabel('변수 대입 계산'));
+        await tester.pump();
+        expect(pressed, [CalcKeyId.calc]);
+        expect(haptics, [_light]);
+        // testWidgets는 tearDown 전에 handle 해제를 검증하므로 본문 끝에서 해제한다.
+        handle.dispose();
+      },
+    );
 
     testWidgets('비활성 키는 비활성 시맨틱이며 탭 동작이 없다', (tester) async {
       final handle = tester.ensureSemantics();

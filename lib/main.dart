@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'core/theme/calc_theme.dart';
 import 'core/theme/font_licenses.dart';
+import 'presentation/l10n/device_locale_scope.dart';
 import 'presentation/screens/calculator_screen.dart';
 
 Future<void> main() async {
@@ -36,6 +37,9 @@ class AltCalcApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: CalcTheme.bodyBackground,
       ),
+      // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
+      builder: (context, child) =>
+          DeviceLocaleScope(child: child ?? const SizedBox.shrink()),
       home: const CalculatorScreen(),
     );
   }

@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
+import '../l10n/calc_semantic_strings.dart';
 
 /// fx-991EX 스타일의 단일 키 버튼.
 ///
@@ -243,21 +244,16 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// 접근성(스크린리더) 활성화 시 호출 — 포인터 다운이 없으므로 햅틱 후 바로 입력한다.
   void _handleSemanticTap() => _commitPress();
 
-  String get _semanticLabel {
-    final def = widget.keyDef;
-    return [
-      def.mainLabel,
-      if (def.hasShift) 'SHIFT ${def.shiftLabel}',
-      if (def.hasAlpha) 'ALPHA ${def.alphaLabel}',
-    ].join(', ');
-  }
-
   @override
   Widget build(BuildContext context) {
+    final strings = CalcSemanticStrings.of(context);
     return Semantics(
       button: true,
       enabled: _enabled,
-      label: _semanticLabel,
+      // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
+      // 메인 기능은 라벨, SHIFT·ALPHA 기능은 힌트로 나눠 키를 훑을 때 짧게 읽히게 한다.
+      label: strings.keyButton(widget.keyDef.id),
+      hint: strings.keyButtonHint(widget.keyDef.id),
       onTap: _enabled ? _handleSemanticTap : null,
       excludeSemantics: true,
       child: LayoutBuilder(builder: _buildLayout),
