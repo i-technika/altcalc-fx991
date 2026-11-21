@@ -48,8 +48,11 @@ abstract final class CalcTheme {
   /// LCD 상태 표시줄 활성 텍스트 (S, A, DEG 등이 켜졌을 때)
   static const Color lcdStatusActive = Color(0xFF2A2A2A);
 
-  /// LCD 상태 표시줄 비활성 텍스트
+  /// LCD 상태 표시줄 비활성 텍스트 (꺼진 세그먼트가 희미하게 비치는 효과)
   static const Color lcdStatusInactive = Color(0xFFB8CCB0);
+
+  /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선)
+  static const Color lcdDotGrid = Color(0x0F000000);
 
   // ───────────────────────────────────────────
   // 키캡 카테고리 색상 (Keycap Category Colors)
@@ -282,6 +285,50 @@ abstract final class CalcTheme {
   static const Duration keyPressAnimationDuration = Duration(milliseconds: 60);
 
   // ───────────────────────────────────────────
+  // LCD 치수 (LCD Dimensions)
+  // ───────────────────────────────────────────
+  // LCD 전체 크기와 화면 비율은 #23에서 정의한다. 여기서는 LCD 내부 장식 치수만 둔다.
+
+  /// LCD 은색 베젤 두께 (dp)
+  static const double lcdFrameWidth = 3.0;
+
+  /// LCD 모서리 둥글기 (dp)
+  static const double lcdBorderRadius = 6.0;
+
+  /// LCD 베젤 안쪽 여백 (dp)
+  static const double lcdInnerPadding = 6.0;
+
+  /// 도트 매트릭스 격자 간격 (dp)
+  static const double lcdDotPitch = 3.0;
+
+  /// 도트 매트릭스 격자선 두께 (dp)
+  static const double lcdDotGridStrokeWidth = 0.5;
+
+  /// 상태 표시줄 높이 (상태 표시 글자 크기 대비)
+  static const double lcdStatusBarHeightRatio = 1.4;
+
+  /// 상태 표시 슬롯 사이 간격 (상태 표시 글자 크기 대비)
+  static const double lcdStatusSlotGapRatio = 0.5;
+
+  /// 상태 표시 슬롯 너비 산정용 글자당 폭 (글자 크기 대비, 고정폭 폰트 기준)
+  static const double lcdStatusCharWidthRatio = 0.65;
+
+  /// 스크롤 표시(◀/▶) 글자 크기 (해당 줄 글자 크기 대비)
+  static const double lcdScrollArrowFontRatio = 0.6;
+
+  /// 스크롤 표시(◀/▶) 자리 너비 (스크롤 표시 글자 크기 대비)
+  static const double lcdScrollArrowWidthRatio = 0.9;
+
+  /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한
+  static const double lcdMaxTextScaleFactor = 1.3;
+
+  /// 입력 줄 : 결과 줄 높이 비율 (TODO(#23): 화면 비율 기준 확정 시 갱신)
+  static const int lcdInputLineFlex = 3;
+
+  /// 결과 줄 높이 비율 (입력 줄과의 상대값)
+  static const int lcdResultLineFlex = 2;
+
+  // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)
   // ───────────────────────────────────────────
 
@@ -293,6 +340,15 @@ abstract final class CalcTheme {
 
   /// 광고 슬롯 상단 안전 여백 — 오터치 방지 (dp)
   static const double adSlotSafetyMargin = 10.0;
+
+  /// 광고 슬롯 상단 안전 여백 하한 (dp) — 이보다 좁히면 키패드 오터치로 광고가 눌릴 수 있다
+  static const double adSlotMinSafetyMargin = 8.0;
+
+  /// 광고 슬롯 상단 안전 여백 상한 (dp) — CLAUDE.md 규칙(8~12dp)
+  static const double adSlotMaxSafetyMargin = 12.0;
+
+  /// [adSlotMaxHeight]를 기본값으로 쓰는 대형 화면 기준 (화면 짧은 변, dp)
+  static const double adSlotLargeScreenShortestSide = 600.0;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

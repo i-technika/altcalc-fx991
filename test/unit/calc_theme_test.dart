@@ -102,6 +102,48 @@ void main() {
         lessThanOrEqualTo(CalcTheme.adSlotMaxHeight),
       );
       expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
+      expect(CalcTheme.adSlotMinSafetyMargin, 8);
+      expect(CalcTheme.adSlotMaxSafetyMargin, 12);
+      expect(
+        CalcTheme.adSlotSafetyMargin,
+        inInclusiveRange(
+          CalcTheme.adSlotMinSafetyMargin,
+          CalcTheme.adSlotMaxSafetyMargin,
+        ),
+      );
+      expect(CalcTheme.adSlotLargeScreenShortestSide, greaterThan(0));
+    });
+
+    test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
+      for (final v in [
+        CalcTheme.lcdFrameWidth,
+        CalcTheme.lcdBorderRadius,
+        CalcTheme.lcdInnerPadding,
+        CalcTheme.lcdDotPitch,
+        CalcTheme.lcdDotGridStrokeWidth,
+        CalcTheme.lcdStatusBarHeightRatio,
+        CalcTheme.lcdStatusSlotGapRatio,
+        CalcTheme.lcdStatusCharWidthRatio,
+        CalcTheme.lcdScrollArrowFontRatio,
+        CalcTheme.lcdScrollArrowWidthRatio,
+      ]) {
+        expect(v, greaterThan(0));
+      }
+      expect(
+        CalcTheme.lcdBorderRadius,
+        greaterThanOrEqualTo(CalcTheme.lcdFrameWidth),
+      );
+      // 격자선은 픽셀 간격보다 얇아야 도트처럼 보인다.
+      expect(CalcTheme.lcdDotGridStrokeWidth, lessThan(CalcTheme.lcdDotPitch));
+      // 상태 표시줄은 글자보다 높아야 잘리지 않는다.
+      expect(CalcTheme.lcdStatusBarHeightRatio, greaterThanOrEqualTo(1.0));
+      expect(CalcTheme.lcdMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));
+      expect(CalcTheme.lcdInputLineFlex, greaterThan(0));
+      expect(CalcTheme.lcdResultLineFlex, greaterThan(0));
+    });
+
+    test('도트 격자는 LCD 글자 가독성을 해치지 않을 만큼 옅다', () {
+      expect(CalcTheme.lcdDotGrid.a, lessThan(0.15));
     });
 
     test('키 버튼 비율 상수는 0~1 사이이며 키캡이 각인 띠보다 크다', () {
