@@ -297,7 +297,7 @@ abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // LCD 치수 (LCD Dimensions)
   // ───────────────────────────────────────────
-  // LCD 전체 크기와 화면 비율은 #23에서 정의한다. 여기서는 LCD 내부 장식 치수만 둔다.
+  // LCD 전체 크기와 화면 비율은 아래 "화면 배치"에서 정의한다.
 
   /// LCD 은색 베젤 두께 (dp)
   static const double lcdFrameWidth = 3.0;
@@ -332,11 +332,28 @@ abstract final class CalcTheme {
   /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한
   static const double lcdMaxTextScaleFactor = 1.3;
 
-  /// 입력 줄 : 결과 줄 높이 비율 (TODO(#23): 화면 비율 기준 확정 시 갱신)
-  static const int lcdInputLineFlex = 3;
+  // ── LCD 내부 구성 (#23) ──
+  // 위 → 아래: 상태 표시줄 + 입력 줄(행 [lcdInputLineFlex]개) + 결과 줄(행 [lcdResultLineFlex]개).
+  // 한 "행"은 줄 글자 하나의 줄 높이(글자 크기 × 스타일 height)다. 줄 글자 크기는 LCD 크기에서
+  // `LcdFontSizes.forSize`가 산출한다 (높이 기준과 폭 기준 중 작은 값).
 
-  /// 결과 줄 높이 비율 (입력 줄과의 상대값)
-  static const int lcdResultLineFlex = 2;
+  /// 입력 줄 높이 (행 수) — 자연 표기(Natural Textbook Display) 2D 수식 템플릿을 담는 2행.
+  /// 분수의 분자·분모, 정적분·시그마의 위·아래 끝이 각각 한 행을 차지한다.
+  static const int lcdInputLineFlex = 2;
+
+  /// 결과 줄 높이 (행 수) — 결과 1행.
+  static const int lcdResultLineFlex = 1;
+
+  /// 상태 표시 글자 크기 (줄 글자 크기 대비)
+  static const double lcdStatusFontRatio = 0.42;
+
+  /// 결과 줄이 스크롤 없이 담아야 하는 글자 칸 수 (폭 기준 글자 크기 산출용).
+  /// 가장 긴 결과 `−1.234567891×10⁻⁹⁹` = 부호 1 + 가수 11 + `×10` 3 + 위첨자 지수 약 2칸.
+  static const int lcdLineColumns = 17;
+
+  /// 줄 글자 한 칸 폭 (글자 크기 대비). 고정폭 글꼴(Roboto Mono·Menlo·Courier)의 글자 폭은 0.6em이다.
+  /// 자간([lcdInputStyle]·[lcdResultStyle]의 `letterSpacing`)은 따로 더한다.
+  static const double lcdLineCharWidthRatio = 0.6;
 
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)
@@ -387,8 +404,16 @@ abstract final class CalcTheme {
   static const double cursorPadDividerWidth = 2.0;
 
   // ───────────────────────────────────────────
-  // 화면 배치 (Screen Layout) — 잠정값, TODO(#23): LCD : 키패드 : 광고 비율 기준 확정
+  // 화면 배치 (Screen Layout) — 세로 폰 화면의 LCD : 키패드 : 광고 슬롯 기준 (#23)
   // ───────────────────────────────────────────
+  // - 광고 슬롯: 비율이 아니라 고정 높이다(배너 규격 [adSlotHeight]~[adSlotMaxHeight] + 안전 여백 8~12dp).
+  //   광고 슬롯을 뺀 나머지를 "본체"라 하고, 본체를 LCD와 키패드가 나눈다.
+  // - LCD: 본체 높이의 [screenLcdHeightRatio]를 목표로 하되
+  //   [screenLcdMinHeight] ~ (LCD 폭 / [screenLcdMinAspectRatio]) 범위로 제한한다.
+  // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio]) 때문에 키패드가 다 쓰지 못하는
+  //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
+  //   (실물의 로고·태양전지 자리). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
+  // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38), 대화면 좌우 분할은 #24·#25.
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
@@ -396,11 +421,16 @@ abstract final class CalcTheme {
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;
 
-  /// LCD 높이 (광고 슬롯을 뺀 본체 높이 대비)
-  static const double screenLcdHeightRatio = 0.26;
+  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX에서 LCD 창 : 키 영역 높이가 약 1 : 3이다.
+  static const double screenLcdHeightRatio = 0.25;
 
-  /// LCD 최소 높이 (dp)
+  /// LCD 최소 높이 (dp). 이 높이에서도 상태 표시줄 + 입력 2행 + 결과 1행이 줄 글자 약 17dp로 들어간다.
   static const double screenLcdMinHeight = 96.0;
+
+  /// LCD 최소 가로/세로 비 — LCD 최대 높이는 LCD 폭 / 이 값이다.
+  /// 실물 LCD 창(192×63 도트 + 상태 표시 행)이 약 2:1보다 납작하므로 그보다 세로로 길어지지 않게 한다.
+  /// 폰 폭에서는 줄 글자가 이미 폭 기준([lcdLineColumns])에 걸리므로 더 높여도 글자가 커지지 않는다.
+  static const double screenLcdMinAspectRatio = 2.0;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

@@ -225,39 +225,173 @@ void main() {
     }
   });
 
-  group('LCD 높이', () {
-    test('기본은 본체 높이 비율이며 최소 높이를 지킨다', () {
-      const body = Size(390, 700);
+  group('화면 배치 기준 (CalcScreenLayout)', () {
+    void expectSumsToBody(Size body, CalcScreenLayout l) {
+      for (final v in [l.top, l.lcdHeight, l.keypadHeight]) {
+        expect(v, greaterThanOrEqualTo(0), reason: '$body $l');
+      }
       expect(
-        CalculatorScreen.lcdHeightFor(body),
+        l.top + l.lcdHeight + CalcTheme.screenLcdKeypadGap + l.keypadHeight,
+        moreOrLessEquals(
+          math.max(body.height, CalcTheme.screenLcdKeypadGap),
+          epsilon: 1e-9,
+        ),
+        reason: '$body $l',
+      );
+    }
+
+    test('기본은 본체 높이 비율이고 상단 띠가 없다', () {
+      const body = Size(390, 700);
+      final l = CalcScreenLayout.of(body);
+      expect(
+        l.lcdHeight,
         moreOrLessEquals(700 * CalcTheme.screenLcdHeightRatio),
       );
-      expect(
-        CalculatorScreen.lcdHeightFor(const Size(390, 200)),
-        CalcTheme.screenLcdMinHeight,
-      );
+      expect(l.top, 0);
+      expectSumsToBody(body, l);
     });
 
-    test('세로로 긴 화면은 키패드 비율 하한을 넘는 높이를 LCD에 준다', () {
-      const body = Size(320, 1000);
-      final lcd = CalculatorScreen.lcdHeightFor(body);
-      final keypad = body.height - lcd - CalcTheme.screenLcdKeypadGap;
+    test('낮은 본체에서도 LCD 최소 높이를 지킨다', () {
+      final l = CalcScreenLayout.of(const Size(390, 200));
+      expect(l.lcdHeight, CalcTheme.screenLcdMinHeight);
+      expect(l.top, 0);
+    });
+
+    test('키패드가 비율 하한에 걸려 남는 높이는 LCD 최대 높이까지 LCD가 받는다', () {
+      const body = Size(390, 720);
+      final l = CalcScreenLayout.of(body);
+      final keypadMax = body.width / CalcTheme.keypadMinAspectRatio;
+      expect(l.keypadHeight, moreOrLessEquals(keypadMax));
+      expect(l.lcdHeight, greaterThan(720 * CalcTheme.screenLcdHeightRatio));
       expect(
-        keypad,
+        l.lcdHeight,
+        lessThan(body.width / CalcTheme.screenLcdMinAspectRatio),
+      );
+      expect(l.top, moreOrLessEquals(0));
+      expectSumsToBody(body, l);
+    });
+
+    test('LCD 최대 높이를 넘어 남는 높이는 LCD 위 상단 띠가 된다', () {
+      const body = Size(320, 1000);
+      final l = CalcScreenLayout.of(body);
+      expect(
+        l.lcdHeight,
+        moreOrLessEquals(body.width / CalcTheme.screenLcdMinAspectRatio),
+      );
+      expect(
+        l.keypadHeight,
         moreOrLessEquals(body.width / CalcTheme.keypadMinAspectRatio),
       );
+      expect(l.top, greaterThan(0));
+      expectSumsToBody(body, l);
     });
 
-    test('본체가 아주 낮아도 LCD + 간격이 본체를 넘지 않는다', () {
-      for (final h in [0.0, 4.0, 50.0, 100.0]) {
-        final lcd = CalculatorScreen.lcdHeightFor(Size(360, h));
-        expect(lcd, greaterThanOrEqualTo(0));
-        expect(
-          lcd + CalcTheme.screenLcdKeypadGap,
-          lessThanOrEqualTo(math.max(h, CalcTheme.screenLcdKeypadGap)),
-        );
+    test('좁은 폭에서도 LCD 최대 높이는 최소 높이 아래로 내려가지 않는다', () {
+      final l = CalcScreenLayout.of(const Size(100, 900));
+      expect(l.lcdHeight, CalcTheme.screenLcdMinHeight);
+    });
+
+    test('본체가 아주 낮거나 좁아도 음수 없이 본체를 넘지 않는다', () {
+      for (final body in const [
+        Size(360, 0),
+        Size(360, 4),
+        Size(360, 50),
+        Size(360, 100),
+        Size(0, 600),
+        Size(0, 0),
+        Size(2000, 300),
+      ]) {
+        expectSumsToBody(body, CalcScreenLayout.of(body));
       }
     });
+  });
+
+  group('폰 화면비별 LCD 확인', () {
+    // 소형(4", 16:9) ~ 대형(6.7", 19.5:9)·초장형(21:9) 세로 폰
+    const phones = [
+      Size(320, 568),
+      Size(360, 640),
+      Size(360, 800),
+      Size(390, 844),
+      Size(412, 915),
+      Size(430, 932),
+      Size(411, 960),
+    ];
+    final input = find.byKey(const ValueKey('lcd-input-line'));
+    final result = find.byKey(const ValueKey('lcd-result-line'));
+    Finder content(Finder line) => find.descendant(
+      of: line,
+      matching: find.byKey(const ValueKey('lcd-line-content')),
+    );
+
+    for (final size in phones) {
+      for (final scale in [1.0, 1.3]) {
+        testWidgets('${size.width}×${size.height}, 글자 배율 $scale', (
+          tester,
+        ) async {
+          await _pumpScreen(tester, size: size, textScale: scale);
+          expect(tester.takeException(), isNull);
+          final lcdRect = tester.getRect(find.byType(LcdDisplay));
+          final keypad = tester.getRect(
+            find.byKey(const ValueKey('calc-keypad')),
+          );
+          final ad = tester.getRect(
+            find.byKey(const ValueKey('banner-ad-slot')),
+          );
+
+          // LCD는 본체(광고 슬롯 위)의 목표 비율 근처를 차지하고, 키패드는 광고 슬롯 바로 위에 붙는다.
+          final body = ad.top - CalcTheme.adSlotSafetyMargin;
+          expect(lcdRect.height / body, inInclusiveRange(0.2, 0.3));
+          expect(
+            ad.top - keypad.bottom,
+            moreOrLessEquals(CalcTheme.adSlotSafetyMargin, epsilon: 0.01),
+          );
+          expect(lcdRect.bottom, lessThanOrEqualTo(keypad.top));
+
+          // 주입된 글자 크기는 LCD 크기에서 산출한 값이고 줄 높이 맞춤으로 다시 줄지 않는다.
+          final lcd = tester.widget<LcdDisplay>(find.byType(LcdDisplay));
+          final scaler = TextScaler.linear(scale)
+              .clamp(maxScaleFactor: CalcTheme.lcdMaxTextScaleFactor);
+          final fonts = LcdFontSizes.forSize(lcdRect.size, scaler);
+          expect(lcd.inputFontSize, fonts.input);
+          expect(lcd.resultFontSize, fonts.result);
+          expect(lcd.statusFontSize, fonts.status);
+          final rendered = DefaultTextStyle.of(
+            tester.element(find.byKey(const ValueKey('lcd-input-text'))),
+          ).style;
+          expect(rendered.fontSize, fonts.input);
+
+          // 배율 반영 줄 글자는 폰에서 20dp 이상이고, 배율을 키워도 LCD 크기로 정해진 값을 넘지 않는다.
+          final scaledLine = scaler.scale(fonts.input);
+          expect(scaledLine, greaterThanOrEqualTo(20));
+          expect(
+            scaledLine,
+            moreOrLessEquals(
+              LcdFontSizes.forSize(lcdRect.size, TextScaler.noScaling).input,
+              epsilon: 0.01,
+            ),
+          );
+
+          // 입력 줄은 2행 템플릿, 결과 줄은 1행을 담고, 결과 줄은 최대 결과 칸 수를 담는다.
+          final row = (scaledLine * CalcTheme.lcdInputStyle.height!)
+              .ceilToDouble();
+          expect(
+            tester.getSize(input).height,
+            greaterThanOrEqualTo(CalcTheme.lcdInputLineFlex * row),
+          );
+          expect(tester.getSize(result).height, greaterThanOrEqualTo(row));
+          expect(
+            tester.getSize(content(result)).width,
+            greaterThanOrEqualTo(
+              CalcTheme.lcdLineColumns *
+                      (scaledLine * CalcTheme.lcdLineCharWidthRatio +
+                          CalcTheme.lcdResultStyle.letterSpacing!) -
+                  0.01,
+            ),
+          );
+        });
+      }
+    }
   });
 
   group('상태 머신 연동', () {

@@ -138,8 +138,24 @@ void main() {
       // 상태 표시줄은 글자보다 높아야 잘리지 않는다.
       expect(CalcTheme.lcdStatusBarHeightRatio, greaterThanOrEqualTo(1.0));
       expect(CalcTheme.lcdMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));
-      expect(CalcTheme.lcdInputLineFlex, greaterThan(0));
-      expect(CalcTheme.lcdResultLineFlex, greaterThan(0));
+    });
+
+    test('LCD 내부 구성: 입력 줄은 2D 템플릿 2행 이상, 결과 줄은 1행 이상이다', () {
+      expect(CalcTheme.lcdInputLineFlex, greaterThanOrEqualTo(2));
+      expect(CalcTheme.lcdResultLineFlex, greaterThanOrEqualTo(1));
+      // 상태 표시는 줄 글자보다 작다.
+      expect(CalcTheme.lcdStatusFontRatio, inExclusiveRange(0, 1));
+      // 고정폭 글꼴 글자 폭은 1em보다 좁다.
+      expect(CalcTheme.lcdLineCharWidthRatio, inExclusiveRange(0, 1));
+    });
+
+    test('결과 줄 칸 수는 가장 긴 10자리 결과(부호·가수·×10 + 위첨자 지수)를 담는다', () {
+      // 위첨자 지수(−99)는 작은 글자라 약 2칸으로 본다.
+      const mantissa = '−1.234567891×10';
+      expect(
+        CalcTheme.lcdLineColumns,
+        greaterThanOrEqualTo(mantissa.runes.length + 2),
+      );
     });
 
     test('도트 격자는 LCD 글자 가독성을 해치지 않을 만큼 옅다', () {
@@ -206,6 +222,17 @@ void main() {
       expect(CalcTheme.screenLcdKeypadGap, greaterThanOrEqualTo(0));
       expect(CalcTheme.screenLcdHeightRatio, inExclusiveRange(0, 0.5));
       expect(CalcTheme.screenLcdMinHeight, greaterThan(0));
+      // LCD는 세로보다 가로가 길다.
+      expect(CalcTheme.screenLcdMinAspectRatio, greaterThanOrEqualTo(1));
+    });
+
+    test('폰 폭에서 LCD 최대 높이(폭 / 최소 가로세로비)는 최소 높이 이상이다', () {
+      // 가장 좁은 폰(320dp)의 LCD 폭 = 320 − 좌우 여백
+      const narrowest = 320 - 2 * CalcTheme.screenPadding;
+      expect(
+        narrowest / CalcTheme.screenLcdMinAspectRatio,
+        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+      );
     });
   });
 }

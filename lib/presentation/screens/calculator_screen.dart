@@ -9,14 +9,72 @@ import '../widgets/banner_ad_slot.dart';
 import '../widgets/calc_keypad.dart';
 import '../widgets/lcd_display.dart';
 
+/// 광고 슬롯을 뺀 본체 영역의 세로 배치 (위 → 아래: 상단 띠 · LCD · 간격 · 키패드).
+///
+/// 기준은 [CalcTheme]의 "화면 배치" 절을 따른다 (#23).
+/// - LCD: [CalcTheme.screenLcdHeightRatio] 목표, [CalcTheme.screenLcdMinHeight] ~
+///   (폭 / [CalcTheme.screenLcdMinAspectRatio]) 범위.
+/// - 키패드: 나머지 높이 중 가로/세로 비 하한([CalcTheme.keypadMinAspectRatio])이 허용하는 만큼.
+///   키패드가 쓰지 못하는 높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 [top]으로 둔다.
+/// - 본체가 아주 낮으면 키패드 높이가 0이 될 때까지만 LCD를 최소 높이로 지킨다 (TODO(#38)).
+@immutable
+class CalcScreenLayout {
+  /// LCD 위 상단 띠 높이 (dp)
+  final double top;
+
+  /// LCD 높이 (dp)
+  final double lcdHeight;
+
+  /// 키패드 영역 높이 (dp)
+  final double keypadHeight;
+
+  const CalcScreenLayout._({
+    required this.top,
+    required this.lcdHeight,
+    required this.keypadHeight,
+  });
+
+  /// [body] (광고 슬롯·화면 여백을 뺀 본체 영역)의 세로 배치.
+  /// `top + lcdHeight + 간격 + keypadHeight`는 본체 높이(간격보다 낮으면 간격)와 같다.
+  factory CalcScreenLayout.of(Size body) {
+    final width = math.max(0.0, body.width);
+    final available = math.max(0.0, body.height - CalcTheme.screenLcdKeypadGap);
+    final keypadMax = width / CalcTheme.keypadMinAspectRatio;
+    final lcdMax = math.max(
+      CalcTheme.screenLcdMinHeight,
+      width / CalcTheme.screenLcdMinAspectRatio,
+    );
+    final lcd = math.min(
+      math
+          .max(
+            body.height * CalcTheme.screenLcdHeightRatio,
+            available - keypadMax,
+          )
+          .clamp(CalcTheme.screenLcdMinHeight, lcdMax),
+      available,
+    );
+    final keypad = math.min(available - lcd, keypadMax);
+    return CalcScreenLayout._(
+      top: available - lcd - keypad,
+      lcdHeight: lcd,
+      keypadHeight: keypad,
+    );
+  }
+
+  @override
+  String toString() =>
+      'CalcScreenLayout(top: $top, lcd: $lcdHeight, keypad: $keypadHeight)';
+}
+
 /// 계산기 메인 화면: LCD + 50키 키패드 + 최하단 광고 슬롯.
 ///
 /// 구성 (위 → 아래):
 /// ```
 ///  ┌──────────────────────────┐  ← 상단 시스템 인셋 (SafeArea)
-///  │          LCD             │  ← [lcdHeightFor]
+///  │       (상단 띠)          │  ← [CalcScreenLayout.top] — 세로로 긴 화면에서만 생긴다
+///  │          LCD             │  ← [CalcScreenLayout.lcdHeight]
 ///  │        (간격)            │
-///  │     50키 키패드          │  ← 남은 높이 (가로/세로 비 제한, 가운데 정렬)
+///  │     50키 키패드          │  ← [CalcScreenLayout.keypadHeight]
 ///  ├──────────────────────────┤
 ///  │ 안전 여백 + 광고 슬롯    │  ← [BannerAdSlot] (하단·좌우 시스템 인셋은 슬롯이 처리)
 ///  └──────────────────────────┘
@@ -24,34 +82,19 @@ import '../widgets/lcd_display.dart';
 ///
 /// - 키패드는 스크롤 영역 밖에 고정 배치한다(`CalcKeyButton`은 누르는 순간 입력한다).
 /// - LCD만 상태를 구독하고 키패드는 notifier만 읽으므로, 키 입력으로 키패드 50개가 다시 그려지지 않는다.
+/// - LCD 글자 크기는 LCD 크기에서 [LcdFontSizes.forSize]로 산출해 주입한다.
 /// - 좌우 여백은 [CalcTheme.screenPadding]만 둔다. 가장자리 열의 바깥쪽 일부가 Android 제스처
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
-/// - 세로 화면 기준이다(`lockPortraitOrientation`). 태블릿·폴더블 좌우 분할은 #24·#25,
-///   LCD 비율 기준은 #23에서 다룬다.
+/// - 세로 화면 기준이다(`lockPortraitOrientation`). 태블릿·폴더블 좌우 분할은 #24·#25.
 class CalculatorScreen extends StatelessWidget {
   const CalculatorScreen({super.key});
 
-  /// 광고 슬롯을 뺀 본체 영역 [body]에서 LCD 높이를 정한다.
-  ///
-  /// 기본은 [CalcTheme.screenLcdHeightRatio] (최소 [CalcTheme.screenLcdMinHeight])이고,
-  /// 세로로 긴 화면에서 키패드가 가로/세로 비 하한에 걸려 남는 높이는 LCD에 준다.
-  /// 본체가 아주 낮으면 키패드 높이가 0이 될 때까지만 LCD를 키운다.
-  static double lcdHeightFor(Size body) {
-    final available = math.max(0.0, body.height - CalcTheme.screenLcdKeypadGap);
-    final keypadMaxHeight = body.width / CalcTheme.keypadMinAspectRatio;
-    final lcd = math.max(
-      math.max(
-        body.height * CalcTheme.screenLcdHeightRatio,
-        CalcTheme.screenLcdMinHeight,
-      ),
-      available - keypadMaxHeight,
-    );
-    return math.min(lcd, available);
-  }
-
   @override
   Widget build(BuildContext context) {
+    // LcdDisplay가 실제로 쓰는 배율 (상한 적용)
+    final lcdTextScaler = MediaQuery.textScalerOf(context)
+        .clamp(maxScaleFactor: CalcTheme.lcdMaxTextScaleFactor);
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       body: Column(
@@ -69,12 +112,22 @@ class CalculatorScreen extends StatelessWidget {
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final lcdHeight = lcdHeightFor(constraints.biggest);
+                    final body = constraints.biggest;
+                    final layout = CalcScreenLayout.of(body);
+                    final fonts = LcdFontSizes.forSize(
+                      Size(body.width, layout.lcdHeight),
+                      lcdTextScaler,
+                    );
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(height: lcdHeight, child: const _LcdPanel()),
+                        SizedBox(height: layout.top),
+                        SizedBox(
+                          height: layout.lcdHeight,
+                          child: _LcdPanel(fonts: fonts),
+                        ),
                         const SizedBox(height: CalcTheme.screenLcdKeypadGap),
+                        // 남는 높이(반올림 오차 등)는 키패드가 받는다.
                         const Expanded(child: _KeypadPanel()),
                       ],
                     );
@@ -94,7 +147,10 @@ class CalculatorScreen extends StatelessWidget {
 /// 상태를 구독해 LCD를 그린다. M1에서는 마지막 입력 기능의 각인을 입력 줄에 보여준다.
 /// TODO(M2): 수식 AST(`MathNodeWidget`)와 결과 표시로 대체한다.
 class _LcdPanel extends ConsumerWidget {
-  const _LcdPanel();
+  /// LCD 크기에서 산출한 글자 크기
+  final LcdFontSizes fonts;
+
+  const _LcdPanel({required this.fonts});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,6 +158,9 @@ class _LcdPanel extends ConsumerWidget {
     final lastLabel = ref.watch(calcProvider.select((s) => s.lastInput?.label));
     return LcdDisplay(
       status: status,
+      statusFontSize: fonts.status,
+      inputFontSize: fonts.input,
+      resultFontSize: fonts.result,
       input: Text(lastLabel ?? '', key: const ValueKey('lcd-input-text')),
     );
   }

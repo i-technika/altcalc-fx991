@@ -31,6 +31,99 @@ class LcdLineOverflow {
   String toString() => 'LcdLineOverflow(left: $left, right: $right)';
 }
 
+/// LCD 크기에서 산출한 상태 표시·입력 줄·결과 줄 글자 크기 (#23). 모두 배율 반영 **전** 크기다.
+///
+/// [LcdDisplay]는 상태 표시줄을 뺀 높이를 입력 줄 [CalcTheme.lcdInputLineFlex]행 + 결과 줄
+/// [CalcTheme.lcdResultLineFlex]행으로 나눈다. 줄 글자 크기는 배율을 반영한 크기가 다음 둘을 모두
+/// 만족하는 가장 큰 값이다.
+/// - **높이 기준**: 상태 표시줄(줄 글자 × [CalcTheme.lcdStatusFontRatio] × [CalcTheme.lcdStatusBarHeightRatio])과
+///   전체 행이 LCD 안쪽 높이에 들어간다. 그래서 입력 줄은 2행 템플릿(분수·적분)을 담을 수 있다.
+/// - **폭 기준**: 결과 줄에 [CalcTheme.lcdLineColumns]칸(◀/▶ 자리 제외)이 들어간다.
+///
+/// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다. LCD를 꽉 채우는 크기이므로 시스템 글자 배율을
+/// 키워도 더 커지지 않고(넘치지 않도록 맞춘다), 배율이 1보다 작으면 그만큼 작아진다.
+@immutable
+class LcdFontSizes {
+  /// 상태 표시 글자 크기 (dp)
+  final double status;
+
+  /// 입력 줄 글자 크기 (dp)
+  final double input;
+
+  /// 결과 줄 글자 크기 (dp)
+  final double result;
+
+  const LcdFontSizes({
+    required this.status,
+    required this.input,
+    required this.result,
+  });
+
+  /// [size] 크기의 LCD(베젤 포함)에 [textScaler]로 그릴 때의 글자 크기.
+  /// [textScaler]는 [LcdDisplay]가 실제로 쓰는 배율([CalcTheme.lcdMaxTextScaleFactor]로 제한한 값)을 넘긴다.
+  factory LcdFontSizes.forSize(Size size, TextScaler textScaler) {
+    const chrome = 2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
+    final innerWidth = math.max(0.0, size.width - chrome);
+    final innerHeight = math.max(0.0, size.height - chrome);
+
+    // 높이 기준: 상태 표시줄 + 전체 행 (배율 반영 크기 기준). 렌더링 시 행 높이를 정수로 올림하므로
+    // (`fitLineStyle`) 행마다 1dp를 남겨, 주입한 크기가 줄 높이 맞춤으로 다시 줄지 않게 한다.
+    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
+    final byHeight =
+        math.max(0.0, innerHeight - rowCount) /
+        (CalcTheme.lcdStatusFontRatio * CalcTheme.lcdStatusBarHeightRatio +
+            rowCount * _lineHeightFactor);
+
+    // 폭 기준: 결과 줄 칸 수 + 양쪽 ◀/▶ 자리. 자간은 배율과 무관한 고정 dp다.
+    const columns = CalcTheme.lcdLineColumns;
+    const arrowWidth =
+        CalcTheme.lcdScrollArrowFontRatio * CalcTheme.lcdScrollArrowWidthRatio;
+    final byWidth =
+        (innerWidth - columns * _maxLetterSpacing) /
+        (columns * CalcTheme.lcdLineCharWidthRatio + 2 * arrowWidth);
+
+    final scaledLine = math.max(minFittedFontSize, math.min(byHeight, byWidth));
+    final scaledStatus = math.max(
+      minFittedFontSize,
+      scaledLine * CalcTheme.lcdStatusFontRatio,
+    );
+    double unscale(double scaled) =>
+        fitFontSize(scaled, textScaler: textScaler, fits: (s) => s <= scaled);
+    final line = unscale(scaledLine);
+    return LcdFontSizes(
+      status: unscale(scaledStatus),
+      input: line,
+      result: line,
+    );
+  }
+
+  /// 입력·결과 줄 스타일 중 큰 줄 높이 배수 (행 높이 = 글자 크기 × 이 값)
+  static double get _lineHeightFactor => math.max(
+    CalcTheme.lcdInputStyle.height ?? 1.0,
+    CalcTheme.lcdResultStyle.height ?? 1.0,
+  );
+
+  /// 입력·결과 줄 스타일 중 큰 자간 (dp)
+  static double get _maxLetterSpacing => math.max(
+    CalcTheme.lcdInputStyle.letterSpacing ?? 0.0,
+    CalcTheme.lcdResultStyle.letterSpacing ?? 0.0,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is LcdFontSizes &&
+      other.status == status &&
+      other.input == input &&
+      other.result == result;
+
+  @override
+  int get hashCode => Object.hash(status, input, result);
+
+  @override
+  String toString() =>
+      'LcdFontSizes(status: $status, input: $input, result: $result)';
+}
+
 /// fx-991EX ClassWiz 스타일의 도트 매트릭스 LCD.
 ///
 /// 구성 (위 → 아래):
@@ -44,10 +137,10 @@ class LcdLineOverflow {
 ///
 /// ## 크기 계약
 /// - 크기는 부모가 정한다. 제약이 무한한 축에만 [fallbackSize]의 해당 축 값을 쓴다.
-///   LCD : 키패드 비율과 글자 크기 산정 기준은 #23에서 정의하며, 부모가 [statusFontSize]·
-///   [inputFontSize]·[resultFontSize]를 주입한다.
+///   LCD : 키패드 비율은 `CalculatorScreen`이 정하고, 부모가 [LcdFontSizes.forSize]로 산출한
+///   [statusFontSize]·[inputFontSize]·[resultFontSize]를 주입한다. 주입하지 않으면 테마 기본 크기다.
 /// - 상태 표시줄 높이는 상태 글자 크기 × [CalcTheme.lcdStatusBarHeightRatio]이고,
-///   남은 높이를 입력 줄과 결과 줄이 [CalcTheme.lcdInputLineFlex] : [CalcTheme.lcdResultLineFlex]로 나눈다.
+///   남은 높이를 입력 줄과 결과 줄이 [CalcTheme.lcdInputLineFlex] : [CalcTheme.lcdResultLineFlex]행으로 나눈다.
 /// - 상태 표시줄은 폭이 남으면 슬롯을 고르게 펼치고, 모자라면 통째로 축소한다.
 ///   슬롯 위치는 표시 상태와 무관하게 LCD 크기로만 정해진다.
 /// - 시스템 글자 배율은 LCD 전체에 [CalcTheme.lcdMaxTextScaleFactor]까지만 반영한다.
