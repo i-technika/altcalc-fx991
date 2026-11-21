@@ -144,6 +144,8 @@ void main() {
       expect(CalcTheme.lcdInputLineFlex, greaterThanOrEqualTo(2));
       // MathO 결과도 분수(⅓ 등)로 표시된다.
       expect(CalcTheme.lcdResultLineFlex, greaterThanOrEqualTo(2));
+      // LcdDisplay는 flex 비율로 줄 높이를 나누므로, 줄마다 분수 막대 몫을 같게 받으려면 행 수가 같아야 한다.
+      expect(CalcTheme.lcdInputLineFlex, CalcTheme.lcdResultLineFlex);
       // 분수 막대·여백은 한 행보다 얇다.
       expect(CalcTheme.lcdFractionBarRatio, inExclusiveRange(0, 1));
       // 상태 표시는 줄 글자보다 작다.

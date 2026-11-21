@@ -240,7 +240,7 @@ void main() {
     test('기본은 본체 높이 비율이고 상단 띠가 없다', () {
       const body = Size(390, 700);
       final l = CalcScreenLayout.of(body);
-      expect(l.lcdHeight, moreOrLessEquals(175)); // 700 × 0.25
+      expect(l.lcdHeight, moreOrLessEquals(196)); // 700 × 0.28
       expect(l.top, 0);
       expect(l.gap, CalcTheme.screenLcdKeypadGap);
       expectSumsToBody(body, l);
@@ -255,11 +255,12 @@ void main() {
     });
 
     test('키패드가 비율 하한에 걸려 남는 높이는 LCD 최대 높이까지 LCD가 받는다', () {
-      // 키패드 최대 390 / 0.75 = 520, LCD = 712 − 520 = 192 (최대 390 / 1.75 ≈ 222.9 미만)
-      const body = Size(390, 720);
+      // 키패드 최대 390 / 0.75 = 520, LCD = 737 − 520 = 217
+      // (목표 745 × 0.28 = 208.6 초과, 최대 390 / 1.75 ≈ 222.9 미만)
+      const body = Size(390, 745);
       final l = CalcScreenLayout.of(body);
       expect(l.keypadHeight, moreOrLessEquals(520));
-      expect(l.lcdHeight, moreOrLessEquals(192));
+      expect(l.lcdHeight, moreOrLessEquals(217));
       expect(l.top, moreOrLessEquals(0));
       expectSumsToBody(body, l);
     });
@@ -317,7 +318,7 @@ void main() {
     // 독립 계산한 기대값 (배율 반영 후 줄 글자 크기)
     // 390×844 인셋 0: 본체 776·폭 374 → LCD 374/1.75, 키패드 374/0.75, 띠 768 − 둘,
     //   글자 = 폭 기준 (356 − 17·1.2) / 11.28
-    // 390×844 iPhone 인셋(47/34): 본체 695 → LCD = 687 − 498.67 (최대 미만), 띠 0,
+    // 390×844 iPhone 인셋(47/34): 본체 695 → LCD = 695 × 0.28 (잉여분 188.3보다 큼, 최대 미만), 띠 0,
     //   글자 = 높이 기준 (LCD − 18 − 4) / 6.288
     // 412×915 Android 인셋(24/24): 본체 799·폭 396 → LCD 396/1.75, 띠 791 − LCD − 528,
     //   글자 = 폭 기준 (378 − 20.4) / 11.28
@@ -332,9 +333,9 @@ void main() {
       (
         const Size(390, 844),
         const EdgeInsets.only(top: 47, bottom: 34),
-        687 - 374 / 0.75,
+        695 * 0.28,
         0.0,
-        (687 - 374 / 0.75 - 22) / 6.288,
+        (695 * 0.28 - 22) / 6.288,
       ),
       (
         const Size(412, 915),
@@ -369,7 +370,13 @@ void main() {
           );
           final scaled = MediaQuery.textScalerOf(text)
               .scale(DefaultTextStyle.of(text).style.fontSize!);
-          expect(scaled, moreOrLessEquals(font, epsilon: 0.01));
+          if (scale == 1.0) {
+            expect(scaled, moreOrLessEquals(font, epsilon: 0.01));
+          } else {
+            // 배율을 키우면 상태 표시가 커진 만큼만 줄 글자가 줄어든다.
+            expect(scaled, lessThanOrEqualTo(font + 0.01));
+            expect(scaled, greaterThan(font * 0.95));
+          }
         });
       }
     }
@@ -397,23 +404,22 @@ void main() {
           // 본체 = 광고 슬롯 안전 여백 위 ~ 상단 화면 여백 아래
           final body =
               ad.top - CalcTheme.adSlotSafetyMargin - CalcTheme.screenPadding;
-          // LCD는 본체의 목표 비율 이상 (키패드 잉여분을 받으면 그보다 크다), LCD 최대 이하
+          // LCD는 본체의 목표 비율 이상(키패드 잉여분을 받으면 그보다 크다)이되 LCD 최대 이하
+          final lcdMax = lcdRect.width / CalcTheme.screenLcdMinAspectRatio;
           expect(
             lcdRect.height,
             greaterThanOrEqualTo(
-              math.max(
-                    body * CalcTheme.screenLcdHeightRatio,
-                    CalcTheme.screenLcdMinHeight,
+              math.min(
+                    lcdMax,
+                    math.max(
+                      body * CalcTheme.screenLcdHeightRatio,
+                      CalcTheme.screenLcdMinHeight,
+                    ),
                   ) -
                   0.01,
             ),
           );
-          expect(
-            lcdRect.height,
-            lessThanOrEqualTo(
-              lcdRect.width / CalcTheme.screenLcdMinAspectRatio + 0.01,
-            ),
-          );
+          expect(lcdRect.height, lessThanOrEqualTo(lcdMax + 0.01));
           // 키패드는 광고 슬롯 바로 위에 붙고, LCD는 키패드 바로 위에 붙는다.
           expect(
             ad.top - keypad.bottom,
@@ -424,13 +430,13 @@ void main() {
             moreOrLessEquals(CalcTheme.screenLcdKeypadGap, epsilon: 0.01),
           );
 
-          // 배율 반영 줄 글자는 가장 작은 폰에서도 16dp 이상이다.
+          // 배율 반영 줄 글자는 가장 작은 폰(16:9)에서도 18dp 이상이다.
           final text = tester.element(
             find.byKey(const ValueKey('lcd-input-text')),
           );
           final line = MediaQuery.textScalerOf(text)
               .scale(DefaultTextStyle.of(text).style.fontSize!);
-          expect(line, greaterThanOrEqualTo(16));
+          expect(line, greaterThanOrEqualTo(18));
 
           // 입력·결과 줄은 각각 분수(2행 + 막대)를 담는다.
           final fractionHeight =

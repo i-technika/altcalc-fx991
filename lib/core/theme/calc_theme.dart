@@ -329,7 +329,8 @@ abstract final class CalcTheme {
   /// 스크롤 표시(◀/▶) 자리 너비 (스크롤 표시 글자 크기 대비)
   static const double lcdScrollArrowWidthRatio = 0.9;
 
-  /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한
+  /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한.
+  /// 계산기 화면(LCD 크기로 글자 산출)에서는 줄 글자가 LCD를 채우므로 상태 표시에만 효과가 있다.
   static const double lcdMaxTextScaleFactor = 1.3;
 
   // ── LCD 내부 구성 (#23) ──
@@ -338,8 +339,9 @@ abstract final class CalcTheme {
   // ([lcdFractionBarRatio])을 더한다. 줄 글자 크기는 LCD 크기에서 `LcdFontSizes.forSize`가
   // 높이 기준과 폭 기준([lcdLineColumns])을 모두 만족하는 가장 큰 값으로 산출한다.
 
-  /// 입력 줄 높이 (행 수) — 자연 표기(Natural Textbook Display) 2D 수식 템플릿을 담는 2행.
-  /// 분수의 분자·분모, 정적분·시그마의 위·아래 끝이 각각 한 행을 차지한다.
+  /// 입력 줄 높이 (행 수) — 자연 표기(Natural Textbook Display) 분수 1단(분자·분모)을 담는 2행.
+  /// 정적분·시그마처럼 더 높은 템플릿의 처리는 #36(M2)에서 정한다.
+  /// [lcdResultLineFlex]와 같아야 한다(줄마다 분수 막대 몫을 같게 받는다).
   static const int lcdInputLineFlex = 2;
 
   /// 결과 줄 높이 (행 수) — MathO 결과도 자연 표기(⅓, √2/2 같은 분수 결과)이므로 2행.
@@ -427,9 +429,11 @@ abstract final class CalcTheme {
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;
 
-  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX 앞면에서 LCD 창 : 키 영역 높이가 대략 1 : 3인 데서
-  /// 잡은 대략값이다 (정밀 실측값 아님).
-  static const double screenLcdHeightRatio = 0.25;
+  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX 앞면의 LCD 창 : 키 영역 높이(대략 1 : 3, 정밀
+  /// 실측값 아님)보다 조금 크게 잡았다 — 앱 LCD는 입력·결과 줄이 각각 분수를 담는 4행 구성이고,
+  /// 16:9 소형 폰(320×568)에서도 줄 글자 약 19dp를 확보한다. 그보다 크게 잡으면 소형 폰 키 각인 글자가
+  /// 키 크기 하한(calculator_screen_test) 아래로 내려간다. 세로로 긴 폰에서는 LCD 최대 높이에 먼저 걸린다.
+  static const double screenLcdHeightRatio = 0.28;
 
   /// LCD 최소 높이 (dp). 이 높이에서도 상태 표시줄 + 입력 2행 + 결과 2행이 줄 글자 약 14dp로 들어간다.
   static const double screenLcdMinHeight = 112.0;
