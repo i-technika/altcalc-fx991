@@ -18,7 +18,7 @@ bool _registered = false;
 ///
 /// - 여러 번 호출해도 한 번만 등록한다(라이선스 화면에 중복 표시 방지).
 /// - 라이선스 전문은 라이선스 화면을 열 때 지연 로드된다([collectFontLicenses]).
-/// - 앱에는 아직 라이선스 화면 진입점(`showLicensePage`)이 없다. 설정·정보 화면에서 연결한다.
+/// - 앱에는 아직 라이선스 화면 진입점(`showLicensePage`)이 없다 — TODO(#46).
 void registerFontLicenses() {
   if (_registered) return;
   _registered = true;

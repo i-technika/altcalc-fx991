@@ -10,7 +10,7 @@ LCD·키캡 라벨의 수학 기호(`◼`, `◻`, `∛`, `⇔`, `∑`, `∫`, `�
 
 - 두 글꼴 모두 예약 글꼴 이름(Reserved Font Name)이 없어 서브셋(수정본)을 같은 이름으로 배포할 수 있다.
 - 라이선스 전문은 이 폴더의 txt로 앱 번들에 들어가고, 앱 시작 시 `LicenseRegistry`에 등록된다
-  (`lib/core/theme/font_licenses.dart`). 앱에는 아직 라이선스 화면 진입점이 없다(설정·정보 화면에서 연결 예정).
+  (`lib/core/theme/font_licenses.dart`). 앱에는 아직 라이선스 화면 진입점이 없다(#46에서 연결).
 
 ## 원본
 
