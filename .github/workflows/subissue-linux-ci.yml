@@ -55,4 +55,4 @@ jobs:
 
       # 개발용 미리보기(#21)의 주 실행 경로(Chrome)가 웹 컴파일되는지 확인한다.
       - name: Build key preview (Web)
-        run: flutter build web --release -t preview/key_preview_main.dart
+        run: flutter build web -t preview/key_preview_main.dart --no-wasm-dry-run

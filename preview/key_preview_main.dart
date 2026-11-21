@@ -49,7 +49,7 @@ class PreviewDevice {
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
 const List<PreviewDevice> previewDevices = [
-  // iPhone 14·15 (상태 표시줄 47, 홈 표시줄 34)
+  // iPhone 14·13 (상태 표시줄 47, 홈 표시줄 34)
   PreviewDevice(
     '일반 폰',
     Size(390, 844),
@@ -104,6 +104,12 @@ const double previewDefaultTextScale = 1.0;
 /// 키패드·LCD는 [CalcTheme.keyMaxTextScaleFactor]·[CalcTheme.lcdMaxTextScaleFactor](130%)에서 배율을
 /// 자르므로, 200%는 그 잘림이 지켜지는지 확인하는 용도다. Android 14 이상의 비선형 배율은 흉내 내지 않는다.
 const List<double> previewTextScales = [0.85, 1.0, 1.3, 2.0];
+
+/// 기기 틀 둘레 여백 (dp)
+const double previewFrameMargin = 16;
+
+/// 기기 틀 위 캡션(기기·배율 표시) 줄 높이 (dp)
+const double previewFrameCaptionHeight = 24;
 
 /// 입력 로그 기본 최대 보관 줄 수 (오래된 것부터 버린다)
 const int previewLogCapacity = 500;
@@ -162,15 +168,27 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   int _inputTotal = 0;
   bool _trimmed = false;
 
-  /// 초기화 직후 상태가 처음으로 돌아가며 오는 알림(예: SHIFT 대기 → 해제)을 로그에 남기지 않는다.
-  bool _skipResetEcho = false;
+  @override
+  void didUpdateWidget(KeyPreviewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.logCapacity < oldWidget.logCapacity) _trimLog();
+  }
+
+  /// 보관 줄 수를 넘는 오래된 줄을 버린다.
+  void _trimLog() {
+    final excess = _log.length - widget.logCapacity;
+    if (excess <= 0) return;
+    _log.removeRange(0, excess);
+    _trimmed = true;
+  }
 
   /// 상태를 처음으로 되돌리고 로그를 비운다.
   void _reset() {
-    // 상태가 이미 처음과 같으면 알림이 오지 않으므로 건너뛸 것도 없다.
-    _skipResetEcho =
-        _watchOf(ref.read(calcProvider)) != _watchOf(CalcState.initial);
+    // invalidate 직후 read하면 provider가 즉시 다시 만들어지고 리스너가 그 자리에서(동기) 불린다.
+    // 그래서 처음 상태로 돌아가는 알림(예: SHIFT 대기 → 해제)은 아래에서 로그를 비우기 전에 들어왔다가
+    // 함께 지워진다. read를 빼면 그 알림이 다음 프레임에 와서 빈 로그에 남는다(테스트가 검증).
     ref.invalidate(calcProvider);
+    ref.read(calcProvider);
     setState(() {
       _log.clear();
       _inputTotal = 0;
@@ -180,10 +198,6 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 
   void _onChanged(PreviewWatch? previous, PreviewWatch next) {
     if (previous == null) return;
-    if (_skipResetEcho && next == _watchOf(CalcState.initial)) {
-      _skipResetEcho = false;
-      return;
-    }
     final (before, countBefore, _) = previous;
     final (after, count, input) = next;
     final PreviewLogEntry entry;
@@ -202,10 +216,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
     }
     setState(() {
       _log.add(entry);
-      if (_log.length > widget.logCapacity) {
-        _log.removeRange(0, _log.length - widget.logCapacity);
-        _trimmed = true;
-      }
+      _trimLog();
     });
   }
 
@@ -266,20 +277,16 @@ class _DeviceFrame extends StatelessWidget {
 
   const _DeviceFrame({required this.device, required this.textScale});
 
-  /// 기기 틀 둘레 여백 (dp)
-  static const double _margin = 16;
-
-  /// 축소 비율 표시 줄 높이 (dp)
-  static const double _captionHeight = 24;
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = device.size;
-        final availableWidth = constraints.maxWidth - _margin * 2;
+        final availableWidth = constraints.maxWidth - previewFrameMargin * 2;
         final availableHeight =
-            constraints.maxHeight - _margin * 2 - _captionHeight;
+            constraints.maxHeight -
+            previewFrameMargin * 2 -
+            previewFrameCaptionHeight;
         final scale = math.max(
           0.0,
           math.min(
@@ -291,12 +298,25 @@ class _DeviceFrame extends StatelessWidget {
           ),
         );
 
+        // 여백·캡션조차 들어가지 않는 창: 안내 문구만 그린다.
+        if (scale <= 0) {
+          return const Center(
+            child: Text(
+              '창이 너무 작아 기기 화면을 표시할 수 없습니다.',
+              key: ValueKey('preview-frame-too-small'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          );
+        }
+
         return Padding(
-          padding: const EdgeInsets.all(_margin),
+          padding: const EdgeInsets.all(previewFrameMargin),
           child: Column(
             children: [
               SizedBox(
-                height: _captionHeight,
+                height: previewFrameCaptionHeight,
                 child: Text(
                   '${device.label} · 글자 ${(textScale * 100).round()}% · '
                   '표시 배율 ${(scale * 100).round()}%',
@@ -308,41 +328,33 @@ class _DeviceFrame extends StatelessWidget {
               ),
               Expanded(
                 child: Center(
-                  child: scale <= 0
-                      ? const Text(
-                          '창이 너무 작아 기기 화면을 표시할 수 없습니다.',
-                          key: ValueKey('preview-frame-too-small'),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: Colors.white38, fontSize: 12),
-                        )
-                      : DecoratedBox(
-                          position: DecorationPosition.foreground,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: SizedBox(
-                            width: size.width * scale,
-                            height: size.height * scale,
-                            child: FittedBox(
-                              child: SizedBox.fromSize(
-                                key: const ValueKey('preview-device-screen'),
-                                size: size,
-                                child: MediaQuery(
-                                  data: MediaQuery.of(context).copyWith(
-                                    size: size,
-                                    padding: device.padding,
-                                    viewPadding: device.padding,
-                                    viewInsets: EdgeInsets.zero,
-                                    systemGestureInsets: EdgeInsets.zero,
-                                    textScaler: TextScaler.linear(textScale),
-                                  ),
-                                  child: const CalculatorScreen(),
-                                ),
-                              ),
+                  child: DecoratedBox(
+                    position: DecorationPosition.foreground,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: SizedBox(
+                      width: size.width * scale,
+                      height: size.height * scale,
+                      child: FittedBox(
+                        child: SizedBox.fromSize(
+                          key: const ValueKey('preview-device-screen'),
+                          size: size,
+                          child: MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              size: size,
+                              padding: device.padding,
+                              viewPadding: device.padding,
+                              viewInsets: EdgeInsets.zero,
+                              systemGestureInsets: EdgeInsets.zero,
+                              textScaler: TextScaler.linear(textScale),
                             ),
+                            child: const CalculatorScreen(),
                           ),
                         ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -353,7 +365,10 @@ class _DeviceFrame extends StatelessWidget {
   }
 }
 
-/// 기기·글자 배율 선택, 초기화 버튼, 입력 로그. 창이 낮으면 패널 전체가 스크롤된다.
+/// 기기·글자 배율 선택, 초기화 버튼, 입력 로그.
+///
+/// 설정 영역을 작게 두고 입력 로그가 남은 높이를 모두 쓴다 — 키를 누르는 동안 로그가 보여야 하기 때문이다.
+/// 패널이 [_scrollAllBelowHeight]보다 낮을 때만 설정과 로그를 한꺼번에 스크롤한다(오버플로 방지).
 class _ControlPanel extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
@@ -375,6 +390,20 @@ class _ControlPanel extends StatelessWidget {
     required this.onReset,
   });
 
+  /// 이보다 낮은 패널은 전체를 스크롤한다 (dp)
+  static const double _scrollAllBelowHeight = 240;
+
+  /// 패널 안쪽 여백 (dp)
+  static const double _padding = 12;
+
+  /// 패널 배경 (미리보기 전용)
+  static const Color _background = Color(0xFF1E1E1E);
+
+  static const TextStyle _label = TextStyle(
+    color: Colors.white70,
+    fontSize: 12,
+  );
+
   static const TextStyle _heading = TextStyle(
     color: Colors.white,
     fontSize: 13,
@@ -394,43 +423,51 @@ class _ControlPanel extends StatelessWidget {
     KeyLayer.alpha => CalcTheme.alphaLabel,
   };
 
-  @override
-  Widget build(BuildContext context) {
-    final settings = <Widget>[
-      const Text('기기 크기', style: _heading),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
+  Widget _settings() => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text('기기 크기', style: _label),
+      DropdownButton<int>(
+        key: const ValueKey('preview-device-select'),
+        isExpanded: true,
+        value: previewDevices.indexOf(device),
+        items: [
           for (final (i, d) in previewDevices.indexed)
-            ChoiceChip(
-              key: ValueKey('preview-device-$i'),
-              label: Text(d.label, style: const TextStyle(fontSize: 11)),
-              selected: d == device,
-              onSelected: (_) => onDeviceChanged(d),
-              visualDensity: VisualDensity.compact,
+            DropdownMenuItem(
+              value: i,
+              child: Text(
+                d.label,
+                key: ValueKey('preview-device-$i'),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
+        onChanged: (i) {
+          if (i != null) onDeviceChanged(previewDevices[i]);
+        },
       ),
-      const SizedBox(height: 12),
-      const Text('시스템 글자 배율', style: _heading),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
+      const SizedBox(height: 8),
+      const Text('시스템 글자 배율', style: _label),
+      const SizedBox(height: 4),
+      SegmentedButton<double>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: [
           for (final s in previewTextScales)
-            ChoiceChip(
-              key: ValueKey('preview-text-scale-$s'),
-              label: Text('${(s * 100).round()}%'),
-              selected: s == textScale,
-              onSelected: (_) => onTextScaleChanged(s),
-              visualDensity: VisualDensity.compact,
+            ButtonSegment(
+              value: s,
+              label: Text(
+                '${(s * 100).round()}%',
+                key: ValueKey('preview-text-scale-$s'),
+                maxLines: 1,
+              ),
             ),
         ],
+        selected: {textScale},
+        onSelectionChanged: (v) => onTextScaleChanged(v.first),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 4),
       Row(
         children: [
           Expanded(
@@ -448,38 +485,67 @@ class _ControlPanel extends StatelessWidget {
           ),
         ],
       ),
-    ];
+    ],
+  );
 
+  /// 입력 로그 (최근 줄이 맨 위). 화면에 보이는 줄만 만든다(지연 생성).
+  Widget _logSliver() => log.isEmpty
+      ? const SliverToBoxAdapter(
+          child: Text(
+            '키를 누르면 여기에 최근 순으로 기록됩니다.',
+            key: ValueKey('preview-log-empty'),
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        )
+      : SliverList.builder(
+          key: const ValueKey('preview-log'),
+          itemCount: log.length,
+          itemBuilder: (context, i) {
+            final (:number, :text, :layer) = log[log.length - 1 - i];
+            return Text(
+              number == null ? text : '$number. $text',
+              style: _logStyle.copyWith(color: _colorOf(layer)),
+            );
+          },
+        );
+
+  @override
+  Widget build(BuildContext context) {
     return ColoredBox(
-      color: CalcTheme.adSlotBackground,
-      child: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            sliver: SliverList.list(children: settings),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            sliver: log.isEmpty
-                ? const SliverToBoxAdapter(
-                    child: Text(
-                      '키를 누르면 여기에 최근 순으로 기록됩니다.',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
-                    ),
-                  )
-                : SliverList.builder(
-                    key: const ValueKey('preview-log'),
-                    itemCount: log.length,
-                    itemBuilder: (context, i) {
-                      final (:number, :text, :layer) = log[log.length - 1 - i];
-                      return Text(
-                        number == null ? text : '$number. $text',
-                        style: _logStyle.copyWith(color: _colorOf(layer)),
-                      );
-                    },
+      key: const ValueKey('preview-panel'),
+      color: _background,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight < _scrollAllBelowHeight) {
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(_padding),
+                  sliver: SliverToBoxAdapter(child: _settings()),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    _padding,
+                    0,
+                    _padding,
+                    _padding,
                   ),
-          ),
-        ],
+                  sliver: _logSliver(),
+                ),
+              ],
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.all(_padding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _settings(),
+                Expanded(child: CustomScrollView(slivers: [_logSliver()])),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

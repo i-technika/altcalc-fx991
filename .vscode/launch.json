@@ -1,6 +1,7 @@
 {
   // VS Code Dart/Flutter 확장 실행 구성 (#21).
-  // 확장이 쓰는 Flutter SDK는 터미널 PATH가 아니라 확장 설정(dart.flutterSdkPath)으로 찾는다 — README 참조.
+  // 확장은 Flutter SDK를 dart.flutterSdkPath 설정 → FLUTTER_ROOT → VS Code 프로세스의 PATH → 잘 알려진 설치 위치 순으로
+  // 찾는다. 터미널 세션에서만 추가한 PATH는 보지 않으므로, 못 찾으면 사용자 설정에 지정한다 — README 참조.
   "version": "0.2.0",
   "configurations": [
     {

@@ -89,6 +89,10 @@ jobs:
       - name: Build Web
         run: flutter build web --release
 
+      # 개발용 미리보기(#21) 웹 컴파일 확인
+      - name: Build key preview (Web)
+        run: flutter build web -t preview/key_preview_main.dart --no-wasm-dry-run
+
   build-windows:
     name: Windows Build
     runs-on: windows-latest

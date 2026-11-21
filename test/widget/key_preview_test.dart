@@ -39,7 +39,22 @@ Future<void> _press(WidgetTester tester, CalcKeyId id) async {
   await tester.pump();
 }
 
+/// 기기 선택 드롭다운에서 [index]번째 프리셋을 고른다.
+Future<void> _selectDevice(WidgetTester tester, int index) async {
+  await tester.tap(find.byKey(const ValueKey('preview-device-select')));
+  await tester.pumpAndSettle();
+  // 드롭다운 버튼 안과 펼친 메뉴에 같은 항목이 있다 — 메뉴(나중에 그려진 쪽)를 누른다.
+  await tester.tap(find.byKey(ValueKey('preview-device-$index')).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectTextScale(WidgetTester tester, double scale) async {
+  await tester.tap(find.byKey(ValueKey('preview-text-scale-$scale')));
+  await tester.pumpAndSettle();
+}
+
 /// 로그에 표시된 줄 (최근 입력이 먼저). 로그가 비어 있으면 빈 목록.
+/// 로그는 지연 생성 목록이라 **화면에 보이는 줄만** 센다 — 화면을 넘는 줄 수를 검사하지 말 것.
 List<String> _logLines(WidgetTester tester) => tester
     .widgetList<Text>(
       find.descendant(
@@ -59,28 +74,46 @@ final Finder _deviceScreen = find.byKey(
 
 void main() {
   group('릴리스 빌드 분리', () {
-    test('lib/에서 preview/로 가는 import·export·part 지시문이 없다', () {
-      final directive = RegExp(
-        r'''^\s*(import|export|part)\s+['"][^'"]*preview/''',
-        multiLine: true,
+    test('lib/의 상대 경로 .dart URI 중 preview/ 아래로 풀리는 것이 없다', () {
+      // lib/ 밖으로 나가는 길은 상대 경로뿐이다(package: URI는 lib/ 안을 가리킨다).
+      // 조건부 import의 두 번째 URI 등도 잡도록, 지시문이 아니라 파일의 모든 .dart 문자열을 실제 경로로 푼다.
+      final previewDir = Directory('preview').absolute.uri.path;
+      bool underPreview(File from, String uri) =>
+          from.absolute.uri.resolve(uri).path.startsWith(previewDir);
+      // 경로 풀이 양성 대조
+      expect(
+        underPreview(File('lib/main.dart'), '../preview/key_preview_main.dart'),
+        isTrue,
       );
-      final offenders = [
-        for (final f in Directory('lib').listSync(recursive: true))
-          if (f is File &&
-              f.path.endsWith('.dart') &&
-              directive.hasMatch(f.readAsStringSync()))
-            f.path,
-      ];
+
+      final literal = RegExp(r'''['"]([^'"\s]+\.dart)['"]''');
+      var checked = 0;
+      final offenders = <String>[];
+      for (final f in Directory('lib').listSync(recursive: true)) {
+        if (f is! File || !f.path.endsWith('.dart')) continue;
+        for (final m in literal.allMatches(f.readAsStringSync())) {
+          final uri = m.group(1)!;
+          if (uri.startsWith('package:') || uri.startsWith('dart:')) continue;
+          checked++;
+          if (underPreview(f, uri)) offenders.add('${f.path} → $uri');
+        }
+      }
+      expect(checked, greaterThan(0), reason: 'lib/의 상대 import를 하나도 읽지 못했다');
       expect(offenders, isEmpty);
     });
 
-    test('pubspec 에셋·글꼴에 preview/ 경로가 없다', () {
-      final pubspec = File('pubspec.yaml').readAsStringSync();
-      final paths = RegExp(
-        r'^\s*-\s*(?:asset:\s*)?(\S+)',
-        multiLine: true,
-      ).allMatches(pubspec).map((m) => m.group(1)!);
-      expect(paths.where((p) => p.contains('preview/')), isEmpty);
+    test('pubspec의 주석 아닌 줄에 preview/ 경로가 없다', () {
+      final lines = File('pubspec.yaml')
+          .readAsLinesSync()
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.startsWith('#'))
+          .toList();
+      // 같은 방식으로 실제 에셋 경로를 읽는다는 양성 대조
+      expect(
+        lines.where((l) => l.contains('assets/fonts/NotoSansMono-OFL.txt')),
+        isNotEmpty,
+      );
+      expect(lines.where((l) => l.contains('preview/')), isEmpty);
     });
   });
 
@@ -184,23 +217,58 @@ void main() {
       expect(_logHeader(tester), '입력 로그 · 입력 2회');
     });
 
-    testWidgets('초기화는 상태와 로그를 비우고, 처음으로 돌아가는 알림을 기록하지 않는다', (tester) async {
+    testWidgets('초기화는 상태와 로그를 비우고 번호를 1부터 다시 센다', (tester) async {
       await _pumpPreview(tester);
       await _press(tester, CalcKeyId.num7);
-      await _press(tester, CalcKeyId.shift); // SHIFT 대기 중에 초기화
       await tester.tap(find.byKey(const ValueKey('preview-reset')));
       await tester.pumpAndSettle();
-
-      expect(_logLines(tester), isEmpty);
+      expect(find.byKey(const ValueKey('preview-log-empty')), findsOneWidget);
       expect(_logHeader(tester), '입력 로그 · 입력 0회');
 
-      // 초기화 후 번호는 1부터, 이미 처음 상태에서 초기화해도 이후 변화가 빠지지 않는다.
+      await _press(tester, CalcKeyId.num7);
+      expect(_logLines(tester), ['1. 7']);
+    });
+
+    testWidgets('입력 없이 SHIFT만 대기 중일 때 초기화: 해제 알림을 기록하지 않고, 이후 변화는 빠짐없이 기록한다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      await _press(tester, CalcKeyId.shift);
       await tester.tap(find.byKey(const ValueKey('preview-reset')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preview-log-empty')), findsOneWidget);
+
+      // 처음 상태로 돌아가는 정당한 변화(SHIFT 두 번)도 삼키지 않는다.
       await _press(tester, CalcKeyId.shift);
       await _press(tester, CalcKeyId.shift);
+      expect(_logLines(tester), ['[SHIFT 해제]', '[SHIFT 대기]']);
+    });
+
+    testWidgets('보관 줄 수를 줄이면 바로 오래된 줄을 버린다', (tester) async {
+      await _pumpPreview(tester, logCapacity: 10);
+      for (var i = 0; i < 5; i++) {
+        await _press(tester, CalcKeyId.num7);
+      }
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: AltCalcApp(home: KeyPreviewScreen(logCapacity: 2)),
+        ),
+      );
+      expect(_logLines(tester), ['5. 7', '4. 7']);
+      expect(_logHeader(tester), '입력 로그 · 입력 5회 (최근 2줄만 표시)');
+    });
+
+    testWidgets('보통 노트북 창(1280×720)에서 입력 로그 헤더와 첫 줄이 창 안에 보인다', (tester) async {
+      await _pumpPreview(tester, window: const Size(1280, 720));
       await _press(tester, CalcKeyId.num7);
-      expect(_logLines(tester), ['1. 7', '[SHIFT 해제]', '[SHIFT 대기]']);
+      final header = tester.getRect(
+        find.byKey(const ValueKey('preview-log-header')),
+      );
+      final line = tester.getRect(find.text('1. 7'));
+      expect(header.bottom, lessThanOrEqualTo(720));
+      expect(line.bottom, lessThanOrEqualTo(720));
+      // 로그에 최소 10줄(줄 높이 약 17dp)이 들어갈 높이가 남는다.
+      expect(720 - line.top, greaterThan(170));
     });
 
     testWidgets('상한을 넘으면 오래된 줄부터 버리고, 번호와 총 입력 수는 이어진다', (tester) async {
@@ -217,10 +285,9 @@ void main() {
     ) async {
       await _pumpPreview(tester);
       for (final (i, device) in previewDevices.indexed) {
-        await tester.tap(find.byKey(ValueKey('preview-device-$i')));
+        await _selectDevice(tester, i);
         for (final scale in previewTextScales) {
-          await tester.tap(find.byKey(ValueKey('preview-text-scale-$scale')));
-          await tester.pumpAndSettle();
+          await _selectTextScale(tester, scale);
           final reason = '${device.label} × $scale';
           expect(tester.takeException(), isNull, reason: reason);
 
@@ -242,11 +309,11 @@ void main() {
           // 논리 크기 그대로 배치되고, 표시 영역은 패널·여백(16)·캡션(24)을 뺀 영역 안에 들어간다.
           expect(tester.getSize(_deviceScreen), device.size, reason: reason);
           final shown = tester.getRect(_deviceScreen);
-          const frameArea = Rect.fromLTRB(
-            KeyPreviewScreen.panelWidth + 16,
-            16 + 24,
-            1280 - 16,
-            900 - 16,
+          final frameArea = Rect.fromLTRB(
+            KeyPreviewScreen.panelWidth + previewFrameMargin,
+            previewFrameMargin + previewFrameCaptionHeight,
+            _window.width - previewFrameMargin,
+            _window.height - previewFrameMargin,
           );
           expect(
             shown.left,
@@ -284,8 +351,7 @@ void main() {
       await _pumpPreview(tester, window: const Size(1000, 700));
       final tablet = previewDevices.indexWhere((d) => d.size.height > 1000);
       expect(tablet, isNonNegative);
-      await tester.tap(find.byKey(ValueKey('preview-device-$tablet')));
-      await tester.pumpAndSettle();
+      await _selectDevice(tester, tablet);
       expect(tester.getRect(_deviceScreen).height, lessThan(700));
 
       await _press(tester, CalcKeyId.num7);
@@ -305,22 +371,33 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.byType(CalculatorScreen), findsOneWidget);
-        // 좁은 창은 위아래 배치: 기기 화면이 창 폭 안에 들어간다.
-        expect(
-          tester.getRect(_deviceScreen).right,
-          lessThanOrEqualTo(window.width),
+        final screen = tester.getRect(_deviceScreen);
+        final panel = tester.getRect(
+          find.byKey(const ValueKey('preview-panel')),
         );
+        expect(screen.right, lessThanOrEqualTo(window.width + 0.01));
+        if (window.width < KeyPreviewScreen.narrowWidth) {
+          // 좁은 창은 위아래 배치: 기기 화면이 패널 위에 온다.
+          expect(screen.bottom, lessThanOrEqualTo(panel.top + 0.01));
+          expect(panel.width, window.width);
+        } else {
+          // 넓은 창은 좌우 배치: 패널이 왼쪽에 고정 폭으로 온다.
+          expect(panel.width, KeyPreviewScreen.panelWidth);
+          expect(screen.left, greaterThanOrEqualTo(panel.right));
+        }
       });
     }
 
     testWidgets('창이 기기 화면을 그릴 수 없을 만큼 좁으면 안내 문구를 보인다', (tester) async {
-      await _pumpPreview(tester, window: const Size(30, 400));
+      // 넓은 배치에서 창 높이가 여백(16×2)+캡션(24)보다 낮은 경우
+      await _pumpPreview(tester, window: const Size(1280, 50));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('preview-frame-too-small')),
         findsOneWidget,
       );
       expect(_deviceScreen, findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 }
