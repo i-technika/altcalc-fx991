@@ -1,0 +1,27 @@
+{
+  // VS Code Dart/Flutter 확장 실행 구성 (#21).
+  // 확장이 쓰는 Flutter SDK는 터미널 PATH가 아니라 확장 설정(dart.flutterSdkPath)으로 찾는다 — README 참조.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AltCalc (앱)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "Key Preview (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "preview/key_preview_main.dart",
+      "deviceId": "chrome"
+    },
+    {
+      "name": "Key Preview (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "program": "preview/key_preview_main.dart",
+      "deviceId": "windows"
+    }
+  ]
+}

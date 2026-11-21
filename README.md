@@ -1,17 +1,48 @@
-# itechnika_altcalc_fx991
+# AltCalc fx-991
 
-A new Flutter project.
+카시오 fx-991EX 공학용 계산기 시뮬레이터 (Flutter, Android / iOS).
 
-## Getting Started
+- 프로젝트 규칙: [CLAUDE.md](CLAUDE.md)
+- 진행 단계: [milestone.md](milestone.md)
 
-This project is a starting point for a Flutter application.
+## 개발 환경
 
-A few resources to get you started if this is your first Flutter project:
+- Flutter 3.50 이상 (Dart 3.14 이상)
+- 의존성 설치: `flutter pub get`
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 앱 실행
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter run            # 연결된 기기·에뮬레이터
+```
+
+## 개발용 미리보기 (`preview/`)
+
+실제 계산기 화면(`CalculatorScreen`)을 데스크톱 브라우저 창에 띄워, 휴대폰·에뮬레이터 없이
+키패드와 키 입력 동작을 확인하는 개발 도구다.
+
+- **기기 크기**: 일반·소형·대형 폰, 폴더블 커버·내부, 태블릿, 분할 화면(짧은 창) 프리셋으로 반응형 배치를 확인한다.
+  창보다 큰 화면은 비율을 유지해 축소하며, 축소 비율은 화면 위에 표시된다.
+- **시스템 글자 배율**: 100% / 130% / 200%
+- **입력 로그**: 눌린 기능을 최근 순으로 기록한다 (SHIFT·ALPHA 기능은 각인 색으로 구분, 길게 눌러 반복된 입력은 `(반복)`).
+  `초기화`는 계산기 상태와 로그를 함께 지운다.
+
+```bash
+flutter run -d chrome -t preview/key_preview_main.dart
+```
+
+- **VS Code**: 실행 및 디버그(Ctrl+Shift+D)에서 `Key Preview (Chrome)`을 고른다 ([.vscode/launch.json](.vscode/launch.json)).
+  확장은 터미널 PATH가 아니라 자체 설정으로 Flutter SDK를 찾으므로, SDK를 찾지 못하면 사용자 설정에
+  `"dart.flutterSdkPath": "<Flutter SDK 폴더>"`를 지정한다 (또는 확장이 띄우는 `Locate SDK` 안내를 따른다).
+- **Windows 데스크톱** (`-d windows`, `Key Preview (Windows)`): 플러그인 빌드에 심볼릭 링크가 필요해
+  Windows **개발자 모드**를 켜야 한다 (`start ms-settings:developers`).
+- 미리보기는 `lib/` 밖에 있고 `lib/`에서 import하지 않으므로 앱 릴리스 빌드에 포함되지 않는다
+  (`test/widget/key_preview_test.dart`가 검증).
+- 실제 기기의 터치감·햅틱·화면 방향 고정·시스템 제스처 영역은 미리보기로 확인할 수 없으므로 실기기·에뮬레이터에서 확인한다.
+
+## 검증
+
+```bash
+flutter analyze   # preview/ 포함, 이슈 0건이어야 한다
+flutter test      # 미리보기 실행·입력 기록 테스트 포함
+```
