@@ -251,7 +251,9 @@ void main() {
       );
     });
 
-    testWidgets('줄 내용은 줄 높이 안에서 세로 가운데에 놓인다', (tester) async {
+    testWidgets('입력은 입력 줄 위쪽, 결과는 결과 줄 아래쪽에 붙는다 (실물 Natural 표시)', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const LcdDisplay(
@@ -264,7 +266,11 @@ void main() {
         final lineRect = tester.getRect(line);
         final textRect = tester.getRect(find.text(text));
         expect(textRect.height, lessThan(lineRect.height));
-        expect(textRect.center.dy, closeTo(lineRect.center.dy, 0.5));
+        if (text == '1') {
+          expect(textRect.top, closeTo(lineRect.top, 0.5));
+        } else {
+          expect(textRect.bottom, closeTo(lineRect.bottom, 0.5));
+        }
       }
     });
 
@@ -388,7 +394,8 @@ void main() {
         find.descendant(of: _resultLine, matching: find.byType(Column)),
       );
       expect(column.height, greaterThan(resultArea.height));
-      expect(column.center.dy, closeTo(resultArea.center.dy, 0.01));
+      // 결과는 아래쪽 정렬: 넘치는 부분은 위쪽이 잘린다.
+      expect(column.bottom, closeTo(resultArea.bottom, 0.01));
     });
 
     testWidgets('가로 스크롤 내용을 넣으면 줄 폭 기준으로 스크롤되어 끝(커서 쪽)을 보여줄 수 있다', (
@@ -621,6 +628,262 @@ void main() {
       expect(() => LcdDisplay(inputFontSize: bad), throwsAssertionError);
       expect(() => LcdDisplay(resultFontSize: bad), throwsAssertionError);
     }
+  });
+
+  group('LcdFontSizes (LCD 크기 → 글자 크기)', () {
+    const chrome = 2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
+    final hf = CalcTheme.lcdInputStyle.height!;
+    const ls = 1.2; // 입력·결과 줄 중 큰 자간 (lcdInputStyle) — 폭 기준은 이 값으로 계산한다
+
+    /// 높이 기준 사용량 (배율 1): 상태 표시줄 + 4행(+정수 올림 여유 1dp) + 분수 막대 2개
+    double usedHeight(double f) =>
+        f * CalcTheme.lcdStatusFontRatio * CalcTheme.lcdStatusBarHeightRatio +
+        4 * (f * hf + 1) +
+        2 * f * CalcTheme.lcdFractionBarRatio;
+
+    /// 폭 기준 사용량 (배율 1): 17칸 + 양쪽 ◀/▶
+    double usedWidth(double f) =>
+        CalcTheme.lcdLineColumns * (f * CalcTheme.lcdLineCharWidthRatio + ls) +
+        2 *
+            f *
+            CalcTheme.lcdScrollArrowFontRatio *
+            CalcTheme.lcdScrollArrowWidthRatio;
+
+    test('입력·결과 줄은 같은 크기이고 상태 표시는 비율만큼 작다', () {
+      final f = LcdFontSizes.forSize(
+        const Size(360, 160),
+        TextScaler.noScaling,
+      );
+      expect(f.input, f.result);
+      expect(
+        f.status,
+        moreOrLessEquals(f.input * CalcTheme.lcdStatusFontRatio, epsilon: 1e-9),
+      );
+    });
+
+    test('높이에 걸리는 LCD: 내부 구성이 안쪽 높이를 꽉 채운다 (독립 계산값)', () {
+      // 안쪽 82dp: (82 − 4) / (0.42·1.4 + 4·1.3 + 2·0.25) = 78 / 6.288
+      final f = LcdFontSizes.forSize(
+        const Size(1000, 100),
+        TextScaler.noScaling,
+      );
+      expect(f.input, moreOrLessEquals(78 / 6.288, epsilon: 1e-3));
+      expect(usedHeight(f.input), lessThanOrEqualTo(100 - chrome + 1e-9));
+    });
+
+    test('폭에 걸리는 LCD: 결과 줄 17칸으로 정해지고 높이를 키워도 그대로다 (독립 계산값)', () {
+      // 안쪽 356dp: (356 − 17·1.2) / (17·0.6 + 2·0.54) = 335.6 / 11.28
+      final tall = LcdFontSizes.forSize(
+        const Size(374, 1000),
+        TextScaler.noScaling,
+      );
+      expect(tall.input, moreOrLessEquals(335.6 / 11.28, epsilon: 1e-3));
+      expect(usedWidth(tall.input), lessThanOrEqualTo(374 - chrome + 1e-9));
+      expect(
+        LcdFontSizes.forSize(const Size(374, 2000), TextScaler.noScaling),
+        tall,
+      );
+    });
+
+    test('폰 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
+      for (final width in [304.0, 344.0, 374.0, 396.0, 414.0]) {
+        final atMax = LcdFontSizes.forSize(
+          Size(width, width / CalcTheme.screenLcdMinAspectRatio),
+          TextScaler.noScaling,
+        );
+        final unlimited = LcdFontSizes.forSize(
+          Size(width, 10000),
+          TextScaler.noScaling,
+        );
+        expect(atMax, unlimited, reason: '$width');
+      }
+    });
+
+    test('LCD 최소 높이에서도 가장 좁은 폰 폭의 줄 글자는 14dp 이상이다', () {
+      final f = LcdFontSizes.forSize(
+        const Size(304, CalcTheme.screenLcdMinHeight),
+        TextScaler.noScaling,
+      );
+      expect(f.input, greaterThanOrEqualTo(14));
+    });
+
+    test('배율을 키우면 상태 표시는 커지고 줄 글자는 LCD 안에서 그만큼만 줄어든다', () {
+      for (final size in const [Size(374, 213), Size(1000, 100)]) {
+        final base = LcdFontSizes.forSize(size, TextScaler.noScaling);
+        const scaler = TextScaler.linear(1.3);
+        final f = LcdFontSizes.forSize(size, scaler);
+        // 상태 표시 = 배율 반영 줄 글자 × 비율 × 배율
+        expect(
+          scaler.scale(f.status),
+          moreOrLessEquals(
+            scaler.scale(f.input) * CalcTheme.lcdStatusFontRatio * 1.3,
+            epsilon: 1e-6,
+          ),
+          reason: '$size',
+        );
+        expect(
+          scaler.scale(f.status),
+          greaterThan(base.status),
+          reason: '$size',
+        );
+        // 줄 글자는 배율로 커지지 않는다 (LCD를 이미 채운다).
+        expect(scaler.scale(f.input), lessThanOrEqualTo(base.input + 1e-6));
+        expect(scaler.scale(f.input), greaterThan(base.input * 0.95));
+      }
+    });
+
+    test('배율을 줄여도 줄 글자는 LCD를 채운다 (작아지지 않는다)', () {
+      const size = Size(374, 213);
+      final base = LcdFontSizes.forSize(size, TextScaler.noScaling);
+      const scaler = TextScaler.linear(0.8);
+      final f = LcdFontSizes.forSize(size, scaler);
+      expect(
+        scaler.scale(f.input),
+        moreOrLessEquals(base.input, epsilon: 0.01),
+      );
+    });
+
+    test('비선형 배율에서도 ◀/▶를 실제 배율로 계산해 폭을 넘지 않는다', () {
+      const scaler = _NonLinearScaler();
+      const size = Size(374, 213);
+      final f = LcdFontSizes.forSize(size, scaler);
+      final line = scaler.scale(f.input);
+      final arrow =
+          scaler.scale(f.input * CalcTheme.lcdScrollArrowFontRatio) *
+          CalcTheme.lcdScrollArrowWidthRatio;
+      expect(
+        CalcTheme.lcdLineColumns *
+                (line * CalcTheme.lcdLineCharWidthRatio + ls) +
+            2 * arrow,
+        lessThanOrEqualTo(size.width - chrome + 1e-9),
+      );
+      // 선형 근사(배율 반영 줄 글자 × 비율)보다 화살표가 넓다 — 근사로 계산하면 넘친다.
+      expect(
+        arrow,
+        greaterThan(
+          line *
+              CalcTheme.lcdScrollArrowFontRatio *
+              CalcTheme.lcdScrollArrowWidthRatio,
+        ),
+      );
+    });
+
+    test('아주 작거나 무한·NaN 크기여도 유한한 양수 글자 크기를 준다', () {
+      for (final size in const [
+        Size.zero,
+        Size(10, 10),
+        Size(400, 5),
+        Size.infinite,
+        Size(double.infinity, 120),
+        Size(double.nan, double.nan),
+      ]) {
+        final f = LcdFontSizes.forSize(size, TextScaler.noScaling);
+        for (final v in [f.status, f.input, f.result]) {
+          expect(v, greaterThan(0), reason: '$size');
+          expect(v.isFinite, isTrue, reason: '$size');
+        }
+      }
+      expect(
+        LcdFontSizes.forSize(Size.infinite, TextScaler.noScaling),
+        LcdFontSizes.forSize(LcdDisplay.fallbackSize, TextScaler.noScaling),
+      );
+    });
+
+    /// 분수 모양 2D 내용: 분자 · 막대(줄 글자 × 막대 비율, 여백 포함) · 분모
+    Widget fraction(String tag, double barHeight) => Column(
+      key: ValueKey('fraction-$tag'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('1$tag'),
+        SizedBox(height: barHeight, width: 10),
+        Text('3$tag'),
+      ],
+    );
+
+    for (final (size, scaler) in <(Size, TextScaler)>[
+      (const Size(304, CalcTheme.screenLcdMinHeight), TextScaler.noScaling),
+      (const Size(304, 125), TextScaler.noScaling),
+      (const Size(374, 213.7), TextScaler.noScaling),
+      (const Size(374, 213.7), const TextScaler.linear(1.3)),
+      (const Size(374, 188), const _NonLinearScaler()),
+      (const Size(1000, 120), const TextScaler.linear(1.3)),
+    ]) {
+      testWidgets('$size·$scaler: fitFontsToSize면 입력·결과 줄이 분수를 잘림 없이 담고 '
+          '결과 줄은 17칸을 담는다', (tester) async {
+        final f = LcdFontSizes.forSize(size, scaler);
+        final bar = scaler.scale(f.input) * CalcTheme.lcdFractionBarRatio;
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(textScaler: scaler),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox.fromSize(
+                  size: size,
+                  child: LcdDisplay(
+                    fitFontsToSize: true,
+                    input: fraction('i', bar),
+                    result: fraction('r', bar),
+                    inputOverflow: const LcdLineOverflow(
+                      left: true,
+                      right: true,
+                    ),
+                    resultOverflow: const LcdLineOverflow(
+                      left: true,
+                      right: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        // 산출한 크기가 그대로 쓰이고 줄 높이 맞춤으로 다시 줄지 않는다.
+        // (LCD는 상한을 적용한 배율 객체로 계산하므로 이분 탐색 오차만큼 다를 수 있다.)
+        expect(
+          DefaultTextStyle.of(tester.element(find.text('1i'))).style.fontSize,
+          moreOrLessEquals(f.input, epsilon: 1e-3),
+        );
+        expect(
+          tester.widget<Text>(_statusText('Math')).style?.fontSize,
+          moreOrLessEquals(f.status, epsilon: 1e-3),
+        );
+        for (final (line, tag) in [(_inputLine, 'i'), (_resultLine, 'r')]) {
+          final area = tester.getRect(_content(line));
+          final frac = tester.getRect(find.byKey(ValueKey('fraction-$tag')));
+          expect(_containsRect(area, frac), isTrue, reason: '$frac ⊄ $area');
+        }
+        final resultWidth = tester.getSize(_content(_resultLine)).width;
+        final line = scaler.scale(f.result);
+        expect(
+          resultWidth,
+          greaterThanOrEqualTo(
+            CalcTheme.lcdLineColumns *
+                    (line * CalcTheme.lcdLineCharWidthRatio + ls) -
+                1e-6,
+          ),
+        );
+      });
+    }
+
+    test('fitFontsToSize와 글자 크기 주입을 함께 쓰면 assert로 막는다', () {
+      expect(
+        () => LcdDisplay(fitFontsToSize: true, inputFontSize: 10),
+        throwsAssertionError,
+      );
+    });
+
+    test('동등성', () {
+      const a = LcdFontSizes(status: 1, input: 2, result: 3);
+      expect(a, const LcdFontSizes(status: 1, input: 2, result: 3));
+      expect(
+        a.hashCode,
+        const LcdFontSizes(status: 1, input: 2, result: 3).hashCode,
+      );
+      expect(a, isNot(const LcdFontSizes(status: 1, input: 2, result: 4)));
+    });
   });
 
   group('LcdLineOverflow', () {
