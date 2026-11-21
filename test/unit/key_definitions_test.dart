@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
-import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 
 void main() {
   group('키패드 명세 불변식', () {
@@ -23,7 +22,7 @@ void main() {
       for (final row in [...controlLeftRows, ...controlRightRows]) {
         expect(row.length, 2);
       }
-      expect(cursorPadKeys.length, 4);
+      expect(cursorPad.all.length, 4);
       expect(functionRows.length, 3);
       for (final row in functionRows) {
         expect(row.length, functionColumns);
@@ -32,6 +31,34 @@ void main() {
       for (final row in numberRows) {
         expect(row.length, numberColumns);
       }
+    });
+
+    test('상단 조작부 좌우 블록은 행 수가 같다', () {
+      expect(controlLeftRows.length, controlRightRows.length);
+    });
+
+    test('커서 패드 각 방향은 올바른 ID에 대응한다', () {
+      expect(cursorPad.up.id, CalcKeyId.cursorUp);
+      expect(cursorPad.down.id, CalcKeyId.cursorDown);
+      expect(cursorPad.left.id, CalcKeyId.cursorLeft);
+      expect(cursorPad.right.id, CalcKeyId.cursorRight);
+      expect(
+        cursorPad.all.every((k) => k.category == KeyCategory.cursor),
+        isTrue,
+      );
+    });
+
+    test('메인 라벨은 키 간에 중복되지 않는다', () {
+      final labels = allKeys.map((k) => k.mainLabel).toList();
+      expect(labels.toSet().length, labels.length);
+    });
+
+    test('ALPHA 각인은 키 간에 중복되지 않는다', () {
+      final labels = allKeys
+          .map((k) => k.alphaLabel)
+          .whereType<String>()
+          .toList();
+      expect(labels.toSet().length, labels.length);
     });
 
     test('메인 라벨은 비어 있지 않고, SHIFT/ALPHA 라벨은 null이거나 비어 있지 않다', () {
@@ -100,31 +127,6 @@ void main() {
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
-    });
-  });
-
-  group('카테고리 색상 매핑', () {
-    test('모든 카테고리는 배경/텍스트 색이 구분된다', () {
-      for (final c in KeyCategory.values) {
-        expect(c.background, isNot(c.foreground), reason: c.name);
-      }
-    });
-
-    test('SHIFT/ALPHA 키 색은 각인 색과 일치한다', () {
-      expect(KeyCategory.shift.background, CalcTheme.shiftLabel);
-      expect(KeyCategory.alpha.background, CalcTheme.alphaLabel);
-    });
-  });
-
-  group('광고 슬롯 치수', () {
-    test('광고 슬롯 높이는 50~60dp, 안전 여백은 8~12dp 범위다', () {
-      expect(CalcTheme.adSlotHeight, inInclusiveRange(50, 60));
-      expect(CalcTheme.adSlotMaxHeight, inInclusiveRange(50, 60));
-      expect(
-        CalcTheme.adSlotHeight,
-        lessThanOrEqualTo(CalcTheme.adSlotMaxHeight),
-      );
-      expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
     });
   });
 }

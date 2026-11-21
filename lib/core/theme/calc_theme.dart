@@ -1,12 +1,17 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../constants/key_definitions.dart';
+
 /// 카시오 fx-991EX ClassWiz 계산기의 테마 정의.
 ///
 /// 본체, LCD, 키캡, 상태 표시줄, SHIFT/ALPHA 각인에 사용되는
 /// 모든 색상 팔레트와 텍스트 스타일을 중앙에서 관리한다.
-class CalcTheme {
-  CalcTheme._(); // 인스턴스화 방지
-
+///
+/// ## 각인 배치 규약
+/// 실물과 같이 SHIFT(금색)/ALPHA(빨간색) 각인은 키캡 **안쪽이 아니라 키캡 위쪽 본체 영역**
+/// ([bodyBackground] 위)에 그린다. 따라서 [shiftLabel]/[alphaLabel]은 본체 배경 대비
+/// 4.5:1 이상을 유지해야 한다 (`test/unit/calc_theme_test.dart`에서 검증).
+abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 본체 색상 (Body Colors)
   // ───────────────────────────────────────────
@@ -70,8 +75,8 @@ class CalcTheme {
   /// 등호 키 텍스트
   static const Color keyEqualsText = Color(0xFFFFFFFF);
 
-  /// AC(All Clear) 키 — 주황 계열
-  static const Color keyAC = Color(0xFFD84315);
+  /// AC(All Clear) 키 — 진한 주황 계열
+  static const Color keyAC = Color(0xFFBF360C);
 
   /// AC 키 텍스트
   static const Color keyACText = Color(0xFFFFFFFF);
@@ -101,20 +106,20 @@ class CalcTheme {
   /// SHIFT 키 본체 — 황금색
   static const Color keyShift = Color(0xFFE5A823);
 
-  /// SHIFT 키 텍스트
-  static const Color keyShiftText = Color(0xFFFFFFFF);
+  /// SHIFT 키 텍스트 (금색 위 흰 글자는 대비가 낮아 흑색 사용)
+  static const Color keyShiftText = Color(0xFF1A1A1A);
 
-  /// SHIFT 각인 텍스트 (키 위 금색 라벨)
+  /// SHIFT 각인 텍스트 (키 위 본체에 인쇄되는 금색 라벨)
   static const Color shiftLabel = Color(0xFFE5A823);
 
-  /// ALPHA 키 본체 — 빨간색
-  static const Color keyAlpha = Color(0xFFE63946);
+  /// ALPHA 키 본체 — 진한 빨간색
+  static const Color keyAlpha = Color(0xFFC62828);
 
   /// ALPHA 키 텍스트
   static const Color keyAlphaText = Color(0xFFFFFFFF);
 
-  /// ALPHA 각인 텍스트 (키 위 빨간색 라벨)
-  static const Color alphaLabel = Color(0xFFE63946);
+  /// ALPHA 각인 텍스트 (키 위 본체에 인쇄되는 빨간색 라벨, 어두운 배경용으로 밝게)
+  static const Color alphaLabel = Color(0xFFFF6B6B);
 
   // ───────────────────────────────────────────
   // 키 눌림 상태 (Pressed State)
@@ -134,11 +139,13 @@ class CalcTheme {
   // 폰트 (Fonts)
   // ───────────────────────────────────────────
 
-  /// LCD·키캡 고정폭 폰트.
-  /// 아직 폰트 에셋을 번들하지 않았으므로 플랫폼 기본 고정폭 폰트로 대체된다.
+  /// LCD·키캡 고정폭 폰트 패밀리 이름.
+  /// 아직 폰트 에셋을 번들하지 않아 현재는 항상 [monoFontFallback]으로 대체된다
+  /// (폰트 번들은 후속 이슈에서 처리).
   static const String monoFontFamily = 'RobotoMono';
 
-  /// [monoFontFamily]가 없을 때의 대체 폰트 (iOS: Menlo/Courier, Android: monospace)
+  /// [monoFontFamily]가 없을 때 순서대로 시도하는 대체 폰트
+  /// (Apple 계열은 Menlo/Courier, Android는 monospace가 해석된다)
   static const List<String> monoFontFallback = [
     'Menlo',
     'Courier',
@@ -182,7 +189,8 @@ class CalcTheme {
     letterSpacing: 0.5,
   );
 
-  /// 키캡 메인 라벨 텍스트 스타일.
+  /// 키캡 메인 라벨 텍스트 스타일 (기준 크기, 위젯에서 키 크기에 맞춰 스케일).
+  /// 색은 카테고리마다 다르므로 [KeyCategoryColors.foreground]로 지정한다.
   static const TextStyle keyMainLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -191,7 +199,7 @@ class CalcTheme {
     height: 1.0,
   );
 
-  /// SHIFT 각인 (키 상단 좌측 금색) 텍스트 스타일.
+  /// SHIFT 각인 (키캡 위 본체 영역 좌측, 금색) 텍스트 스타일.
   static const TextStyle keyShiftLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -201,7 +209,7 @@ class CalcTheme {
     height: 1.0,
   );
 
-  /// ALPHA 각인 (키 상단 우측 빨간색) 텍스트 스타일.
+  /// ALPHA 각인 (키캡 위 본체 영역 우측, 빨간색) 텍스트 스타일.
   static const TextStyle keyAlphaLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -241,4 +249,37 @@ class CalcTheme {
 
   /// 광고 슬롯 상단 안전 여백 — 오터치 방지 (dp)
   static const double adSlotSafetyMargin = 10.0;
+}
+
+/// [KeyCategory]별 키캡 색상 조회 확장.
+extension KeyCategoryColors on KeyCategory {
+  /// 키캡 배경색
+  Color get background => switch (this) {
+    KeyCategory.number => CalcTheme.keyNumber,
+    KeyCategory.operator => CalcTheme.keyOperator,
+    KeyCategory.function => CalcTheme.keyFunction,
+    KeyCategory.equals => CalcTheme.keyEquals,
+    KeyCategory.ac => CalcTheme.keyAC,
+    KeyCategory.del => CalcTheme.keyDEL,
+    KeyCategory.shift => CalcTheme.keyShift,
+    KeyCategory.alpha => CalcTheme.keyAlpha,
+    KeyCategory.cursor => CalcTheme.keyCursor,
+    KeyCategory.on => CalcTheme.keyON,
+    KeyCategory.menu => CalcTheme.keyFunction,
+  };
+
+  /// 키캡 메인 라벨 텍스트색
+  Color get foreground => switch (this) {
+    KeyCategory.number => CalcTheme.keyNumberText,
+    KeyCategory.operator => CalcTheme.keyOperatorText,
+    KeyCategory.function => CalcTheme.keyFunctionText,
+    KeyCategory.equals => CalcTheme.keyEqualsText,
+    KeyCategory.ac => CalcTheme.keyACText,
+    KeyCategory.del => CalcTheme.keyDELText,
+    KeyCategory.shift => CalcTheme.keyShiftText,
+    KeyCategory.alpha => CalcTheme.keyAlphaText,
+    KeyCategory.cursor => CalcTheme.keyCursorText,
+    KeyCategory.on => CalcTheme.keyONText,
+    KeyCategory.menu => CalcTheme.keyFunctionText,
+  };
 }

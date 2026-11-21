@@ -1,6 +1,4 @@
-import 'package:material_ui/material_ui.dart';
-
-import '../theme/calc_theme.dart';
+import 'package:meta/meta.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // 카시오 fx-991EX ClassWiz 50키 키패드 명세
@@ -106,8 +104,12 @@ enum CalcKeyId {
 // ═══════════════════════════════════════════════════════════════
 
 /// 키캡의 시각적 카테고리. 카테고리마다 배경색/텍스트색이 다르다.
+///
+/// 색상 매핑은 `core/theme/calc_theme.dart`의 `KeyCategoryColors` 확장에 있다.
+/// 이 파일은 도메인 계층에서도 import할 수 있도록 UI 패키지에 의존하지 않는다.
 enum KeyCategory {
-  /// 숫자 키 (0~9, 소수점)
+  /// 밝은 키캡 그룹 (0~9, 소수점, ×10ˣ, Ans).
+  /// 시각 분류일 뿐이며 "숫자 입력" 여부를 뜻하지 않는다.
   number,
 
   /// 사칙연산 키 (+, −, ×, ÷)
@@ -139,39 +141,6 @@ enum KeyCategory {
 
   /// MENU(모드 선택) 키
   menu,
-}
-
-/// [KeyCategory]별 키캡 색상 조회 확장.
-extension KeyCategoryColors on KeyCategory {
-  /// 키캡 배경색
-  Color get background => switch (this) {
-    KeyCategory.number => CalcTheme.keyNumber,
-    KeyCategory.operator => CalcTheme.keyOperator,
-    KeyCategory.function => CalcTheme.keyFunction,
-    KeyCategory.equals => CalcTheme.keyEquals,
-    KeyCategory.ac => CalcTheme.keyAC,
-    KeyCategory.del => CalcTheme.keyDEL,
-    KeyCategory.shift => CalcTheme.keyShift,
-    KeyCategory.alpha => CalcTheme.keyAlpha,
-    KeyCategory.cursor => CalcTheme.keyCursor,
-    KeyCategory.on => CalcTheme.keyON,
-    KeyCategory.menu => CalcTheme.keyFunction,
-  };
-
-  /// 키캡 메인 라벨 텍스트색
-  Color get foreground => switch (this) {
-    KeyCategory.number => CalcTheme.keyNumberText,
-    KeyCategory.operator => CalcTheme.keyOperatorText,
-    KeyCategory.function => CalcTheme.keyFunctionText,
-    KeyCategory.equals => CalcTheme.keyEqualsText,
-    KeyCategory.ac => CalcTheme.keyACText,
-    KeyCategory.del => CalcTheme.keyDELText,
-    KeyCategory.shift => CalcTheme.keyShiftText,
-    KeyCategory.alpha => CalcTheme.keyAlphaText,
-    KeyCategory.cursor => CalcTheme.keyCursorText,
-    KeyCategory.on => CalcTheme.keyONText,
-    KeyCategory.menu => CalcTheme.keyFunctionText,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -277,29 +246,48 @@ const List<List<CalcKeyDef>> controlRightRows = [
   ],
 ];
 
-/// 커서 패드 4방향 (상·하·좌·우 순)
-const List<CalcKeyDef> cursorPadKeys = [
-  CalcKeyDef(
+/// 커서 패드 4방향 키 묶음. 인덱스 규약 대신 방향 이름으로 접근한다.
+@immutable
+class CursorPadKeys {
+  final CalcKeyDef up;
+  final CalcKeyDef down;
+  final CalcKeyDef left;
+  final CalcKeyDef right;
+
+  const CursorPadKeys({
+    required this.up,
+    required this.down,
+    required this.left,
+    required this.right,
+  });
+
+  /// 상·하·좌·우 순 목록 ([CalcKeyId] 선언 순서와 동일)
+  List<CalcKeyDef> get all => [up, down, left, right];
+}
+
+/// 커서 패드 (상단 조작부 좌우 블록 사이, 2행에 걸쳐 배치)
+const CursorPadKeys cursorPad = CursorPadKeys(
+  up: CalcKeyDef(
     id: CalcKeyId.cursorUp,
     mainLabel: '▲',
     category: KeyCategory.cursor,
   ),
-  CalcKeyDef(
+  down: CalcKeyDef(
     id: CalcKeyId.cursorDown,
     mainLabel: '▼',
     category: KeyCategory.cursor,
   ),
-  CalcKeyDef(
+  left: CalcKeyDef(
     id: CalcKeyId.cursorLeft,
     mainLabel: '◀',
     category: KeyCategory.cursor,
   ),
-  CalcKeyDef(
+  right: CalcKeyDef(
     id: CalcKeyId.cursorRight,
     mainLabel: '▶',
     category: KeyCategory.cursor,
   ),
-];
+);
 
 // ═══════════════════════════════════════════════════════════════
 // 함수부 (3행 × 6열)
@@ -585,15 +573,23 @@ const int totalKeyCount = 50;
 ///
 /// 상단 조작부는 행 단위로 왼쪽 2키 → 오른쪽 2키 순(SHIFT ALPHA MENU ON / OPTN CALC ∫▭ x),
 /// 이어서 커서 패드 → 함수부 → 숫자부 순이다.
-final List<CalcKeyDef> allKeys = List.unmodifiable([
-  for (var i = 0; i < controlLeftRows.length; i++) ...[
-    ...controlLeftRows[i],
-    ...controlRightRows[i],
-  ],
-  ...cursorPadKeys,
-  for (final row in functionRows) ...row,
-  for (final row in numberRows) ...row,
-]);
+final List<CalcKeyDef> allKeys = _buildAllKeys();
+
+List<CalcKeyDef> _buildAllKeys() {
+  // 좌우 블록 행 수가 다르면 키가 조용히 누락되므로 즉시 실패시킨다.
+  if (controlLeftRows.length != controlRightRows.length) {
+    throw StateError('상단 조작부 좌우 블록의 행 수가 다릅니다.');
+  }
+  return List.unmodifiable([
+    for (var i = 0; i < controlLeftRows.length; i++) ...[
+      ...controlLeftRows[i],
+      ...controlRightRows[i],
+    ],
+    ...cursorPad.all,
+    for (final row in functionRows) ...row,
+    for (final row in numberRows) ...row,
+  ]);
+}
 
 /// [CalcKeyId] → [CalcKeyDef] O(1) 조회 맵.
 final Map<CalcKeyId, CalcKeyDef> keyById = Map.unmodifiable({
