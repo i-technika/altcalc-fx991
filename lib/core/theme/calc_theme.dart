@@ -196,7 +196,8 @@ abstract final class CalcTheme {
     letterSpacing: 0.5,
   );
 
-  /// 키캡 메인 라벨 텍스트 스타일 (기준 크기, 위젯에서 키 크기에 맞춰 스케일).
+  /// 키캡 메인 라벨 텍스트 스타일 (기준 크기). `CalcKeyButton`은 [keyMainLabelFontRatio]로
+  /// 키캡 높이에 맞춰 `fontSize`를 덮어쓴다.
   /// 색은 카테고리마다 다르므로 [KeyCategoryColors.foreground]로 지정한다.
   static const TextStyle keyMainLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
@@ -243,6 +244,24 @@ abstract final class CalcTheme {
 
   /// 키 그림자 높이 (dp)
   static const double keyElevation = 2.0;
+
+  /// 키캡 테두리 두께 (dp)
+  static const double keyBorderWidth = 1.0;
+
+  /// 키 눌림 시 키캡이 아래로 이동하는 거리 (dp)
+  static const double keyPressedOffset = 1.0;
+
+  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡)
+  static const double keyLegendHeightRatio = 0.28;
+
+  /// 각인 띠 높이 대비 각인 글자 크기 비율
+  static const double keyLegendFontRatio = 0.8;
+
+  /// 키캡 높이 대비 메인 라벨 글자 크기 비율
+  static const double keyMainLabelFontRatio = 0.42;
+
+  /// 키캡 안쪽 좌우 여백 비율 (키캡 너비 대비)
+  static const double keyCapHorizontalPaddingRatio = 0.08;
 
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)

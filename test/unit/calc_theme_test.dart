@@ -104,6 +104,21 @@ void main() {
       expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
     });
 
+    test('키 버튼 비율 상수는 0~1 사이이며 키캡이 각인 띠보다 크다', () {
+      for (final ratio in [
+        CalcTheme.keyLegendHeightRatio,
+        CalcTheme.keyLegendFontRatio,
+        CalcTheme.keyMainLabelFontRatio,
+        CalcTheme.keyCapHorizontalPaddingRatio,
+      ]) {
+        expect(ratio, inExclusiveRange(0, 1));
+      }
+      expect(CalcTheme.keyLegendHeightRatio, lessThan(0.5));
+      expect(CalcTheme.keyCapHorizontalPaddingRatio, lessThan(0.25));
+      expect(CalcTheme.keyBorderWidth, greaterThan(0));
+      expect(CalcTheme.keyPressedOffset, greaterThanOrEqualTo(0));
+    });
+
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));
