@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
@@ -582,7 +583,9 @@ void _cursorPadR2Tests() {
       );
       for (final sector in CursorPadSector.values) {
         final def = CursorPad.defOf(sector);
-        final finder = find.semantics.byLabel(def.mainLabel);
+        final finder = find.semantics.byLabel(
+          const KoSemanticStrings().keyButton(def.id),
+        );
         expect(finder, findsOne, reason: sector.name);
         tester.semantics.tap(finder);
         await tester.pump();

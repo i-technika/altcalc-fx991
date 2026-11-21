@@ -911,7 +911,7 @@ void main() {
       expect(
         tester.getSemantics(find.byType(CalcKeyButton)),
         matchesSemantics(
-          label: 'CALC, SHIFT SOLVE, ALPHA =',
+          label: '변수 대입 계산, 시프트 방정식 풀기, 알파 등호 입력',
           isButton: true,
           hasEnabledState: true,
           isEnabled: true,
@@ -920,7 +920,7 @@ void main() {
       );
 
       tester.semantics.tap(
-        find.semantics.byLabel('CALC, SHIFT SOLVE, ALPHA ='),
+        find.semantics.byLabel('변수 대입 계산, 시프트 방정식 풀기, 알파 등호 입력'),
       );
       await tester.pump();
       expect(pressed, [CalcKeyId.calc]);

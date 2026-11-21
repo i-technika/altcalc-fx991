@@ -1,9 +1,14 @@
 import 'dart:math' as math;
 
+import 'dart:async';
+
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/calc_theme.dart';
+import '../../domain/models/calc_state.dart';
+import '../l10n/calc_semantic_strings.dart';
 import '../providers/calc_provider.dart';
 import '../widgets/banner_ad_slot.dart';
 import '../widgets/calc_keypad.dart';
@@ -152,11 +157,57 @@ class _LcdPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(lcdStatusProvider);
-    final lastLabel = ref.watch(calcProvider.select((s) => s.lastInput?.label));
+    final lastInput = ref.watch(calcProvider.select((s) => s.lastInput));
+    final strings = CalcSemanticStrings.of(context);
+    ref.listen(
+      calcProvider.select((s) => (s.modifier, s.inputCount)),
+      (previous, next) => _announceModifier(context, strings, previous, next),
+    );
     return LcdDisplay(
       status: status,
       fitFontsToSize: true,
-      input: Text(lastLabel ?? '', key: const ValueKey('lcd-input-text')),
+      input: Text(
+        lastInput?.label ?? '',
+        key: const ValueKey('lcd-input-text'),
+        // 각인 기호 대신 기능 이름을 읽는다 (#20)
+        semanticsLabel: lastInput == null
+            ? null
+            : strings.keyFunction(lastInput.id, lastInput.layer),
+      ),
+    );
+  }
+
+  /// SHIFT/ALPHA 대기가 바뀌면 스크린리더로 알린다 (#20).
+  ///
+  /// 상태 표시줄의 `S`·`A`는 화면에서만 보이므로, 스크린리더 사용자는 모디파이어가 켜졌는지 알 수 없다.
+  /// `liveRegion`은 Android에서만 동작하므로 두 플랫폼 모두 지원하는 알림(announcement)을 쓴다.
+  /// - 켜짐: 항상 알린다.
+  /// - 꺼짐: 기능을 입력하지 않고 풀린 경우(같은 키를 다시 누름, 기능 없는 층의 키)만 알린다.
+  ///   기능 입력으로 소비된 경우는 그 입력 자체가 결과이므로 알리지 않는다.
+  static void _announceModifier(
+    BuildContext context,
+    CalcSemanticStrings strings,
+    (KeyModifier, int)? previous,
+    (KeyModifier, int) next,
+  ) {
+    if (previous == null) return;
+    final (before, countBefore) = previous;
+    final (after, countAfter) = next;
+    if (before == after) return;
+    final String message;
+    if (after != KeyModifier.none) {
+      message = strings.modifierChanged(after, on: true);
+    } else if (countAfter == countBefore) {
+      message = strings.modifierChanged(before, on: false);
+    } else {
+      return;
+    }
+    unawaited(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        message,
+        Directionality.of(context),
+      ),
     );
   }
 }

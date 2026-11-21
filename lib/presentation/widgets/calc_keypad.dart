@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
+import '../l10n/calc_semantic_strings.dart';
 import 'calc_key_button.dart';
 import 'text_fit.dart';
 
@@ -573,6 +574,7 @@ class CursorPad extends StatelessWidget {
         final size = constraints.biggest;
         if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
         final press = onKeyPressed;
+        final strings = CalcSemanticStrings.of(context);
         return ClipOval(
           key: const ValueKey('cursor-pad'),
           child: Stack(
@@ -598,7 +600,7 @@ class CursorPad extends StatelessWidget {
                     container: true,
                     button: true,
                     enabled: press != null,
-                    label: defOf(sector).mainLabel,
+                    label: strings.keyButton(defOf(sector).id),
                     onTap: press == null
                         ? null
                         : () {

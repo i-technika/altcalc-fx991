@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/lcd_status.dart';
+import '../l10n/calc_semantic_strings.dart';
 import 'text_fit.dart';
 
 /// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◄/►) 여부.
@@ -293,6 +294,7 @@ class LcdDisplay extends StatelessWidget {
 
   Widget _buildLayout(BuildContext context, BoxConstraints constraints) {
     final textScaler = MediaQuery.textScalerOf(context);
+    final strings = CalcSemanticStrings.of(context);
     final width = constraints.hasBoundedWidth
         ? constraints.maxWidth
         : fallbackSize.width;
@@ -377,6 +379,7 @@ class LcdDisplay extends StatelessWidget {
                         flex: CalcTheme.lcdInputLineFlex,
                         child: _LcdLine(
                           key: const ValueKey('lcd-input-line'),
+                          semanticLabel: strings.inputLine,
                           alignment: Alignment.topLeft,
                           style: inputStyle,
                           overflow: inputOverflow,
@@ -388,6 +391,7 @@ class LcdDisplay extends StatelessWidget {
                         flex: CalcTheme.lcdResultLineFlex,
                         child: _LcdLine(
                           key: const ValueKey('lcd-result-line'),
+                          semanticLabel: strings.resultLine,
                           alignment: Alignment.bottomRight,
                           style: resultStyle,
                           overflow: resultOverflow,
@@ -431,8 +435,8 @@ class LcdDisplay extends StatelessWidget {
 ///
 /// [LcdIndicatorSlot] 순서대로 고정 너비 슬롯을 배치한다. 폭이 남으면 슬롯 사이를 고르게 벌려
 /// LCD 폭 전체에 분포시키고, 모자라면 줄 전체를 축소한다. 표시기가 꺼져도 슬롯은 남으므로
-/// 다른 표시기의 위치가 바뀌지 않는다. 스크린리더에는 켜진 표시기만 읽힌다
-/// (표시기별 의미 라벨은 TODO(#20)).
+/// 다른 표시기의 위치가 바뀌지 않는다. 스크린리더에는 켜진 표시기의 의미만 읽힌다
+/// (예: "알파, 메모리, 각도 도, 수학 입출력" — [CalcSemanticStrings.statusBar]).
 class LcdStatusBar extends StatelessWidget {
   /// 표시할 상태
   final LcdStatus status;
@@ -486,7 +490,7 @@ class LcdStatusBar extends StatelessWidget {
     );
 
     return Semantics(
-      label: status.activeIndicators.join(' '),
+      label: CalcSemanticStrings.of(context).statusBar(status),
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -563,6 +567,8 @@ class _IndicatorSlot extends StatelessWidget {
 
 /// 입력 줄 또는 결과 줄 한 줄: `[◄] 내용 [►]`.
 class _LcdLine extends StatelessWidget {
+  /// 스크린리더가 줄 내용 앞에 읽는 줄 이름 ("입력"/"결과")
+  final String semanticLabel;
   final Alignment alignment;
   final TextStyle style;
   final LcdLineOverflow overflow;
@@ -571,6 +577,7 @@ class _LcdLine extends StatelessWidget {
 
   const _LcdLine({
     super.key,
+    required this.semanticLabel,
     required this.alignment,
     required this.style,
     required this.overflow,
@@ -586,6 +593,13 @@ class _LcdLine extends StatelessWidget {
       letterSpacing: 0,
       height: 1.0,
     );
+    // 스크린리더: 줄 이름("입력"/"결과")과 ◄/► 표시·줄 내용을 한 덩어리로 읽는다.
+    return MergeSemantics(
+      child: Semantics(label: semanticLabel, child: _buildRow(arrowStyle)),
+    );
+  }
+
+  Widget _buildRow(TextStyle arrowStyle) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -684,8 +698,8 @@ class _ScrollArrow extends StatelessWidget {
                   textScaler: textScaler,
                   maxLines: 1,
                   softWrap: false,
-                  // TODO(#20): 스크린리더 라벨 다국어 처리
-                  semanticsLabel: isLeft ? '왼쪽에 내용 더 있음' : '오른쪽에 내용 더 있음',
+                  semanticsLabel: CalcSemanticStrings.of(context)
+                      .scrollMore(left: isLeft),
                 ),
               ),
             )
