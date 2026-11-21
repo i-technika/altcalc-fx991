@@ -76,6 +76,12 @@ class CalcKeyButton extends StatefulWidget {
   /// 메인 라벨 글자 크기 (dp). `null`이면 키캡 높이 비율로 계산.
   final double? mainLabelFontSize;
 
+  /// 키 모양 — 버튼 상자 크기를 받아 버튼 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
+  ///
+  /// 지정하면 그리기, 누름 판정(히트 테스트), 누른 채 이동할 때의 이탈 판정(반복 중단)을
+  /// 모두 이 경로 안으로 제한한다(커서 패드 부채꼴 등).
+  final Path Function(Size size)? shape;
+
   const CalcKeyButton({
     super.key,
     required this.keyDef,
@@ -88,6 +94,7 @@ class CalcKeyButton extends StatefulWidget {
     this.extendHitAreaToLegend = false,
     this.legendFontSize,
     this.mainLabelFontSize,
+    this.shape,
   });
 
   /// 기본 반복 시작 지연
@@ -117,6 +124,19 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   /// 터치 영역 크기 (Listener 로컬 좌표 기준, 레이아웃마다 갱신)
   Size _hitSize = Size.zero;
+
+  /// 버튼 좌표에서 터치 영역(Listener)의 원점 (각인 띠를 빼면 띠 높이만큼 아래)
+  Offset _hitOrigin = Offset.zero;
+
+  /// 버튼 상자 크기 ([CalcKeyButton.shape] 판정용, 레이아웃마다 갱신)
+  Size _size = Size.zero;
+
+  /// Listener 로컬 좌표가 터치 영역(사각형 ∩ 키 모양) 안인지 판정한다.
+  bool _hitAreaContains(Offset localPosition) {
+    if (!(Offset.zero & _hitSize).contains(localPosition)) return false;
+    final shape = widget.shape;
+    return shape == null || shape(_size).contains(localPosition + _hitOrigin);
+  }
 
   bool get _enabled => widget.onPressed != null;
   bool get _pressed => _activePointer != null;
@@ -198,7 +218,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   void _handlePointerMove(PointerMoveEvent event) {
     if (!mounted || event.pointer != _activePointer) return;
-    if ((Offset.zero & _hitSize).contains(event.localPosition)) return;
+    if (_hitAreaContains(event.localPosition)) return;
     if (_deferred) {
       // 시스템 제스처일 가능성이 높으므로 확정하지 않고 버린다.
       setState(_release);
@@ -278,9 +298,13 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final textScaler = MediaQuery.textScalerOf(context)
         .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
 
+    _size = Size(width, height);
     _hitSize = widget.extendHitAreaToLegend
         ? Size(width, height)
         : Size(width, capHeight);
+    _hitOrigin = widget.extendHitAreaToLegend
+        ? Offset.zero
+        : Offset(0, legendHeight);
 
     Widget keycap = Padding(
       padding: EdgeInsets.only(bottom: pressRoom),
@@ -306,6 +330,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             child: _LegendRow(
               shiftLabel: widget.keyDef.shiftLabel,
               alphaLabel: widget.keyDef.alphaLabel,
+              width: width,
               fontSize:
                   widget.legendFontSize ??
                   legendHeight * CalcTheme.keyLegendFontRatio,
@@ -317,20 +342,42 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       ],
     );
 
-    return SizedBox(
+    final body = SizedBox(
       width: width,
       height: height,
       child: widget.extendHitAreaToLegend ? _wrapHitArea(column) : column,
     );
+    final shape = widget.shape;
+    // ClipPath는 그림과 히트 테스트를 함께 경로 안으로 제한한다.
+    return shape == null
+        ? body
+        : ClipPath(clipper: _ShapeClipper(shape), child: body);
   }
+}
+
+/// [CalcKeyButton.shape]를 적용하는 클리퍼
+class _ShapeClipper extends CustomClipper<Path> {
+  final Path Function(Size size) shape;
+
+  const _ShapeClipper(this.shape);
+
+  @override
+  Path getClip(Size size) => shape(size);
+
+  @override
+  bool shouldReclip(_ShapeClipper oldClipper) => oldClipper.shape != shape;
 }
 
 /// 키캡 위 본체 영역의 SHIFT/ALPHA 각인 띠.
 ///
-/// 두 각인이 모두 있으면 글자 수에 비례해 폭을 나눠, 짧은 쪽이 남긴 폭을 긴 쪽이 쓰게 한다.
+/// 두 각인이 모두 있으면 글자 수에 비례해 폭을 나눠, 넘치면 함께 같은 비율로 줄어든다.
+/// 단, 짧은 쪽이 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름 `A`~`F`, `Y` 등)면
+/// 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
+/// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
 class _LegendRow extends StatelessWidget {
   final String? shiftLabel;
   final String? alphaLabel;
+  final double width;
   final double fontSize;
   final double maxGap;
   final TextScaler textScaler;
@@ -338,6 +385,7 @@ class _LegendRow extends StatelessWidget {
   const _LegendRow({
     required this.shiftLabel,
     required this.alphaLabel,
+    required this.width,
     required this.fontSize,
     required this.maxGap,
     required this.textScaler,
@@ -349,36 +397,74 @@ class _LegendRow extends StatelessWidget {
     final alpha = alphaLabel;
     if (shift == null && alpha == null) return const SizedBox.shrink();
 
-    Widget legend(String text, TextStyle style, Alignment alignment) {
-      return Expanded(
-        flex: math.max(1, text.runes.length),
-        child: Align(
-          alignment: alignment,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: alignment,
-            child: Text(
-              text,
-              maxLines: 1,
-              softWrap: false,
-              textScaler: textScaler,
-              style: style.copyWith(fontSize: fontSize),
-            ),
-          ),
+    final gap = shift != null && alpha != null
+        ? math.min(fontSize * CalcTheme.keyLegendGapRatio, maxGap)
+        : 0.0;
+    // 자연 폭 우선 배분을 받을 짧은 각인 (둘 다 있고, 짧은 쪽이 충분히 짧을 때만)
+    final shiftRunes = shift?.runes.length ?? 0;
+    final alphaRunes = alpha?.runes.length ?? 0;
+    final both = shift != null && alpha != null;
+    final shiftIsShort =
+        both &&
+        shiftRunes <= alphaRunes &&
+        shiftRunes <= CalcTheme.keyLegendPriorityMaxRunes;
+    final alphaIsShort =
+        both &&
+        alphaRunes < shiftRunes &&
+        alphaRunes <= CalcTheme.keyLegendPriorityMaxRunes;
+    final shortMaxWidth = math.max(0.0, (width - gap) / 2);
+
+    Widget legend(
+      String text,
+      TextStyle style,
+      Alignment alignment, {
+      required bool short,
+      required bool priorityLayout,
+    }) {
+      final label = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: alignment,
+        child: Text(
+          text,
+          maxLines: 1,
+          softWrap: false,
+          textScaler: textScaler,
+          style: style.copyWith(fontSize: fontSize),
         ),
+      );
+      if (short) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: shortMaxWidth),
+          child: Align(alignment: alignment, widthFactor: 1, child: label),
+        );
+      }
+      return Expanded(
+        // 우선 배분이면 긴 쪽이 남은 폭 전부, 아니면 글자 수 비례
+        flex: priorityLayout ? 1 : math.max(1, text.runes.length),
+        child: Align(alignment: alignment, child: label),
       );
     }
 
+    final priority = shiftIsShort || alphaIsShort;
     return Row(
       children: [
         if (shift != null)
-          legend(shift, CalcTheme.keyShiftLabelStyle, Alignment.bottomLeft),
-        if (shift != null && alpha != null)
-          SizedBox(
-            width: math.min(fontSize * CalcTheme.keyLegendGapRatio, maxGap),
+          legend(
+            shift,
+            CalcTheme.keyShiftLabelStyle,
+            Alignment.bottomLeft,
+            short: shiftIsShort,
+            priorityLayout: priority,
           ),
+        if (both) SizedBox(width: gap),
         if (alpha != null)
-          legend(alpha, CalcTheme.keyAlphaLabelStyle, Alignment.bottomRight),
+          legend(
+            alpha,
+            CalcTheme.keyAlphaLabelStyle,
+            Alignment.bottomRight,
+            short: alphaIsShort,
+            priorityLayout: priority,
+          ),
       ],
     );
   }

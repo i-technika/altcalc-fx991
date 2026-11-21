@@ -7,6 +7,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
+import 'package:itechnika_altcalc_fx991/main.dart' as app show main;
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/banner_ad_slot.dart';
@@ -118,7 +119,7 @@ void main() {
       expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
     });
 
-    testWidgets('앱 시작 시 화면을 세로로 고정한다', (tester) async {
+    testWidgets('main()은 화면을 세로로 고정하고 계산기 화면을 띄운다', (tester) async {
       final calls = <MethodCall>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -133,11 +134,13 @@ void main() {
           null,
         ),
       );
-      await lockPortraitOrientation();
+      await app.main();
+      await tester.pump();
       final call = calls.singleWhere(
         (c) => c.method == 'SystemChrome.setPreferredOrientations',
       );
       expect(call.arguments, ['DeviceOrientation.portraitUp']);
+      expect(find.byType(CalculatorScreen), findsOneWidget);
     });
   });
 
@@ -184,6 +187,30 @@ void main() {
             scaler.scale(buttons.first.legendFontSize!),
             greaterThanOrEqualTo(minLegendFont),
           );
+
+          // 주입값만이 아니라 실제 렌더 크기도 본다: 한 글자 라벨(숫자·연산자, 변수 각인 A~F·X·Y·M 등)은
+          // FittedBox로 줄지 않아야 한다. (테스트 글꼴은 글자 폭이 실제보다 넓어 긴 라벨은 줄 수 있다.)
+          for (final b in buttons) {
+            final def = b.keyDef;
+            if (def.category == KeyCategory.cursor) continue;
+            for (final label in [
+              def.mainLabel,
+              def.shiftLabel,
+              def.alphaLabel,
+            ]) {
+              if (label == null || label.runes.length != 1) continue;
+              final text = find.descendant(
+                of: find.byWidget(b),
+                matching: find.text(label),
+              );
+              final rendered = tester.getRect(text).height;
+              expect(
+                rendered,
+                moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+                reason: '${def.id.name} "$label"',
+              );
+            }
+          }
 
           // 커서 패드: 방향 하나의 터치 영역(타원의 1/4)은 함수 키 셀(각인 띠 포함)의 80% 이상이다.
           final pad = tester.getSize(find.byKey(const ValueKey('cursor-pad')));

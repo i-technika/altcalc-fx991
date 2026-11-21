@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/key_definitions.dart';
@@ -200,20 +201,32 @@ class _LabelWidthLimits {
   const _LabelWidthLimits(this.main, this.legend);
 
   /// 폭 측정 기준 글자 크기 — 폭은 글자 크기에 비례한다고 보고 1dp당 폭(em 폭)을 구한다.
+  /// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 비례가 깨지지 않는다.)
   static const double _probeFontSize = 100;
 
+  /// em 폭 캐시. 화면 크기와 무관하므로 라벨·스타일별로 한 번만 잰다.
+  /// 시스템 글꼴이 바뀌면(글꼴 지연 로드 등) 비운다.
+  static final Map<(String, TextStyle), double> _emWidthCache = {};
+  static bool _listeningSystemFonts = false;
+
   static double _emWidth(String text, TextStyle style) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: style.copyWith(fontSize: _probeFontSize),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    final width = painter.width / _probeFontSize;
-    painter.dispose();
-    return width;
+    if (!_listeningSystemFonts) {
+      _listeningSystemFonts = true;
+      PaintingBinding.instance.systemFonts.addListener(_emWidthCache.clear);
+    }
+    return _emWidthCache.putIfAbsent((text, style), () {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: style.copyWith(fontSize: _probeFontSize),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width / _probeFontSize;
+      painter.dispose();
+      return width;
+    });
   }
 
   static _LabelWidthLimits measure({
@@ -244,23 +257,32 @@ class _LabelWidthLimits {
             _emWidth(def.mainLabel, CalcTheme.keyMainLabelStyle),
       );
 
-      // 각인: 두 각인은 글자 수 비율로 폭을 나눈다 (사이 간격은 상한으로 잡는다).
+      // 각인: CalcKeyButton의 각인 띠와 같은 규칙. 두 각인이 함께 들어가려면 (어느 배분이든)
+      // 두 폭의 합이 띠 폭 이하여야 하고, 짧은 쪽이 우선 배분을 받으면 절반 이하여야 한다.
+      // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       final shift = def.shiftLabel;
       final alpha = def.alphaLabel;
       if (shift == null && alpha == null) continue;
-      final gap = shift != null && alpha != null
-          ? width * CalcTheme.keyLegendGapMaxWidthRatio
-          : 0.0;
-      final shiftRunes = shift == null ? 0 : math.max(1, shift.runes.length);
-      final alphaRunes = alpha == null ? 0 : math.max(1, alpha.runes.length);
-      final usable = math.max(0.0, width - gap);
-      for (final (text, runes, style) in [
-        (shift, shiftRunes, CalcTheme.keyShiftLabelStyle),
-        (alpha, alphaRunes, CalcTheme.keyAlphaLabelStyle),
-      ]) {
-        if (text == null) continue;
-        final share = usable * runes / (shiftRunes + alphaRunes);
-        legend = math.min(legend, share / _emWidth(text, style));
+      if (shift == null || alpha == null) {
+        final (text, style) = shift != null
+            ? (shift, CalcTheme.keyShiftLabelStyle)
+            : (alpha!, CalcTheme.keyAlphaLabelStyle);
+        legend = math.min(legend, width / _emWidth(text, style));
+        continue;
+      }
+      final usable = math.max(
+        0.0,
+        width - width * CalcTheme.keyLegendGapMaxWidthRatio,
+      );
+      final shiftEm = _emWidth(shift, CalcTheme.keyShiftLabelStyle);
+      final alphaEm = _emWidth(alpha, CalcTheme.keyAlphaLabelStyle);
+      legend = math.min(legend, usable / (shiftEm + alphaEm));
+      final shortRunes = math.min(shift.runes.length, alpha.runes.length);
+      if (shortRunes <= CalcTheme.keyLegendPriorityMaxRunes) {
+        final shortEm = shift.runes.length <= alpha.runes.length
+            ? shiftEm
+            : alphaEm;
+        legend = math.min(legend, usable / 2 / shortEm);
       }
     }
     return _LabelWidthLimits(main, legend);
@@ -356,9 +378,11 @@ class _KeypadBody extends StatelessWidget {
     CalcKeyDef def, {
     bool showLegendBand = true,
     bool extendHitArea = false,
+    Path Function(Size size)? shape,
   }) {
     return CalcKeyButton(
       keyDef: def,
+      shape: shape,
       onPressed: onKeyPressed,
       onRepeat: autoRepeatKeys.contains(def.id) ? onKeyRepeat : null,
       enableHaptics: enableHaptics,
@@ -410,7 +434,10 @@ class _KeypadBody extends StatelessWidget {
                 child: Padding(
                   padding: _cellPadding,
                   child: CursorPad(
-                    buttonBuilder: (def) => _button(def, showLegendBand: false),
+                    buttonBuilder: (def, shape) =>
+                        _button(def, showLegendBand: false, shape: shape),
+                    onKeyPressed: onKeyPressed,
+                    enableHaptics: enableHaptics,
                   ),
                 ),
               ),
@@ -443,15 +470,57 @@ enum CursorPadSector { up, down, left, right }
 ///   ┌───────────┐
 ///   │ ╲   ▲   ╱ │   각 방향 키는 자기 부채꼴 전체가 터치 영역이다
 ///   │ ◀  ╲ ╱  ▶ │   (가운데·대각선 근처까지 데드존 없음, 타원 밖은 무시).
-///   │    ╱ ╲    │   키캡은 [sectorBox] 상자에 그리고, 부채꼴 모양으로 잘라 그림·히트 테스트를 함께 제한한다.
-///   │ ╱   ▼   ╲ │
+///   │    ╱ ╲    │   키캡은 [sectorBox] 상자에 그리고, [CalcKeyButton.shape]로 부채꼴 경로를
+///   │ ╱   ▼   ╲ │   넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 부채꼴로 제한한다.
 ///   └───────────┘
 /// ```
+///
+/// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
+/// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
 class CursorPad extends StatelessWidget {
-  /// 방향 키 위젯 생성기 (보통 `showLegendBand: false`인 [CalcKeyButton])
-  final Widget Function(CalcKeyDef def) buttonBuilder;
+  /// 방향 키 위젯 생성기. [shape]를 `CalcKeyButton.shape`에 넘겨야 한다
+  /// (보통 `showLegendBand: false`인 [CalcKeyButton]).
+  final Widget Function(CalcKeyDef def, Path Function(Size size) shape)
+  buttonBuilder;
 
-  const CursorPad({super.key, required this.buttonBuilder});
+  /// 시맨틱 탭(스크린리더) 입력 콜백. `null`이면 시맨틱 노드가 비활성이다.
+  final ValueChanged<CalcKeyId>? onKeyPressed;
+
+  /// 시맨틱 탭 햅틱 사용 여부 (버튼과 같게 맞춘다)
+  final bool enableHaptics;
+
+  const CursorPad({
+    super.key,
+    required this.buttonBuilder,
+    this.onKeyPressed,
+    this.enableHaptics = true,
+  });
+
+  /// [sector] 부채꼴 경로 생성기 (정적 함수라 매 빌드 같은 인스턴스 — 불필요한 재클립 방지)
+  static Path Function(Size size) shapeOf(CursorPadSector sector) =>
+      switch (sector) {
+        CursorPadSector.up => _upPath,
+        CursorPadSector.down => _downPath,
+        CursorPadSector.left => _leftPath,
+        CursorPadSector.right => _rightPath,
+      };
+
+  static Path _upPath(Size s) => sectorPath(CursorPadSector.up, s);
+  static Path _downPath(Size s) => sectorPath(CursorPadSector.down, s);
+  static Path _leftPath(Size s) => sectorPath(CursorPadSector.left, s);
+  static Path _rightPath(Size s) => sectorPath(CursorPadSector.right, s);
+
+  /// [size] 패드 안에서 [sector]의 시맨틱 영역 — 3×3 격자의 가장자리 가운데 칸 (서로 겹치지 않는다)
+  static Rect semanticRect(CursorPadSector sector, Size size) {
+    final w = size.width / 3;
+    final h = size.height / 3;
+    return switch (sector) {
+      CursorPadSector.up => Rect.fromLTWH(w, 0, w, h),
+      CursorPadSector.down => Rect.fromLTWH(w, 2 * h, w, h),
+      CursorPadSector.left => Rect.fromLTWH(0, h, w, h),
+      CursorPadSector.right => Rect.fromLTWH(2 * w, h, w, h),
+    };
+  }
 
   /// 방향별 키 명세
   static CalcKeyDef defOf(CursorPadSector sector) => switch (sector) {
@@ -492,6 +561,7 @@ class CursorPad extends StatelessWidget {
       builder: (context, constraints) {
         final size = constraints.biggest;
         if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
+        final press = onKeyPressed;
         return ClipOval(
           key: const ValueKey('cursor-pad'),
           child: Stack(
@@ -499,9 +569,8 @@ class CursorPad extends StatelessWidget {
               for (final sector in CursorPadSector.values)
                 Positioned.fromRect(
                   rect: sectorBox(sector, size),
-                  child: ClipPath(
-                    clipper: _SectorClipper(sector),
-                    child: buttonBuilder(defOf(sector)),
+                  child: ExcludeSemantics(
+                    child: buttonBuilder(defOf(sector), shapeOf(sector)),
                   ),
                 ),
               // 부채꼴 경계선과 테두리 (터치는 통과시킨다)
@@ -510,24 +579,30 @@ class CursorPad extends StatelessWidget {
                   child: CustomPaint(painter: _CursorPadDividerPainter()),
                 ),
               ),
+              // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
+              for (final sector in CursorPadSector.values)
+                Positioned.fromRect(
+                  rect: semanticRect(sector, size),
+                  child: Semantics(
+                    container: true,
+                    button: true,
+                    enabled: press != null,
+                    label: defOf(sector).mainLabel,
+                    onTap: press == null
+                        ? null
+                        : () {
+                            if (enableHaptics) HapticFeedback.lightImpact();
+                            press(defOf(sector).id);
+                          },
+                    child: const SizedBox.expand(),
+                  ),
+                ),
             ],
           ),
         );
       },
     );
   }
-}
-
-class _SectorClipper extends CustomClipper<Path> {
-  final CursorPadSector sector;
-
-  const _SectorClipper(this.sector);
-
-  @override
-  Path getClip(Size size) => CursorPad.sectorPath(sector, size);
-
-  @override
-  bool shouldReclip(_SectorClipper oldClipper) => oldClipper.sector != sector;
 }
 
 /// 커서 패드 대각선 경계와 타원 테두리

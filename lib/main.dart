@@ -11,10 +11,13 @@ Future<void> main() async {
   runApp(const ProviderScope(child: AltCalcApp()));
 }
 
-/// 화면을 세로로 고정한다. 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아지기 때문이다.
+/// 폰 화면을 세로로 고정한다. 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아지기 때문이다.
+/// (iPhone은 Info.plist에서도 세로만 허용해 실행 첫 프레임부터 세로로 뜬다.)
 ///
-/// TODO(#24): 태블릿은 가로 고정 + LCD/키패드 좌우 분할로 바꾼다.
-/// (iPad는 멀티태스킹을 지원하는 동안 방향 고정이 적용되지 않는다 — #24에서 방침 결정)
+/// 방향 고정이 항상 지켜지지는 않는다 — 분할 화면·팝업 창처럼 창 자체가 낮아지는 경우,
+/// Android 16(targetSdk 36) 이상에서 짧은 변 600dp 이상 화면(태블릿·폴더블 내부)은 방향 고정을
+/// 무시하고, iPad는 멀티태스킹을 지원하는 동안 무시한다.
+/// TODO(#24): 대화면은 방향 고정 없이 창 크기에 따라 LCD/키패드 좌우 분할로 대응한다.
 Future<void> lockPortraitOrientation() =>
     SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
 

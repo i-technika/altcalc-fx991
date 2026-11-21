@@ -188,6 +188,17 @@ void main() {
     test('통일 글자 하한 비율은 0.5~1, 커서 패드 경계선은 양수 두께다', () {
       expect(CalcTheme.keypadUniformFontMinRatio, inInclusiveRange(0.5, 1.0));
       expect(CalcTheme.cursorPadDividerWidth, greaterThan(0));
+      expect(CalcTheme.keyLegendPriorityMaxRunes, inInclusiveRange(1, 3));
+    });
+
+    test('키 라벨 스타일은 자간을 명시해 테마 자간을 물려받지 않는다', () {
+      for (final style in [
+        CalcTheme.keyMainLabelStyle,
+        CalcTheme.keyShiftLabelStyle,
+        CalcTheme.keyAlphaLabelStyle,
+      ]) {
+        expect(style.letterSpacing, 0);
+      }
     });
 
     test('화면 배치 상수는 양수이며 LCD 비율은 본체의 절반 미만이다', () {

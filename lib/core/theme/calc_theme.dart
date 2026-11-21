@@ -202,11 +202,15 @@ abstract final class CalcTheme {
   /// 키캡 메인 라벨 텍스트 스타일 (기준 크기). `CalcKeyButton`은 [keyMainLabelFontRatio]로
   /// 키캡 높이에 맞춰 `fontSize`를 덮어쓴다.
   /// 색은 카테고리마다 다르므로 [KeyCategoryColors.foreground]로 지정한다.
+  ///
+  /// 키 라벨 스타일은 `letterSpacing`을 명시한다. 생략하면 테마의 [DefaultTextStyle] 자간을
+  /// 물려받아, 키패드가 측정한 라벨 폭(`KeypadMetrics`)과 실제 렌더링 폭이 어긋난다.
   static const TextStyle keyMainLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
     fontSize: 16,
     fontWeight: FontWeight.w600,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -217,6 +221,7 @@ abstract final class CalcTheme {
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: shiftLabel,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -227,6 +232,7 @@ abstract final class CalcTheme {
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: alphaLabel,
+    letterSpacing: 0,
     height: 1.0,
   );
 
@@ -268,6 +274,10 @@ abstract final class CalcTheme {
 
   /// SHIFT·ALPHA 각인 사이 간격 (각인 글자 크기 대비)
   static const double keyLegendGapRatio = 0.3;
+
+  /// 자연 폭 우선 배분을 받는 짧은 각인의 최대 글자 수 (변수 이름 `A`~`F`, `X`, `Y`, `M` 등).
+  /// 이보다 긴 각인 쌍은 글자 수 비례로 폭을 나눈다.
+  static const int keyLegendPriorityMaxRunes = 2;
 
   /// SHIFT·ALPHA 각인 사이 간격 상한 (키 너비 대비) — 좁고 긴 셀에서 넘침 방지
   static const double keyLegendGapMaxWidthRatio = 0.05;

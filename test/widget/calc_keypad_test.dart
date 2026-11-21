@@ -65,6 +65,7 @@ const _areas = <Size>[
 ];
 
 void main() {
+  _cursorPadR2Tests();
   group('키 구성', () {
     testWidgets('50개 키가 각각 한 번씩 배치된다', (tester) async {
       await tester.pumpWidget(_host(const CalcKeypad()));
@@ -512,5 +513,119 @@ void main() {
       expect(m.legendFontSize, greaterThan(0));
       expect(m.mainLabelFontSize, greaterThan(0));
     });
+  });
+}
+
+void _cursorPadR2Tests() {
+  group('커서 패드 (이동·시맨틱)', () {
+    testWidgets('▲를 누른 채 ◀ 부채꼴이나 타원 밖으로 미끄러지면 ▲ 반복이 멈춘다', (tester) async {
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeypad(
+            onKeyPressed: (_) {},
+            onKeyRepeat: repeats.add,
+            enableHaptics: false,
+          ),
+        ),
+      );
+      final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+      Offset at(double u, double v) =>
+          pad.center + Offset(u * pad.width / 2, v * pad.height / 2);
+
+      for (final target in [at(-0.6, -0.1), at(-0.95, -0.9)]) {
+        repeats.clear();
+        final g = await tester.startGesture(at(0, -0.6));
+        await tester.pump(CalcKeyButton.defaultRepeatDelay);
+        expect(repeats, [CalcKeyId.cursorUp]);
+        await g.moveTo(target);
+        await tester.pump(CalcKeyButton.defaultRepeatInterval * 5);
+        expect(repeats, [CalcKeyId.cursorUp], reason: '$target');
+        await g.up();
+        await tester.pump();
+      }
+    });
+
+    test('시맨틱 영역은 서로 겹치지 않고 각자 자기 부채꼴 쪽에 있다', () {
+      const size = Size(120, 100);
+      final rects = {
+        for (final s in CursorPadSector.values)
+          s: CursorPad.semanticRect(s, size),
+      };
+      for (final a in CursorPadSector.values) {
+        for (final b in CursorPadSector.values) {
+          if (a == b) continue;
+          final overlap = rects[a]!.intersect(rects[b]!);
+          expect(
+            overlap.width <= 0 || overlap.height <= 0,
+            isTrue,
+            reason: '${a.name} × ${b.name}',
+          );
+        }
+        // 영역 중심은 그 방향 부채꼴 안이다.
+        final c = rects[a]!.center - size.center(Offset.zero);
+        final inSector = switch (a) {
+          CursorPadSector.up => c.dy < 0 && c.dx.abs() < c.dy.abs(),
+          CursorPadSector.down => c.dy > 0 && c.dx.abs() < c.dy.abs(),
+          CursorPadSector.left => c.dx < 0 && c.dy.abs() < c.dx.abs(),
+          CursorPadSector.right => c.dx > 0 && c.dy.abs() < c.dx.abs(),
+        };
+        expect(inSector, isTrue, reason: a.name);
+      }
+    });
+
+    testWidgets('방향마다 시맨틱 노드가 하나씩 있고, 시맨틱 탭으로 입력된다', (tester) async {
+      final handle = tester.ensureSemantics();
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false)),
+      );
+      for (final sector in CursorPadSector.values) {
+        final def = CursorPad.defOf(sector);
+        final finder = find.semantics.byLabel(def.mainLabel);
+        expect(finder, findsOne, reason: sector.name);
+        tester.semantics.tap(finder);
+        await tester.pump();
+        expect(pressed.last, def.id);
+      }
+      handle.dispose();
+    });
+  });
+
+  group('폭 제약 라벨의 렌더링', () {
+    // 폭 제약을 결정하는 가장 긴 메인 라벨(SHIFT·ALPHA)까지 포함해 모든 메인 라벨이
+    // FittedBox 축소 없이 통일 크기로 그려진다 (통일 크기가 하한에 걸리지 않는 크기에서).
+    // 테스트 글꼴(글자 폭 1em)은 실제 고정폭 글꼴(약 0.6em)보다 넓어, 배율 1.3에서는 하한에 걸린다.
+    for (final scale in [1.0]) {
+      testWidgets('360×420, 글자 배율 $scale: 모든 메인 라벨이 축소 없이 그려진다', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
+        final m = KeypadMetrics.compute(
+          const Size(360, 420),
+          TextScaler.linear(scale),
+        );
+        final cap = m.functionKeyHeight * (1 - CalcTheme.keyLegendHeightRatio);
+        // 전제: 통일 크기가 폭 제약으로 정해졌다 (하한 미만이 아니고 높이 기준보다 작다).
+        final byHeight = cap * CalcTheme.keyMainLabelFontRatio;
+        expect(m.mainLabelFontSize, lessThan(byHeight));
+        expect(
+          m.mainLabelFontSize,
+          greaterThan(byHeight * CalcTheme.keypadUniformFontMinRatio),
+        );
+        for (final def in allKeys) {
+          if (def.category == KeyCategory.cursor) continue;
+          final text = find.descendant(
+            of: _keycap(def.id),
+            matching: find.byType(Text),
+          );
+          expect(
+            tester.getRect(text).height,
+            moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+            reason: def.mainLabel,
+          );
+        }
+      });
+    }
   });
 }
