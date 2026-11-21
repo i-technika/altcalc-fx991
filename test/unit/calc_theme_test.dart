@@ -1,0 +1,112 @@
+import 'dart:math' as math;
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:material_ui/material_ui.dart';
+
+/// WCAG 2.x 명암비 (1.0 ~ 21.0)
+double contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
+
+void main() {
+  const minTextContrast = 4.5; // WCAG AA 일반 텍스트 기준
+
+  group('색상 대비 (WCAG AA)', () {
+    test('모든 키캡 카테고리의 메인 라벨은 배경 대비 4.5:1 이상이다', () {
+      for (final c in KeyCategory.values) {
+        expect(
+          contrastRatio(c.foreground, c.background),
+          greaterThanOrEqualTo(minTextContrast),
+          reason: c.name,
+        );
+      }
+    });
+
+    test('SHIFT/ALPHA 각인은 모든 본체 색 대비 4.5:1 이상이다', () {
+      for (final body in [
+        CalcTheme.bodyBackground,
+        CalcTheme.bodyFrame,
+        CalcTheme.bodyBottomGradient,
+      ]) {
+        for (final legend in [CalcTheme.shiftLabel, CalcTheme.alphaLabel]) {
+          expect(
+            contrastRatio(legend, body),
+            greaterThanOrEqualTo(minTextContrast),
+            reason: 'legend=$legend body=$body',
+          );
+        }
+      }
+    });
+
+    test('키캡 테두리는 본체 배경 대비 3:1 이상이다 (비텍스트 대비)', () {
+      expect(
+        contrastRatio(CalcTheme.keyBorder, CalcTheme.bodyBackground),
+        greaterThanOrEqualTo(3.0),
+      );
+    });
+
+    test('LCD 텍스트와 활성 상태 표시는 LCD 배경 대비 4.5:1 이상이다', () {
+      expect(
+        contrastRatio(CalcTheme.lcdText, CalcTheme.lcdBackground),
+        greaterThanOrEqualTo(minTextContrast),
+      );
+      expect(
+        contrastRatio(CalcTheme.lcdStatusActive, CalcTheme.lcdBackground),
+        greaterThanOrEqualTo(minTextContrast),
+      );
+    });
+
+    test('비활성 상태 표시는 활성 상태보다 LCD 배경과의 대비가 낮다', () {
+      expect(
+        contrastRatio(CalcTheme.lcdStatusInactive, CalcTheme.lcdBackground),
+        lessThan(
+          contrastRatio(CalcTheme.lcdStatusActive, CalcTheme.lcdBackground),
+        ),
+      );
+    });
+  });
+
+  group('텍스트 스타일', () {
+    test('모든 스타일은 고정폭 폰트와 대체 폰트를 지정한다', () {
+      for (final style in [
+        CalcTheme.lcdInputStyle,
+        CalcTheme.lcdResultStyle,
+        CalcTheme.lcdStatusStyle,
+        CalcTheme.keyMainLabelStyle,
+        CalcTheme.keyShiftLabelStyle,
+        CalcTheme.keyAlphaLabelStyle,
+      ]) {
+        expect(style.fontFamily, CalcTheme.monoFontFamily);
+        expect(style.fontFamilyFallback, CalcTheme.monoFontFallback);
+        expect(style.fontSize, isNotNull);
+        expect(style.fontSize!, greaterThan(0));
+      }
+    });
+
+    test('각인 스타일 색은 각인 팔레트와 일치한다', () {
+      expect(CalcTheme.keyShiftLabelStyle.color, CalcTheme.shiftLabel);
+      expect(CalcTheme.keyAlphaLabelStyle.color, CalcTheme.alphaLabel);
+    });
+  });
+
+  group('치수', () {
+    test('광고 슬롯 높이는 50~60dp, 안전 여백은 8~12dp 범위다', () {
+      expect(CalcTheme.adSlotHeight, inInclusiveRange(50, 60));
+      expect(CalcTheme.adSlotMaxHeight, inInclusiveRange(50, 60));
+      expect(
+        CalcTheme.adSlotHeight,
+        lessThanOrEqualTo(CalcTheme.adSlotMaxHeight),
+      );
+      expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
+    });
+
+    test('키 간격 비율은 0~0.1 사이의 양수다', () {
+      expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
+      expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));
+    });
+  });
+}
