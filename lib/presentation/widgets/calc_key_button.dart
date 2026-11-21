@@ -246,11 +246,14 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = CalcSemanticStrings.of(context);
     return Semantics(
       button: true,
       enabled: _enabled,
-      // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20)
-      label: CalcSemanticStrings.of(context).keyButton(widget.keyDef.id),
+      // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
+      // 메인 기능은 라벨, SHIFT·ALPHA 기능은 힌트로 나눠 키를 훑을 때 짧게 읽히게 한다.
+      label: strings.keyButton(widget.keyDef.id),
+      hint: strings.keyButtonHint(widget.keyDef.id),
       onTap: _enabled ? _handleSemanticTap : null,
       excludeSemantics: true,
       child: LayoutBuilder(builder: _buildLayout),

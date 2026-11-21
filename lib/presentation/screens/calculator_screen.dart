@@ -1,6 +1,5 @@
-import 'dart:math' as math;
-
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -159,10 +158,25 @@ class _LcdPanel extends ConsumerWidget {
     final status = ref.watch(lcdStatusProvider);
     final lastInput = ref.watch(calcProvider.select((s) => s.lastInput));
     final strings = CalcSemanticStrings.of(context);
-    ref.listen(
-      calcProvider.select((s) => (s.modifier, s.inputCount)),
-      (previous, next) => _announceModifier(context, strings, previous, next),
-    );
+    // 스크린리더 알림: 알림(announcement)을 지원하는 플랫폼(iOS)에서 스크린리더가 켜져 있을 때만 보낸다.
+    // Android는 알림 대신 LCD의 liveRegion(상태 표시줄·입력 줄)이 바뀐 내용을 읽는다
+    // (`LcdDisplay` 참고 — Android 16부터 알림 API가 폐기 예정이라 Flutter도 liveRegion을 권장한다).
+    if (MediaQuery.supportsAnnounceOf(context) &&
+        MediaQuery.accessibleNavigationOf(context)) {
+      final view = View.of(context);
+      final direction = Directionality.of(context);
+      ref.listen(
+        calcProvider.select((s) => (s.modifier, s.inputCount, s.lastInput)),
+        (previous, next) {
+          // select 구독은 첫 값으로 콜백하지 않으므로 previous는 항상 있다.
+          final message = announcementFor(strings, previous!, next);
+          if (message == null) return;
+          unawaited(
+            SemanticsService.sendAnnouncement(view, message, direction),
+          );
+        },
+      );
+    }
     return LcdDisplay(
       status: status,
       fitFontsToSize: true,
@@ -176,40 +190,31 @@ class _LcdPanel extends ConsumerWidget {
       ),
     );
   }
+}
 
-  /// SHIFT/ALPHA 대기가 바뀌면 스크린리더로 알린다 (#20).
-  ///
-  /// 상태 표시줄의 `S`·`A`는 화면에서만 보이므로, 스크린리더 사용자는 모디파이어가 켜졌는지 알 수 없다.
-  /// `liveRegion`은 Android에서만 동작하므로 두 플랫폼 모두 지원하는 알림(announcement)을 쓴다.
-  /// - 켜짐: 항상 알린다.
-  /// - 꺼짐: 기능을 입력하지 않고 풀린 경우(같은 키를 다시 누름, 기능 없는 층의 키)만 알린다.
-  ///   기능 입력으로 소비된 경우는 그 입력 자체가 결과이므로 알리지 않는다.
-  static void _announceModifier(
-    BuildContext context,
-    CalcSemanticStrings strings,
-    (KeyModifier, int)? previous,
-    (KeyModifier, int) next,
-  ) {
-    if (previous == null) return;
-    final (before, countBefore) = previous;
-    final (after, countAfter) = next;
-    if (before == after) return;
-    final String message;
-    if (after != KeyModifier.none) {
-      message = strings.modifierChanged(after, on: true);
-    } else if (countAfter == countBefore) {
-      message = strings.modifierChanged(before, on: false);
-    } else {
-      return;
-    }
-    unawaited(
-      SemanticsService.sendAnnouncement(
-        View.of(context),
-        message,
-        Directionality.of(context),
-      ),
-    );
+/// 상태 변화([previous] → [next])에 대해 스크린리더로 알릴 말. 알릴 것이 없으면 `null`. (#20)
+///
+/// 상태는 `(모디파이어 대기, 입력 수, 마지막 입력)`이다.
+/// - 기능이 입력되면(입력 수 증가) 그 기능 이름을 알린다. 시프트·알파 대기가 그 입력으로 풀렸다는 것도
+///   이것으로 전달된다(예: 시프트 → sin → "아크사인"). 길게 눌러 반복되는 입력은 알리지 않는다.
+/// - 입력 없이 대기만 바뀌면: 켜짐("시프트 켜짐"), 또는 꺼짐(같은 키를 다시 누름, 기능 없는 층의 키).
+@visibleForTesting
+String? announcementFor(
+  CalcSemanticStrings strings,
+  (KeyModifier, int, KeyInput?) previous,
+  (KeyModifier, int, KeyInput?) next,
+) {
+  final (before, countBefore, _) = previous;
+  final (after, countAfter, input) = next;
+  if (countAfter != countBefore) {
+    if (input == null || input.isRepeat) return null;
+    return strings.keyFunction(input.id, input.layer);
   }
+  if (before == after) return null;
+  if (after != KeyModifier.none) {
+    return strings.modifierChanged(after, on: true);
+  }
+  return strings.modifierChanged(before, on: false);
 }
 
 /// 키 입력을 notifier로 전달하는 키패드. 상태를 구독하지 않는다.

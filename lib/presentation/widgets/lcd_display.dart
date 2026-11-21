@@ -380,6 +380,8 @@ class LcdDisplay extends StatelessWidget {
                         child: _LcdLine(
                           key: const ValueKey('lcd-input-line'),
                           semanticLabel: strings.inputLine,
+                          // 입력이 바뀌면 읽어 준다 (Android — 상태 표시줄과 같은 규칙)
+                          liveRegion: !MediaQuery.supportsAnnounceOf(context),
                           alignment: Alignment.topLeft,
                           style: inputStyle,
                           overflow: inputOverflow,
@@ -491,6 +493,10 @@ class LcdStatusBar extends StatelessWidget {
 
     return Semantics(
       label: CalcSemanticStrings.of(context).statusBar(status),
+      // 상태(SHIFT·ALPHA 등)가 바뀌면 읽어 준다. 알림(announcement)을 지원하지 않는 플랫폼(Android)에서만
+      // liveRegion을 쓰고, 지원하는 플랫폼(iOS)은 화면(CalculatorScreen)이 직접 알린다
+      // — Flutter 자체 위젯(InputDecorator)과 같은 방식.
+      liveRegion: !MediaQuery.supportsAnnounceOf(context),
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -569,6 +575,9 @@ class _IndicatorSlot extends StatelessWidget {
 class _LcdLine extends StatelessWidget {
   /// 스크린리더가 줄 내용 앞에 읽는 줄 이름 ("입력"/"결과")
   final String semanticLabel;
+
+  /// 내용이 바뀌면 스크린리더가 읽어 주는 영역인지
+  final bool liveRegion;
   final Alignment alignment;
   final TextStyle style;
   final LcdLineOverflow overflow;
@@ -578,6 +587,7 @@ class _LcdLine extends StatelessWidget {
   const _LcdLine({
     super.key,
     required this.semanticLabel,
+    this.liveRegion = false,
     required this.alignment,
     required this.style,
     required this.overflow,
@@ -594,8 +604,14 @@ class _LcdLine extends StatelessWidget {
       height: 1.0,
     );
     // 스크린리더: 줄 이름("입력"/"결과")과 ◄/► 표시·줄 내용을 한 덩어리로 읽는다.
+    // M2에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
+    // 그것까지 흡수하므로 이 병합 방식을 다시 정한다.
     return MergeSemantics(
-      child: Semantics(label: semanticLabel, child: _buildRow(arrowStyle)),
+      child: Semantics(
+        label: semanticLabel,
+        liveRegion: liveRegion,
+        child: _buildRow(arrowStyle),
+      ),
     );
   }
 

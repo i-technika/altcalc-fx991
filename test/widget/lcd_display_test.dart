@@ -4,6 +4,8 @@ import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/korean_locale.dart';
+
 /// 크기를 지정한 LCD를 띄운다. [width]/[height]가 `null`이면 그 축은 무한 제약.
 Future<void> _pump(
   WidgetTester tester,
@@ -178,13 +180,17 @@ void main() {
 
     testWidgets('스크린리더에는 켜진 표시기의 의미만 읽힌다 (기호가 아니라 말로)', (tester) async {
       final handle = tester.ensureSemantics();
+      useKoreanLocale(tester);
       await _pump(
         tester,
         const LcdDisplay(status: LcdStatus(alpha: true, memory: true)),
       );
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)),
-        matchesSemantics(label: '알파, 메모리, 각도 도, 수학 입출력'),
+        matchesSemantics(
+          label: '알파, 메모리, 각도 단위 도, 수학 입출력',
+          isLiveRegion: true, // 테스트 MediaQuery는 알림 미지원(Android와 같다)
+        ),
       );
       handle.dispose();
     });
@@ -329,6 +335,7 @@ void main() {
 
     testWidgets('스크린리더: 줄 이름("입력"/"결과")·스크롤 방향·내용을 한 덩어리로 읽는다', (tester) async {
       final handle = tester.ensureSemantics();
+      useKoreanLocale(tester);
       await _pump(
         tester,
         const LcdDisplay(

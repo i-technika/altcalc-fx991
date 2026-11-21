@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,12 +17,16 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/korean_locale.dart';
+
 /// 화면 크기·인셋을 지정해 [CalculatorScreen]을 띄우고 상태 컨테이너를 돌려준다.
 Future<ProviderContainer> _pumpScreen(
   WidgetTester tester, {
   Size size = const Size(390, 844),
   EdgeInsets padding = EdgeInsets.zero,
   double textScale = 1.0,
+  bool supportsAnnounce = false,
+  bool accessibleNavigation = false,
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
@@ -37,6 +42,8 @@ Future<ProviderContainer> _pumpScreen(
             padding: padding,
             viewPadding: padding,
             textScaler: TextScaler.linear(textScale),
+            supportsAnnounce: supportsAnnounce,
+            accessibleNavigation: accessibleNavigation,
           ),
           child: const CalculatorScreen(),
         ),
@@ -532,67 +539,113 @@ void main() {
   });
 
   group('스크린리더 (#20)', () {
-    /// 스크린리더 알림(announcement) 메시지를 모은다.
-    List<String> recordAnnouncements(WidgetTester tester) {
-      final messages = <String>[];
-      tester.binding.defaultBinaryMessenger
-          .setMockDecodedMessageHandler<dynamic>(SystemChannels.accessibility, (
-            message,
-          ) async {
-            final map = message as Map<Object?, Object?>;
-            if (map['type'] == 'announce') {
-              messages.add(
-                (map['data']! as Map<Object?, Object?>)['message']! as String,
-              );
-            }
-            return null;
-          });
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger
-            .setMockDecodedMessageHandler<dynamic>(
-              SystemChannels.accessibility,
-              null,
-            ),
-      );
-      return messages;
-    }
-
     Future<void> press(WidgetTester tester, CalcKeyId id) async {
       await tester.tap(_keycap(id));
       await tester.pump();
     }
 
-    testWidgets('SHIFT/ALPHA가 켜지면 알리고, 같은 키로 끄면 꺼짐을 알린다', (tester) async {
-      await _pumpScreen(tester);
-      final messages = recordAnnouncements(tester);
-      await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.alpha);
-      await press(tester, CalcKeyId.alpha);
-      expect(messages, ['시프트 켜짐', '시프트 꺼짐', '알파 켜짐', '알파 꺼짐']);
+    /// 알림 메시지만 꺼낸다 (방향·정중함 수준도 함께 확인)
+    List<String> takeMessages(WidgetTester tester) => [
+      for (final a in tester.takeAnnouncements())
+        if (a.textDirection == TextDirection.ltr &&
+            a.assertiveness == Assertiveness.polite)
+          a.message,
+    ];
+
+    group('알림을 지원하는 플랫폼(iOS)·스크린리더 켜짐', () {
+      Future<void> pumpIos(WidgetTester tester) async {
+        useKoreanLocale(tester);
+        await _pumpScreen(
+          tester,
+          supportsAnnounce: true,
+          accessibleNavigation: true,
+        );
+        tester.takeAnnouncements(); // 시작 전 알림 비우기
+      }
+
+      testWidgets('SHIFT/ALPHA가 켜지면 알리고, 같은 키로 끄면 꺼짐을 알린다', (tester) async {
+        await pumpIos(tester);
+        await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.alpha);
+        await press(tester, CalcKeyId.alpha);
+        expect(takeMessages(tester), ['시프트 켜짐', '시프트 꺼짐', '알파 켜짐', '알파 꺼짐']);
+      });
+
+      testWidgets('SHIFT → ALPHA → ALPHA: 알파 켜짐, 알파 꺼짐', (tester) async {
+        await pumpIos(tester);
+        await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.alpha);
+        await press(tester, CalcKeyId.alpha);
+        expect(takeMessages(tester), ['시프트 켜짐', '알파 켜짐', '알파 꺼짐']);
+      });
+
+      testWidgets('입력된 기능 이름을 알리고, 기능 없는 층의 키로 풀리면 꺼짐을 알린다', (tester) async {
+        await pumpIos(tester);
+        await press(tester, CalcKeyId.shift);
+        await press(tester, CalcKeyId.sin); // SHIFT sin = sin⁻¹
+        await press(tester, CalcKeyId.num7);
+        await press(tester, CalcKeyId.alpha);
+        await press(tester, CalcKeyId.num4); // ALPHA 4 = 기능 없음 (무시)
+        expect(takeMessages(tester), ['시프트 켜짐', '아크사인', '7', '알파 켜짐', '알파 꺼짐']);
+      });
     });
 
-    testWidgets('SHIFT 대기 중 ALPHA를 누르면 알파 켜짐만 알린다', (tester) async {
-      await _pumpScreen(tester);
-      final messages = recordAnnouncements(tester);
+    testWidgets('스크린리더가 꺼져 있으면 알리지 않는다', (tester) async {
+      useKoreanLocale(tester);
+      await _pumpScreen(tester, supportsAnnounce: true);
+      tester.takeAnnouncements();
       await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.alpha);
-      expect(messages, ['시프트 켜짐', '알파 켜짐']);
+      await press(tester, CalcKeyId.sin);
+      expect(tester.takeAnnouncements(), isEmpty);
     });
 
-    testWidgets('기능 입력으로 대기가 풀리면 꺼짐을 알리지 않고, 기능 없는 키로 풀리면 알린다', (tester) async {
-      await _pumpScreen(tester);
-      final messages = recordAnnouncements(tester);
-      await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.num7); // SHIFT 7 = CONST (입력됨)
-      expect(messages, ['시프트 켜짐']);
-      await press(tester, CalcKeyId.shift);
-      await press(tester, CalcKeyId.num4); // SHIFT 4 = 기능 없음 (무시)
-      expect(messages, ['시프트 켜짐', '시프트 켜짐', '시프트 꺼짐']);
+    testWidgets(
+      '알림을 지원하지 않는 플랫폼(Android)은 알림 대신 상태 표시줄·입력 줄 liveRegion으로 읽는다',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester, accessibleNavigation: true);
+        tester.takeAnnouncements();
+        await press(tester, CalcKeyId.shift);
+        expect(tester.takeAnnouncements(), isEmpty);
+        expect(
+          tester.getSemantics(find.byType(LcdStatusBar)),
+          matchesSemantics(label: '시프트, 각도 단위 도, 수학 입출력', isLiveRegion: true),
+        );
+        final input = tester.getSemantics(
+          find.byKey(const ValueKey('lcd-input-line')),
+        );
+        expect(input.flagsCollection.isLiveRegion, isTrue);
+        handle.dispose();
+      },
+    );
+
+    testWidgets('알림을 지원하는 플랫폼에서는 liveRegion을 쓰지 않는다 (중복 낭독 방지)', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pumpScreen(tester, supportsAnnounce: true);
+      expect(
+        tester
+            .getSemantics(find.byType(LcdStatusBar))
+            .flagsCollection
+            .isLiveRegion,
+        isFalse,
+      );
+      expect(
+        tester
+            .getSemantics(find.byKey(const ValueKey('lcd-input-line')))
+            .flagsCollection
+            .isLiveRegion,
+        isFalse,
+      );
+      handle.dispose();
     });
 
     testWidgets('LCD 입력 줄은 각인 기호가 아니라 기능 이름으로 읽힌다', (tester) async {
       final handle = tester.ensureSemantics();
+      useKoreanLocale(tester);
       await _pumpScreen(tester);
       await press(tester, CalcKeyId.shift);
       await press(tester, CalcKeyId.sin); // sin⁻¹
@@ -600,8 +653,19 @@ void main() {
       final label = tester
           .getSemantics(find.byKey(const ValueKey('lcd-input-line')))
           .label;
-      expect(label, contains('역사인'));
+      expect(label, contains('아크사인'));
       expect(label, isNot(contains('sin')));
+      handle.dispose();
+    });
+
+    testWidgets('영어 기기에서는 영어로 읽는다', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pumpScreen(tester);
+      expect(find.semantics.byLabel('Calculate with variables'), findsOne);
+      expect(
+        tester.getSemantics(find.byType(LcdStatusBar)).label,
+        'Degrees, Math input output',
+      );
       handle.dispose();
     });
   });
