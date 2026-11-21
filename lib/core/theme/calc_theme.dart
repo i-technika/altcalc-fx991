@@ -10,7 +10,11 @@ import '../constants/key_definitions.dart';
 /// ## 각인 배치 규약
 /// 실물과 같이 SHIFT(금색)/ALPHA(빨간색) 각인은 키캡 **안쪽이 아니라 키캡 위쪽 본체 영역**
 /// ([bodyBackground] 위)에 그린다. 따라서 [shiftLabel]/[alphaLabel]은 본체 배경 대비
-/// 4.5:1 이상을 유지해야 한다 (`test/unit/calc_theme_test.dart`에서 검증).
+/// 4.5:1 이상을 유지해야 한다. 각인이 놓일 수 있는 본체 색([bodyBackground], [bodyFrame],
+/// [bodyBottomGradient]) 모두에 대해 `test/unit/calc_theme_test.dart`에서 검증한다.
+///
+/// 어두운 키캡(함수·커서·DEL)은 본체와 명도가 비슷하므로, 키 경계는 [keyBorder]로
+/// 테두리를 그려 본체 대비 3:1(WCAG 1.4.11 비텍스트 대비) 이상을 확보한다.
 abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 본체 색상 (Body Colors)
@@ -51,10 +55,10 @@ abstract final class CalcTheme {
   // 키캡 카테고리 색상 (Keycap Category Colors)
   // ───────────────────────────────────────────
 
-  /// 숫자 키 (0~9, 소수점) — 밝은 회색
+  /// 밝은 키캡 그룹 (0~9, 소수점, ×10ˣ, Ans) — 밝은 회색
   static const Color keyNumber = Color(0xFFE8E8E8);
 
-  /// 숫자 키 텍스트
+  /// 밝은 키캡 그룹 텍스트
   static const Color keyNumberText = Color(0xFF1A1A1A);
 
   /// 연산자 키 (+, −, ×, ÷) — 짙은 회색
@@ -119,11 +123,14 @@ abstract final class CalcTheme {
   static const Color keyAlphaText = Color(0xFFFFFFFF);
 
   /// ALPHA 각인 텍스트 (키 위 본체에 인쇄되는 빨간색 라벨, 어두운 배경용으로 밝게)
-  static const Color alphaLabel = Color(0xFFFF6B6B);
+  static const Color alphaLabel = Color(0xFFFF8080);
 
   // ───────────────────────────────────────────
   // 키 눌림 상태 (Pressed State)
   // ───────────────────────────────────────────
+
+  /// 키캡 테두리 — 어두운 키캡과 본체의 경계 표시용 (본체 대비 3:1 이상)
+  static const Color keyBorder = Color(0xFF808080);
 
   /// 키 눌림 시 오버레이 (20% 불투명 검정)
   static const Color keyPressedOverlay = Color(0x33000000);

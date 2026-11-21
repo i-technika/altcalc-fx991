@@ -26,14 +26,26 @@ void main() {
       }
     });
 
-    test('SHIFT/ALPHA 각인은 본체 배경 대비 4.5:1 이상이다', () {
+    test('SHIFT/ALPHA 각인은 모든 본체 색 대비 4.5:1 이상이다', () {
+      for (final body in [
+        CalcTheme.bodyBackground,
+        CalcTheme.bodyFrame,
+        CalcTheme.bodyBottomGradient,
+      ]) {
+        for (final legend in [CalcTheme.shiftLabel, CalcTheme.alphaLabel]) {
+          expect(
+            contrastRatio(legend, body),
+            greaterThanOrEqualTo(minTextContrast),
+            reason: 'legend=$legend body=$body',
+          );
+        }
+      }
+    });
+
+    test('키캡 테두리는 본체 배경 대비 3:1 이상이다 (비텍스트 대비)', () {
       expect(
-        contrastRatio(CalcTheme.shiftLabel, CalcTheme.bodyBackground),
-        greaterThanOrEqualTo(minTextContrast),
-      );
-      expect(
-        contrastRatio(CalcTheme.alphaLabel, CalcTheme.bodyBackground),
-        greaterThanOrEqualTo(minTextContrast),
+        contrastRatio(CalcTheme.keyBorder, CalcTheme.bodyBackground),
+        greaterThanOrEqualTo(3.0),
       );
     });
 

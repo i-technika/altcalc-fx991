@@ -262,7 +262,7 @@ class CursorPadKeys {
   });
 
   /// 상·하·좌·우 순 목록 ([CalcKeyId] 선언 순서와 동일)
-  List<CalcKeyDef> get all => [up, down, left, right];
+  List<CalcKeyDef> get all => List.unmodifiable([up, down, left, right]);
 }
 
 /// 커서 패드 (상단 조작부 좌우 블록 사이, 2행에 걸쳐 배치)
@@ -393,7 +393,7 @@ const List<List<CalcKeyDef>> functionRows = [
     CalcKeyDef(
       id: CalcKeyId.eng,
       mainLabel: 'ENG',
-      shiftLabel: '←',
+      shiftLabel: '←', // ALPHA(i) 각인 여부 실물 대조 필요
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -576,10 +576,8 @@ const int totalKeyCount = 50;
 final List<CalcKeyDef> allKeys = _buildAllKeys();
 
 List<CalcKeyDef> _buildAllKeys() {
-  // 좌우 블록 행 수가 다르면 키가 조용히 누락되므로 즉시 실패시킨다.
-  if (controlLeftRows.length != controlRightRows.length) {
-    throw StateError('상단 조작부 좌우 블록의 행 수가 다릅니다.');
-  }
+  // 좌우 블록 행 수가 다르면 오른쪽 키가 누락된다 (allKeys.length == 50 테스트로도 검출).
+  assert(controlLeftRows.length == controlRightRows.length);
   return List.unmodifiable([
     for (var i = 0; i < controlLeftRows.length; i++) ...[
       ...controlLeftRows[i],

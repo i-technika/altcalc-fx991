@@ -33,10 +33,6 @@ void main() {
       }
     });
 
-    test('상단 조작부 좌우 블록은 행 수가 같다', () {
-      expect(controlLeftRows.length, controlRightRows.length);
-    });
-
     test('커서 패드 각 방향은 올바른 ID에 대응한다', () {
       expect(cursorPad.up.id, CalcKeyId.cursorUp);
       expect(cursorPad.down.id, CalcKeyId.cursorDown);
@@ -127,6 +123,7 @@ void main() {
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
+      expect(() => cursorPad.all.clear(), throwsUnsupportedError);
     });
   });
 }
