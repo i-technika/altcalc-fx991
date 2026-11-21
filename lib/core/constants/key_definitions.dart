@@ -8,11 +8,11 @@ import 'package:meta/meta.dart';
 //
 //   ┌ 상단 조작부 (8키 + 커서 패드 4방향 = 12키) ───────────────┐
 //   │ SHIFT  ALPHA     ┌───────┐     MENU   ON                  │
-//   │                  │ ▲ ◀▶ ▼│                                 │
-//   │ OPTN   CALC      └───────┘     ∫▭     x                   │
+//   │                  │ ▲ ◄► ▼│                                 │
+//   │ OPTN   CALC      └───────┘     ∫□□■   x                   │
 //   └───────────────────────────────────────────────────────────┘
 //   ┌ 함수부 (3행 × 6열 = 18키) ────────────────────────────────┐
-//   │ ▭/▭   √▭   x²   x^▭   log▭▭ ln                            │
+//   │ ■/□   √■   x²   x^■   log■□ ln                            │
 //   │ (−)   °'"  x⁻¹  sin   cos   tan                           │
 //   │ STO   ENG  (    )     S⇔D   M+                            │
 //   └───────────────────────────────────────────────────────────┘
@@ -35,9 +35,15 @@ import 'package:meta/meta.dart';
 //   이 명세는 노란색·빨간색 각인만 담는다. 모드별 각인은 #33에서 다룬다.
 //   숫자 1~6 키에는 각인이 없다.
 //
-// ※ 라벨 표기: `▭`는 입력 칸 자리를 나타내는 임시 텍스트 표기다. 칸 개수·위치(위첨자·아래첨자)는
-//   키마다 실물과 다를 수 있다(예: 실물 ∫ 키는 칸 3개, 명세는 `∫▭`). 템플릿 모양은 #16의 글리프로
-//   그리며, 그때 표기도 함께 정리한다.
+// ※ 라벨 표기 (#16에서 확정, 실물 키캡 각인과 같은 규칙):
+//   - 입력 칸은 실물처럼 칸 수만큼 쓴다. `■` = 템플릿을 넣은 직후 커서가 들어가는 칸,
+//     `□` = 나머지 칸. 템플릿 라벨에는 `■`가 정확히 하나 있다(테스트로 검증).
+//     예: `log■□`(밑 → 진수), `■√□`(지수 → 피개법수), `∫□□■`(본문 → 아래·위 끝).
+//   - 칸의 위치(위첨자·아래첨자·분수)는 한 줄 텍스트로 나타낼 수 없어 읽는 순서로 늘어놓는다.
+//     위첨자는 `^`로 표시한다(`x^■`, `10^■`). 2차원 모양은 LCD 수식 렌더링(M2)에서 그린다.
+//   - `▭`(U+25AD)는 쓰지 않는다. 번들 글꼴 Noto Sans Mono에서 두 칸 폭이라 라벨 폭 측정을 왜곡한다.
+//     같은 이유로 커서 패드 좌우는 `◀`·`▶` 대신 한 칸 폭인 `◄`·`►`를 쓴다 (`▲`·`▼`와 같은 디자인).
+//     두 칸 폭 글자는 실물 각인에 꼭 필요한 `⇔`(S⇔D)만 허용한다(테스트로 검증).
 
 // ═══════════════════════════════════════════════════════════════
 // 키 식별자
@@ -70,7 +76,7 @@ enum CalcKeyId {
   square,
   power,
 
-  /// 밑 지정 로그 템플릿 키 `log▭▭`. 밑 생략 상용로그 `log`는 (−) 키의 SHIFT 기능이다.
+  /// 밑 지정 로그 템플릿 키 `log■□`. 밑 생략 상용로그 `log`는 (−) 키의 SHIFT 기능이다.
   logBase,
   ln,
 
@@ -129,7 +135,7 @@ enum KeyCategory {
   /// 사칙연산 키 (+, −, ×, ÷)
   operator,
 
-  /// 함수 키 (sin, log▭▭, x², OPTN, CALC 등)
+  /// 함수 키 (sin, log■□, x², OPTN, CALC 등)
   function,
 
   /// 등호(=) 키
@@ -147,7 +153,7 @@ enum KeyCategory {
   /// ALPHA 모디파이어 키
   alpha,
 
-  /// 커서 패드 방향 (▲, ▼, ◀, ▶)
+  /// 커서 패드 방향 (▲, ▼, ◄, ►)
   cursor,
 
   /// ON 키
@@ -232,7 +238,7 @@ const List<List<CalcKeyDef>> controlLeftRows = [
   ],
 ];
 
-/// 커서 패드 오른쪽 2×2 키 (1행: MENU, ON / 2행: ∫▭, x)
+/// 커서 패드 오른쪽 2×2 키 (1행: MENU, ON / 2행: ∫□□■, x)
 const List<List<CalcKeyDef>> controlRightRows = [
   [
     CalcKeyDef(
@@ -246,15 +252,15 @@ const List<List<CalcKeyDef>> controlRightRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.integral,
-      mainLabel: '∫▭',
-      shiftLabel: 'd/dx▭',
+      mainLabel: '∫□□■',
+      shiftLabel: 'd/dx■',
       alphaLabel: ':',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.variableX,
       mainLabel: 'x',
-      shiftLabel: '∑▭',
+      shiftLabel: '∑□□■',
       category: KeyCategory.function,
     ),
   ],
@@ -293,12 +299,12 @@ const CursorPadKeys cursorPad = CursorPadKeys(
   ),
   left: CalcKeyDef(
     id: CalcKeyId.cursorLeft,
-    mainLabel: '◀',
+    mainLabel: '◄',
     category: KeyCategory.cursor,
   ),
   right: CalcKeyDef(
     id: CalcKeyId.cursorRight,
-    mainLabel: '▶',
+    mainLabel: '►',
     category: KeyCategory.cursor,
   ),
 );
@@ -316,14 +322,14 @@ const List<List<CalcKeyDef>> functionRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.fraction,
-      mainLabel: '▭/▭',
-      shiftLabel: '▭▭/▭',
+      mainLabel: '■/□',
+      shiftLabel: '■□/□',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.sqrt,
-      mainLabel: '√▭',
-      shiftLabel: '∛▭',
+      mainLabel: '√■',
+      shiftLabel: '∛■',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -334,20 +340,20 @@ const List<List<CalcKeyDef>> functionRows = [
     ),
     CalcKeyDef(
       id: CalcKeyId.power,
-      mainLabel: 'x^▭',
-      shiftLabel: '▭√▭',
+      mainLabel: 'x^■',
+      shiftLabel: '■√□',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.logBase,
-      mainLabel: 'log▭▭',
-      shiftLabel: '10^▭',
+      mainLabel: 'log■□',
+      shiftLabel: '10^■',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.ln,
       mainLabel: 'ln',
-      shiftLabel: 'e^▭',
+      shiftLabel: 'e^■',
       category: KeyCategory.function,
     ),
   ],
@@ -586,7 +592,7 @@ const int totalKeyCount = 50;
 
 /// 전체 50키를 실물 배열 순서로 평탄화한 목록.
 ///
-/// 상단 조작부는 행 단위로 왼쪽 2키 → 오른쪽 2키 순(SHIFT ALPHA MENU ON / OPTN CALC ∫▭ x),
+/// 상단 조작부는 행 단위로 왼쪽 2키 → 오른쪽 2키 순(SHIFT ALPHA MENU ON / OPTN CALC ∫□□■ x),
 /// 이어서 커서 패드 → 함수부 → 숫자부 순이다.
 final List<CalcKeyDef> allKeys = _buildAllKeys();
 

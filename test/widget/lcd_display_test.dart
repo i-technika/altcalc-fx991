@@ -46,7 +46,7 @@ Finder _statusText(String label) =>
 final _inputLine = find.byKey(const ValueKey('lcd-input-line'));
 final _resultLine = find.byKey(const ValueKey('lcd-result-line'));
 
-/// [line] 줄의 내용 영역(◀/▶ 자리 제외)
+/// [line] 줄의 내용 영역(◄/► 자리 제외)
 Finder _content(Finder line) => find.descendant(
   of: line,
   matching: find.byKey(const ValueKey('lcd-line-content')),
@@ -173,7 +173,7 @@ void main() {
         ),
       );
       final lcd = tester.getRect(find.byType(LcdDisplay));
-      expect(tester.getCenter(find.text('◀')).dx, lessThan(lcd.center.dx));
+      expect(tester.getCenter(find.text('◄')).dx, lessThan(lcd.center.dx));
     });
 
     testWidgets('스크린리더에는 켜진 표시기만 읽힌다', (tester) async {
@@ -290,11 +290,11 @@ void main() {
         find.text('1+2'),
         find.text('3'),
         ...find
-            .text('◀')
+            .text('◄')
             .evaluate()
             .map((e) => find.byElementPredicate((x) => x == e)),
         ...find
-            .text('▶')
+            .text('►')
             .evaluate()
             .map((e) => find.byElementPredicate((x) => x == e)),
       ];
@@ -305,7 +305,7 @@ void main() {
       }
     });
 
-    testWidgets('스크롤 표시 ◀/▶는 지정한 쪽에만 나타나고 줄 글자 크기에 비례한다', (tester) async {
+    testWidgets('스크롤 표시 ◄/►는 지정한 쪽에만 나타나고 줄 글자 크기에 비례한다', (tester) async {
       await _pump(
         tester,
         const LcdDisplay(
@@ -315,12 +315,12 @@ void main() {
       );
       Finder inLine(Finder line, String s) =>
           find.descendant(of: line, matching: find.text(s));
-      expect(inLine(_inputLine, '▶'), findsOneWidget);
-      expect(inLine(_inputLine, '◀'), findsNothing);
-      expect(inLine(_resultLine, '◀'), findsOneWidget);
-      expect(inLine(_resultLine, '▶'), findsNothing);
+      expect(inLine(_inputLine, '►'), findsOneWidget);
+      expect(inLine(_inputLine, '◄'), findsNothing);
+      expect(inLine(_resultLine, '◄'), findsOneWidget);
+      expect(inLine(_resultLine, '►'), findsNothing);
 
-      final arrow = tester.widget<Text>(inLine(_inputLine, '▶'));
+      final arrow = tester.widget<Text>(inLine(_inputLine, '►'));
       expect(
         arrow.style?.fontSize,
         CalcTheme.lcdInputStyle.fontSize! * CalcTheme.lcdScrollArrowFontRatio,
@@ -641,7 +641,7 @@ void main() {
         4 * (f * hf + 1) +
         2 * f * CalcTheme.lcdFractionBarRatio;
 
-    /// 폭 기준 사용량 (배율 1): 17칸 + 양쪽 ◀/▶
+    /// 폭 기준 사용량 (배율 1): 17칸 + 양쪽 ◄/►
     double usedWidth(double f) =>
         CalcTheme.lcdLineColumns * (f * CalcTheme.lcdLineCharWidthRatio + ls) +
         2 *
@@ -743,7 +743,7 @@ void main() {
       );
     });
 
-    test('비선형 배율에서도 ◀/▶를 실제 배율로 계산해 폭을 넘지 않는다', () {
+    test('비선형 배율에서도 ◄/►를 실제 배율로 계산해 폭을 넘지 않는다', () {
       const scaler = _NonLinearScaler();
       const size = Size(374, 213);
       final f = LcdFontSizes.forSize(size, scaler);

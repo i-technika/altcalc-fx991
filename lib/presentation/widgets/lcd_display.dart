@@ -6,13 +6,13 @@ import '../../core/theme/calc_theme.dart';
 import '../../domain/models/lcd_status.dart';
 import 'text_fit.dart';
 
-/// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◀/▶) 여부.
+/// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◄/►) 여부.
 @immutable
 class LcdLineOverflow {
-  /// 왼쪽에 가려진 내용이 있음 (◀)
+  /// 왼쪽에 가려진 내용이 있음 (◄)
   final bool left;
 
-  /// 오른쪽에 가려진 내용이 있음 (▶)
+  /// 오른쪽에 가려진 내용이 있음 (►)
   final bool right;
 
   const LcdLineOverflow({this.left = false, this.right = false});
@@ -38,7 +38,7 @@ class LcdLineOverflow {
 /// (배율 반영·정수 올림)으로 계산해 다음 둘을 모두 만족하는 가장 큰 값이다.
 /// - **높이 기준**: 상태 표시줄 + 전체 행 + 2행 줄마다 분수 막대·여백([CalcTheme.lcdFractionBarRatio])이
 ///   LCD 안쪽 높이에 들어간다. 그래서 입력·결과 줄이 각각 분수(분자·막대·분모)를 잘림 없이 담는다.
-/// - **폭 기준**: 결과 줄에 [CalcTheme.lcdLineColumns]칸과 양쪽 ◀/▶ 자리가 들어간다.
+/// - **폭 기준**: 결과 줄에 [CalcTheme.lcdLineColumns]칸과 양쪽 ◄/► 자리가 들어간다.
 ///
 /// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다.
 ///
@@ -107,7 +107,7 @@ class LcdFontSizes {
           scaledStatus * CalcTheme.lcdStatusBarHeightRatio +
           rowCount * (scaledLine * _lineHeightFactor + 1) +
           fractionLines * scaledLine * CalcTheme.lcdFractionBarRatio;
-      // 폭: ◀/▶ 자리는 _ScrollArrow와 같은 식(줄 글자 × 비율을 배율 반영). 자간은 배율과 무관하다.
+      // 폭: ◄/► 자리는 _ScrollArrow와 같은 식(줄 글자 × 비율을 배율 반영). 자간은 배율과 무관하다.
       final arrow =
           textScaler.scale(line * CalcTheme.lcdScrollArrowFontRatio) *
           CalcTheme.lcdScrollArrowWidthRatio;
@@ -119,7 +119,7 @@ class LcdFontSizes {
       return height <= innerHeight && width <= innerWidth;
     }
 
-    // 탐색 상한은 폭 기준만으로 정한 값(자간·◀/▶ 무시)이다. 배율이 1보다 작으면 배율 반영 전 크기로
+    // 탐색 상한은 폭 기준만으로 정한 값(자간·◄/► 무시)이다. 배율이 1보다 작으면 배율 반영 전 크기로
     // 되돌려 키운다. 높이와 무관하게 두어, 폭 기준에 걸리는 LCD는 높이가 달라도 같은 탐색 경로로
     // 정확히 같은 값을 얻는다 (배율이 단조라는 전제).
     final widthBound = math.max(
@@ -170,7 +170,7 @@ class LcdFontSizes {
 /// ```
 ///  ╔══════════════════════════════════╗  ← 은색 베젤 (CalcTheme.lcdFrame)
 ///  ║ S  A  M  STO  D  FIX  E  Math ... ║  ← 상태 표시줄 (고정 슬롯을 폭 전체에 분포)
-///  ║◀ 2+3×                           ▶║  ← 입력 줄 (왼쪽 정렬)
+///  ║◄ 2+3×                           ►║  ← 입력 줄 (왼쪽 정렬)
 ///  ║                                5 ║  ← 결과 줄 (오른쪽 정렬)
 ///  ╚══════════════════════════════════╝
 /// ```
@@ -200,8 +200,8 @@ class LcdFontSizes {
 ///   이 크기를 기준으로 스스로 처리한다. 스크롤 뷰를 쓰려면 이 크기의 `SizedBox`로 감싼다.
 ///   [fitFontsToSize]이면 입력·결과 줄은 각각 분수 1단(분자·막대·분모)을 잘림 없이 담는다.
 ///   그보다 세로로 큰 수식(정적분·시그마·겹분수 등)을 축소할지, 세로 스크롤할지는 #36(M2)에서 정한다.
-/// - 가려진 쪽이 있으면 호출자가 [inputOverflow]/[resultOverflow]로 ◀/▶를 켠다.
-///   ◀/▶ 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M2 스크롤 구현과 함께 정한다.
+/// - 가려진 쪽이 있으면 호출자가 [inputOverflow]/[resultOverflow]로 ◄/►를 켠다.
+///   ◄/► 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M2 스크롤 구현과 함께 정한다.
 /// - 일반 [Text]를 넘기면 입력 줄은 [CalcTheme.lcdInputStyle], 결과 줄은 [CalcTheme.lcdResultStyle]
 ///   (글자 크기는 위 규칙으로 조정)이 적용된다.
 class LcdDisplay extends StatelessWidget {
@@ -561,7 +561,7 @@ class _IndicatorSlot extends StatelessWidget {
   }
 }
 
-/// 입력 줄 또는 결과 줄 한 줄: `[◀] 내용 [▶]`.
+/// 입력 줄 또는 결과 줄 한 줄: `[◄] 내용 [►]`.
 class _LcdLine extends StatelessWidget {
   final Alignment alignment;
   final TextStyle style;
@@ -590,7 +590,7 @@ class _LcdLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ScrollArrow(
-          symbol: '◀',
+          symbol: '◄',
           visible: overflow.left,
           style: arrowStyle,
           textScaler: textScaler,
@@ -621,7 +621,7 @@ class _LcdLine extends StatelessWidget {
           ),
         ),
         _ScrollArrow(
-          symbol: '▶',
+          symbol: '►',
           visible: overflow.right,
           style: arrowStyle,
           textScaler: textScaler,
@@ -636,7 +636,7 @@ class _LcdLine extends StatelessWidget {
 /// 줄 내용은 제약 없이 그려지므로 `LayoutBuilder`로는 줄 크기를 알 수 없다.
 /// 가로 스크롤이나 넘침 판정이 필요한 내용 위젯(M2 `MathNodeWidget`)은 이 값을 기준으로 삼는다.
 class LcdLineScope extends InheritedWidget {
-  /// 줄 내용 영역 크기 (◀/▶ 자리 제외)
+  /// 줄 내용 영역 크기 (◄/► 자리 제외)
   final Size size;
 
   const LcdLineScope({super.key, required this.size, required super.child});
@@ -649,7 +649,7 @@ class LcdLineScope extends InheritedWidget {
   bool updateShouldNotify(LcdLineScope oldWidget) => oldWidget.size != size;
 }
 
-/// 줄 양끝의 스크롤 표시(◀/▶). 꺼져도 자리를 유지해 내용 위치가 흔들리지 않는다.
+/// 줄 양끝의 스크롤 표시(◄/►). 꺼져도 자리를 유지해 내용 위치가 흔들리지 않는다.
 class _ScrollArrow extends StatelessWidget {
   final String symbol;
   final bool visible;
@@ -680,7 +680,7 @@ class _ScrollArrow extends StatelessWidget {
                   maxLines: 1,
                   softWrap: false,
                   // TODO(#20): 스크린리더 라벨 다국어 처리
-                  semanticsLabel: symbol == '◀'
+                  semanticsLabel: symbol == '◄'
                       ? '왼쪽에 내용 더 있음'
                       : '오른쪽에 내용 더 있음',
                 ),

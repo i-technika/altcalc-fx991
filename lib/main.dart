@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'core/theme/calc_theme.dart';
+import 'core/theme/font_licenses.dart';
 import 'presentation/screens/calculator_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerFontLicenses();
   await lockPortraitOrientation();
   runApp(const ProviderScope(child: AltCalcApp()));
 }
