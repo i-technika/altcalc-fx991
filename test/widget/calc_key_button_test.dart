@@ -1015,7 +1015,7 @@ void _shapeAndLegendTests() {
           size: const Size(55, 38),
         ),
       );
-      final y = find.text('Y');
+      final y = find.text('y');
       expect(
         tester.getRect(y).height,
         moreOrLessEquals(tester.getSize(y).height, epsilon: 0.01),

@@ -82,8 +82,9 @@ void main() {
       expect(labels.toSet().length, labels.length);
     });
 
-    test('ALPHA 변수 A~F, X, Y, M이 각각 정확히 하나의 키에 매핑된다', () {
-      const variables = ['A', 'B', 'C', 'D', 'E', 'F', 'X', 'Y', 'M'];
+    test('ALPHA 변수 A~F, x, y, M이 각각 정확히 하나의 키에 매핑된다', () {
+      // 가이드 "Variables (A, B, C, D, E, F, M, x, y)" — x, y는 소문자다.
+      const variables = ['A', 'B', 'C', 'D', 'E', 'F', 'x', 'y', 'M'];
       for (final v in variables) {
         expect(allKeys.where((k) => k.alphaLabel == v).length, 1, reason: v);
       }
@@ -127,6 +128,32 @@ void main() {
       });
     });
 
+    test('숫자 1~6 키에는 SHIFT/ALPHA 각인이 없다', () {
+      for (final id in [
+        CalcKeyId.num1,
+        CalcKeyId.num2,
+        CalcKeyId.num3,
+        CalcKeyId.num4,
+        CalcKeyId.num5,
+        CalcKeyId.num6,
+      ]) {
+        expect(keyDefOf(id).hasShift, isFalse, reason: id.name);
+        expect(keyDefOf(id).hasAlpha, isFalse, reason: id.name);
+      }
+    });
+
+    test('50키의 각인은 실물 대조표와 일치한다', () {
+      expect(_verifiedLegends.keys.toSet(), CalcKeyId.values.toSet());
+      for (final key in allKeys) {
+        final (main, shift, alpha) = _verifiedLegends[key.id]!;
+        expect(
+          (key.mainLabel, key.shiftLabel, key.alphaLabel),
+          (main, shift, alpha),
+          reason: key.id.name,
+        );
+      }
+    });
+
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
@@ -134,3 +161,66 @@ void main() {
     });
   });
 }
+
+/// 실물 대조표 (#15). 출처: fx-991EX Quick Start Guide 1쪽 제품 사진,
+/// fx-570EX/fx-991EX User's Guide (RJA532432-001V01).
+///
+/// `(메인, SHIFT, ALPHA)` — 각인이 없으면 `null`. 명세를 바꿀 때는 출처를 확인한 뒤 이 표도 함께 고친다.
+const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
+  // 상단 조작부
+  CalcKeyId.shift: ('SHIFT', null, null),
+  CalcKeyId.alpha: ('ALPHA', null, null),
+  CalcKeyId.menu: ('MENU', 'SETUP', null),
+  CalcKeyId.on: ('ON', null, null),
+  CalcKeyId.optn: ('OPTN', 'QR', null),
+  CalcKeyId.calc: ('CALC', 'SOLVE', '='),
+  CalcKeyId.integral: ('∫▭', 'd/dx▭', ':'),
+  CalcKeyId.variableX: ('x', '∑▭', null),
+  // 커서 패드
+  CalcKeyId.cursorUp: ('▲', null, null),
+  CalcKeyId.cursorDown: ('▼', null, null),
+  CalcKeyId.cursorLeft: ('◀', null, null),
+  CalcKeyId.cursorRight: ('▶', null, null),
+  // 함수부 1행
+  CalcKeyId.fraction: ('▭/▭', '▭▭/▭', null),
+  CalcKeyId.sqrt: ('√▭', '∛▭', null),
+  CalcKeyId.square: ('x²', 'x³', null),
+  CalcKeyId.power: ('x^▭', '▭√▭', null),
+  CalcKeyId.logBase: ('log▭▭', '10^▭', null),
+  CalcKeyId.ln: ('ln', 'e^▭', null),
+  // 함수부 2행
+  CalcKeyId.negative: ('(−)', 'log', 'A'),
+  CalcKeyId.degMinSec: ('°\'"', 'FACT', 'B'),
+  CalcKeyId.reciprocal: ('x⁻¹', 'x!', 'C'),
+  CalcKeyId.sin: ('sin', 'sin⁻¹', 'D'),
+  CalcKeyId.cos: ('cos', 'cos⁻¹', 'E'),
+  CalcKeyId.tan: ('tan', 'tan⁻¹', 'F'),
+  // 함수부 3행
+  CalcKeyId.sto: ('STO', 'RECALL', null),
+  CalcKeyId.eng: ('ENG', '←', null),
+  CalcKeyId.parenOpen: ('(', 'Abs', null),
+  CalcKeyId.parenClose: (')', ',', 'x'),
+  CalcKeyId.sdToggle: ('S⇔D', 'a b/c⇔d/c', 'y'),
+  CalcKeyId.mPlus: ('M+', 'M−', 'M'),
+  // 숫자부
+  CalcKeyId.num7: ('7', 'CONST', null),
+  CalcKeyId.num8: ('8', 'CONV', null),
+  CalcKeyId.num9: ('9', 'RESET', null),
+  CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
+  CalcKeyId.ac: ('AC', 'OFF', null),
+  CalcKeyId.num4: ('4', null, null),
+  CalcKeyId.num5: ('5', null, null),
+  CalcKeyId.num6: ('6', null, null),
+  CalcKeyId.multiply: ('×', 'nPr', null),
+  CalcKeyId.divide: ('÷', 'nCr', null),
+  CalcKeyId.num1: ('1', null, null),
+  CalcKeyId.num2: ('2', null, null),
+  CalcKeyId.num3: ('3', null, null),
+  CalcKeyId.add: ('+', 'Pol', null),
+  CalcKeyId.subtract: ('−', 'Rec', null),
+  CalcKeyId.num0: ('0', 'Rnd', null),
+  CalcKeyId.dot: ('.', 'Ran#', 'RanInt'),
+  CalcKeyId.exp10: ('×10ˣ', 'π', 'e'),
+  CalcKeyId.ans: ('Ans', '%', null),
+  CalcKeyId.equals: ('=', '≈', null),
+};
