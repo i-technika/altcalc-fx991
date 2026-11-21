@@ -185,12 +185,9 @@ void main() {
       expect(CalcTheme.keyMinTouchTargetHeight, greaterThanOrEqualTo(44));
     });
 
-    test('커서 패드 키 폭: 좌·우 키가 서로 겹치지 않고 위·아래 키는 패드 안에 있다', () {
-      expect(CalcTheme.cursorPadVerticalKeyWidthRatio, inExclusiveRange(0, 1));
-      expect(
-        CalcTheme.cursorPadHorizontalKeyWidthRatio,
-        inExclusiveRange(0, 0.5),
-      );
+    test('통일 글자 하한 비율은 0.5~1, 커서 패드 경계선은 양수 두께다', () {
+      expect(CalcTheme.keypadUniformFontMinRatio, inInclusiveRange(0.5, 1.0));
+      expect(CalcTheme.cursorPadDividerWidth, greaterThan(0));
     });
 
     test('화면 배치 상수는 양수이며 LCD 비율은 본체의 절반 미만이다', () {

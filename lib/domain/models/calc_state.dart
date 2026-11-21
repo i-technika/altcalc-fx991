@@ -29,7 +29,8 @@ enum KeyLayer {
 
 /// 모디파이어 해석이 끝난 단일 키 입력.
 ///
-/// 상태 머신은 [layer]에 기능이 있는 입력만 만든다. 즉 [label]은 항상 존재한다.
+/// [layer]에 기능이 있는 입력만 만들 수 있다(생성자 assert). 즉 [label]은 항상 존재한다.
+/// 모디파이어 키(SHIFT/ALPHA) 자체는 입력이 아니다.
 @immutable
 class KeyInput {
   /// 눌린 물리 키
@@ -38,10 +39,19 @@ class KeyInput {
   /// 선택된 기능 층
   final KeyLayer layer;
 
-  /// 길게 누름에 의한 반복 입력 여부 (반복은 항상 [KeyLayer.main])
+  /// 길게 누름에 의한 반복 입력 여부 (반복은 항상 [KeyLayer.main]의 [autoRepeatKeys])
   final bool isRepeat;
 
-  const KeyInput(this.id, this.layer, {this.isRepeat = false});
+  KeyInput(this.id, this.layer, {this.isRepeat = false})
+    : assert(
+        id != CalcKeyId.shift && id != CalcKeyId.alpha,
+        '모디파이어 키는 입력이 아니다: $id',
+      ),
+      assert(labelOf(id, layer) != null, '$id 키에는 $layer 기능이 없다'),
+      assert(
+        !isRepeat || (layer == KeyLayer.main && autoRepeatKeys.contains(id)),
+        '반복 입력은 반복 키의 메인 기능만 가능하다: $id $layer',
+      );
 
   /// [layer]에 해당하는 각인. 해당 층에 기능이 없으면 `null`.
   static String? labelOf(CalcKeyId id, KeyLayer layer) {
@@ -90,6 +100,9 @@ class KeyInput {
 /// - 반복 입력은 모디파이어 대기를 소비·변경하지 않는다. 반복 중 다른 손가락으로 SHIFT를 눌러도
 ///   S는 다음 키 누름까지 유지된다.
 /// - 반복 중 모디파이어가 아닌 다른 키를 누르면 이전 키의 반복은 끊긴다(실물처럼 마지막 키만 반복).
+/// - [repeatKey]는 키를 **누르고 있는 동안에만** 호출해야 한다(호출자 계약 — `CalcKeyButton`의
+///   반복 타이머가 지킨다). 손을 뗀 뒤에도 [repeatableKey]는 남지만 다음 누름에서 갱신된다.
+///   하드웨어 키보드 등 다른 입력 경로의 키 해제 처리는 M2 입력 설계에서 정한다.
 @immutable
 class CalcState {
   /// 1회성 모디파이어 대기 상태
@@ -105,15 +118,23 @@ class CalcState {
   /// 길게 눌렀을 때 반복 입력을 이어갈 키. 마지막 누름이 모디파이어 없는 반복 키일 때만 설정된다.
   final CalcKeyId? repeatableKey;
 
-  const CalcState({
+  CalcState({
     this.modifier = KeyModifier.none,
     this.lastInput,
     this.inputCount = 0,
     this.repeatableKey,
-  }) : assert(inputCount >= 0, 'inputCount는 0 이상이어야 한다');
+  }) : assert(inputCount >= 0, 'inputCount는 0 이상이어야 한다'),
+       assert(
+         (lastInput == null) == (inputCount == 0),
+         '입력이 있으면 lastInput이 있어야 하고, 없으면 null이어야 한다',
+       ),
+       assert(
+         repeatableKey == null || autoRepeatKeys.contains(repeatableKey),
+         '반복 대상은 autoRepeatKeys여야 한다: $repeatableKey',
+       );
 
   /// 앱 시작 직후 상태
-  static const CalcState initial = CalcState();
+  static final CalcState initial = CalcState();
 
   /// LCD 상태 표시줄 스냅샷. M1에서는 S/A만 상태에서 파생하고 나머지는 초기 설정값이다.
   LcdStatus get lcdStatus => LcdStatus(

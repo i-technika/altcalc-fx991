@@ -370,14 +370,11 @@ abstract final class CalcTheme {
   /// (Material·Android 접근성 권장 터치 대상 48dp)
   static const double keyMinTouchTargetHeight = 48.0;
 
-  /// 커서 패드 위·아래 키 너비 (패드 너비 대비)
-  static const double cursorPadVerticalKeyWidthRatio = 0.5;
+  /// 키패드 통일 글자 크기 하한 (높이 기준 크기 대비). 이보다 긴 라벨은 키마다 따로 줄어든다.
+  static const double keypadUniformFontMinRatio = 0.75;
 
-  /// 커서 패드 좌·우 키 너비 (패드 너비 대비)
-  static const double cursorPadHorizontalKeyWidthRatio = 0.36;
-
-  /// 커서 패드 원형 받침 색
-  static const Color cursorPadBase = Color(0xFF242424);
+  /// 커서 패드 부채꼴 경계선·테두리 두께 (dp). 색은 [keyBorder](본체 대비 3:1 이상).
+  static const double cursorPadDividerWidth = 2.0;
 
   // ───────────────────────────────────────────
   // 화면 배치 (Screen Layout) — 잠정값, TODO(#23): LCD : 키패드 : 광고 비율 기준 확정

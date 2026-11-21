@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -116,6 +117,85 @@ void main() {
       expect(find.byType(CalculatorScreen), findsOneWidget);
       expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
     });
+
+    testWidgets('앱 시작 시 화면을 세로로 고정한다', (tester) async {
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await lockPortraitOrientation();
+      final call = calls.singleWhere(
+        (c) => c.method == 'SystemChrome.setPreferredOrientations',
+      );
+      expect(call.arguments, ['DeviceOrientation.portraitUp']);
+    });
+  });
+
+  group('세로 폰 화면의 키 크기 하한', () {
+    // 터치 높이(dp) 하한, 배율 반영 메인·각인 글자(dp) 하한
+    const minTouchHeight = 28.0;
+    const minMainFont = 7.0;
+    const minLegendFont = 5.0;
+
+    for (final size in const [
+      Size(320, 568),
+      Size(360, 640),
+      Size(390, 844),
+      Size(412, 915),
+    ]) {
+      for (final scale in [1.0, 1.3]) {
+        testWidgets('${size.width}×${size.height}, 글자 배율 $scale', (
+          tester,
+        ) async {
+          await _pumpScreen(tester, size: size, textScale: scale);
+          final buttons = tester
+              .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
+              .toList();
+          final scaler = TextScaler.linear(scale)
+              .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
+
+          for (final b in buttons) {
+            if (b.keyDef.category == KeyCategory.cursor) continue;
+            final cell = tester.getSize(find.byWidget(b));
+            final touch = b.extendHitAreaToLegend
+                ? cell.height
+                : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+            expect(
+              touch,
+              greaterThanOrEqualTo(minTouchHeight),
+              reason: b.keyDef.id.name,
+            );
+          }
+          expect(
+            scaler.scale(buttons.first.mainLabelFontSize!),
+            greaterThanOrEqualTo(minMainFont),
+          );
+          expect(
+            scaler.scale(buttons.first.legendFontSize!),
+            greaterThanOrEqualTo(minLegendFont),
+          );
+
+          // 커서 패드: 방향 하나의 터치 영역(타원의 1/4)은 함수 키 셀(각인 띠 포함)의 80% 이상이다.
+          final pad = tester.getSize(find.byKey(const ValueKey('cursor-pad')));
+          final sin = buttons.firstWhere((b) => b.keyDef.id == CalcKeyId.sin);
+          final sinCell = tester.getSize(find.byWidget(sin));
+          expect(
+            math.pi * pad.width * pad.height / 16, // 타원 넓이의 1/4
+            greaterThanOrEqualTo(0.8 * sinCell.width * sinCell.height),
+          );
+        });
+      }
+    }
   });
 
   group('LCD 높이', () {
@@ -213,7 +293,7 @@ void main() {
       expect(s.inputCount, 4); // 누름 1 + 반복 3
       expect(
         s.lastInput,
-        const KeyInput(CalcKeyId.del, KeyLayer.main, isRepeat: true),
+        KeyInput(CalcKeyId.del, KeyLayer.main, isRepeat: true),
       );
     });
 

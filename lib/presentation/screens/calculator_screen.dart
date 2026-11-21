@@ -24,7 +24,11 @@ import '../widgets/lcd_display.dart';
 ///
 /// - 키패드는 스크롤 영역 밖에 고정 배치한다(`CalcKeyButton`은 누르는 순간 입력한다).
 /// - LCD만 상태를 구독하고 키패드는 notifier만 읽으므로, 키 입력으로 키패드 50개가 다시 그려지지 않는다.
-/// - 태블릿·폴더블 좌우 분할은 #24·#25, LCD 비율 기준은 #23에서 다룬다.
+/// - 좌우 여백은 [CalcTheme.screenPadding]만 둔다. 가장자리 열의 바깥쪽 일부가 Android 제스처
+///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
+///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
+/// - 세로 화면 기준이다(`lockPortraitOrientation`). 태블릿·폴더블 좌우 분할은 #24·#25,
+///   LCD 비율 기준은 #23에서 다룬다.
 class CalculatorScreen extends StatelessWidget {
   const CalculatorScreen({super.key});
 

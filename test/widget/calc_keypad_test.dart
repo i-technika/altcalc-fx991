@@ -36,6 +36,22 @@ Finder _button(CalcKeyId id) =>
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
+/// 작은 글자를 더 많이 키우는 비선형 배율 (안드로이드 14 이상 흉내)
+class _NonLinearScaler extends TextScaler {
+  const _NonLinearScaler();
+
+  @override
+  double scale(double fontSize) =>
+      fontSize < 12 ? fontSize * 1.8 : fontSize + 9.6;
+
+  @override
+  double get textScaleFactor => 1.8;
+
+  @override
+  TextScaler clamp({double minScaleFactor = 0, double maxScaleFactor = 99}) =>
+      this;
+}
+
 /// 키패드 영역 크기 (가로 × 세로) — 일반 폰부터 극단적인 화면비까지
 const _areas = <Size>[
   Size(280, 300), // 아주 작은 폰
@@ -67,7 +83,7 @@ void main() {
           reason: b.keyDef.id.name,
         );
       }
-      expect(find.byKey(const ValueKey('cursor-pad-base')), findsOneWidget);
+      expect(find.byKey(const ValueKey('cursor-pad')), findsOneWidget);
     });
 
     testWidgets('반복 콜백은 autoRepeatKeys에만 연결된다', (tester) async {
@@ -197,8 +213,10 @@ void main() {
 
             for (final def in allKeys) {
               final cap = tester.getRect(_keycap(def.id));
+              final inside = keypad.inflate(0.01);
+              expect(inside.contains(cap.topLeft), isTrue, reason: def.id.name);
               expect(
-                keypad.inflate(0.01).contains(cap.bottomRight),
+                inside.contains(cap.bottomRight),
                 isTrue,
                 reason: def.id.name,
               );
@@ -246,6 +264,89 @@ void main() {
       });
     }
 
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('글자 배율 $scale: 한 글자 메인 라벨은 모두 같은 크기로, 축소 없이 그려진다', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
+        final cursorIds = cursorPad.all.map((d) => d.id).toSet();
+        final heights = <double>{};
+        for (final def in allKeys) {
+          if (cursorIds.contains(def.id)) continue;
+          if (def.mainLabel.runes.length != 1) continue;
+          final text = find.descendant(
+            of: _keycap(def.id),
+            matching: find.byType(Text),
+          );
+          // FittedBox가 줄이면 화면상 높이(getRect)가 레이아웃 높이(getSize)보다 작아진다.
+          final rendered = tester.getRect(text).height;
+          expect(
+            rendered,
+            moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+            reason: def.id.name,
+          );
+          heights.add(rendered.roundToDouble());
+        }
+        expect(heights, hasLength(1));
+      });
+    }
+
+    test('폭 기준: 통일 크기는 높이 기준 크기의 하한 비율 이상, 높이 기준 이하다', () {
+      for (final scale in [1.0, 1.3]) {
+        final scaler = TextScaler.linear(scale);
+        final m = KeypadMetrics.compute(const Size(360, 420), scaler);
+        final cap = m.functionKeyHeight * (1 - CalcTheme.keyLegendHeightRatio);
+        // 이 크기에서는 높이 제한에 걸리지 않으므로 높이 기준 = 비율 크기다.
+        final byHeight = cap * CalcTheme.keyMainLabelFontRatio;
+        expect(m.mainLabelFontSize, lessThanOrEqualTo(byHeight + 1e-9));
+        expect(
+          m.mainLabelFontSize,
+          greaterThanOrEqualTo(
+            byHeight * CalcTheme.keypadUniformFontMinRatio - 1e-9,
+          ),
+        );
+      }
+    });
+
+    test('폭 기준: 좁은 키패드일수록 통일 크기가 셀 높이 비율보다 작아진다', () {
+      // 같은 높이에서 폭만 줄이면 높이 기준은 같고 폭 제한만 강해진다.
+      final wide = KeypadMetrics.compute(
+        const Size(400, 400),
+        TextScaler.noScaling,
+      );
+      final narrow = KeypadMetrics.compute(
+        const Size(300, 400),
+        TextScaler.noScaling,
+      );
+      expect(narrow.mainLabelFontSize, lessThan(wide.mainLabelFontSize));
+    });
+
+    testWidgets('비선형 글자 배율에서도 넘침 없이 배치된다', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 420),
+              textScaler: _NonLinearScaler(),
+            ),
+            child: const Scaffold(
+              body: SizedBox(width: 360, height: 420, child: CalcKeypad()),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final m = KeypadMetrics.compute(
+        const Size(360, 420),
+        const _NonLinearScaler(),
+      );
+      final legendHeight = m.functionKeyHeight * CalcTheme.keyLegendHeightRatio;
+      expect(
+        const _NonLinearScaler().scale(m.legendFontSize).ceilToDouble(),
+        lessThanOrEqualTo(legendHeight),
+      );
+    });
+
     test('시스템 글자 배율이 커지면 (상한까지) 메인 글자가 함께 커진다', () {
       const area = Size(360, 420);
       final normal = KeypadMetrics.compute(area, TextScaler.noScaling);
@@ -289,6 +390,103 @@ void main() {
             ? m.extendNumberHitArea
             : m.extendFunctionHitArea;
         expect(b.extendHitAreaToLegend, expected, reason: id.name);
+      }
+    });
+  });
+
+  group('커서 패드', () {
+    /// 패드 중심 기준 정규화 좌표 (u, v ∈ -1..1, 타원 반지름 단위)를 화면 좌표로 바꾼다.
+    Offset padPoint(Rect pad, double u, double v) =>
+        pad.center + Offset(u * pad.width / 2, v * pad.height / 2);
+
+    /// 위 방향 부채꼴 안의 점들 (중심 근처, 대각선 근처, 바깥쪽)
+    const upPoints = [(0.0, -0.12), (0.45, -0.6), (-0.45, -0.6), (0.0, -0.9)];
+
+    Offset rotate((double, double) p, CursorPadSector sector) {
+      final (u, v) = p;
+      return switch (sector) {
+        CursorPadSector.up => Offset(u, v),
+        CursorPadSector.down => Offset(-u, -v),
+        CursorPadSector.left => Offset(v, u),
+        CursorPadSector.right => Offset(-v, u),
+      };
+    }
+
+    for (final area in const [Size(320, 380), Size(360, 420), Size(412, 640)]) {
+      testWidgets('${area.width}×${area.height}: 부채꼴 어디를 눌러도 그 방향만 입력된다', (
+        tester,
+      ) async {
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(
+          _host(
+            CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false),
+            size: area,
+          ),
+        );
+        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+        for (final sector in CursorPadSector.values) {
+          for (final p in upPoints) {
+            pressed.clear();
+            final q = rotate(p, sector);
+            await tester.tapAt(padPoint(pad, q.dx, q.dy));
+            await tester.pump();
+            expect(pressed, [
+              CursorPad.defOf(sector).id,
+            ], reason: '${sector.name} $p');
+          }
+        }
+      });
+    }
+
+    testWidgets('타원 밖 모서리는 아무 키도 입력하지 않는다', (tester) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false)),
+      );
+      final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+      for (final (u, v) in const [(0.95, 0.95), (-0.95, -0.95)]) {
+        await tester.tapAt(padPoint(pad, u, v));
+      }
+      expect(pressed, isEmpty);
+    });
+
+    testWidgets('방향 라벨은 자기 부채꼴 안쪽에 그려진다', (tester) async {
+      await tester.pumpWidget(_host(const CalcKeypad()));
+      final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+      for (final sector in CursorPadSector.values) {
+        final label = tester.getRect(
+          find.descendant(
+            of: _keycap(CursorPad.defOf(sector).id),
+            matching: find.byType(Text),
+          ),
+        );
+        final u = (label.center.dx - pad.center.dx) / (pad.width / 2);
+        final v = (label.center.dy - pad.center.dy) / (pad.height / 2);
+        final inSector = switch (sector) {
+          CursorPadSector.up => v < 0 && u.abs() < v.abs(),
+          CursorPadSector.down => v > 0 && u.abs() < v.abs(),
+          CursorPadSector.left => u < 0 && v.abs() < u.abs(),
+          CursorPadSector.right => u > 0 && v.abs() < u.abs(),
+        };
+        expect(inSector, isTrue, reason: sector.name);
+        expect(u * u + v * v, lessThan(1), reason: sector.name);
+      }
+    });
+
+    test('부채꼴 상자는 패드를 반씩 나누고, 경로는 패드 중심에서 만난다', () {
+      const size = Size(120, 100);
+      for (final sector in CursorPadSector.values) {
+        final box = CursorPad.sectorBox(sector, size);
+        expect((Offset.zero & size).intersect(box), box);
+        expect(box.width * box.height, size.width * size.height / 2);
+        final path = CursorPad.sectorPath(sector, box.size);
+        // 패드 중심 쪽으로 조금 들어간 점은 그 부채꼴에 속한다.
+        final towardCenter = Offset.lerp(
+          box.center,
+          size.center(Offset.zero),
+          0.5,
+        )!;
+        expect(path.contains(towardCenter - box.topLeft), isTrue);
       }
     });
   });

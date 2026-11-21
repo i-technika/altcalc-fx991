@@ -6,20 +6,54 @@ import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 
 /// 키를 순서대로 누른 결과 상태
-CalcState _press(List<CalcKeyId> ids, [CalcState from = CalcState.initial]) =>
-    ids.fold(from, (s, id) => s.pressKey(id));
+CalcState _press(List<CalcKeyId> ids) =>
+    ids.fold(CalcState.initial, (s, id) => s.pressKey(id));
 
 const _modifierKeys = {CalcKeyId.shift, CalcKeyId.alpha};
 
 void main() {
   group('초기 상태', () {
     test('모디파이어 없음, 입력 없음, LCD는 초기 표시 상태다', () {
-      const s = CalcState.initial;
+      final s = CalcState.initial;
       expect(s.modifier, KeyModifier.none);
       expect(s.lastInput, isNull);
       expect(s.inputCount, 0);
       expect(s.repeatableKey, isNull);
       expect(s.lcdStatus, LcdStatus.initial);
+    });
+  });
+
+  group('생성자 불변식', () {
+    test('기능 없는 층·모디파이어 키·반복 불가 입력은 KeyInput으로 만들 수 없다', () {
+      expect(
+        () => KeyInput(CalcKeyId.num4, KeyLayer.shift),
+        throwsAssertionError,
+      );
+      expect(
+        () => KeyInput(CalcKeyId.shift, KeyLayer.main),
+        throwsAssertionError,
+      );
+      expect(
+        () => KeyInput(CalcKeyId.num5, KeyLayer.main, isRepeat: true),
+        throwsAssertionError,
+      );
+      expect(
+        () => KeyInput(CalcKeyId.del, KeyLayer.shift, isRepeat: true),
+        throwsAssertionError,
+      );
+    });
+
+    test('CalcState는 입력 수·마지막 입력·반복 대상의 정합을 강제한다', () {
+      expect(() => CalcState(inputCount: 1), throwsAssertionError);
+      expect(
+        () => CalcState(lastInput: KeyInput(CalcKeyId.sin, KeyLayer.main)),
+        throwsAssertionError,
+      );
+      expect(
+        () => CalcState(repeatableKey: CalcKeyId.num5),
+        throwsAssertionError,
+      );
+      expect(() => CalcState(inputCount: -1), throwsAssertionError);
     });
   });
 
@@ -63,14 +97,14 @@ void main() {
   group('1회성 해석과 자동 해제', () {
     test('모디파이어 없이 누르면 메인 기능을 입력한다', () {
       final s = _press([CalcKeyId.sin]);
-      expect(s.lastInput, const KeyInput(CalcKeyId.sin, KeyLayer.main));
+      expect(s.lastInput, KeyInput(CalcKeyId.sin, KeyLayer.main));
       expect(s.lastInput!.label, 'sin');
       expect(s.inputCount, 1);
     });
 
     test('SHIFT + CALC = SOLVE, 입력 후 S가 꺼진다', () {
       final s = _press([CalcKeyId.shift, CalcKeyId.calc]);
-      expect(s.lastInput, const KeyInput(CalcKeyId.calc, KeyLayer.shift));
+      expect(s.lastInput, KeyInput(CalcKeyId.calc, KeyLayer.shift));
       expect(s.lastInput!.label, 'SOLVE');
       expect(s.modifier, KeyModifier.none);
       expect(s.lcdStatus.shift, isFalse);
@@ -84,7 +118,7 @@ void main() {
 
     test('모디파이어는 다음 키 하나에만 적용된다', () {
       final s = _press([CalcKeyId.shift, CalcKeyId.sin, CalcKeyId.sin]);
-      expect(s.lastInput, const KeyInput(CalcKeyId.sin, KeyLayer.main));
+      expect(s.lastInput, KeyInput(CalcKeyId.sin, KeyLayer.main));
       expect(s.inputCount, 2);
     });
 
@@ -193,8 +227,8 @@ void main() {
       );
       expect(_press([CalcKeyId.sin]), isNot(_press([CalcKeyId.cos])));
       expect(
-        const KeyInput(CalcKeyId.del, KeyLayer.main),
-        isNot(const KeyInput(CalcKeyId.del, KeyLayer.main, isRepeat: true)),
+        KeyInput(CalcKeyId.del, KeyLayer.main),
+        isNot(KeyInput(CalcKeyId.del, KeyLayer.main, isRepeat: true)),
       );
     });
   });
