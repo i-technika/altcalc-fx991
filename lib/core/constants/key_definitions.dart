@@ -1,0 +1,604 @@
+import 'package:material_ui/material_ui.dart';
+
+import '../theme/calc_theme.dart';
+
+// ═══════════════════════════════════════════════════════════════
+// 카시오 fx-991EX ClassWiz 50키 키패드 명세
+// ═══════════════════════════════════════════════════════════════
+//
+// 실물 배열 (위 → 아래, 왼쪽 → 오른쪽):
+//
+//   ┌ 상단 조작부 (8키 + 커서 패드 4방향 = 12키) ───────────────┐
+//   │ SHIFT  ALPHA     ┌───────┐     MENU   ON                  │
+//   │                  │ ▲ ◀▶ ▼│                                 │
+//   │ OPTN   CALC      └───────┘     ∫▭     x                   │
+//   └───────────────────────────────────────────────────────────┘
+//   ┌ 함수부 (3행 × 6열 = 18키) ────────────────────────────────┐
+//   │ ▭/▭   √▭   x²   x^▭   log   ln                            │
+//   │ (−)   °'"  x⁻¹  sin   cos   tan                           │
+//   │ STO   ENG  (    )     S⇔D   M+                            │
+//   └───────────────────────────────────────────────────────────┘
+//   ┌ 숫자부 (4행 × 5열 = 20키) ────────────────────────────────┐
+//   │ 7  8  9  DEL  AC                                          │
+//   │ 4  5  6  ×    ÷                                           │
+//   │ 1  2  3  +    −                                           │
+//   │ 0  .  ×10ˣ  Ans  =                                        │
+//   └───────────────────────────────────────────────────────────┘
+//
+// ※ 실물 대조가 끝나지 않은 각인: `x` 키의 SHIFT(∑▭), log▭▭ 입력 경로,
+//   ENG 키의 ALPHA(i), 숫자 4~6/1~3 키의 SHIFT 각인.
+//   M6 실물 대조 검증 시 확정한다.
+
+// ═══════════════════════════════════════════════════════════════
+// 키 식별자
+// ═══════════════════════════════════════════════════════════════
+
+/// 50개 물리 키의 고유 식별자.
+///
+/// 상태 머신·입력 처리에서 `switch`로 전수 검사(exhaustive)할 수 있도록
+/// 문자열 대신 열거형으로 정의한다. 선언 순서 = 실물 배열 순서.
+enum CalcKeyId {
+  // ── 상단 조작부 ──
+  shift,
+  alpha,
+  menu,
+  on,
+  optn,
+  calc,
+  integral,
+  variableX,
+
+  // ── 커서 패드 ──
+  cursorUp,
+  cursorDown,
+  cursorLeft,
+  cursorRight,
+
+  // ── 함수부 1행 ──
+  fraction,
+  sqrt,
+  square,
+  power,
+  log,
+  ln,
+
+  // ── 함수부 2행 ──
+  negative,
+  degMinSec,
+  reciprocal,
+  sin,
+  cos,
+  tan,
+
+  // ── 함수부 3행 ──
+  sto,
+  eng,
+  parenOpen,
+  parenClose,
+  sdToggle,
+  mPlus,
+
+  // ── 숫자부 ──
+  num7,
+  num8,
+  num9,
+  del,
+  ac,
+  num4,
+  num5,
+  num6,
+  multiply,
+  divide,
+  num1,
+  num2,
+  num3,
+  add,
+  subtract,
+  num0,
+  dot,
+  exp10,
+  ans,
+  equals,
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 키 카테고리
+// ═══════════════════════════════════════════════════════════════
+
+/// 키캡의 시각적 카테고리. 카테고리마다 배경색/텍스트색이 다르다.
+enum KeyCategory {
+  /// 숫자 키 (0~9, 소수점)
+  number,
+
+  /// 사칙연산 키 (+, −, ×, ÷)
+  operator,
+
+  /// 함수 키 (sin, log, x², OPTN, CALC 등)
+  function,
+
+  /// 등호(=) 키
+  equals,
+
+  /// AC(All Clear) 키
+  ac,
+
+  /// DEL(Delete) 키
+  del,
+
+  /// SHIFT 모디파이어 키
+  shift,
+
+  /// ALPHA 모디파이어 키
+  alpha,
+
+  /// 커서 패드 방향 (▲, ▼, ◀, ▶)
+  cursor,
+
+  /// ON 키
+  on,
+
+  /// MENU(모드 선택) 키
+  menu,
+}
+
+/// [KeyCategory]별 키캡 색상 조회 확장.
+extension KeyCategoryColors on KeyCategory {
+  /// 키캡 배경색
+  Color get background => switch (this) {
+    KeyCategory.number => CalcTheme.keyNumber,
+    KeyCategory.operator => CalcTheme.keyOperator,
+    KeyCategory.function => CalcTheme.keyFunction,
+    KeyCategory.equals => CalcTheme.keyEquals,
+    KeyCategory.ac => CalcTheme.keyAC,
+    KeyCategory.del => CalcTheme.keyDEL,
+    KeyCategory.shift => CalcTheme.keyShift,
+    KeyCategory.alpha => CalcTheme.keyAlpha,
+    KeyCategory.cursor => CalcTheme.keyCursor,
+    KeyCategory.on => CalcTheme.keyON,
+    KeyCategory.menu => CalcTheme.keyFunction,
+  };
+
+  /// 키캡 메인 라벨 텍스트색
+  Color get foreground => switch (this) {
+    KeyCategory.number => CalcTheme.keyNumberText,
+    KeyCategory.operator => CalcTheme.keyOperatorText,
+    KeyCategory.function => CalcTheme.keyFunctionText,
+    KeyCategory.equals => CalcTheme.keyEqualsText,
+    KeyCategory.ac => CalcTheme.keyACText,
+    KeyCategory.del => CalcTheme.keyDELText,
+    KeyCategory.shift => CalcTheme.keyShiftText,
+    KeyCategory.alpha => CalcTheme.keyAlphaText,
+    KeyCategory.cursor => CalcTheme.keyCursorText,
+    KeyCategory.on => CalcTheme.keyONText,
+    KeyCategory.menu => CalcTheme.keyFunctionText,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 키 정의 모델
+// ═══════════════════════════════════════════════════════════════
+
+/// 단일 키의 3단 각인(메인·SHIFT·ALPHA) 및 카테고리를 정의하는 불변 모델.
+@immutable
+class CalcKeyDef {
+  /// 키 고유 식별자
+  final CalcKeyId id;
+
+  /// 키캡 중앙에 표시되는 메인 라벨
+  final String mainLabel;
+
+  /// SHIFT 후 입력되는 기능의 금색 각인. 없으면 `null`.
+  final String? shiftLabel;
+
+  /// ALPHA 후 입력되는 기능의 빨간색 각인. 없으면 `null`.
+  final String? alphaLabel;
+
+  /// 키 시각적 카테고리 (색상 테마 결정)
+  final KeyCategory category;
+
+  const CalcKeyDef({
+    required this.id,
+    required this.mainLabel,
+    this.shiftLabel,
+    this.alphaLabel,
+    required this.category,
+  });
+
+  /// SHIFT 기능 보유 여부
+  bool get hasShift => shiftLabel != null;
+
+  /// ALPHA 기능 보유 여부
+  bool get hasAlpha => alphaLabel != null;
+
+  @override
+  String toString() => 'CalcKeyDef(${id.name}, "$mainLabel")';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 상단 조작부 (커서 패드 좌우 2행 × 2열씩)
+// ═══════════════════════════════════════════════════════════════
+
+/// 커서 패드 왼쪽 2×2 키 (1행: SHIFT, ALPHA / 2행: OPTN, CALC)
+const List<List<CalcKeyDef>> controlLeftRows = [
+  [
+    CalcKeyDef(
+      id: CalcKeyId.shift,
+      mainLabel: 'SHIFT',
+      category: KeyCategory.shift,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.alpha,
+      mainLabel: 'ALPHA',
+      category: KeyCategory.alpha,
+    ),
+  ],
+  [
+    CalcKeyDef(
+      id: CalcKeyId.optn,
+      mainLabel: 'OPTN',
+      shiftLabel: 'QR',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.calc,
+      mainLabel: 'CALC',
+      shiftLabel: 'SOLVE',
+      alphaLabel: '=',
+      category: KeyCategory.function,
+    ),
+  ],
+];
+
+/// 커서 패드 오른쪽 2×2 키 (1행: MENU, ON / 2행: ∫▭, x)
+const List<List<CalcKeyDef>> controlRightRows = [
+  [
+    CalcKeyDef(
+      id: CalcKeyId.menu,
+      mainLabel: 'MENU',
+      shiftLabel: 'SETUP',
+      category: KeyCategory.menu,
+    ),
+    CalcKeyDef(id: CalcKeyId.on, mainLabel: 'ON', category: KeyCategory.on),
+  ],
+  [
+    CalcKeyDef(
+      id: CalcKeyId.integral,
+      mainLabel: '∫▭',
+      shiftLabel: 'd/dx▭',
+      alphaLabel: ':',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.variableX,
+      mainLabel: 'x',
+      shiftLabel: '∑▭', // 실물 대조 필요
+      category: KeyCategory.function,
+    ),
+  ],
+];
+
+/// 커서 패드 4방향 (상·하·좌·우 순)
+const List<CalcKeyDef> cursorPadKeys = [
+  CalcKeyDef(
+    id: CalcKeyId.cursorUp,
+    mainLabel: '▲',
+    category: KeyCategory.cursor,
+  ),
+  CalcKeyDef(
+    id: CalcKeyId.cursorDown,
+    mainLabel: '▼',
+    category: KeyCategory.cursor,
+  ),
+  CalcKeyDef(
+    id: CalcKeyId.cursorLeft,
+    mainLabel: '◀',
+    category: KeyCategory.cursor,
+  ),
+  CalcKeyDef(
+    id: CalcKeyId.cursorRight,
+    mainLabel: '▶',
+    category: KeyCategory.cursor,
+  ),
+];
+
+// ═══════════════════════════════════════════════════════════════
+// 함수부 (3행 × 6열)
+// ═══════════════════════════════════════════════════════════════
+
+/// 함수부 열 수
+const int functionColumns = 6;
+
+/// 함수부 키 행 목록
+const List<List<CalcKeyDef>> functionRows = [
+  // ── 1행: 분수, 루트, 제곱, 거듭제곱, 로그 ──
+  [
+    CalcKeyDef(
+      id: CalcKeyId.fraction,
+      mainLabel: '▭/▭',
+      shiftLabel: '▭▭/▭',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.sqrt,
+      mainLabel: '√▭',
+      shiftLabel: '∛▭',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.square,
+      mainLabel: 'x²',
+      shiftLabel: 'x³',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.power,
+      mainLabel: 'x^▭',
+      shiftLabel: '▭√▭',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.log,
+      mainLabel: 'log',
+      shiftLabel: '10^▭',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.ln,
+      mainLabel: 'ln',
+      shiftLabel: 'e^▭',
+      category: KeyCategory.function,
+    ),
+  ],
+  // ── 2행: 음수, 도분초, 역수, 삼각함수 (ALPHA: 변수 A~F) ──
+  [
+    CalcKeyDef(
+      id: CalcKeyId.negative,
+      mainLabel: '(−)',
+      shiftLabel: '∠',
+      alphaLabel: 'A',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.degMinSec,
+      mainLabel: '°\'"',
+      shiftLabel: 'FACT',
+      alphaLabel: 'B',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.reciprocal,
+      mainLabel: 'x⁻¹',
+      shiftLabel: 'x!',
+      alphaLabel: 'C',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.sin,
+      mainLabel: 'sin',
+      shiftLabel: 'sin⁻¹',
+      alphaLabel: 'D',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.cos,
+      mainLabel: 'cos',
+      shiftLabel: 'cos⁻¹',
+      alphaLabel: 'E',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.tan,
+      mainLabel: 'tan',
+      shiftLabel: 'tan⁻¹',
+      alphaLabel: 'F',
+      category: KeyCategory.function,
+    ),
+  ],
+  // ── 3행: 저장, 공학표기, 괄호, S⇔D, 메모리 (ALPHA: 변수 X, Y, M) ──
+  [
+    CalcKeyDef(
+      id: CalcKeyId.sto,
+      mainLabel: 'STO',
+      shiftLabel: 'RECALL',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.eng,
+      mainLabel: 'ENG',
+      shiftLabel: '←',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.parenOpen,
+      mainLabel: '(',
+      shiftLabel: '%',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.parenClose,
+      mainLabel: ')',
+      shiftLabel: ',',
+      alphaLabel: 'X',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.sdToggle,
+      mainLabel: 'S⇔D',
+      shiftLabel: 'a b/c⇔d/c',
+      alphaLabel: 'Y',
+      category: KeyCategory.function,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.mPlus,
+      mainLabel: 'M+',
+      shiftLabel: 'M−',
+      alphaLabel: 'M',
+      category: KeyCategory.function,
+    ),
+  ],
+];
+
+// ═══════════════════════════════════════════════════════════════
+// 숫자부 (4행 × 5열)
+// ═══════════════════════════════════════════════════════════════
+
+/// 숫자부 열 수
+const int numberColumns = 5;
+
+/// 숫자부 키 행 목록
+const List<List<CalcKeyDef>> numberRows = [
+  [
+    CalcKeyDef(
+      id: CalcKeyId.num7,
+      mainLabel: '7',
+      shiftLabel: 'CONST',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num8,
+      mainLabel: '8',
+      shiftLabel: 'CONV',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num9,
+      mainLabel: '9',
+      shiftLabel: 'RESET',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.del,
+      mainLabel: 'DEL',
+      shiftLabel: 'INS',
+      alphaLabel: 'UNDO',
+      category: KeyCategory.del,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.ac,
+      mainLabel: 'AC',
+      shiftLabel: 'OFF',
+      category: KeyCategory.ac,
+    ),
+  ],
+  [
+    CalcKeyDef(
+      id: CalcKeyId.num4,
+      mainLabel: '4',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num5,
+      mainLabel: '5',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num6,
+      mainLabel: '6',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.multiply,
+      mainLabel: '×',
+      shiftLabel: 'nPr',
+      category: KeyCategory.operator,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.divide,
+      mainLabel: '÷',
+      shiftLabel: 'nCr',
+      category: KeyCategory.operator,
+    ),
+  ],
+  [
+    CalcKeyDef(
+      id: CalcKeyId.num1,
+      mainLabel: '1',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num2,
+      mainLabel: '2',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.num3,
+      mainLabel: '3',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.add,
+      mainLabel: '+',
+      shiftLabel: 'Pol',
+      category: KeyCategory.operator,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.subtract,
+      mainLabel: '−',
+      shiftLabel: 'Rec',
+      category: KeyCategory.operator,
+    ),
+  ],
+  [
+    CalcKeyDef(
+      id: CalcKeyId.num0,
+      mainLabel: '0',
+      shiftLabel: 'Rnd',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.dot,
+      mainLabel: '.',
+      shiftLabel: 'Ran#',
+      alphaLabel: 'RanInt',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.exp10,
+      mainLabel: '×10ˣ',
+      shiftLabel: 'π',
+      alphaLabel: 'e',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.ans,
+      mainLabel: 'Ans',
+      shiftLabel: 'PreAns',
+      category: KeyCategory.number,
+    ),
+    CalcKeyDef(
+      id: CalcKeyId.equals,
+      mainLabel: '=',
+      shiftLabel: '≈',
+      category: KeyCategory.equals,
+    ),
+  ],
+];
+
+// ═══════════════════════════════════════════════════════════════
+// 조회용 컬렉션
+// ═══════════════════════════════════════════════════════════════
+
+/// 전체 키 수 (실물 fx-991EX 기준)
+const int totalKeyCount = 50;
+
+/// 전체 50키를 실물 배열 순서로 평탄화한 목록.
+///
+/// 상단 조작부는 행 단위로 왼쪽 2키 → 오른쪽 2키 순(SHIFT ALPHA MENU ON / OPTN CALC ∫▭ x),
+/// 이어서 커서 패드 → 함수부 → 숫자부 순이다.
+final List<CalcKeyDef> allKeys = List.unmodifiable([
+  for (var i = 0; i < controlLeftRows.length; i++) ...[
+    ...controlLeftRows[i],
+    ...controlRightRows[i],
+  ],
+  ...cursorPadKeys,
+  for (final row in functionRows) ...row,
+  for (final row in numberRows) ...row,
+]);
+
+/// [CalcKeyId] → [CalcKeyDef] O(1) 조회 맵.
+final Map<CalcKeyId, CalcKeyDef> keyById = Map.unmodifiable({
+  for (final key in allKeys) key.id: key,
+});
+
+/// [id]에 해당하는 키 정의를 반환한다. 모든 [CalcKeyId]는 정의가 보장된다(테스트로 검증).
+CalcKeyDef keyDefOf(CalcKeyId id) => keyById[id]!;
