@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/lcd_status.dart';
+import 'text_fit.dart';
 
 /// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◀/▶) 여부.
 @immutable
@@ -256,32 +257,16 @@ class LcdDisplay extends StatelessWidget {
     required double lineHeight,
     required TextScaler textScaler,
   }) {
-    final requested = fontSize ?? base.fontSize!;
-    final heightFactor = base.height ?? 1.0;
-    // TextPainter는 문단 높이를 정수로 올림하므로 올림한 높이로 판정한다.
-    bool fits(double size) =>
-        (textScaler.scale(size) * heightFactor).ceilToDouble() <= lineHeight;
-    if (fits(requested)) return base.copyWith(fontSize: requested);
-    if (!fits(_minLineFontSize)) {
-      return base.copyWith(fontSize: _minLineFontSize);
-    }
-    // 시스템 글자 배율이 비선형(안드로이드 14 이상)일 수 있으므로 비례 계산 대신 이분 탐색으로
-    // 줄 높이에 들어가는 가장 큰 글자 크기를 찾는다. lo는 항상 줄 높이에 들어간다.
-    var lo = _minLineFontSize;
-    var hi = requested;
-    for (var i = 0; i < 24; i++) {
-      final mid = (lo + hi) / 2;
-      if (fits(mid)) {
-        lo = mid;
-      } else {
-        hi = mid;
-      }
-    }
-    return base.copyWith(fontSize: lo);
+    // 하한은 [minFittedFontSize]이며, 그보다 낮은 줄은 잘린다.
+    return base.copyWith(
+      fontSize: fitFontSizeToHeight(
+        fontSize ?? base.fontSize!,
+        maxHeight: lineHeight,
+        textScaler: textScaler,
+        heightFactor: base.height ?? 1.0,
+      ),
+    );
   }
-
-  /// 줄 글자 크기 하한 (dp) — 0 크기 글꼴을 피하기 위한 값. 이보다 낮은 줄은 잘린다.
-  static const double _minLineFontSize = 1.0;
 }
 
 /// LCD 상단 상태 표시줄.

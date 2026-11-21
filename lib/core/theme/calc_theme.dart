@@ -349,6 +349,51 @@ abstract final class CalcTheme {
 
   /// [adSlotMaxHeight]를 기본값으로 쓰는 대형 화면 기준 (화면 짧은 변, dp)
   static const double adSlotLargeScreenShortestSide = 600.0;
+
+  // ───────────────────────────────────────────
+  // 키패드 배치 (Keypad Layout)
+  // ───────────────────────────────────────────
+
+  /// 숫자부 행 높이 (함수부·상단 조작부 행 높이 대비) — 실물처럼 숫자 키가 더 크다.
+  static const double keypadNumberRowHeightRatio = 1.2;
+
+  /// 함수부와 숫자부 사이 간격 (키패드 높이 대비)
+  static const double keypadSectionGapRatio = 0.02;
+
+  /// 키패드 최소 가로/세로 비 — 세로로 긴 화면에서 키가 과도하게 길어지지 않게 높이를 제한한다.
+  static const double keypadMinAspectRatio = 0.75;
+
+  /// 키패드 최대 가로/세로 비 — 가로로 넓은 화면에서 키가 과도하게 넓어지지 않게 폭을 제한한다.
+  static const double keypadMaxAspectRatio = 1.25;
+
+  /// 키캡 터치 영역 최소 높이 (dp). 키캡이 이보다 낮으면 각인 띠까지 터치 영역을 넓힌다.
+  /// (Material·Android 접근성 권장 터치 대상 48dp)
+  static const double keyMinTouchTargetHeight = 48.0;
+
+  /// 커서 패드 위·아래 키 너비 (패드 너비 대비)
+  static const double cursorPadVerticalKeyWidthRatio = 0.5;
+
+  /// 커서 패드 좌·우 키 너비 (패드 너비 대비)
+  static const double cursorPadHorizontalKeyWidthRatio = 0.36;
+
+  /// 커서 패드 원형 받침 색
+  static const Color cursorPadBase = Color(0xFF242424);
+
+  // ───────────────────────────────────────────
+  // 화면 배치 (Screen Layout) — 잠정값, TODO(#23): LCD : 키패드 : 광고 비율 기준 확정
+  // ───────────────────────────────────────────
+
+  /// 화면 가장자리 여백 (dp)
+  static const double screenPadding = 8.0;
+
+  /// LCD와 키패드 사이 간격 (dp)
+  static const double screenLcdKeypadGap = 8.0;
+
+  /// LCD 높이 (광고 슬롯을 뺀 본체 높이 대비)
+  static const double screenLcdHeightRatio = 0.26;
+
+  /// LCD 최소 높이 (dp)
+  static const double screenLcdMinHeight = 96.0;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

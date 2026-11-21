@@ -173,5 +173,31 @@ void main() {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));
     });
+
+    test('키패드 배치 상수: 숫자 행이 더 크고, 가로/세로 비 하한 < 상한이다', () {
+      expect(CalcTheme.keypadNumberRowHeightRatio, inInclusiveRange(1.0, 2.0));
+      expect(CalcTheme.keypadSectionGapRatio, inExclusiveRange(0, 0.1));
+      expect(CalcTheme.keypadMinAspectRatio, greaterThan(0));
+      expect(
+        CalcTheme.keypadMinAspectRatio,
+        lessThan(CalcTheme.keypadMaxAspectRatio),
+      );
+      expect(CalcTheme.keyMinTouchTargetHeight, greaterThanOrEqualTo(44));
+    });
+
+    test('커서 패드 키 폭: 좌·우 키가 서로 겹치지 않고 위·아래 키는 패드 안에 있다', () {
+      expect(CalcTheme.cursorPadVerticalKeyWidthRatio, inExclusiveRange(0, 1));
+      expect(
+        CalcTheme.cursorPadHorizontalKeyWidthRatio,
+        inExclusiveRange(0, 0.5),
+      );
+    });
+
+    test('화면 배치 상수는 양수이며 LCD 비율은 본체의 절반 미만이다', () {
+      expect(CalcTheme.screenPadding, greaterThanOrEqualTo(0));
+      expect(CalcTheme.screenLcdKeypadGap, greaterThanOrEqualTo(0));
+      expect(CalcTheme.screenLcdHeightRatio, inExclusiveRange(0, 0.5));
+      expect(CalcTheme.screenLcdMinHeight, greaterThan(0));
+    });
   });
 }
