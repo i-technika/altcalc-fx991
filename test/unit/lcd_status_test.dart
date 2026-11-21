@@ -11,6 +11,8 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
       store: true,
       engineering: true,
       disp: true,
+      historyUp: true,
+      historyDown: true,
     ),
     for (final u in AngleUnit.values) LcdStatus(angleUnit: u),
     for (final f in NumberDisplayFormat.values) LcdStatus(numberFormat: f),
@@ -41,6 +43,8 @@ void main() {
         'i',
         '∠',
         'Disp',
+        '▲',
+        '▼',
       ]) {
         expect(all, contains(required), reason: required);
       }
@@ -142,24 +146,12 @@ void main() {
         base.copyWith(mathIO: false),
         base.copyWith(complex: ComplexResultIndicator.rectangular),
         base.copyWith(disp: true),
+        base.copyWith(historyUp: true),
+        base.copyWith(historyDown: true),
       ];
       for (final v in variants) {
         expect(v, isNot(base), reason: '$v');
       }
-    });
-  });
-
-  group('LcdLineOverflow', () {
-    test('기본값은 넘침 없음이며 동등성을 지킨다', () {
-      expect(const LcdLineOverflow(), LcdLineOverflow.none);
-      expect(
-        const LcdLineOverflow(left: true),
-        isNot(const LcdLineOverflow(right: true)),
-      );
-      expect(
-        const LcdLineOverflow(left: true).hashCode,
-        const LcdLineOverflow(left: true).hashCode,
-      );
     });
   });
 }

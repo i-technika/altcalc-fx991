@@ -313,7 +313,13 @@ abstract final class CalcTheme {
   /// 상태 표시 슬롯 너비 산정용 글자당 폭 (글자 크기 대비, 고정폭 폰트 기준)
   static const double lcdStatusCharWidthRatio = 0.65;
 
-  /// LCD 상태 표시·스크롤 표시에 반영하는 시스템 글자 크기 배율 상한
+  /// 스크롤 표시(◀/▶) 글자 크기 (해당 줄 글자 크기 대비)
+  static const double lcdScrollArrowFontRatio = 0.6;
+
+  /// 스크롤 표시(◀/▶) 자리 너비 (스크롤 표시 글자 크기 대비)
+  static const double lcdScrollArrowWidthRatio = 0.9;
+
+  /// LCD 안의 모든 글자에 반영하는 시스템 글자 크기 배율 상한
   static const double lcdMaxTextScaleFactor = 1.3;
 
   /// 입력 줄 : 결과 줄 높이 비율 (TODO(#23): 화면 비율 기준 확정 시 갱신)

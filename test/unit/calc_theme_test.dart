@@ -120,6 +120,8 @@ void main() {
         CalcTheme.lcdStatusBarHeightRatio,
         CalcTheme.lcdStatusSlotGapRatio,
         CalcTheme.lcdStatusCharWidthRatio,
+        CalcTheme.lcdScrollArrowFontRatio,
+        CalcTheme.lcdScrollArrowWidthRatio,
       ]) {
         expect(v, greaterThan(0));
       }

@@ -112,7 +112,19 @@ void main() {
       );
     });
 
-    testWidgets('광고 위젯은 슬롯 가운데에 놓이고 슬롯보다 커도 넘침 오류가 없다', (tester) async {
+    testWidgets('가로 모드 좌우 시스템 인셋만큼 광고를 안쪽으로 들인다', (tester) async {
+      await _pump(
+        tester,
+        const BannerAdSlot(),
+        padding: const EdgeInsets.only(left: 24, right: 48),
+      );
+      final bg = tester.getRect(_background);
+      final slot = tester.getRect(_slot);
+      expect(slot.left - bg.left, 24);
+      expect(bg.right - slot.right, 48);
+    });
+
+    testWidgets('광고는 슬롯 가운데에 놓이고 슬롯 크기를 넘지 않으며 잘리지 않는다', (tester) async {
       const adKey = ValueKey('ad');
       await _pump(
         tester,
@@ -121,11 +133,55 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+      expect(tester.getCenter(find.byKey(adKey)), tester.getCenter(_slot));
+      // 큰 광고는 자르지 않고 슬롯 크기로 제약한다 (AdMob 정책: 광고를 잘라 가리지 않는다).
+      expect(tester.getSize(find.byKey(adKey)).height, CalcTheme.adSlotHeight);
       expect(
-        tester.getCenter(find.byKey(adKey)).dx,
-        tester.getCenter(_slot).dx,
+        find.ancestor(of: find.byKey(adKey), matching: find.byType(ClipRect)),
+        findsNothing,
       );
-      expect(tester.getSize(_slot).height, CalcTheme.adSlotHeight);
+    });
+
+    testWidgets('안전 여백을 누른 터치는 뒤쪽 위젯이나 광고로 전달되지 않는다', (tester) async {
+      var behindTaps = 0;
+      var adTaps = 0;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800)),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => behindTaps++,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: BannerAdSlot(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => adTaps++,
+                      child: const SizedBox(width: 320, height: 50),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      final margin = find.byKey(const ValueKey('banner-ad-slot-safety-margin'));
+      await tester.tapAt(tester.getCenter(margin));
+      await tester.pump();
+      expect(behindTaps, 0);
+      expect(adTaps, 0);
+      // 대조: 여백 밖(위쪽)은 뒤쪽 위젯이 받는다.
+      await tester.tapAt(const Offset(200, 100));
+      await tester.pump();
+      expect(behindTaps, 1);
     });
 
     testWidgets('부모 너비를 가득 채운다', (tester) async {

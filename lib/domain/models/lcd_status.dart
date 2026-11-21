@@ -54,7 +54,7 @@ enum ComplexResultIndicator {
 /// LCD 상태 표시줄의 고정 슬롯. 선언 순서가 화면의 왼쪽 → 오른쪽 배치 순서다.
 ///
 /// 실물 LCD처럼 슬롯 위치는 고정이며, 표시기가 꺼져도 자리를 비워 두어 다른 표시기가 밀리지 않는다.
-/// (사용자 가이드 "Reading the Display" 기준. 실물 배치 순서 대조는 TODO(#15).)
+/// (사용자 가이드 "Reading the Display" 기준. 슬롯 구성·배치 순서는 실물 대조 전까지 잠정이다 — TODO(#15).)
 enum LcdIndicatorSlot {
   /// S — SHIFT 1회성 대기
   shift('S'),
@@ -84,7 +84,13 @@ enum LcdIndicatorSlot {
   complex('∠'),
 
   /// Disp — 멀티 스테이트먼트 중간 결과 표시 중
-  disp('Disp');
+  disp('Disp'),
+
+  /// ▲ — 위쪽에 이력·데이터가 더 있음 (계산 이력 재생 가능 등)
+  historyUp('▲'),
+
+  /// ▼ — 아래쪽에 이력·데이터가 더 있음
+  historyDown('▼');
 
   /// 꺼진 상태에서 흐리게 보여줄 대표 문자이자, 슬롯 너비 산정 기준 문자열
   final String template;
@@ -127,6 +133,12 @@ class LcdStatus {
   /// 멀티 스테이트먼트 중간 결과 표시 중 (Disp)
   final bool disp;
 
+  /// 위쪽에 이력·데이터가 더 있음 (▲)
+  final bool historyUp;
+
+  /// 아래쪽에 이력·데이터가 더 있음 (▼)
+  final bool historyDown;
+
   const LcdStatus({
     this.shift = false,
     this.alpha = false,
@@ -138,6 +150,8 @@ class LcdStatus {
     this.mathIO = true,
     this.complex = ComplexResultIndicator.none,
     this.disp = false,
+    this.historyUp = false,
+    this.historyDown = false,
   });
 
   /// 실물 초기 설정(RESET 직후)과 같은 상태: Deg, Norm, MathI/MathO
@@ -155,6 +169,8 @@ class LcdStatus {
     LcdIndicatorSlot.math => mathIO ? 'Math' : null,
     LcdIndicatorSlot.complex => complex.indicator,
     LcdIndicatorSlot.disp => disp ? 'Disp' : null,
+    LcdIndicatorSlot.historyUp => historyUp ? '▲' : null,
+    LcdIndicatorSlot.historyDown => historyDown ? '▼' : null,
   };
 
   /// 켜져 있는 표시 문자 목록 (슬롯 순서)
@@ -173,6 +189,8 @@ class LcdStatus {
     bool? mathIO,
     ComplexResultIndicator? complex,
     bool? disp,
+    bool? historyUp,
+    bool? historyDown,
   }) => LcdStatus(
     shift: shift ?? this.shift,
     alpha: alpha ?? this.alpha,
@@ -184,6 +202,8 @@ class LcdStatus {
     mathIO: mathIO ?? this.mathIO,
     complex: complex ?? this.complex,
     disp: disp ?? this.disp,
+    historyUp: historyUp ?? this.historyUp,
+    historyDown: historyDown ?? this.historyDown,
   );
 
   @override
@@ -198,7 +218,9 @@ class LcdStatus {
       other.engineering == engineering &&
       other.mathIO == mathIO &&
       other.complex == complex &&
-      other.disp == disp;
+      other.disp == disp &&
+      other.historyUp == historyUp &&
+      other.historyDown == historyDown;
 
   @override
   int get hashCode => Object.hash(
@@ -212,33 +234,10 @@ class LcdStatus {
     mathIO,
     complex,
     disp,
+    historyUp,
+    historyDown,
   );
 
   @override
   String toString() => 'LcdStatus(${activeIndicators.join(' ')})';
-}
-
-/// 입력·결과 줄이 LCD 폭을 넘을 때 좌/우 스크롤 표시(◀/▶) 여부.
-@immutable
-class LcdLineOverflow {
-  /// 왼쪽에 가려진 내용이 있음 (◀)
-  final bool left;
-
-  /// 오른쪽에 가려진 내용이 있음 (▶)
-  final bool right;
-
-  const LcdLineOverflow({this.left = false, this.right = false});
-
-  /// 넘침 없음
-  static const LcdLineOverflow none = LcdLineOverflow();
-
-  @override
-  bool operator ==(Object other) =>
-      other is LcdLineOverflow && other.left == left && other.right == right;
-
-  @override
-  int get hashCode => Object.hash(left, right);
-
-  @override
-  String toString() => 'LcdLineOverflow(left: $left, right: $right)';
 }
