@@ -489,7 +489,7 @@ class _Keycap extends StatelessWidget {
   Widget build(BuildContext context) {
     final category = keyDef.category;
     final background = pressed
-        ? Color.alphaBlend(CalcTheme.keyPressedOverlay, category.background)
+        ? category.pressedBackground
         : category.background;
     final labelColor = enabled
         ? category.foreground

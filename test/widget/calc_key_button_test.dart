@@ -141,6 +141,44 @@ void main() {
     });
   });
 
+  group('눌림 색 (#22)', () {
+    testWidgets('모든 키가 누르는 동안 카테고리 눌림 색이 되고, 떼면 원래 색으로 돌아온다', (tester) async {
+      for (final def in allKeys) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(_keycap(def.id)),
+        );
+        await tester.pump();
+        expect(
+          _decoration(tester, def.id).color,
+          def.category.pressedBackground,
+          reason: '$def',
+        );
+
+        await gesture.up();
+        await tester.pump();
+        expect(
+          _decoration(tester, def.id).color,
+          def.category.background,
+          reason: '$def',
+        );
+      }
+    });
+
+    testWidgets('비활성 키는 눌러도 눌림 색이 되지 않는다', (tester) async {
+      final def = keyDefOf(CalcKeyId.sin);
+      await tester.pumpWidget(_host(CalcKeyButton(keyDef: def)));
+      final gesture = await tester.startGesture(
+        tester.getCenter(_keycap(def.id)),
+      );
+      await tester.pump();
+      expect(_decoration(tester, def.id).color, def.category.background);
+      await gesture.up();
+    });
+  });
+
   group('반응형 크기', () {
     const sizes = [
       Size(28, 34),

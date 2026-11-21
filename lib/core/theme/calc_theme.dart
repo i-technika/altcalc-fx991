@@ -135,8 +135,45 @@ abstract final class CalcTheme {
   /// 키캡 테두리 — 어두운 키캡과 본체의 경계 표시용 (본체 대비 3:1 이상)
   static const Color keyBorder = Color(0xFF808080);
 
-  /// 키 눌림 시 오버레이 (20% 불투명 검정)
-  static const Color keyPressedOverlay = Color(0x33000000);
+  // 눌림 색 (#22): 카테고리마다 눌림 전후의 지각 명도 차(CIELAB L*)가 [keyPressedMinLightnessDelta] 이상이고,
+  // 눌린 상태에서도 메인 라벨이 4.5:1 이상이 되도록 방향과 세기를 정했다(테스트로 검증).
+  // - 가장 어두운 키(L* 35 미만, 흰 라벨): 흰색 20%를 덧씌워 **밝게** — 검정을 덧씌우면 명도 차가 5~7에 그친다.
+  // - 중간 밝기 키(L* 약 43~45, 흰 라벨): 검정 30%로 **어둡게** — 밝히면 흰 라벨 대비가 4.5:1 아래로 떨어진다.
+  // - 밝은 키(어두운 라벨): 검정 20%로 **어둡게**.
+  // 값은 sRGB 채널별 혼합(alpha blend) 결과를 반올림한 것이다.
+
+  /// 눌림 전후 키캡 배경의 최소 명도 차 (CIELAB L*, 0~100). 약 12 이상이면 확대 없이 구분된다.
+  static const double keyPressedMinLightnessDelta = 12.0;
+
+  /// 밝은 키캡 눌림 — [keyNumber] + 검정 20% (L* 92.0 → 75.5)
+  static const Color keyNumberPressed = Color(0xFFBABABA);
+
+  /// 연산자 키 눌림 — [keyOperator] + 검정 30% (L* 45.2 → 31.9)
+  static const Color keyOperatorPressed = Color(0xFF4B4B4B);
+
+  /// 함수 키 눌림 — [keyFunction] + 흰색 20% (L* 31.5 → 46.4)
+  static const Color keyFunctionPressed = Color(0xFF6E6E6E);
+
+  /// 등호 키 눌림 — [keyEquals] + 검정 30% (L* 43.2 → 30.2)
+  static const Color keyEqualsPressed = Color(0xFF0F4786);
+
+  /// AC 키 눌림 — [keyAC] + 검정 30% (L* 43.9 → 30.6)
+  static const Color keyACPressed = Color(0xFF862608);
+
+  /// DEL 키 눌림 — [keyDEL] + 흰색 20% (L* 30.1 → 45.2)
+  static const Color keyDELPressed = Color(0xFF7D665F);
+
+  /// 커서 패드 눌림 — [keyCursor] + 흰색 20% (L* 26.2 → 42.8)
+  static const Color keyCursorPressed = Color(0xFF656565);
+
+  /// ON 키 눌림 — [keyON] + 흰색 20% (L* 31.5 → 46.4)
+  static const Color keyONPressed = Color(0xFF6E6E6E);
+
+  /// SHIFT 키 눌림 — [keyShift] + 검정 20% (L* 72.7 → 59.2)
+  static const Color keyShiftPressed = Color(0xFFB7861C);
+
+  /// ALPHA 키 눌림 — [keyAlpha] + 검정 30% (L* 43.8 → 30.4)
+  static const Color keyAlphaPressed = Color(0xFF8B1C1C);
 
   // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
@@ -479,6 +516,21 @@ extension KeyCategoryColors on KeyCategory {
     KeyCategory.cursor => CalcTheme.keyCursor,
     KeyCategory.on => CalcTheme.keyON,
     KeyCategory.menu => CalcTheme.keyFunction,
+  };
+
+  /// 눌린 키캡 배경색 (#22) — 방향·세기 기준은 [CalcTheme.keyPressedMinLightnessDelta] 위 주석 참조
+  Color get pressedBackground => switch (this) {
+    KeyCategory.number => CalcTheme.keyNumberPressed,
+    KeyCategory.operator => CalcTheme.keyOperatorPressed,
+    KeyCategory.function => CalcTheme.keyFunctionPressed,
+    KeyCategory.equals => CalcTheme.keyEqualsPressed,
+    KeyCategory.ac => CalcTheme.keyACPressed,
+    KeyCategory.del => CalcTheme.keyDELPressed,
+    KeyCategory.shift => CalcTheme.keyShiftPressed,
+    KeyCategory.alpha => CalcTheme.keyAlphaPressed,
+    KeyCategory.cursor => CalcTheme.keyCursorPressed,
+    KeyCategory.on => CalcTheme.keyONPressed,
+    KeyCategory.menu => CalcTheme.keyFunctionPressed,
   };
 
   /// 키캡 메인 라벨 텍스트색
