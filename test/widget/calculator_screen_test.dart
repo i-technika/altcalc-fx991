@@ -188,7 +188,7 @@ void main() {
             greaterThanOrEqualTo(minLegendFont),
           );
 
-          // 주입값만이 아니라 실제 렌더 크기도 본다: 한 글자 라벨(숫자·연산자, 변수 각인 A~F·X·Y·M 등)은
+          // 주입값만이 아니라 실제 렌더 크기도 본다: 한 글자 라벨(숫자·연산자, 변수 각인 A~F·x·y·M 등)은
           // FittedBox로 줄지 않아야 한다. (테스트 글꼴은 글자 폭이 실제보다 넓어 긴 라벨은 줄 수 있다.)
           for (final b in buttons) {
             final def = b.keyDef;
