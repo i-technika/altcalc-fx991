@@ -196,7 +196,8 @@ abstract final class CalcTheme {
     letterSpacing: 0.5,
   );
 
-  /// 키캡 메인 라벨 텍스트 스타일 (기준 크기, 위젯에서 키 크기에 맞춰 스케일).
+  /// 키캡 메인 라벨 텍스트 스타일 (기준 크기). `CalcKeyButton`은 [keyMainLabelFontRatio]로
+  /// 키캡 높이에 맞춰 `fontSize`를 덮어쓴다.
   /// 색은 카테고리마다 다르므로 [KeyCategoryColors.foreground]로 지정한다.
   static const TextStyle keyMainLabelStyle = TextStyle(
     fontFamily: monoFontFamily,
@@ -243,6 +244,42 @@ abstract final class CalcTheme {
 
   /// 키 그림자 높이 (dp)
   static const double keyElevation = 2.0;
+
+  /// 키캡 테두리 두께 (dp)
+  static const double keyBorderWidth = 1.0;
+
+  /// 키 눌림 시 키캡이 아래로 이동하는 거리 (dp)
+  static const double keyPressedOffset = 1.0;
+
+  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡)
+  static const double keyLegendHeightRatio = 0.28;
+
+  /// 각인 띠 높이 대비 각인 글자 크기 비율
+  static const double keyLegendFontRatio = 0.8;
+
+  /// 키캡 높이 대비 메인 라벨 글자 크기 비율
+  static const double keyMainLabelFontRatio = 0.42;
+
+  /// 키캡 안쪽 좌우 여백 비율 (키캡 너비 대비)
+  static const double keyCapHorizontalPaddingRatio = 0.08;
+
+  /// SHIFT·ALPHA 각인 사이 간격 (각인 글자 크기 대비)
+  static const double keyLegendGapRatio = 0.3;
+
+  /// SHIFT·ALPHA 각인 사이 간격 상한 (키 너비 대비) — 좁고 긴 셀에서 넘침 방지
+  static const double keyLegendGapMaxWidthRatio = 0.05;
+
+  /// 키 라벨에 반영하는 시스템 글자 크기 배율 상한 (넘침은 FittedBox가 추가로 막는다)
+  static const double keyMaxTextScaleFactor = 1.3;
+
+  /// 키캡 그림자 색
+  static const Color keyShadow = Color(0x66000000);
+
+  /// 비활성 키 메인 라벨 불투명도
+  static const double keyDisabledLabelOpacity = 0.5;
+
+  /// 키 눌림 색·그림자 전환 시간
+  static const Duration keyPressAnimationDuration = Duration(milliseconds: 60);
 
   // ───────────────────────────────────────────
   // 광고 슬롯 치수 (Banner Ad Slot Dimensions)

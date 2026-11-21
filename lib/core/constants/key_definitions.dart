@@ -589,6 +589,15 @@ List<CalcKeyDef> _buildAllKeys() {
   ]);
 }
 
+/// 길게 누르면 반복 입력되는 키 (커서 패드 4방향, DEL).
+const Set<CalcKeyId> autoRepeatKeys = {
+  CalcKeyId.cursorUp,
+  CalcKeyId.cursorDown,
+  CalcKeyId.cursorLeft,
+  CalcKeyId.cursorRight,
+  CalcKeyId.del,
+};
+
 /// [CalcKeyId] → [CalcKeyDef] O(1) 조회 맵.
 final Map<CalcKeyId, CalcKeyDef> keyById = Map.unmodifiable({
   for (final key in allKeys) key.id: key,
