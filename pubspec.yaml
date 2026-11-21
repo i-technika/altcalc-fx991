@@ -63,6 +63,27 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 번들 글꼴 라이선스 (앱 시작 시 LicenseRegistry에 등록 — lib/core/theme/font_licenses.dart)
+  assets:
+    - assets/fonts/NotoSansMono-OFL.txt
+    - assets/fonts/NotoSansMath-OFL.txt
+
+  # LCD·키캡 글꼴 (#16). 출처·서브셋 범위는 assets/fonts/README.md 참조.
+  # 패밀리 이름은 CalcTheme.monoFontFamily / CalcTheme.mathFontFamily와 같아야 한다(테스트로 검증).
+  fonts:
+    - family: NotoSansMono
+      fonts:
+        - asset: assets/fonts/NotoSansMono-Regular.ttf
+        - asset: assets/fonts/NotoSansMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansMono-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansMono-Bold.ttf
+          weight: 700
+    - family: NotoSansMath
+      fonts:
+        - asset: assets/fonts/NotoSansMath-Regular.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

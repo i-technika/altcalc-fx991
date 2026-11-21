@@ -260,6 +260,7 @@ class _LabelWidthLimits {
       // 각인: CalcKeyButton의 각인 띠와 같은 규칙. 두 각인이 함께 들어가려면 (어느 배분이든)
       // 두 폭의 합이 띠 폭 이하여야 하고, 짧은 쪽이 우선 배분을 받으면 절반 이하여야 한다.
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
+      // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
       final shift = def.shiftLabel;
       final alpha = def.alphaLabel;
       if (shift == null && alpha == null) continue;
@@ -328,6 +329,16 @@ class CalcKeypad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
+    // 글꼴이 나중에 로드되면(웹 지연 로드, FontLoader 등) 라벨 폭 캐시가 비워진다. LayoutBuilder는
+    // 제약이 바뀌지 않으면 다시 빌드하지 않으므로, 글꼴 변경 알림에 맞춰 다시 빌드해 글자 크기를
+    // 새 글꼴로 다시 계산한다. 글꼴 변경은 드물어 평소 키 입력 리빌드에는 영향이 없다.
+    return ListenableBuilder(
+      listenable: PaintingBinding.instance.systemFonts,
+      builder: (context, _) => _buildForFonts(textScaler),
+    );
+  }
+
+  Widget _buildForFonts(TextScaler textScaler) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = Size(
@@ -469,7 +480,7 @@ enum CursorPadSector { up, down, left, right }
 /// ```
 ///   ┌───────────┐
 ///   │ ╲   ▲   ╱ │   각 방향 키는 자기 부채꼴 전체가 터치 영역이다
-///   │ ◀  ╲ ╱  ▶ │   (가운데·대각선 근처까지 데드존 없음, 타원 밖은 무시).
+///   │ ◄  ╲ ╱  ► │   (가운데·대각선 근처까지 데드존 없음, 타원 밖은 무시).
 ///   │    ╱ ╲    │   키캡은 [sectorBox] 상자에 그리고, [CalcKeyButton.shape]로 부채꼴 경로를
 ///   │ ╱   ▼   ╲ │   넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 부채꼴로 제한한다.
 ///   └───────────┘

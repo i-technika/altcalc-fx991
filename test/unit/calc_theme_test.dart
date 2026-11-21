@@ -155,12 +155,23 @@ void main() {
     });
 
     test('결과 줄 칸 수는 가장 긴 10자리 결과(부호·가수·×10 + 위첨자 지수)를 담는다', () {
-      // 위첨자 지수(−99)는 작은 글자라 약 2칸으로 본다 (가정의 기록 — 위첨자 비율은 M2에서 정한다).
+      // 위첨자 지수(−99)는 lcdExponentMaxScale 이하 크기로 그린다는 전제다.
+      // 실제 글꼴 폭 실측은 test/widget/bundled_font_test.dart (#16).
       const mantissa = '−1.234567891×10';
+      const exponent = '−99';
       expect(
         CalcTheme.lcdLineColumns,
-        greaterThanOrEqualTo(mantissa.runes.length + 2),
+        greaterThanOrEqualTo(
+          mantissa.runes.length +
+              exponent.runes.length * CalcTheme.lcdExponentMaxScale,
+        ),
       );
+      // 유니코드 위첨자로 같은 크기로 그리면 넘친다 — 지수는 반드시 작게 그려야 한다.
+      expect(
+        CalcTheme.lcdLineColumns,
+        lessThan(mantissa.runes.length + exponent.runes.length),
+      );
+      expect(CalcTheme.lcdExponentMaxScale, inExclusiveRange(0, 1));
     });
 
     test('도트 격자는 LCD 글자 가독성을 해치지 않을 만큼 옅다', () {
