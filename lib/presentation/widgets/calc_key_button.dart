@@ -371,7 +371,7 @@ class _ShapeClipper extends CustomClipper<Path> {
 /// 키캡 위 본체 영역의 SHIFT/ALPHA 각인 띠.
 ///
 /// 두 각인이 모두 있으면 글자 수에 비례해 폭을 나눠, 넘치면 함께 같은 비율로 줄어든다.
-/// 단, 짧은 쪽이 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름 `A`~`F`, `Y` 등)면
+/// 단, 짧은 쪽이 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름 `A`~`F`, `y` 등)면
 /// 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
 /// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
 class _LegendRow extends StatelessWidget {

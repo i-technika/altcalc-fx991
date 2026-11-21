@@ -82,8 +82,10 @@ void main() {
       expect(labels.toSet().length, labels.length);
     });
 
-    test('ALPHA 변수 A~F, X, Y, M이 각각 정확히 하나의 키에 매핑된다', () {
-      const variables = ['A', 'B', 'C', 'D', 'E', 'F', 'X', 'Y', 'M'];
+    test('ALPHA 층에서 변수 A~F, x, y, M은 각각 정확히 하나의 키에 있다', () {
+      // 가이드 인쇄 13쪽 "Variables (A, B, C, D, E, F, M, x, y)" — x, y는 소문자다.
+      // ALPHA 층만 센다. 변수 x는 x 키 메인으로도 입력된다 (아래 '층 간 라벨 겹침' 테스트).
+      const variables = ['A', 'B', 'C', 'D', 'E', 'F', 'x', 'y', 'M'];
       for (final v in variables) {
         expect(allKeys.where((k) => k.alphaLabel == v).length, 1, reason: v);
       }
@@ -127,6 +129,68 @@ void main() {
       });
     });
 
+    // 출처: QSG 1쪽 사진(1~6 키 위 각인 없음). 가이드에도 SHIFT/ALPHA + 1~6 조작 예가 없다.
+    test('숫자 1~6 키에는 SHIFT/ALPHA 각인이 없다', () {
+      for (final id in [
+        CalcKeyId.num1,
+        CalcKeyId.num2,
+        CalcKeyId.num3,
+        CalcKeyId.num4,
+        CalcKeyId.num5,
+        CalcKeyId.num6,
+      ]) {
+        expect(keyDefOf(id).hasShift, isFalse, reason: id.name);
+        expect(keyDefOf(id).hasAlpha, isFalse, reason: id.name);
+      }
+    });
+
+    test('SHIFT/ALPHA 층에 모드 전용(보라색·파란색) 각인이 섞이지 않는다', () {
+      // 가이드 인쇄 3쪽 "Key Markings": 보라색 = Complex 모드, 파란색 = Base-N 모드 전용.
+      // 이 명세는 노란색(SHIFT)·빨간색(ALPHA) 각인만 담는다. 모드별 각인은 #33.
+      const modeOnly = {'∠', 'i', 'DEC', 'HEX', 'BIN', 'OCT'};
+      for (final key in allKeys) {
+        expect(modeOnly, isNot(contains(key.shiftLabel)), reason: '$key');
+        expect(modeOnly, isNot(contains(key.alphaLabel)), reason: '$key');
+      }
+    });
+
+    test('층 간 라벨 겹침은 의도된 두 경우뿐이다', () {
+      // 라벨 문자열 → (키, 층) 목록
+      final owners = <String, List<String>>{};
+      void add(String? label, CalcKeyDef key, String layer) {
+        if (label == null) return;
+        owners.putIfAbsent(label, () => []).add('${key.id.name}.$layer');
+      }
+
+      for (final key in allKeys) {
+        add(key.mainLabel, key, 'main');
+        add(key.shiftLabel, key, 'shift');
+        add(key.alphaLabel, key, 'alpha');
+      }
+      final shared = {
+        for (final e in owners.entries)
+          if (e.value.length > 1) e.key: e.value.toSet(),
+      };
+      expect(shared, {
+        // 같은 변수 x로 가는 두 경로 (가이드 인쇄 13쪽 각주 *1).
+        'x': {'variableX.main', 'parenClose.alpha'},
+        // 라벨만 같고 기능은 다르다: ALPHA = 은 방정식 기호 입력, = 키는 계산 실행.
+        '=': {'equals.main', 'calc.alpha'},
+      });
+    });
+
+    test('50키의 각인은 실물 대조표와 일치한다', () {
+      expect(_verifiedLegends.keys.toSet(), CalcKeyId.values.toSet());
+      for (final key in allKeys) {
+        final (main, shift, alpha) = _verifiedLegends[key.id]!;
+        expect(
+          (key.mainLabel, key.shiftLabel, key.alphaLabel),
+          (main, shift, alpha),
+          reason: key.id.name,
+        );
+      }
+    });
+
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
@@ -134,3 +198,71 @@ void main() {
     });
   });
 }
+
+/// 실물 대조표 (#15).
+///
+/// 모든 행은 fx-991EX Quick Start Guide 1쪽 제품 사진과 한 줄씩 대조했다. User's Guide
+/// (RJA532432-001V01)의 키 조작 예제에서 그 각인을 찾은 행에는 `G<인쇄 쪽>`을 덧붙였다.
+/// `G` 표시가 없다고 가이드에 없다는 뜻은 아니다(쪽수를 이 표에 정리하지 않았을 뿐). "없음" 판정은
+/// 사진이 근거다(예: Ans·ENG의 ALPHA 없음, 숫자 1~6 무각인).
+///
+/// `(메인, SHIFT, ALPHA)` — 각인이 없으면 `null`. 이 표는 명세의 사본이라 출처 없이 둘을 함께 고치면
+/// 통과한다. 명세를 바꿀 때는 반드시 위 출처를 다시 확인하고 행 주석도 고친다.
+const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
+  // 상단 조작부
+  CalcKeyId.shift: ('SHIFT', null, null),
+  CalcKeyId.alpha: ('ALPHA', null, null),
+  CalcKeyId.menu: ('MENU', 'SETUP', null), // G3
+  CalcKeyId.on: ('ON', null, null),
+  CalcKeyId.optn: ('OPTN', 'QR', null), // G7
+  CalcKeyId.calc: ('CALC', 'SOLVE', '='),
+  CalcKeyId.integral: ('∫▭', 'd/dx▭', ':'), // G15 d/dx, G11 :
+  CalcKeyId.variableX: ('x', '∑▭', null), // G16 ∑ 예제
+  // 커서 패드
+  CalcKeyId.cursorUp: ('▲', null, null),
+  CalcKeyId.cursorDown: ('▼', null, null),
+  CalcKeyId.cursorLeft: ('◀', null, null),
+  CalcKeyId.cursorRight: ('▶', null, null),
+  // 함수부 1행
+  CalcKeyId.fraction: ('▭/▭', '▭▭/▭', null),
+  CalcKeyId.sqrt: ('√▭', '∛▭', null),
+  CalcKeyId.square: ('x²', 'x³', null), // G14
+  CalcKeyId.power: ('x^▭', '▭√▭', null), // G15
+  CalcKeyId.logBase: ('log▭▭', '10^▭', null),
+  CalcKeyId.ln: ('ln', 'e^▭', null), // G14
+  // 함수부 2행
+  CalcKeyId.negative: ('(−)', 'log', 'A'), // G14 log 예제, G13 변수
+  CalcKeyId.degMinSec: ('°\'"', 'FACT', 'B'),
+  CalcKeyId.reciprocal: ('x⁻¹', 'x!', 'C'), // G16 x!
+  CalcKeyId.sin: ('sin', 'sin⁻¹', 'D'),
+  CalcKeyId.cos: ('cos', 'cos⁻¹', 'E'),
+  CalcKeyId.tan: ('tan', 'tan⁻¹', 'F'),
+  // 함수부 3행
+  CalcKeyId.sto: ('STO', 'RECALL', null), // G13 변수 저장·호출
+  CalcKeyId.eng: ('ENG', '←', null), // G11 ←, ALPHA 없음은 사진
+  CalcKeyId.parenOpen: ('(', 'Abs', null), // G16 Abs 예제
+  CalcKeyId.parenClose: (')', ',', 'x'), // G14·G15 ,  G13 변수 x
+  CalcKeyId.sdToggle: ('S⇔D', 'a b/c⇔d/c', 'y'), // G11 a b/c⇔d/c, G13 변수 y
+  CalcKeyId.mPlus: ('M+', 'M−', 'M'), // G13
+  // 숫자부
+  CalcKeyId.num7: ('7', 'CONST', null),
+  CalcKeyId.num8: ('8', 'CONV', null),
+  CalcKeyId.num9: ('9', 'RESET', null), // G7
+  CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
+  CalcKeyId.ac: ('AC', 'OFF', null), // G3 전원
+  CalcKeyId.num4: ('4', null, null),
+  CalcKeyId.num5: ('5', null, null),
+  CalcKeyId.num6: ('6', null, null),
+  CalcKeyId.multiply: ('×', 'nPr', null), // G16
+  CalcKeyId.divide: ('÷', 'nCr', null), // G16
+  CalcKeyId.num1: ('1', null, null),
+  CalcKeyId.num2: ('2', null, null),
+  CalcKeyId.num3: ('3', null, null),
+  CalcKeyId.add: ('+', 'Pol', null), // G16
+  CalcKeyId.subtract: ('−', 'Rec', null), // G16
+  CalcKeyId.num0: ('0', 'Rnd', null),
+  CalcKeyId.dot: ('.', 'Ran#', 'RanInt'), // G16
+  CalcKeyId.exp10: ('×10ˣ', 'π', 'e'), // G15
+  CalcKeyId.ans: ('Ans', '%', null), // G11 %, ALPHA 없음은 사진 (가이드에 PreAns 없음)
+  CalcKeyId.equals: ('=', '≈', null), // G7
+};

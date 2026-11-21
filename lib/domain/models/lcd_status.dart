@@ -54,7 +54,7 @@ enum ComplexResultIndicator {
 /// LCD 상태 표시줄의 고정 슬롯. 선언 순서가 화면의 왼쪽 → 오른쪽 배치 순서다.
 ///
 /// 실물 LCD처럼 슬롯 위치는 고정이며, 표시기가 꺼져도 자리를 비워 두어 다른 표시기가 밀리지 않는다.
-/// (사용자 가이드 "Reading the Display" 기준. 슬롯 구성·배치 순서는 실물 대조 전까지 잠정이다 — TODO(#15).)
+/// (사용자 가이드 "Reading the Display" 기준. 슬롯 구성·아이콘·배치 순서는 잠정이다 — TODO(#44).)
 enum LcdIndicatorSlot {
   /// S — SHIFT 1회성 대기
   shift('S'),
@@ -65,7 +65,7 @@ enum LcdIndicatorSlot {
   /// M — 독립 메모리에 값이 있음
   memory('M'),
 
-  /// STO — 변수 지정 대기 (SHIFT + RCL)
+  /// STO — 변수 지정 대기 (STO 키를 누른 뒤. 실물 표시는 `→x` 아이콘 — #44)
   store('STO'),
 
   /// D/R/G — 각도 단위 (항상 켜짐)

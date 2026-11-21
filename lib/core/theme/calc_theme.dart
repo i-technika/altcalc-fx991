@@ -70,7 +70,7 @@ abstract final class CalcTheme {
   /// 연산자 키 텍스트
   static const Color keyOperatorText = Color(0xFFFFFFFF);
 
-  /// 함수 키 (sin, cos, log 등) — 중간 회색
+  /// 함수 키 (sin, cos, log▭▭ 등) — 중간 회색
   static const Color keyFunction = Color(0xFF4A4A4A);
 
   /// 함수 키 텍스트
@@ -275,7 +275,7 @@ abstract final class CalcTheme {
   /// SHIFT·ALPHA 각인 사이 간격 (각인 글자 크기 대비)
   static const double keyLegendGapRatio = 0.3;
 
-  /// 자연 폭 우선 배분을 받는 짧은 각인의 최대 글자 수 (변수 이름 `A`~`F`, `X`, `Y`, `M` 등).
+  /// 자연 폭 우선 배분을 받는 짧은 각인의 최대 글자 수 (변수 이름 `A`~`F`, `x`, `y`, `M` 등).
   /// 이보다 긴 각인 쌍은 글자 수 비례로 폭을 나눈다.
   static const int keyLegendPriorityMaxRunes = 2;
 

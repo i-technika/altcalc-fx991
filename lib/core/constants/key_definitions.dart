@@ -12,7 +12,7 @@ import 'package:meta/meta.dart';
 //   │ OPTN   CALC      └───────┘     ∫▭     x                   │
 //   └───────────────────────────────────────────────────────────┘
 //   ┌ 함수부 (3행 × 6열 = 18키) ────────────────────────────────┐
-//   │ ▭/▭   √▭   x²   x^▭   log   ln                            │
+//   │ ▭/▭   √▭   x²   x^▭   log▭▭ ln                            │
 //   │ (−)   °'"  x⁻¹  sin   cos   tan                           │
 //   │ STO   ENG  (    )     S⇔D   M+                            │
 //   └───────────────────────────────────────────────────────────┘
@@ -23,9 +23,21 @@ import 'package:meta/meta.dart';
 //   │ 0  .  ×10ˣ  Ans  =                                        │
 //   └───────────────────────────────────────────────────────────┘
 //
-// ※ 실물 대조가 끝나지 않은 각인: `x` 키의 SHIFT(∑▭), log▭▭ 입력 경로,
-//   ENG 키의 ALPHA(i), 숫자 4~6/1~3 키의 SHIFT 각인.
-//   TODO(#15): 실물/공식 매뉴얼 대조 후 확정한다.
+// ※ 각인 출처 (#15에서 확정):
+//   - fx-991EX Quick Start Guide 1쪽의 제품 사진 (전체 50키의 메인·SHIFT·ALPHA 각인)
+//   - fx-570EX/fx-991EX User's Guide (RJA532432-001V01)의 키 조작 예제 (쪽수는 인쇄 쪽 기준)
+//     ("Key Markings" 3쪽, "Variables (A, B, C, D, E, F, M, x, y)" 13쪽, log 14쪽, ∑·Abs 16쪽)
+//   각인 색상 규칙(가이드 "Key Markings" 3쪽):
+//   - 노란색 = SHIFT, 빨간색 = ALPHA
+//   - 보라색(또는 보라 괄호) = Complex 모드 전용 (ENG 키 위의 ∠·i)
+//   - 파란색(또는 파란 괄호) = Base-N 모드 전용 (DEC·HEX·BIN·OCT).
+//     A~F는 빨간 글자(ALPHA 변수)에 파란 괄호가 둘러져 있어, Base-N에서는 16진 숫자로 바로 입력된다.
+//   이 명세는 노란색·빨간색 각인만 담는다. 모드별 각인은 #33에서 다룬다.
+//   숫자 1~6 키에는 각인이 없다.
+//
+// ※ 라벨 표기: `▭`는 입력 칸 자리를 나타내는 임시 텍스트 표기다. 칸 개수·위치(위첨자·아래첨자)는
+//   키마다 실물과 다를 수 있다(예: 실물 ∫ 키는 칸 3개, 명세는 `∫▭`). 템플릿 모양은 #16의 글리프로
+//   그리며, 그때 표기도 함께 정리한다.
 
 // ═══════════════════════════════════════════════════════════════
 // 키 식별자
@@ -57,7 +69,9 @@ enum CalcKeyId {
   sqrt,
   square,
   power,
-  log,
+
+  /// 밑 지정 로그 템플릿 키 `log▭▭`. 밑 생략 상용로그 `log`는 (−) 키의 SHIFT 기능이다.
+  logBase,
   ln,
 
   // ── 함수부 2행 ──
@@ -115,7 +129,7 @@ enum KeyCategory {
   /// 사칙연산 키 (+, −, ×, ÷)
   operator,
 
-  /// 함수 키 (sin, log, x², OPTN, CALC 등)
+  /// 함수 키 (sin, log▭▭, x², OPTN, CALC 등)
   function,
 
   /// 등호(=) 키
@@ -240,7 +254,7 @@ const List<List<CalcKeyDef>> controlRightRows = [
     CalcKeyDef(
       id: CalcKeyId.variableX,
       mainLabel: 'x',
-      shiftLabel: '∑▭', // TODO(#15): 실물 대조 필요
+      shiftLabel: '∑▭',
       category: KeyCategory.function,
     ),
   ],
@@ -298,7 +312,7 @@ const int functionColumns = 6;
 
 /// 함수부 키 행 목록
 const List<List<CalcKeyDef>> functionRows = [
-  // ── 1행: 분수, 루트, 제곱, 거듭제곱, 로그 ──
+  // ── 1행: 분수, 루트, 제곱, 거듭제곱, 밑 지정 로그, 자연로그 ──
   [
     CalcKeyDef(
       id: CalcKeyId.fraction,
@@ -325,8 +339,8 @@ const List<List<CalcKeyDef>> functionRows = [
       category: KeyCategory.function,
     ),
     CalcKeyDef(
-      id: CalcKeyId.log,
-      mainLabel: 'log',
+      id: CalcKeyId.logBase,
+      mainLabel: 'log▭▭',
       shiftLabel: '10^▭',
       category: KeyCategory.function,
     ),
@@ -342,7 +356,7 @@ const List<List<CalcKeyDef>> functionRows = [
     CalcKeyDef(
       id: CalcKeyId.negative,
       mainLabel: '(−)',
-      shiftLabel: '∠',
+      shiftLabel: 'log', // log(a,b) 입력, 밑 a 생략 시 10 (가이드 "log" 예제)
       alphaLabel: 'A',
       category: KeyCategory.function,
     ),
@@ -382,7 +396,7 @@ const List<List<CalcKeyDef>> functionRows = [
       category: KeyCategory.function,
     ),
   ],
-  // ── 3행: 저장, 공학표기, 괄호, S⇔D, 메모리 (ALPHA: 변수 X, Y, M) ──
+  // ── 3행: 저장, 공학표기, 괄호, S⇔D, 메모리 (ALPHA: 변수 x, y, M) ──
   [
     CalcKeyDef(
       id: CalcKeyId.sto,
@@ -393,27 +407,28 @@ const List<List<CalcKeyDef>> functionRows = [
     CalcKeyDef(
       id: CalcKeyId.eng,
       mainLabel: 'ENG',
-      shiftLabel: '←', // TODO(#15): ALPHA(i) 각인 여부 실물 대조 필요
+      // ALPHA 기능은 없다. 키 위의 보라색 ∠·i는 Complex 모드 전용 각인이다 (#33).
+      shiftLabel: '←',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.parenOpen,
       mainLabel: '(',
-      shiftLabel: '%',
+      shiftLabel: 'Abs',
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.parenClose,
       mainLabel: ')',
       shiftLabel: ',',
-      alphaLabel: 'X',
+      alphaLabel: 'x', // 변수 x (실물 각인은 빨간 이탤릭 소문자)
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.sdToggle,
       mainLabel: 'S⇔D',
       shiftLabel: 'a b/c⇔d/c',
-      alphaLabel: 'Y',
+      alphaLabel: 'y', // 변수 y
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -550,7 +565,7 @@ const List<List<CalcKeyDef>> numberRows = [
     CalcKeyDef(
       id: CalcKeyId.ans,
       mainLabel: 'Ans',
-      shiftLabel: 'PreAns',
+      shiftLabel: '%', // ALPHA 기능 없음
       category: KeyCategory.number,
     ),
     CalcKeyDef(
