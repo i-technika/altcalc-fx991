@@ -37,7 +37,7 @@ class KeySpeech {
 /// 앱(`MaterialApp`)은 `supportedLocales`를 지정하지 않아 `Localizations` 로캘이 항상 en_US이므로
 /// 그것을 쓰지 않는다. 실행 중 기기 언어가 바뀌면 앱 루트의 [DeviceLocaleScope]가 다시 빌드시킨다.
 /// 한국어·영어가 아닌 기기는 영어 문구를 그 기기 언어의 TTS가 읽는다(예: 독일어 TTS가 "Sine"을 읽음).
-/// 앱 전체 다국어(`flutter_localizations`·ARB)를 도입할 때 언어를 늘리거나 문구에 로캘 표식을 붙인다.
+/// 앱 전체 다국어(`flutter_localizations`·ARB)를 도입할 때 언어를 늘리거나 문구에 로캘 표식을 붙인다 — TODO(#48).
 abstract class CalcSemanticStrings {
   const CalcSemanticStrings();
 
