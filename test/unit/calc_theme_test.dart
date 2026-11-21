@@ -119,19 +119,26 @@ void main() {
       }
     });
 
-    test('눌림 테두리: 평소 테두리와 확연히 다르고(ΔL* 30 이상), 모든 눌린 키캡 위에서 보인다(1.5:1 이상)', () {
+    test('눌림 테두리: 평소 테두리보다 L* 30 이상 밝다', () {
       expect(
-        (lightness(CalcTheme.keyPressedBorder) - lightness(CalcTheme.keyBorder))
-            .abs(),
+        lightness(CalcTheme.keyPressedBorder) - lightness(CalcTheme.keyBorder),
         greaterThanOrEqualTo(30),
       );
-      for (final c in KeyCategory.values) {
-        expect(
-          contrastRatio(CalcTheme.keyPressedBorder, c.pressedBackground),
-          greaterThanOrEqualTo(1.5),
-          reason: c.name,
-        );
-      }
+    });
+
+    test('눌림 테두리: 맞닿는 본체 배경 대비 3:1 이상이고 평소 테두리보다 뚜렷하다 (비텍스트 대비)', () {
+      // 보이는 단서는 키캡 바깥쪽(본체 쪽) 경계다 — 테마 "눌림 표시" 주석 참조.
+      final pressed = contrastRatio(
+        CalcTheme.keyPressedBorder,
+        CalcTheme.bodyBackground,
+      );
+      expect(pressed, greaterThanOrEqualTo(3.0));
+      expect(
+        pressed,
+        greaterThan(
+          contrastRatio(CalcTheme.keyBorder, CalcTheme.bodyBackground),
+        ),
+      );
     });
 
     test('눌림 색은 불투명하다 (키캡 아래 그림자·본체가 비치지 않는다)', () {

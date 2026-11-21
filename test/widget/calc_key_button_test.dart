@@ -63,6 +63,15 @@ BoxDecoration _renderedDecoration(WidgetTester tester, CalcKeyId id) {
   return box.decoration as BoxDecoration;
 }
 
+final _normalBorder = Border.all(
+  color: CalcTheme.keyBorder,
+  width: CalcTheme.keyBorderWidth,
+);
+final _pressedBorder = Border.all(
+  color: CalcTheme.keyPressedBorder,
+  width: CalcTheme.keyBorderWidth,
+);
+
 bool _isPressed(WidgetTester tester, CalcKeyId id) =>
     _decoration(tester, id).boxShadow!.isEmpty;
 
@@ -164,22 +173,24 @@ void main() {
         await tester.pump();
         var drawn = _renderedDecoration(tester, def.id);
         expect(drawn.color, def.category.pressedBackground, reason: '$def');
-        expect(
-          (drawn.border! as Border).top.color,
-          CalcTheme.keyPressedBorder,
-          reason: '$def',
-        );
+        expect(drawn.border, _pressedBorder, reason: '$def');
 
+        // 뗄 때는 애니메이션한다: 중간 시점에는 눌림 색도 평소 색도 아니다.
         await gesture.up();
         await tester.pump();
+        await tester.pump(CalcTheme.keyPressAnimationDuration ~/ 2);
+        drawn = _renderedDecoration(tester, def.id);
+        expect(
+          drawn.color,
+          isNot(def.category.pressedBackground),
+          reason: '$def',
+        );
+        expect(drawn.color, isNot(def.category.background), reason: '$def');
+
         await tester.pump(CalcTheme.keyPressAnimationDuration);
         drawn = _renderedDecoration(tester, def.id);
         expect(drawn.color, def.category.background, reason: '$def');
-        expect(
-          (drawn.border! as Border).top.color,
-          CalcTheme.keyBorder,
-          reason: '$def',
-        );
+        expect(drawn.border, _normalBorder, reason: '$def');
       }
     });
 
@@ -190,10 +201,9 @@ void main() {
         tester.getCenter(_keycap(def.id)),
       );
       await tester.pump();
-      expect(
-        _renderedDecoration(tester, def.id).color,
-        def.category.background,
-      );
+      final drawn = _renderedDecoration(tester, def.id);
+      expect(drawn.color, def.category.background);
+      expect(drawn.border, _normalBorder);
       await gesture.up();
     });
   });
