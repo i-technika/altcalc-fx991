@@ -91,11 +91,34 @@ void main() {
         expect(wrapper, lessThan(test), reason: '래퍼를 먼저 만들어야 한다');
       });
 
-      test('잡이 실패를 삼키지 않는다', () {
-        expect(_job(workflow).containsKey('continue-on-error'), isFalse);
+      test('잡이 실패를 삼키거나 건너뛰지 않고, 시간 제한이 있다', () {
+        final job = _job(workflow);
+        expect(job.containsKey('continue-on-error'), isFalse);
+        // 같은 워크플로의 다른 잡과 같은 조건 — Draft가 아니면 늘 돈다 (두 워크플로가 같이 틀리면 일치 검사로는 못 잡는다)
+        expect(job['if'], 'github.event.pull_request.draft == false');
+        // 캐시가 빈 실행(약 12분)이 잘리지 않을 만큼, 멈춘 내려받기가 오래 잡히지 않을 만큼
+        expect(
+          job['timeout-minutes'],
+          isA<int>().having((m) => m, '분', inInclusiveRange(15, 60)),
+        );
       });
     });
   }
+
+  test('Gradle 테스트 설정이 실패를 삼키지 않고 Java 버전 검사가 최저 버전을 쓴다', () {
+    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    // 실패를 무시하거나 테스트 작업을 끄는 설정
+    for (final pattern in [
+      'ignoreFailures',
+      'enabled = false',
+      'isEnabled = false',
+    ]) {
+      expect(gradle, isNot(contains(pattern)), reason: pattern);
+    }
+    // 최저 버전 값이 실제 검사에 쓰이는지 (값만 있고 검사가 빠지면 위 Java 버전 대조가 헛돈다)
+    expect(gradle, contains('val required = minTestJavaVersion'));
+    expect(gradle, contains('check(version >= required)'));
+  });
 
   test('Gradle 래퍼는 저장소에 두지 않는다 (CI가 만들어 쓴다)', () {
     // 래퍼를 커밋하게 되면 래퍼 생성 단계와 이 검사를 함께 정리한다

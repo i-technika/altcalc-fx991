@@ -39,7 +39,8 @@
 3. `pubspec.yaml`의 `environment.flutter`를 `X.Y.Z`로 바꾼다. Dart 버전이 바뀌었으면 `environment.sdk`도 검토한다.
 4. `flutter pub get`을 실행한다. `pubspec.lock`의 `sdks.flutter`가 바뀌고, SDK가 고정하는 의존성(`meta`·`characters` 등)도 바뀔 수 있다.
 5. 위 "개발 환경"의 버전 표기를 고친다. `test/unit/flutter_sdk_pin_test.dart`가 고정값과 대조한다.
-6. `flutter analyze`·`flutter test`를 통과시킨 뒤 위 파일을 함께 커밋한다.
+6. `flutter analyze`·`flutter test`와 Android 단위 테스트(아래 "Android 단위 테스트")를 통과시킨 뒤 위 파일을 함께 커밋한다.
+   - Flutter가 minSdk·targetSdk 기본값을 바꾸면 `AndroidTestSetupTest`가 실패한다. `TestSupport.kt`의 `MIN_SDK` 등을 함께 고친다.
    - `pubspec.lock`을 빠뜨리면 CI의 작업 트리 검사(`.github/scripts/verify-clean-tree.sh`)가 실패한다.
    - 로컬 테스트는 이를 잡지 못한다. `flutter test`가 먼저 pub get으로 lock을 다시 쓰기 때문이다.
 
@@ -241,22 +242,35 @@ flutter build web -t preview/key_preview_main.dart --no-wasm-dry-run   # 미리�
 
 `android/app/src/main/kotlin`의 플랫폼 코드(플랫폼 채널, 고대비 텍스트 수신)는 JVM 단위 테스트로 검사한다 (#108).
 테스트는 `android/app/src/test/kotlin`에 있고, Robolectric이 API 수준별 Android 프레임워크를 JVM에서 돌리므로
-기기·에뮬레이터가 필요 없다. Kotlin 코드나 `android/` Gradle 설정을 바꿨으면 커밋 전에 돌린다.
+기기·에뮬레이터는 필요 없다(Android SDK는 앱 빌드와 같이 필요하다). Kotlin 코드나 `android/` Gradle 설정을 바꿨으면 커밋 전에 돌린다.
 
 ```bash
-flutter build apk --debug --config-only   # gradlew·android/local.properties가 없을 때 한 번 (저장소에 없고 Flutter가 만든다)
+flutter build apk --debug --config-only   # gradlew·android/local.properties를 만들고 지금 셸의 Flutter SDK 경로로 맞춘다 (몇 초)
 cd android
 ./gradlew :app:testDebugUnitTest          # PowerShell: .\gradlew.bat :app:testDebugUnitTest
 ```
 
+- 첫 줄은 래퍼가 이미 있어도 돌린다. `gradlew`는 `android/local.properties`의 `flutter.sdk`를 쓰므로,
+  다른 SDK 폴더로 버전을 올리는 중(위 "Flutter SDK 버전 올리기")이면 옛 SDK로 돌 수 있다.
 - **Java 21 이상**이 필요하다. Gradle은 `JAVA_HOME`(없으면 PATH의 `java`)을 쓴다 — Android Studio의 JBR
   (`<Android Studio>/jbr`)이면 된다. 낮은 버전이면 테스트를 시작하기 전에 안내 문구와 함께 멈춘다
   (`android/app/build.gradle.kts`의 `minTestJavaVersion` — Robolectric이 API 36 프레임워크에 Java 21을 요구한다).
-- 처음 실행할 때 Robolectric이 테스트 대상 API 수준(24·29·30·35·36)의 프레임워크 jar를 Maven Central에서
-  `~/.m2/repository/org/robolectric`으로 받는다(합쳐 약 700MB). 그 뒤로는 받지 않는다.
-- 결과 보고서: `build/app/reports/tests/testDebugUnitTest/index.html`. 실패한 테스트의 단언 문구와 스택은 콘솔에도 나온다.
-- 테스트 대상 API 수준은 `TestSupport.kt`의 상수(`MIN_SDK` 등)가 정하고, `AndroidTestSetupTest`가 앱 minSdk·targetSdk와 대조한다.
-  Flutter를 올려 minSdk가 바뀌면 그 테스트가 실패하므로 상수를 함께 고친다.
-- CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡 (두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
+- 처음 실행할 때 내려받는 것이 많다:
+  - Robolectric이 테스트 대상 API 수준(24·29·30·35·36)의 프레임워크 jar를 Maven Central에서
+    `~/.m2/repository/org/robolectric`으로 받는다(합쳐 약 700MB).
+  - Gradle 구성 단계에서 Flutter 기본 NDK가 없으면 Android SDK에 설치한다(`jni` 플러그인이 NDK 버전을 지정한다 — 테스트에는 쓰지 않는다).
+- 콘솔 마지막에 `Android 단위 테스트: SUCCESS — 실행 N, 성공 N, 실패 0, 건너뜀 0` 한 줄이 나온다.
+  실패·건너뛴 테스트는 이름과 단언 문구·스택이 콘솔에 나오고, 결과 보고서는 `build/app/reports/tests/testDebugUnitTest/index.html`이다.
+- 테스트 구성:
+  - `HighTextContrastStreamHandlerTest` — 고대비 텍스트 처리기의 구독·전송 규칙과 API 35 이하/36 이상 분기
+  - `MainActivityChannelsTest` — 채널 등록 부분을 가짜 메신저로 부른다(채널·메서드 이름, `hasHingeSensor`, 정리)
+  - `MainActivityLifecycleTest` — `FlutterJNI`를 Mockito 대역으로 바꾼 캐시 엔진으로 액티비티를 생명주기대로 돌려
+    `configureFlutterEngine`·`cleanUpFlutterEngine`·`onResume`의 연결을 본다(Flutter 자체 `FlutterActivityTest`와 같은 방식)
+  - `AndroidTestSetupTest` — 테스트 대상 API 수준(`TestSupport.kt`의 `MIN_SDK` 등)을 앱 minSdk·targetSdk와 대조한다.
+    Flutter를 올려 minSdk가 바뀌면 이 테스트가 실패하므로 상수를 함께 고친다.
+  - Dart 쪽 `test/unit/platform_channel_names_test.dart`가 채널 이름을 `MainActivity.kt`와 대조한다.
+- CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡(두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
+  Gradle 캐시(`setup-java`의 `cache: gradle`)와 NDK 캐시가 비었을 때 약 12분 걸리고, 캐시가 차면 줄어든다.
+  `Linux Analyze, Test & Build`와 나란히 돌므로 서브이슈 PR의 CI 대기는 이 잡이 정한다.
 - 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
-  릴리스 빌드(R8)의 API 36 참조 격리(#109), Flutter 엔진을 띄워야 하는 `MainActivity` 생명주기(`onCreate`·`onResume`).
+  릴리스 빌드(R8)의 API 36 참조 격리(#109), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).

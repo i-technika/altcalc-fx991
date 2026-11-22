@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:yaml/yaml.dart';
 
-/// CI 워크플로 구성 테스트(`flutter_sdk_pin_test`, `ci_actions_test`)가 함께 쓰는 도구.
+/// CI 워크플로 구성 테스트(`flutter_sdk_pin_test`, `ci_actions_test`, `ci_android_unit_test_test`)가 함께 쓰는 도구.
 /// 경로는 패키지 루트(= `flutter test`의 작업 디렉터리) 기준이다.
 
 /// `.github/workflows/`의 워크플로 파일 (경로순)

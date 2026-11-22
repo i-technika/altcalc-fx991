@@ -56,8 +56,8 @@ git checkout -b issue/<번호>-<영문-키워드>
   ```
 - `android/`의 Kotlin·Gradle 설정을 바꿨으면 Android 단위 테스트도 통과시킨다 (Java 21 이상 — README "Android 단위 테스트"):
   ```bash
-  [ -f android/gradlew ] || flutter build apk --debug --config-only   # 래퍼는 저장소에 없다
-  (cd android && ./gradlew :app:testDebugUnitTest)                    # BUILD SUCCESSFUL 이어야 함
+  flutter build apk --debug --config-only          # 래퍼(저장소에 없다)를 만들고 local.properties를 지금 SDK로 맞춘다
+  (cd android && ./gradlew :app:testDebugUnitTest) # "Android 단위 테스트: SUCCESS" 이어야 함
   ```
 
 ### 4. 커밋·푸시·PR

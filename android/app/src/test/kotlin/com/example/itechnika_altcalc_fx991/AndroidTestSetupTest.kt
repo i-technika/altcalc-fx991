@@ -24,12 +24,6 @@ class AndroidTestSetupTest {
     }
 
     @Test
-    fun `고대비 텍스트 분기 경계는 API 35와 36 사이다`() {
-        assertEquals(35, LAST_LEGACY_SDK)
-        assertEquals(LAST_LEGACY_SDK + 1, FIRST_PUBLIC_API_SDK)
-    }
-
-    @Test
     fun `공개 API 경로 테스트는 앱 targetSdk 이하에서 돈다`() {
         // targetSdk보다 높은 API 수준에서는 Robolectric이 호환 동작을 흉내 내 실제 기기와 다를 수 있다.
         assertTrue(

@@ -1,7 +1,7 @@
 package com.example.itechnika_altcalc_fx991
 
 import android.content.Context
-import android.content.ContextWrapper
+import android.provider.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -117,6 +117,55 @@ class HighTextContrastStreamHandlerTest {
         assertEquals(listOf<Any?>(false), sink.events)
     }
 
+    @Test
+    fun `변경 알림은 메인 스레드에서 전달된다`() {
+        handler.onListen(null, sink)
+
+        // 시스템 쪽 변경은 알림을 메인 루퍼에 올릴 뿐, 그 자리에서 보내지 않는다
+        // (API 35 이하: 메인 Handler의 ContentObserver, API 36 이상: context.mainExecutor의 리스너)
+        setSystem(true)
+        assertEquals(listOf<Any?>(false), sink.events)
+
+        idle()
+        assertEquals(listOf<Any?>(false, true), sink.events)
+    }
+
+    @Test
+    fun `알림이 쌓인 채 구독을 해제하면 뒤늦은 알림은 보내지 않는다`() {
+        handler.onListen(null, sink)
+
+        setSystem(true)
+        handler.onCancel(null)
+        idle()
+
+        assertEquals(listOf<Any?>(false), sink.events)
+    }
+
+    @Test
+    fun `알림이 쌓인 채 다시 구독하면 새 값을 한 번만 보낸다`() {
+        handler.onListen(null, sink)
+
+        setSystem(true)
+        handler.onCancel(null)
+        val second = RecordingSink()
+        handler.onListen(null, second)
+        idle()
+
+        assertEquals(listOf<Any?>(true), second.events)
+        assertEquals(listOf<Any?>(false), sink.events)
+    }
+
+    @Test
+    @Config(sdk = [MIN_SDK, LAST_LEGACY_SDK])
+    fun `API 35 이하 - 0이 아닌 설정 값은 켜짐으로 본다`() {
+        Settings.Secure.putInt(context.contentResolver, HighTextContrastSystem.LEGACY_KEY, 2)
+        idle()
+
+        handler.onListen(null, sink)
+
+        assertEquals(listOf<Any?>(true), sink.events)
+    }
+
     // ---- refresh (onResume) ----
 
     @Test
@@ -227,13 +276,9 @@ class HighTextContrastStreamHandlerTest {
     @Test
     @Config(sdk = [FIRST_PUBLIC_API_SDK])
     fun `API 36 이상 - 접근성 관리자를 얻지 못하면 꺼진 것으로 본다`() {
-        val withoutManager = object : ContextWrapper(context) {
-            override fun getSystemService(name: String): Any? =
-                if (name == Context.ACCESSIBILITY_SERVICE) null else super.getSystemService(name)
-        }
         HighTextContrastSystem.setManagerState(context, enabled = true)
         idle()
-        val handler = HighTextContrastStreamHandler(withoutManager)
+        val handler = HighTextContrastStreamHandler(ContextWithoutAccessibilityManager(context))
 
         handler.onListen(null, sink)
         handler.refresh()

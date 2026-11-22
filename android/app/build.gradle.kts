@@ -60,24 +60,40 @@ flutter {
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18.1")
+    // Flutter 엔진의 네이티브 연결(FlutterJNI)을 대역으로 바꿔 MainActivity 생명주기를 돌린다 (MainActivityLifecycleTest)
+    testImplementation("org.mockito:mockito-core:5.24.0")
 }
 
-// Robolectric은 API 36 프레임워크를 Java 21 이상에서만 돌린다(Robolectric `DefaultSdkProvider`의 SDK별 요구 Java 버전).
-// 낮은 JVM으로는 API 36 분기 테스트가 돌지 못하므로, 테스트를 시작하기 전에 분명한 문구로 멈춘다.
+// Robolectric은 API 36 프레임워크를 Java 21 이상에서만 돌린다(Robolectric 4.18 `DefaultSdkProvider`의 SDK별 요구 Java 버전).
+// 낮은 JVM이면 Robolectric도 API 36 테스트마다 "Failed to create a Robolectric sandbox"로 실패시키지만, 여기서는 테스트를
+// 시작하기 전에 한 번, 무엇을 하면 되는지 적은 문구로 멈춘다. Robolectric을 올릴 때 그쪽 요구 버전과 이 값을 함께 확인한다.
 // CI 잡의 Java 버전은 이 값 이상이어야 한다 (test/unit/ci_android_unit_test_test.dart가 대조한다).
 val minTestJavaVersion = 21
 tasks.withType<Test>().configureEach {
-    // 실패한 테스트의 이름·단언 문구·스택을 콘솔에 남긴다 — CI 로그만으로 원인을 볼 수 있게 (HTML 보고서는 CI에 남지 않는다)
+    // 실패·건너뜀은 테스트별로, 전체 결과는 마지막에 한 줄로 콘솔에 남긴다 — CI 로그만으로 원인과 실행 개수를 볼 수 있게
+    // (HTML 보고서는 CI에 남지 않는다)
     testLogging {
-        events("failed")
+        events("failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
+    afterSuite(
+        KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, result ->
+            if (suite.parent == null) {
+                println(
+                    "Android 단위 테스트: ${result.resultType} — 실행 ${result.testCount}, 성공 ${result.successfulTestCount}, " +
+                        "실패 ${result.failedTestCount}, 건너뜀 ${result.skippedTestCount}",
+                )
+            }
+        }),
+    )
+    // doFirst가 스크립트 객체를 잡지 않게 지역 값으로 옮긴다 (구성 캐시 직렬화)
+    val required = minTestJavaVersion
     val launcherVersion = javaLauncher.map { it.metadata.languageVersion.asInt() }
     doFirst {
         val version = launcherVersion.get()
-        check(version >= minTestJavaVersion) {
-            "Android 단위 테스트는 Java $minTestJavaVersion 이상에서 돌린다 (지금 Java $version) — " +
-                "Robolectric의 API 36 프레임워크가 Java $minTestJavaVersion 을 요구한다 (#108, README \"Android 단위 테스트\")"
+        check(version >= required) {
+            "Android 단위 테스트는 Java $required 이상에서 돌린다 (지금 Java $version). " +
+                "Robolectric이 API 36 프레임워크에 Java ${required}을 요구한다 — JAVA_HOME을 바꿀 것 (#108, README \"Android 단위 테스트\")"
         }
     }
 }

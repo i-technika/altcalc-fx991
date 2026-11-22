@@ -2,6 +2,7 @@ package com.example.itechnika_altcalc_fx991
 
 import android.content.ContentResolver
 import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Build
 import android.os.Looper
@@ -70,7 +71,12 @@ internal object HighTextContrastSystem {
         }
     }
 
-    /** 옛 설정 키를 바꾼다. [notify]가 false면 관찰자에게 알리지 않는다(변경 알림을 놓친 상황). */
+    /**
+     * 옛 설정 키를 바꾼다. [notify]가 false면 관찰자에게 알리지 않는다(변경 알림을 놓친 상황).
+     *
+     * 알림을 빼는 방법은 Robolectric 섀도의 구현에 기댄다: `ShadowSettings.ShadowSecure.putInt`는 리졸버가 null이면
+     * 값만 바꾸고 `notifyChange`를 부르지 않는다(실제 Android에서는 null 리졸버가 NPE다). 섀도가 바뀌면 NPE로 드러난다.
+     */
     fun setLegacySetting(context: Context, enabled: Boolean, notify: Boolean = true) {
         val resolver: ContentResolver? = if (notify) context.contentResolver else null
         Settings.Secure.putInt(resolver, LEGACY_KEY, if (enabled) 1 else 0)
@@ -109,6 +115,12 @@ internal object HighTextContrastSystem {
 
     private fun manager(context: Context): AccessibilityManager =
         context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+}
+
+/** 접근성 관리자를 얻지 못하는 컨텍스트 (`getSystemService`가 null을 돌려주는 기기·환경) */
+internal class ContextWithoutAccessibilityManager(base: Context) : ContextWrapper(base) {
+    override fun getSystemService(name: String): Any? =
+        if (name == Context.ACCESSIBILITY_SERVICE) null else super.getSystemService(name)
 }
 
 /**

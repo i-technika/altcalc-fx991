@@ -68,6 +68,8 @@ jobs:
     name: Android Unit Tests (JVM)
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
+    # 캐시가 비었을 때 약 12분(Gradle·NDK 설치 포함), 캐시가 차면 그보다 짧다. 내려받기가 멈춰도 오래 잡히지 않게 한다.
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -78,6 +80,8 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+          # ~/.gradle/caches(Gradle 배포본·플러그인·의존성)를 Gradle 설정 파일 해시로 캐시한다
+          cache: 'gradle'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -92,6 +96,23 @@ jobs:
       # Gradle 래퍼(android/gradlew)와 android/local.properties는 저장소에 없고 Flutter가 만든다
       - name: Generate Gradle wrapper
         run: flutter build apk --debug --config-only
+
+      # Gradle 구성 단계에서 AGP가 Flutter 기본 NDK를 설치한다(jni 플러그인이 ndkVersion을 지정한다, 약 3.5분).
+      # 단위 테스트에는 쓰지 않지만 구성 단계라 피할 수 없으므로, Flutter가 정하는 버전 하나만 캐시한다.
+      - name: Locate Flutter default NDK
+        id: ndk
+        run: |
+          flutter_root=$(dirname "$(dirname "$(command -v flutter)")")
+          version=$(grep -oP 'val ndkVersion: String = "\K[^"]+' "$flutter_root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt" || true)
+          test -n "$version" || { echo "::error::Flutter 기본 NDK 버전을 읽지 못했다 (FlutterExtension.kt 형식 변경?)"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "path=$ANDROID_HOME/ndk/$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Android NDK
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.ndk.outputs.path }}
+          key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}
 
       - name: Run Android unit tests
         working-directory: android

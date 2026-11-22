@@ -16,12 +16,13 @@ import org.robolectric.annotation.Config
 /**
  * [MainActivity]가 거는 플랫폼 채널 (#108) — `altcalc/device`(#24)와 고대비 텍스트 이벤트 채널(#95).
  *
- * Flutter 엔진은 JVM에서 뜨지 않으므로 액티비티를 만들기만 하고(onCreate 전) 채널 등록 부분만 가짜 메신저로 부른다.
- * 채널·메서드 이름은 Dart 쪽(`FormFactor.deviceChannel`, `high_text_contrast.dart`)과 맞춘 값을 여기에 따로 적어,
- * Kotlin 쪽 이름이 바뀌면 실패하게 한다.
+ * 액티비티를 만들기만 하고(onCreate 전) 채널 등록 부분만 가짜 메신저로 불러 채널 동작을 자세히 본다.
+ * 생명주기 훅이 이 등록·정리를 실제로 부르는지는 [MainActivityLifecycleTest]가 본다.
+ * 채널 이름은 여기에 따로 적어 Kotlin 상수가 바뀌면 실패하게 하고, Dart 쪽 이름과의 일치는
+ * Dart 테스트 `test/unit/platform_channel_names_test.dart`가 `MainActivity.kt`를 읽어 대조한다.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [LAST_LEGACY_SDK, FIRST_PUBLIC_API_SDK])
+@Config(sdk = [MIN_SDK, LAST_LEGACY_SDK, FIRST_PUBLIC_API_SDK])
 class MainActivityChannelsTest {
     private lateinit var activity: MainActivity
     private val messenger = FakeBinaryMessenger()
@@ -53,7 +54,7 @@ class MainActivityChannelsTest {
     }
 
     @Test
-    @Config(sdk = [Build.VERSION_CODES.Q])
+    @Config(sdk = [MIN_SDK, Build.VERSION_CODES.Q])
     fun `hasHingeSensor - API 29 이하는 기능 선언이 있어도 false`() {
         declareHingeSensor(true)
 
@@ -104,6 +105,16 @@ class MainActivityChannelsTest {
         activity.unregisterChannels(messenger)
 
         assertEquals(0, HighTextContrastSystem.registrationCount(activity))
+    }
+
+    @Test
+    fun `고대비 텍스트 채널 - 다시 listen하면(핫 리스타트) 앞 구독을 풀고 첫 값을 다시 보낸다`() {
+        // EventChannel은 구독 중에 listen이 다시 오면 처리기의 onCancel 뒤 onListen을 부른다
+        messenger.invokeMethod(HIGH_TEXT_CONTRAST_CHANNEL, "listen")
+        messenger.invokeMethod(HIGH_TEXT_CONTRAST_CHANNEL, "listen")
+
+        assertEquals(listOf<Any?>(false, false), messenger.sentEvents(HIGH_TEXT_CONTRAST_CHANNEL))
+        assertEquals(1, HighTextContrastSystem.registrationCount(activity))
     }
 
     @Test
