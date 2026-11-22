@@ -27,7 +27,8 @@ import 'handedness_dialog.dart';
 /// 기준으로 하므로 48dp 미만으로 보고될 수 있다 — 실제 터치 영역은 48dp다).
 ///
 /// ## 접힘선이 있을 때 대화상자 위치 (#25)
-/// 대화상자는 이 버튼이 있는 쪽 절반에 뜬다(`showDialog`의 `anchorPoint` → `DisplayFeatureSubScreen`).
+/// 대화상자는 이 버튼이 있는 쪽 절반에 뜬다(`showDialog`의 `anchorPoint` → `DisplayFeatureSubScreen`, 좁은 절반
+/// 예외는 아래 "좁은 하위 화면").
 /// Flutter는 반 접힘·물리 힌지만 화면을 나누는 것으로 보지만, 앱은 펼친 폭 0 세로 접힘선에서도 화면을 나눈다
 /// (`FormFactor.arrangementOf`). 그 경우 대화상자가 주름을 가로지르지 않도록 같은 기준으로 한 번 더 나눈다.
 /// 다만 다음 두 조건을 모두 만족할 때만이다 (#41 R1·R2).
@@ -36,7 +37,8 @@ import 'handedness_dialog.dart';
 /// - 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상이다. 그보다 좁으면 대화상자
 ///   카드가 150dp 안팎으로 줄어 읽기 어려우므로, 주름을 가로지르더라도 화면 전체에 띄운다.
 ///   이 하한은 앱 배치 판정과 같은 값이라, 절반이 280~360dp이면 카드가 Material 최소 폭(280dp)보다 좁은
-///   200~280dp로 나뉘어 뜬다(대칭인 Pixel Fold 세로 화면은 절반 336dp, 카드 256dp — 주름을 피하는 쪽을 택했다, #25).
+///   200~280dp로 나뉘어 뜬다(대칭인 Galaxy Z Fold 내부 세로 화면은 절반 336.5dp, 카드 256dp — 주름을 피하는 쪽을
+///   택했다, #25).
 ///
 /// ### 좁은 하위 화면 (#125)
 /// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 `showDialog`
@@ -63,7 +65,8 @@ import 'handedness_dialog.dart';
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 버튼이 반대쪽 절반으로 옮겨 가도, 대화상자는 연 자리(연 시점의
 /// 버튼 쪽 절반)에 남는다. 고른 뒤에는 버튼과 대화상자가 서로 다른 절반에 있고 옮겨 간 키패드를 대화상자가
 /// 가리지만, 고르는 순간 반대쪽 절반에서 키패드가 빠지고 LCD가 들어오는 것은 대화상자 바깥에서 보인다(미리 보기).
-/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다. 다른 두 방식을 쓰지 않는 이유:
+/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다(좁은 절반 예외는 위 "좁은 하위 화면"). 다른 두 방식을 쓰지 않는
+/// 이유:
 /// - 버튼 쪽으로 따라가기: 키보드 화살표로 선택지를 옮기면 선택도 바뀌므로([HandednessDialog]) 화살표를 누를
 ///   때마다 대화상자가 접힘선 건너로 뛴다. 손가락·스크린리더 터치 탐색 위치에서도 대화상자가 사라진다.
 ///   (반 접힘·물리 힌지까지 따라가게 하려면 `showDialog` 대신 `anchorPoint`를 바꿀 수 있는 `DialogRoute`를
@@ -73,8 +76,9 @@ import 'handedness_dialog.dart';
 /// 다른 화면에서도 대화상자는 연 자리에 남는다.
 /// - 손잡이를 바꾸면 배치까지 바뀌는 비대칭 세로 접힘선(키패드가 들어갈 절반 폭이 손잡이마다 다르다): 반 접힘·물리
 ///   힌지는 연 시점의 `anchorPoint`가 고정이라, 버튼이 반대쪽 절반으로 가도 옮겨 가지 않는다(넓은 절반이 대화상자
-///   최소 크기를 넘으면 어느 손잡이로 열어도 넓은 절반이다 — 위 "좁은 하위 화면"). 펼친 폭 0 접힘선은 위 절대로 버튼 중심을 다시 재지만, 접힘선 기준 배치일 때 버튼이 있는 LCD 쪽은 키패드가 들어가지 못한 좁은
-///   절반이라 하한([FormFactor.hingeMinPanelExtent])보다 늘 좁아, 대화상자는 화면 전체에 그대로 뜬다
+///   최소 크기를 넘으면 어느 손잡이로 열어도 넓은 절반이다 — 위 "좁은 하위 화면"). 펼친 폭 0 접힘선은 위 절대로
+///   버튼 중심을 다시 재지만, 접힘선 기준 배치일 때 버튼이 있는 LCD 쪽은 키패드가 들어가지 못한 좁은 절반이라
+///   하한([FormFactor.hingeMinPanelExtent])보다 늘 좁아, 대화상자는 화면 전체에 그대로 뜬다
 ///   (하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `split_layout_test`가 검사한다).
 /// - 가로 접힘선 기준 배치(테이블톱): 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고
 ///   어느 쪽인지는 손잡이와 무관하다(`CalcTabletopLayout`) — 손잡이를 바꾸면 같은 절반 안에서 좌우로만 옮겨 간다.
@@ -113,8 +117,9 @@ class SettingsButton extends StatefulWidget {
   static const Key touchExtensionKey = ValueKey('settings-button-touch');
 
   /// 대화상자 카드 최소 높이를 테마가 정하지 않을 때 쓰는 값 (dp). Material은 최소 높이를 두지 않는다.
-  /// 최소 폭과 같은 값으로, 스크롤 밖에 고정된 제목·닫기 버튼과 선택지 일부가 큰 글자 배율(2.0)에서도 넘치지 않는
-  /// 높이다 (#125 테스트가 확인).
+  /// 최소 폭과 같은 값으로 정한 기준이다. 이 높이의 카드는 글자 배율 2.0에서도 넘치지 않고 스크롤 밖에 고정된
+  /// 제목·닫기 버튼이 보이지만(#125 테스트가 확인), 영어 2.0에서는 제목이 높이 대부분을 차지해 선택지는 스크롤해야
+  /// 보인다(넘침까지 여유 약 10dp — 영어 2.0에서 넘치지 않는 최소 카드 높이는 약 270dp, 한국어 2.0은 약 206dp).
   static const double dialogFallbackMinCardHeight = 280;
 
   /// 대화상자 카드가 최소 크기를 지키려면 대화상자가 뜨는 하위 화면이 시스템 인셋을 빼고 가져야 하는 크기 (dp).
@@ -155,7 +160,9 @@ class SettingsButton extends StatefulWidget {
     ).toList();
     if (subScreens.length < 2) return anchor;
     // 인셋은 `MediaQueryData.removeDisplayFeatures`처럼 화면 가장자리에 닿은 쪽에만 남는다 = 안전 영역과의 교집합.
-    final safe = screen.padding.deflateRect(whole);
+    // 시스템 인셋(SafeArea)과 함께 Material `Dialog`가 바깥 여백에 더하는 키보드 인셋도 뺀다(키보드가 뜨면
+    // padding 아래쪽은 0이 되므로 합이 실제 남는 영역이다).
+    final safe = (screen.padding + screen.viewInsets).deflateRect(whole);
     bool fits(Rect sub) {
       final usable = sub.intersect(safe);
       return usable.width >= minRegion.width &&

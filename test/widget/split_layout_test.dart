@@ -2051,8 +2051,44 @@ void _hingeLayoutTests() {
       }
     }
 
-    // 높이 기준([SettingsButton.dialogFallbackMinCardHeight])의 근거: 최소 크기 하위 화면(카드 280×280)에서
-    // 큰 글자 배율에도 넘치지 않는다. 안내 글까지 보이는(가장 긴) 대화상자로 확인한다.
+    // 높이 경계: 가로 접힘선 기준 배치(테이블톱, 버튼은 키패드 옆 아래 절반)에서 아래 절반이 인셋을 빼고 카드 최소
+    // 높이 + 위아래 여백(280 + 24×2 = 328dp)이면 그 절반에(카드 280dp 이하), 1dp 낮으면 위 절반에 뜬다.
+    for (final (lowerHalf, stays) in [(328.0, true), (327.0, false)]) {
+      for (final textScale in [1.0, 2.0]) {
+        testWidgets('높이 경계: 버튼 쪽 아래 절반 ${lowerHalf}dp·글자 배율 $textScale → '
+            '${stays ? '그 절반' : '위 절반'}', (tester) async {
+          final hinge = Rect.fromLTWH(
+            0,
+            tall.height - portraitInset.bottom - lowerHalf,
+            tall.width,
+            0,
+          );
+          setView(tester, portraitInset, textScale);
+          await _pump(
+            tester,
+            size: tall,
+            padding: portraitInset,
+            textScale: textScale,
+            displayFeatures: [_halfOpenedAt(hinge)],
+          );
+          expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
+          expect(after(hinge, tester.getRect(_settings)), isTrue);
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final dialog = tester.getRect(_dialogSurface);
+          if (stays) {
+            expect(after(hinge, dialog), isTrue, reason: '$dialog');
+            expect(dialog.height, lessThanOrEqualTo(280.01));
+          } else {
+            expect(before(hinge, dialog), isTrue, reason: '$dialog');
+          }
+        });
+      }
+    }
+
+    // 높이 기준([SettingsButton.dialogFallbackMinCardHeight])을 확인한다: 최소 크기 하위 화면(카드 280×280)에서
+    // 큰 글자 배율에도 넘치지 않고 고정된 닫기 버튼이 보인다. 안내 글까지 보이는(가장 긴) 대화상자로 확인한다.
     for (final textScale in [1.0, 2.0]) {
       testWidgets('최소 크기 하위 화면(카드 280×280)·글자 배율 $textScale에서 넘치지 않는다', (
         tester,
@@ -2133,6 +2169,63 @@ void _hingeLayoutTests() {
         expect(
           SettingsButton.dialogAnchorPointOf(null, anchor, minRegion),
           anchor,
+        );
+      });
+
+      test('네 하위 화면: 최소 크기를 넘는 곳 중 버튼에 가장 가까운 곳의 가운데이고, 접힘 정보 순서와 무관하다', () {
+        // 1400×1000을 세로 힌지(x=400, 폭 20)·가로 힌지(y=300, 높이 20)로 4분할. 위 두 곳은 높이 300dp로 미달,
+        // 아래 왼쪽(400×680)·아래 오른쪽(980×680)이 넘는다. 버튼은 위 왼쪽.
+        const size = Size(1400, 1000);
+        const anchor = Offset(100, 100);
+        final vertical = _foldAt(
+          const Rect.fromLTWH(400, 0, 20, 1000),
+          type: DisplayFeatureType.hinge,
+        );
+        final horizontal = _foldAt(
+          const Rect.fromLTWH(0, 300, 1400, 20),
+          type: DisplayFeatureType.hinge,
+        );
+        for (final features in [
+          [vertical, horizontal],
+          [horizontal, vertical],
+        ]) {
+          expect(
+            SettingsButton.dialogAnchorPointOf(
+              screenOf(size, features),
+              anchor,
+              minRegion,
+            ),
+            const Rect.fromLTWH(0, 320, 400, 680).center,
+            reason: '$features',
+          );
+        }
+      });
+
+      test('키보드 인셋(viewInsets)도 빼고 판정한다', () {
+        // 가로 반 접힘 y=600, 버튼은 아래 절반(400dp): 키보드가 없으면 넘어 그대로, 키보드 100dp가 뜨면 아래
+        // 절반이 300dp로 줄어 미달이라 위 절반(600dp)으로 옮긴다.
+        const size = Size(700, 1000);
+        final fold = _halfOpenedAt(const Rect.fromLTWH(0, 600, 700, 0));
+        const anchor = Offset(600, 900); // 아래 절반 (400dp)
+        expect(
+          SettingsButton.dialogAnchorPointOf(
+            screenOf(size, [fold]),
+            anchor,
+            minRegion,
+          ),
+          anchor,
+        );
+        expect(
+          SettingsButton.dialogAnchorPointOf(
+            MediaQueryData(
+              size: size,
+              viewInsets: const EdgeInsets.only(bottom: 100),
+              displayFeatures: [fold],
+            ),
+            anchor,
+            minRegion,
+          ),
+          const Offset(350, 300),
         );
       });
 
