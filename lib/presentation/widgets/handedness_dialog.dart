@@ -25,6 +25,8 @@ class HandednessDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = SettingsStrings.of(context);
     return AlertDialog(
+      // 작은 창·큰 글자 배율에서도 넘치지 않게 제목·내용을 스크롤한다 (#72 R1 — 열린 채 창이 줄어드는 경우 포함).
+      scrollable: true,
       title: Text(strings.handednessTitle),
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
       content: RadioGroup<Handedness>(

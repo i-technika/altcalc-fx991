@@ -207,6 +207,11 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   int _inputTotal = 0;
   bool _trimmed = false;
 
+  /// 기기 화면 Navigator를 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지한다 — 열린 대화상자가 닫히지 않게 (#72).
+  final GlobalKey _deviceNavigatorKey = GlobalKey(
+    debugLabel: 'preview-device-navigator',
+  );
+
   @override
   void didUpdateWidget(KeyPreviewScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -273,7 +278,11 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
       onTextScaleChanged: (s) => setState(() => _textScale = s),
       onReset: _reset,
     );
-    final frame = _DeviceFrame(device: _device, textScale: _textScale);
+    final frame = _DeviceFrame(
+      device: _device,
+      textScale: _textScale,
+      navigatorKey: _deviceNavigatorKey,
+    );
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -319,7 +328,14 @@ class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
 
-  const _DeviceFrame({required this.device, required this.textScale});
+  /// 기기 화면 Navigator([PreviewDeviceNavigator])의 키 — 미리보기 화면이 들고 있어 배치가 바뀌어도 유지된다
+  final GlobalKey navigatorKey;
+
+  const _DeviceFrame({
+    required this.device,
+    required this.textScale,
+    required this.navigatorKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +411,7 @@ class _DeviceFrame extends StatelessWidget {
                               displayFeatures: const [],
                               textScaler: TextScaler.linear(textScale),
                             ),
-                            child: const PreviewDeviceNavigator(),
+                            child: PreviewDeviceNavigator(key: navigatorKey),
                           ),
                         ),
                       ),
@@ -413,20 +429,19 @@ class _DeviceFrame extends StatelessWidget {
 
 /// 기기 화면 안의 Navigator — 첫 화면은 [CalculatorScreen] (#72).
 ///
-/// 미리보기 앱의 Navigator(루트)는 기기 틀 바깥(미리보기 창 전체)에 있다. 계산기 화면이 대화상자를 띄울 때
-/// 가장 가까운 Navigator를 쓰므로(`SettingsButton`), 이 Navigator가 있으면 대화상자가 기기 틀 안에 뜬다:
+/// 미리보기 앱의 Navigator(루트)는 기기 틀 바깥(미리보기 창 전체)에 있다. 계산기 화면은 대화상자를
+/// 가장 가까운 Navigator에 띄우므로(`showScreenDialog`), 이 Navigator가 있으면 대화상자가 기기 틀 안에 뜬다:
 /// - 크기·인셋·글자 배율: 이 Navigator가 기기 MediaQuery([ScreenCoordinateRoot]) 아래에 있어 그대로 물려받는다.
 /// - 축소 표시: 기기 틀의 축소(FittedBox)가 대화상자에도 함께 적용되고, 터치 좌표도 그 변환을 따른다.
 /// - 장벽(barrier)은 기기 화면만 덮는다 — 대화상자가 열려 있어도 옆 패널(기기 선택·로그)은 쓸 수 있다.
-/// - 툴팁 등 [Overlay]를 쓰는 것도 이 Navigator의 Overlay에 그려진다.
+/// - 툴팁 등 [Overlay]를 쓰는 것, SnackBar([ScaffoldMessenger])도 기기 화면 안에 그려진다.
+/// - Hero 애니메이션: 루트 Navigator는 하위 Navigator에 HeroController를 물려주지 않으므로 따로 둔다.
+/// - 시스템 뒤로가기·Esc는 이 Navigator의 맨 위 라우트(대화상자)를 먼저 닫는다([NavigatorPopHandler]).
 ///
-/// 이 State가 유지되므로 기기·글자 배율을 바꿔도 열린 대화상자는 닫히지 않고 새 크기로 다시 그려진다.
-/// 시스템 뒤로가기는 이 Navigator를 먼저 닫는다([NavigatorPopHandler]).
+/// 미리보기 화면이 GlobalKey를 주므로 기기·글자 배율을 바꾸거나 창 배치(좌우 ↔ 위아래)가 바뀌어도 이 State와
+/// 열린 대화상자가 유지된다. 창이 기기 화면을 그릴 수 없을 만큼 작아지면(안내 문구만 표시) 함께 사라진다.
 class PreviewDeviceNavigator extends StatefulWidget {
   const PreviewDeviceNavigator({super.key});
-
-  /// 기기 화면 Navigator의 위젯 키
-  static const Key navigatorKey = ValueKey('preview-device-navigator');
 
   @override
   State<PreviewDeviceNavigator> createState() => _PreviewDeviceNavigatorState();
@@ -434,19 +449,32 @@ class PreviewDeviceNavigator extends StatefulWidget {
 
 class _PreviewDeviceNavigatorState extends State<PreviewDeviceNavigator> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+  final HeroController _heroController =
+      MaterialApp.createMaterialHeroController();
+
+  @override
+  void dispose() {
+    _heroController.dispose();
+    super.dispose();
+  }
+
+  /// 기본 라우트만 만든다. 그 밖의 이름은 `null` — 앱과 같이 알 수 없는 라우트 오류가 나게 한다.
+  Route<void>? _onGenerateRoute(RouteSettings settings) {
+    if (settings.name != Navigator.defaultRouteName) return null;
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (_) => const CalculatorScreen(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return NavigatorPopHandler<Object?>(
       onPopWithResult: (_) => _navigator.currentState?.maybePop(),
-      child: KeyedSubtree(
-        key: PreviewDeviceNavigator.navigatorKey,
-        child: Navigator(
-          key: _navigator,
-          onGenerateRoute: (settings) => MaterialPageRoute<void>(
-            settings: settings,
-            builder: (_) => const CalculatorScreen(),
-          ),
+      child: ScaffoldMessenger(
+        child: HeroControllerScope(
+          controller: _heroController,
+          child: Navigator(key: _navigator, onGenerateRoute: _onGenerateRoute),
         ),
       ),
     );
