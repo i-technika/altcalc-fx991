@@ -272,9 +272,16 @@ cd android
     `configureFlutterEngine`·`cleanUpFlutterEngine`·`onResume`의 연결을 본다(Flutter 자체 `FlutterActivityTest`와 같은 방식)
   - `AndroidTestSetupTest` — 테스트 대상 API 수준(`TestSupport.kt`의 `MIN_SDK` 등)을 앱 minSdk·targetSdk와 대조한다.
     Flutter를 올려 minSdk가 바뀌면 이 테스트가 실패하므로 상수를 함께 고친다.
-  - Dart 쪽 `test/unit/platform_channel_names_test.dart`가 채널 이름을 `MainActivity.kt`와 대조한다.
+  - Dart 쪽 `test/unit/main_activity_source_test.dart`가 `MainActivity.kt` 소스를 읽어 채널 이름을 Dart 쪽과 대조하고,
+    생명주기 테스트가 구조상 못 보는 `super.configureFlutterEngine`(플러그인 등록) 호출을 확인한다.
+  - Mockito 인라인 모크 에이전트는 Gradle이 테스트 JVM에 `-javaagent`로 붙인다(`android/app/build.gradle.kts`의 `mockitoAgent`).
 - CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡(두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
-  Gradle 캐시(`setup-java`의 `cache: gradle`)와 NDK 캐시가 비었을 때 약 12분 걸리고, 캐시가 차면 줄어든다.
-  `Linux Analyze, Test & Build`와 나란히 돌므로 서브이슈 PR의 CI 대기는 이 잡이 정한다.
+  - 캐시 없이 약 12분 걸린다. 캐시는 Gradle(`setup-java`의 `cache: gradle`)과 NDK·Robolectric jar(`actions/cache`) 두 가지다.
+  - PR 실행이 저장한 캐시는 그 PR만 쓴다(GitHub 캐시 범위 규칙 — 다른 PR은 베이스 브랜치 범위만 읽는다).
+    그래서 Sub-issue CI는 마일스톤 브랜치 push(서브이슈 머지)에서도 돌아 그 브랜치 범위에 캐시를 만들고, 다음 서브이슈 PR들이
+    처음부터 그 캐시를 쓴다. 이 예열은 Flutter SDK 캐시처럼 다른 잡의 캐시에도 똑같이 효과가 있다.
+  - Gradle 캐시 키는 Gradle 설정 파일(`*.gradle*`·`gradle.properties`·`gradle-wrapper.properties`) 해시라, 그 파일을 고친 PR은
+    Gradle 캐시 없이 돈다. NDK·Robolectric 캐시는 앞부분이 같은 키에서 부분 복원한다.
+  - `Linux Analyze, Test & Build`와 나란히 돌므로 서브이슈 PR의 CI 대기는 이 잡이 정한다.
 - 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
   릴리스 빌드(R8)의 API 36 참조 격리(#109), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).

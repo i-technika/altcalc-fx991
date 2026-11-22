@@ -57,11 +57,17 @@ flutter {
 
 // Kotlin 플랫폼 코드의 JVM 단위 테스트 (#108) — 실행 방법은 README "Android 단위 테스트".
 // Robolectric이 API 수준별 Android 프레임워크(android-all jar)를 JVM에서 돌려, 기기 없이 API 분기를 검사한다.
+// 인라인 모크를 만드는 Mockito 에이전트. JVM에 실행 중 붙는 방식(자기 부착)은 앞으로의 JDK에서 기본으로 막히므로
+// 테스트 JVM을 띄울 때 -javaagent로 붙인다 (Mockito 공식 권장 설정).
+val mockitoVersion = "5.24.0"
+val mockitoAgent: Configuration by configurations.creating
+
 dependencies {
+    mockitoAgent("org.mockito:mockito-core:$mockitoVersion") { isTransitive = false }
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18.1")
     // Flutter 엔진의 네이티브 연결(FlutterJNI)을 대역으로 바꿔 MainActivity 생명주기를 돌린다 (MainActivityLifecycleTest)
-    testImplementation("org.mockito:mockito-core:5.24.0")
+    testImplementation("org.mockito:mockito-core:$mockitoVersion")
 }
 
 // Robolectric은 API 36 프레임워크를 Java 21 이상에서만 돌린다(Robolectric 4.18 `DefaultSdkProvider`의 SDK별 요구 Java 버전).
@@ -86,6 +92,9 @@ tasks.withType<Test>().configureEach {
             }
         }),
     )
+    // Configuration 대신 경로 Provider를 잡는다 (구성 캐시 직렬화)
+    val agentPath = mockitoAgent.elements.map { it.single().asFile.absolutePath }
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-javaagent:${agentPath.get()}") })
     // doFirst가 스크립트 객체를 잡지 않게 지역 값으로 옮긴다 (구성 캐시 직렬화)
     val required = minTestJavaVersion
     val launcherVersion = javaLauncher.map { it.metadata.languageVersion.asInt() }

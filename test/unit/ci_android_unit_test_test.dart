@@ -89,13 +89,25 @@ void main() {
         );
         expect(wrapper, isNot(-1), reason: 'Gradle 래퍼를 만드는 단계가 없다');
         expect(wrapper, lessThan(test), reason: '래퍼를 먼저 만들어야 한다');
+
+        // 이 잡만의 작업 트리 검사(#67) — 두 워크플로에서 함께 지워지면 일치 검사로는 못 잡는다
+        final verify = steps.indexWhere(
+          (s) =>
+              '${s['run'] ?? ''}'.trim() ==
+              'bash .github/scripts/verify-clean-tree.sh',
+        );
+        expect(verify, greaterThan(test), reason: '테스트 뒤에 작업 트리 검사가 있어야 한다');
       });
 
       test('잡이 실패를 삼키거나 건너뛰지 않고, 시간 제한이 있다', () {
         final job = _job(workflow);
         expect(job.containsKey('continue-on-error'), isFalse);
-        // 같은 워크플로의 다른 잡과 같은 조건 — Draft가 아니면 늘 돈다 (두 워크플로가 같이 틀리면 일치 검사로는 못 잡는다)
-        expect(job['if'], 'github.event.pull_request.draft == false');
+        // Draft가 아닌 PR과 Sub-issue CI의 마일스톤 브랜치 push(캐시 예열)에서 늘 돈다
+        // (두 워크플로가 같이 틀리면 일치 검사로는 못 잡는다)
+        expect(
+          job['if'],
+          "github.event_name == 'push' || github.event.pull_request.draft == false",
+        );
         // 캐시가 빈 실행(약 12분)이 잘리지 않을 만큼, 멈춘 내려받기가 오래 잡히지 않을 만큼
         expect(
           job['timeout-minutes'],
@@ -104,6 +116,26 @@ void main() {
       });
     });
   }
+
+  test('Sub-issue CI는 마일스톤 브랜치 push에서도 모든 잡을 돌려 캐시를 예열한다', () {
+    // PR 실행의 캐시는 그 PR 범위에만 저장된다. 베이스(마일스톤 브랜치) 범위에 캐시가 있어야 새 서브이슈 PR이 함께 쓴다.
+    const workflow = '.github/workflows/subissue-linux-ci.yml';
+    final doc = loadYamlFile(workflow);
+    // YAML 1.1 해석기는 키 `on`을 그대로 문자열로 읽는다
+    final on = doc['on'] as YamlMap;
+    final push = on['push'] as YamlMap?;
+    expect(push, isNotNull, reason: 'push 트리거가 없다');
+    expect(_plain(push!['branches']), ['milestone/**']);
+    for (final MapEntry(key: id, value: job)
+        in (doc['jobs'] as YamlMap).entries) {
+      // `github.event.pull_request.draft == false`만 있으면 push에서는 pull_request가 없어 조건 해석에 기대게 된다
+      expect(
+        '${(job as YamlMap)['if']}',
+        startsWith("github.event_name == 'push' || "),
+        reason: '$id: push 실행에서도 돌아야 한다',
+      );
+    }
+  });
 
   test('Gradle 테스트 설정이 실패를 삼키지 않고 Java 버전 검사가 최저 버전을 쓴다', () {
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();

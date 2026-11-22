@@ -54,11 +54,13 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * [registerChannels]가 건 고대비 텍스트 구독을 정리한다. Dart 쪽이 구독을 끊지 않은 채 엔진이 정리돼도
-     * 시스템 변경 감지 등록이 남지 않게 한다. 거듭 불러도 안전하다.
+     * [registerChannels]가 건 채널 처리기를 떼고 고대비 텍스트 구독을 정리한다. Dart 쪽이 구독을 끊지 않은 채 엔진이
+     * 정리돼도 시스템 변경 감지 등록이 남지 않고, 엔진이 이 액티비티보다 오래 살아도(캐시 엔진) 끝난 액티비티를
+     * 붙드는 처리기가 남지 않게 한다. 거듭 불러도 안전하다.
      */
     @VisibleForTesting
     internal fun unregisterChannels(messenger: BinaryMessenger) {
+        MethodChannel(messenger, DEVICE_CHANNEL).setMethodCallHandler(null)
         EventChannel(messenger, HIGH_TEXT_CONTRAST_CHANNEL).setStreamHandler(null)
         highTextContrast?.onCancel(null)
         highTextContrast = null

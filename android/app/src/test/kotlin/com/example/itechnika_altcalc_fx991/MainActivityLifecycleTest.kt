@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.eq
+import org.mockito.Mockito
 import org.mockito.Mockito.atLeast
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -72,6 +73,8 @@ class MainActivityLifecycleTest {
     fun tearDown() {
         FlutterEngineCache.getInstance().remove(ENGINE_ID)
         FlutterInjector.reset()
+        // 인라인 모크는 Mockito가 정적 맵에 붙들고 있어, 지우지 않으면 SDK 샌드박스마다 엔진·액티비티가 쌓인다
+        Mockito.framework().clearInlineMocks()
     }
 
     /** Dart의 `invokeMethod`처럼 엔진에 메서드 호출을 넣고, 플랫폼이 보낸 응답을 푼다 */
@@ -154,19 +157,21 @@ class MainActivityLifecycleTest {
     }
 
     @Test
-    fun `cleanUpFlutterEngine - 캐시 엔진에 남은 채널 처리기를 뗀다`() {
+    fun `cleanUpFlutterEngine - 캐시 엔진에 끝난 액티비티의 채널 처리기를 남기지 않는다`() {
         controller.create().start().resume().pause().stop().destroy()
 
         // 엔진은 캐시에 살아 있다 — 끝난 액티비티의 처리기가 남아 있으면 응답한다
-        val replyId = nextReplyId++
-        val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall("listen", null))
-        message.flip()
-        fromDart.handleMessageFromDart(HIGH_TEXT_CONTRAST_CHANNEL, message, replyId, 0)
-        HighTextContrastSystem.idleMainLooper()
+        for ((channel, method) in listOf(HIGH_TEXT_CONTRAST_CHANNEL to "listen", DEVICE_CHANNEL to "hasHingeSensor")) {
+            val replyId = nextReplyId++
+            val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall(method, null))
+            message.flip()
+            fromDart.handleMessageFromDart(channel, message, replyId, 0)
+            HighTextContrastSystem.idleMainLooper()
 
-        // 처리기가 없으면 엔진은 빈 응답(null)을 보낸다
-        verify(jni).invokePlatformMessageEmptyResponseCallback(replyId)
-        verify(jni, never()).invokePlatformMessageResponseCallback(eq(replyId), any(), anyInt())
+            // 처리기가 없으면 엔진은 빈 응답(null)을 보낸다
+            verify(jni).invokePlatformMessageEmptyResponseCallback(replyId)
+            verify(jni, never()).invokePlatformMessageResponseCallback(eq(replyId), any(), anyInt())
+        }
         assertEquals(0, HighTextContrastSystem.registrationCount(context))
     }
 

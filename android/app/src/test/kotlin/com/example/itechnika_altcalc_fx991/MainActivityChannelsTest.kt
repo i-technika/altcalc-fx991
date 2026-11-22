@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
  * 액티비티를 만들기만 하고(onCreate 전) 채널 등록 부분만 가짜 메신저로 불러 채널 동작을 자세히 본다.
  * 생명주기 훅이 이 등록·정리를 실제로 부르는지는 [MainActivityLifecycleTest]가 본다.
  * 채널 이름은 여기에 따로 적어 Kotlin 상수가 바뀌면 실패하게 하고, Dart 쪽 이름과의 일치는
- * Dart 테스트 `test/unit/platform_channel_names_test.dart`가 `MainActivity.kt`를 읽어 대조한다.
+ * Dart 테스트 `test/unit/main_activity_source_test.dart`가 `MainActivity.kt`를 읽어 대조한다.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [MIN_SDK, LAST_LEGACY_SDK, FIRST_PUBLIC_API_SDK])
@@ -82,14 +82,14 @@ class MainActivityChannelsTest {
     }
 
     @Test
-    fun `엔진 정리 - Dart가 구독을 끊지 않았어도 변경 감지를 풀고 채널 처리기를 뗀다`() {
+    fun `엔진 정리 - Dart가 구독을 끊지 않았어도 변경 감지를 풀고 두 채널 처리기를 모두 뗀다`() {
         messenger.invokeMethod(HIGH_TEXT_CONTRAST_CHANNEL, "listen")
         assertEquals(1, HighTextContrastSystem.registrationCount(activity))
 
         activity.unregisterChannels(messenger)
 
         assertEquals(0, HighTextContrastSystem.registrationCount(activity))
-        assertFalse(HIGH_TEXT_CONTRAST_CHANNEL in messenger.channels)
+        assertTrue("채널 처리기를 모두 뗀다: ${messenger.channels}", messenger.channels.isEmpty())
         HighTextContrastSystem.set(activity, true)
         HighTextContrastSystem.idleMainLooper()
         assertEquals(listOf<Any?>(false), messenger.sentEvents(HIGH_TEXT_CONTRAST_CHANNEL))

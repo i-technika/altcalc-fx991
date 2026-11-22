@@ -106,6 +106,7 @@
 - 라벨: 에픽 `milestone`, 서브이슈 `sub-issue` / 프로젝트: `AltCalc FX-991` (#7)
 - 서브이슈 PR은 기본 브랜치가 아닌 마일스톤 브랜치로 머지되므로 `Closes #N`으로 **이슈가 자동 Close되지 않는다.** 머지 후 직접 `gh issue close`한다.
 - CI: 마일스톤 브랜치 대상 PR → `Sub-issue Linux CI`, `main` 대상 PR(Ready) → `Milestone Full Multi-Platform CI`
+  (`Sub-issue Linux CI`는 마일스톤 브랜치 push에서도 돌아 그 브랜치 범위에 캐시를 만든다 — 다음 서브이슈 PR들이 그 캐시를 쓴다, #108)
 
 ### GitHub Project #7 (AltCalc FX-991) 식별자
 - Project ID: `PVT_kwHOBMwL0c4BsMze` / Owner: `i-technika`

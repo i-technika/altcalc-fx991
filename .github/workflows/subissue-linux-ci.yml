@@ -5,6 +5,12 @@ on:
     branches-ignore:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
+  # 마일스톤 브랜치에 서브이슈가 머지될 때도 돌린다 (#108). 서브이슈 PR의 캐시(Flutter SDK·Gradle·NDK 등)는 그 PR 범위에만
+  # 저장되고, 다른 PR은 베이스 브랜치 범위의 캐시만 읽을 수 있다. 여기서 마일스톤 브랜치 범위에 캐시를 만들어 두면
+  # 다음 서브이슈 PR들이 처음부터 함께 쓴다(키가 정확히 맞으면 PR 범위에 다시 저장하지도 않는다).
+  push:
+    branches:
+      - 'milestone/**'
   workflow_dispatch:
 
 concurrency:
@@ -15,7 +21,7 @@ jobs:
   linux-ci:
     name: Linux Analyze, Test & Build
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
 
     steps:
       - name: Checkout repository
@@ -73,8 +79,9 @@ jobs:
   android-unit-test:
     name: Android Unit Tests (JVM)
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
-    # 캐시가 비었을 때 약 12분(Gradle·NDK 설치 포함), 캐시가 차면 그보다 짧다. 내려받기가 멈춰도 오래 잡히지 않게 한다.
+    # push는 Sub-issue CI의 마일스톤 브랜치 캐시 예열 실행이다 (Milestone CI에는 push 트리거가 없어 늘 PR 조건만 본다)
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    # 캐시가 없으면 약 12분(Gradle·NDK·Robolectric jar 내려받기 포함). 내려받기가 멈춰도 오래 잡히지 않게 한다.
     timeout-minutes: 25
     steps:
       - name: Checkout repository
@@ -86,14 +93,20 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          # ~/.gradle/caches(Gradle 배포본·플러그인·의존성)를 Gradle 설정 파일 해시로 캐시한다
+          # ~/.gradle/caches·wrapper(Gradle 배포본·플러그인·의존성)를 Gradle 설정 파일 해시로 캐시한다
           cache: 'gradle'
+
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies
@@ -103,22 +116,32 @@ jobs:
       - name: Generate Gradle wrapper
         run: flutter build apk --debug --config-only
 
-      # Gradle 구성 단계에서 AGP가 Flutter 기본 NDK를 설치한다(jni 플러그인이 ndkVersion을 지정한다, 약 3.5분).
-      # 단위 테스트에는 쓰지 않지만 구성 단계라 피할 수 없으므로, Flutter가 정하는 버전 하나만 캐시한다.
-      - name: Locate Flutter default NDK
-        id: ndk
+      # Gradle 구성 단계에서 AGP가 Flutter 기본 NDK를 설치하고(jni 플러그인이 ndkVersion을 지정한다, 약 3.5분 — 테스트에는 안 쓴다),
+      # Robolectric은 테스트 대상 API 수준의 프레임워크 jar(약 700MB)를 ~/.m2에 받는다. 둘 다 Gradle 캐시 밖이라 따로 캐시한다.
+      # 버전을 읽지 못하면(Flutter를 올려 FlutterExtension.kt 형식이 바뀌는 등) 경고만 남기고 캐시 없이 돈다.
+      - name: Locate Android test downloads
+        id: test-deps
+        shell: bash
         run: |
-          flutter_root=$(dirname "$(dirname "$(command -v flutter)")")
-          version=$(grep -oP 'val ndkVersion: String = "\K[^"]+' "$flutter_root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt" || true)
-          test -n "$version" || { echo "::error::Flutter 기본 NDK 버전을 읽지 못했다 (FlutterExtension.kt 형식 변경?)"; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "path=$ANDROID_HOME/ndk/$version" >> "$GITHUB_OUTPUT"
+          root=${FLUTTER_ROOT:-$(dirname "$(dirname "$(command -v flutter)")")}
+          ndk=$(grep -oP 'val ndkVersion: String = "\K[^"]+' "$root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt" || true)
+          if [ -z "$ndk" ] || [ -z "${ANDROID_HOME:-}" ]; then
+            echo "::warning::Flutter 기본 NDK 버전이나 ANDROID_HOME을 읽지 못해 NDK·Robolectric 캐시 없이 돈다"
+            exit 0
+          fi
+          echo "ndk=$ndk" >> "$GITHUB_OUTPUT"
+          echo "ndk-path=$ANDROID_HOME/ndk/$ndk" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Android NDK
+      # 키: NDK 버전 + Robolectric 버전이 적힌 build.gradle.kts. 테스트 대상 API 수준을 더하면 그 jar만 더 받는다.
+      - name: Cache Android NDK and Robolectric SDK jars
+        if: steps.test-deps.outputs.ndk != ''
         uses: actions/cache@v5
         with:
-          path: ${{ steps.ndk.outputs.path }}
-          key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}
+          path: |
+            ${{ steps.test-deps.outputs.ndk-path }}
+            ~/.m2/repository/org/robolectric
+          key: android-test-deps-${{ runner.os }}-ndk${{ steps.test-deps.outputs.ndk }}-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: android-test-deps-${{ runner.os }}-ndk${{ steps.test-deps.outputs.ndk }}-
 
       - name: Run Android unit tests
         working-directory: android

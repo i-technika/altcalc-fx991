@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/high_text_contrast.dart';
 
-/// Dart가 쓰는 플랫폼 채널 이름이 Android `MainActivity.kt`가 거는 이름과 같은지 본다 (#108).
+/// Android `MainActivity.kt` 소스 검사 (#108) — Kotlin 단위 테스트가 구조상 볼 수 없는 것을 소스에서 본다.
 ///
-/// 한쪽만 바꾸면 Dart는 `MissingPluginException`(기기 채널)을 받거나 첫 값을 기다리다 시간 초과로 꺼짐에 머물고
+/// 1. 플랫폼 채널 이름이 Dart 쪽과 같은지. 한쪽만 바꾸면 Dart는 `MissingPluginException`(기기 채널)을 받거나 첫 값을 기다리다 시간 초과로 꺼짐에 머물고
 /// (고대비 텍스트), 양쪽의 단위 테스트는 각자 자기 이름으로 맞아 통과한다. 그래서 여기서 두 소스를 맞댄다.
-/// Kotlin 쪽 테스트(`MainActivityChannelsTest`)는 Kotlin 상수가 실제로 등록되는지를 본다.
+///    Kotlin 쪽 테스트(`MainActivityChannelsTest`)는 Kotlin 상수가 실제로 등록되는지를 본다.
+/// 2. `configureFlutterEngine`이 `super`를 부르는지. 그 호출이 플러그인(`shared_preferences` 등)을 등록하는데,
+///    Kotlin 생명주기 테스트는 캐시 엔진을 써서 `super`가 바로 반환하므로(`FlutterActivity` 규칙) 빠져도 알 수 없다.
 
 const _mainActivity =
     'android/app/src/main/kotlin/com/example/itechnika_altcalc_fx991/MainActivity.kt';
@@ -57,9 +59,32 @@ void main() {
     expect(channels, {'DEVICE_CHANNEL', 'HIGH_TEXT_CONTRAST_CHANNEL'});
     // 상수를 거치지 않고 이름을 바로 적은 채널 생성도 막는다
     expect(
-      RegExp(r'(MethodChannel|EventChannel)\([^,)]*,\s*"').hasMatch(source),
+      RegExp(r'(MethodChannel|EventChannel|BasicMessageChannel)\([^,)]*,\s*"')
+          .hasMatch(source),
       isFalse,
       reason: '채널 이름은 *_CHANNEL 상수로 적는다',
     );
+  });
+
+  test('configureFlutterEngine은 먼저 super를 불러 플러그인을 등록한다', () {
+    final body = RegExp(
+      r'override fun configureFlutterEngine\(flutterEngine: FlutterEngine\) \{\s*(\S[^\r\n]*)',
+    ).firstMatch(source);
+    expect(body, isNotNull, reason: 'configureFlutterEngine 재정의를 찾지 못했다');
+    expect(body![1]!.trim(), 'super.configureFlutterEngine(flutterEngine)');
+  });
+
+  test('cleanUpFlutterEngine은 정리 뒤 마지막에 super를 부른다', () {
+    final body = RegExp(
+      r'override fun cleanUpFlutterEngine\(flutterEngine: FlutterEngine\) \{(.*?)\r?\n    \}',
+      dotAll: true,
+    ).firstMatch(source);
+    expect(body, isNotNull, reason: 'cleanUpFlutterEngine 재정의를 찾지 못했다');
+    final lines = body![1]!
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty && !l.startsWith('//'))
+        .toList();
+    expect(lines.last, 'super.cleanUpFlutterEngine(flutterEngine)');
   });
 }
