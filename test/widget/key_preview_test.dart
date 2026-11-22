@@ -1829,14 +1829,21 @@ void main() {
                         reason: reason,
                       );
                     case ScreenArrangement.stacked:
-                      // 접힘선을 배치에 쓰지 않는다: 위 LCD·아래 키패드가 본체 폭을 다 쓰고 설정 버튼이 없다.
+                      // 접힘선을 배치에 쓰지 않는다: 위 LCD·아래 키패드가 본체 폭을 다 쓰고, 설정 버튼은
+                      // LCD 위 상단 띠의 오른쪽 끝에 있다 (#41).
                       expect(
                         lcd.bottom,
                         lessThanOrEqualTo(keypad.top + e),
                         reason: reason,
                       );
                       expect(keypad.top, lessThan(hinge.top), reason: reason);
-                      expect(settings, findsNothing, reason: reason);
+                      final s = rectOf(settings);
+                      expect(s.top, lessThan(lcd.top), reason: reason);
+                      expect(
+                        s.right,
+                        moreOrLessEquals(lcd.right, epsilon: e),
+                        reason: reason,
+                      );
                     case ScreenArrangement.split:
                       fail('$reason: 폴더블 프리셋에서 접힘선을 무시한 좌우 분할');
                   }

@@ -32,6 +32,10 @@ abstract class SettingsStrings {
   /// 키패드 위치(손잡이) 선택 대화상자 제목
   String get handednessTitle;
 
+  /// 키패드 위치 설정이 적용되는 화면 안내 (#41) — 설정 버튼이 폰에도 보이므로, 폰 화면에서는 달라지는 것이
+  /// 없다는 것을 대화상자에서 알린다.
+  String get handednessNote;
+
   /// 손잡이 선택지 이름
   String handedness(Handedness value);
 
@@ -51,6 +55,9 @@ class KoSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessTitle => '키패드 위치';
+
+  @override
+  String get handednessNote => '태블릿 가로 화면과 펼친 폴더블에 적용됩니다. 폰 화면에서는 달라지지 않습니다.';
 
   @override
   String handedness(Handedness value) => switch (value) {
@@ -77,6 +84,11 @@ class EnSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessTitle => 'Keypad position';
+
+  @override
+  String get handednessNote =>
+      'Applies to tablets in landscape and unfolded foldables. '
+      'Nothing changes on a phone screen.';
 
   @override
   String handedness(Handedness value) => switch (value) {

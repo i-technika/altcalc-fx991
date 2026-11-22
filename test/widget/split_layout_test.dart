@@ -21,6 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/bundled_fonts.dart';
 import '../support/korean_locale.dart';
+import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
 
 /// 대화면 가로 창의 좌우 분할 배치와 손잡이 설정 (#24).
@@ -212,7 +213,7 @@ void main() {
       Size(844, 390), // 가로 폰 — 짧은 창 대응은 #38
     ]) {
       testWidgets(
-        '${size.width}×${size.height}: 왼손잡이 설정이어도 위아래 배치이고 설정 버튼이 없다',
+        '${size.width}×${size.height}: 왼손잡이 설정이어도 위아래 배치이고 설정 버튼은 상단 띠에 있다',
         (tester) async {
           await _pump(tester, size: size, handedness: Handedness.left);
           expect(tester.takeException(), isNull);
@@ -220,7 +221,7 @@ void main() {
             tester.getRect(_lcd).bottom,
             lessThanOrEqualTo(tester.getRect(_keypad).top),
           );
-          expect(_settings, findsNothing);
+          expect(isStackedArrangement(tester), isTrue);
         },
       );
     }
@@ -234,7 +235,7 @@ void main() {
       // 오른손잡이: 접힘선(x = 640) 왼쪽 LCD, 오른쪽 키패드
       expect(tester.getRect(_lcd).right, lessThanOrEqualTo(640));
       expect(tester.getRect(_keypad).left, greaterThanOrEqualTo(640));
-      expect(_settings, findsOneWidget);
+      expect(isStackedArrangement(tester), isFalse);
     });
   });
 
@@ -257,8 +258,14 @@ void main() {
         lcdMaxHeight,
         1122 - lcdMaxHeight - 640,
       ),
-      // 정사각형 창: 본체 752×690 — LCD는 목표 비율(690 × 0.28)이라 폭 상한만 걸리고 띠는 없다
-      (Size(768, 768), EdgeInsets.zero, 690 * 0.28, 0.0),
+      // 정사각형 창: 본체 752×690 — LCD는 목표 비율((690 − 최소 띠 12) × 0.28)이라 폭 상한만 걸리고
+      // 띠는 최소 높이(#41)뿐이다
+      (
+        Size(768, 768),
+        EdgeInsets.zero,
+        (690 - CalcTheme.screenTopStripMinHeight) * 0.28,
+        CalcTheme.screenTopStripMinHeight,
+      ),
     ];
 
     for (final (size, padding, lcdHeight, band) in windows) {
@@ -290,7 +297,7 @@ void main() {
             keypad.top - lcd.bottom,
             moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
           );
-          expect(_settings, findsNothing);
+          expect(isStackedArrangement(tester), isTrue);
         });
       }
     }
@@ -307,7 +314,7 @@ void main() {
         size: const Size(1024, 1366),
         padding: padding,
       );
-      expect(_settings, findsNothing); // 위아래 배치
+      expect(isStackedArrangement(tester), isTrue);
       expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
       expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
       final font = lineFont();
@@ -317,11 +324,8 @@ void main() {
         expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
         expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
         expect(lineFont(), moreOrLessEquals(font), reason: '$size');
-        // 가로는 좌우 분할(설정 버튼 있음), 세로는 위아래 배치
-        expect(
-          _settings,
-          size.width > size.height ? findsOneWidget : findsNothing,
-        );
+        // 가로는 좌우 분할, 세로는 위아래 배치
+        expect(isStackedArrangement(tester), size.width < size.height);
       }
     });
 
@@ -380,7 +384,7 @@ void main() {
           ],
         );
         expect(tester.takeException(), isNull);
-        expect(_settings, findsOneWidget);
+        expect(isStackedArrangement(tester), isFalse);
         final lcd = tester.getRect(_lcd);
         final keypad = tester.getRect(_keypad);
         expect(keypad.width, lessThan(300));
@@ -727,7 +731,7 @@ void main() {
 
     // 세로로 회전 (방향 고정이 무시된 경우) → 위아래 배치
     await _pump(tester, size: const Size(800, 1280), container: container);
-    expect(_settings, findsNothing);
+    expect(isStackedArrangement(tester), isTrue);
     expect(
       tester.getRect(_lcd).bottom,
       lessThanOrEqualTo(tester.getRect(_keypad).top),
@@ -743,7 +747,7 @@ void main() {
 
     // 다시 가로로
     await _pump(tester, size: const Size(1280, 800), container: container);
-    expect(_settings, findsOneWidget);
+    expect(isStackedArrangement(tester), isFalse);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
       isTrue,
@@ -1330,7 +1334,7 @@ void _hingeLayoutTests() {
       tester.getRect(_lcd).bottom,
       lessThanOrEqualTo(tester.getRect(_keypad).top),
     );
-    expect(_settings, findsOneWidget);
+    expect(isStackedArrangement(tester), isFalse);
     expect(container.read(calcProvider).modifier, KeyModifier.shift);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
@@ -1338,9 +1342,9 @@ void _hingeLayoutTests() {
     );
     expect(identical(tester.element(_lcd), lcdElement), isTrue);
 
-    // 접음 → 커버 화면 (접힘 정보 없음) → 위아래 배치, 설정 버튼 없음
+    // 접음 → 커버 화면 (접힘 정보 없음) → 위아래 배치
     await _pump(tester, size: const Size(344, 882), container: container);
-    expect(_settings, findsNothing);
+    expect(isStackedArrangement(tester), isTrue);
     expect(container.read(calcProvider).modifier, KeyModifier.shift);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
@@ -1362,24 +1366,23 @@ void _hingeLayoutTests() {
       ),
       ('Flip 내부', const Size(411, 1005), const Rect.fromLTWH(0, 502.5, 411, 0)),
     ]) {
-      testWidgets(
-        '$name ${size.width}×${size.height}: 위아래 배치, 설정 버튼 없음, 키는 터치 하한 이상',
-        (tester) async {
-          await _pump(
-            tester,
-            size: size,
-            padding: const EdgeInsets.only(top: 24, bottom: 24),
-            displayFeatures: [_foldAt(fold)],
-          );
-          expect(tester.takeException(), isNull);
-          expect(_settings, findsNothing);
-          expect(
-            tester.getRect(_lcd).bottom,
-            lessThanOrEqualTo(tester.getRect(_keypad).top),
-          );
-          _expectTouchTargets(tester);
-        },
-      );
+      testWidgets('$name ${size.width}×${size.height}: 위아래 배치, 키는 터치 하한 이상', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          size: size,
+          padding: const EdgeInsets.only(top: 24, bottom: 24),
+          displayFeatures: [_foldAt(fold)],
+        );
+        expect(tester.takeException(), isNull);
+        expect(isStackedArrangement(tester), isTrue);
+        expect(
+          tester.getRect(_lcd).bottom,
+          lessThanOrEqualTo(tester.getRect(_keypad).top),
+        );
+        _expectTouchTargets(tester);
+      });
     }
 
     testWidgets('본체에서 키가 터치 하한보다 낮아지는 비대칭 접힘선은 위아래 배치로 둔다 (#25 R2)', (
@@ -1393,7 +1396,7 @@ void _hingeLayoutTests() {
         displayFeatures: [_foldAt(const Rect.fromLTWH(560, 0, 0, 701))],
       );
       expect(tester.takeException(), isNull);
-      expect(_settings, findsNothing);
+      expect(isStackedArrangement(tester), isTrue);
       _expectTouchTargets(tester);
 
       // 가로 반 접힘: 아래쪽 281dp + 아래 인셋 48 → 광고 슬롯까지 빼면 키가 하한(테이블톱)보다 낮다
@@ -1404,7 +1407,7 @@ void _hingeLayoutTests() {
         displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 392, 841, 0))],
       );
       expect(tester.takeException(), isNull);
-      expect(_settings, findsNothing);
+      expect(isStackedArrangement(tester), isTrue);
     });
 
     testWidgets('Fold 가로 반 접힘·3버튼 내비게이션(아래 인셋 48)은 테이블톱 배치를 유지한다', (
@@ -1416,7 +1419,7 @@ void _hingeLayoutTests() {
         padding: const EdgeInsets.only(top: 24, bottom: 48),
         displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
       );
-      expect(_settings, findsOneWidget);
+      expect(isStackedArrangement(tester), isFalse);
       expect(tester.getRect(_keypad).top, greaterThanOrEqualTo(336.5));
       _expectTouchTargets(tester, floor: CalcTheme.tabletopKeyTouchHeightFloor);
     });
@@ -1429,7 +1432,7 @@ void _hingeLayoutTests() {
         displayFeatures: [_foldAt(const Rect.fromLTWH(20, 0, 0, 701))],
       );
       expect(tester.takeException(), isNull);
-      expect(_settings, findsNothing);
+      expect(isStackedArrangement(tester), isTrue);
       expect(tester.getRect(_lcd).width, greaterThan(300));
     });
   });
