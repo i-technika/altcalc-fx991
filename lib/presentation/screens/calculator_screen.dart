@@ -90,26 +90,32 @@ class CalcScreenLayout {
 ///
 /// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭):
 /// ```
-///  ┌───────────────────────────────┬──┬─────────────┐
-///  │            (빈 띠)            │  │             │
-///  ├───────────────────────────────┤  ├─────────────┤ ← 키패드 윗변 = LCD 윗변
-///  │             LCD               │간│             │
-///  ├───────────────────────────────┤격│  50키 키패드 │
-///  │ [설정]                         │  │             │
-///  └───────────────────────────────┴──┴─────────────┘ ← 본체 아래 (광고 슬롯은 그 아래 전체 폭)
+///  ┌──────────┬────────────────────┬──┬─────────────┐
+///  │          │  (빈 띠 — #41)     │  │             │
+///  │          ├────────────────────┤  ├─────────────┤ ← 키패드 윗변 = LCD 윗변
+///  │  (여백)  │        LCD         │간│             │
+///  │          ├────────────────────┤격│  50키 키패드 │
+///  │          │ [설정]             │  │             │
+///  └──────────┴────────────────────┴──┴─────────────┘ ← 본체 아래 (광고 슬롯은 그 아래 전체 폭)
+///  └──────── LCD 쪽 패널 ─────────┘
 /// ```
 /// - 키패드: 주로 쓰는 손 쪽 가장자리·본체 아래에 붙인다. 크기는 [KeypadMetrics.fitSize]
 ///   (폭 ≤ (본체 폭 − 간격) × [CalcTheme.screenSplitKeypadMaxWidthRatio], 높이 ≤ 본체 높이).
-/// - LCD: 나머지 폭 전체. 높이는 그 폭의 최대 높이(폭 / [CalcTheme.screenLcdMinAspectRatio], 하한
-///   [CalcTheme.screenLcdMinHeight])이되, 아래에 설정 버튼 자리를 남기도록 키패드 높이에서 버튼 자리를 뺀
-///   높이를 넘지 않는다.
-/// - 설정 버튼: LCD 바로 아래, 키패드에서 먼 쪽 끝.
+/// - LCD 쪽 패널: 나머지 폭 전체.
+/// - LCD: 폭은 패널 폭과 키패드 폭 × [CalcTheme.screenSplitLcdMaxWidthRatio] 중 작은 쪽이고 (#71),
+///   패널 안에서 키패드 쪽에 붙인다 — 그래서 LCD와 키패드 사이는 항상 간격만큼이고, 남는 폭은 패널 바깥쪽 여백이다.
+///   높이는 그 폭의 최대 높이(폭 / [CalcTheme.screenLcdMinAspectRatio], 하한 [CalcTheme.screenLcdMinHeight])이되,
+///   아래에 설정 버튼 자리를 남기도록 키패드 높이에서 버튼 자리를 뺀 높이를 넘지 않는다.
+/// - 설정 버튼: LCD 바로 아래, LCD의 키패드에서 먼 쪽 끝.
+/// - 본체가 키패드 최대 높이보다 높으면 위쪽 남는 높이는 빈 띠다 — 위아래 배치의 상단 띠처럼 키패드를 광고 슬롯
+///   바로 위에 붙인 채로 두며, 띠 활용은 TODO(#41).
 /// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
 ///
 /// ## 세로 접힘선 기준 (#25, [ScreenArrangement.hingeSplit])
 /// 접힘선([hinge], 본체 좌표)을 주면 키패드 쪽과 LCD 쪽의 경계를 접힘선으로 고정한다. 접힘선 양쪽에
 /// [CalcTheme.screenHingeMargin]씩 비우고, 주로 쓰는 손 쪽 절반 전체가 키패드 자리(폭 비율 상한 없음,
-/// [CalcTheme.keypadMaxWidth]는 적용), 다른 절반 전체가 LCD 쪽이다. 나머지 규칙은 같다.
+/// [CalcTheme.keypadMaxWidth]는 적용), 다른 절반 전체가 LCD 쪽 패널이다. 나머지 규칙은 같다 — LCD 폭 상한에
+/// 걸리면 LCD는 키패드 쪽, 곧 접힘선 쪽에 붙는다.
 /// 그래서 LCD·키패드·설정 버튼 어느 것도 접힘선 위에 놓이지 않는다.
 @immutable
 class CalcSplitLayout {
@@ -162,18 +168,25 @@ class CalcSplitLayout {
     final keypadLeft = onRight ? width - keypadSize.width : 0.0;
     final keypadTop = height - keypadSize.height;
 
+    // LCD 폭 상한 (#71) — 상한에 걸리면 패널 안에서 키패드 쪽에 붙인다.
+    final lcdWidth = math.min(
+      panelWidth,
+      keypadSize.width * CalcTheme.screenSplitLcdMaxWidthRatio,
+    );
+    final lcdLeft = onRight ? panelLeft + panelWidth - lcdWidth : panelLeft;
+
     // LCD 아래에 설정 버튼 자리(간격 + 버튼)를 남긴다.
     const buttonBlock =
         CalcTheme.screenSplitSettingsGap + CalcTheme.settingsButtonSize;
     final lcdMax = math.max(0.0, keypadSize.height - buttonBlock);
     final lcdHeight = math.min(
       math.max(
-        panelWidth / CalcTheme.screenLcdMinAspectRatio,
+        lcdWidth / CalcTheme.screenLcdMinAspectRatio,
         CalcTheme.screenLcdMinHeight,
       ),
       lcdMax,
     );
-    final lcd = Rect.fromLTWH(panelLeft, keypadTop, panelWidth, lcdHeight);
+    final lcd = Rect.fromLTWH(lcdLeft, keypadTop, lcdWidth, lcdHeight);
     // 버튼은 항상 LCD 아래에 둔다. 본체가 버튼 자리보다 낮은 비정상 크기에서만 버튼이 줄어든다
     // (좌우 분할은 짧은 변 600dp 이상 창에서만 쓰므로 실제로는 생기지 않는다).
     final buttonTop = math.min(
@@ -181,10 +194,11 @@ class CalcSplitLayout {
       height,
     );
     final button = math.min(CalcTheme.settingsButtonSize, height - buttonTop);
+    // LCD의 키패드에서 먼 쪽 끝. LCD가 버튼보다 좁은 비정상 크기에서도 패널 밖(키패드 쪽)으로 나가지 않는다.
     final buttonWidth = math.min(CalcTheme.settingsButtonSize, panelWidth);
     final buttonLeft = onRight
-        ? panelLeft
-        : panelLeft + panelWidth - buttonWidth;
+        ? math.min(lcd.left, panelLeft + panelWidth - buttonWidth)
+        : math.max(lcd.right - buttonWidth, panelLeft);
     return CalcSplitLayout._(
       lcd: lcd,
       keypad: Rect.fromLTWH(

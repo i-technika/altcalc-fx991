@@ -559,8 +559,12 @@ abstract final class CalcTheme {
   // 대화면 가로 창(`FormFactor.arrangementOf`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
   // - 키패드: 주로 쓰는 손 쪽 가장자리, 광고 슬롯 바로 위에 붙인다. 폭은 본체 폭의
   //   [screenSplitKeypadMaxWidthRatio] 이하(그리고 [keypadMaxWidth] 이하), 높이는 본체 높이까지.
-  // - LCD: 나머지 폭을 채우고, 높이는 그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다.
+  // - LCD: 나머지 폭(LCD 쪽 패널) 안에서 폭은 키패드 폭 × [screenSplitLcdMaxWidthRatio] 이하이고, 높이는
+  //   그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다 (#71). 상한에 걸리면 키패드 쪽
+  //   (접힘선 기준 배치면 접힘선 쪽)에 붙이고, 남는 폭은 패널 바깥쪽 빈 공간으로 둔다.
   //   LCD 아래 남는 자리에 설정 버튼을 둔다.
+  // - 본체가 키패드 최대 높이보다 높으면(12.9인치 iPad 가로 등) 위아래 배치와 같이 키패드·LCD를 본체 아래에
+  //   붙인 채로 두고, 위쪽 남는 높이는 빈 띠로 둔다 — 띠 활용은 세로 폰 상단 띠와 함께 TODO(#41).
   // - 광고 슬롯: 위아래 배치와 같이 본체 아래 전체 폭 — 키패드 최하단 행 아래 안전 여백 규칙이 그대로 지켜진다.
 
   /// 좌우 분할 배치의 LCD 쪽과 키패드 쪽 사이 간격 (dp)
@@ -569,6 +573,15 @@ abstract final class CalcTheme {
   /// 좌우 분할 배치에서 키패드가 차지할 수 있는 최대 폭 (본체 폭에서 간격을 뺀 폭 대비).
   /// 이보다 넓히면 LCD 쪽이 키패드보다 좁아져 LCD 글자가 키 각인보다 작아질 수 있다.
   static const double screenSplitKeypadMaxWidthRatio = 0.5;
+
+  /// 좌우 분할 배치의 LCD 최대 폭 (키패드 실제 폭 대비) (#71).
+  ///
+  /// 상한이 없으면 큰 태블릿에서 LCD가 키패드보다 훨씬 넓어진다 — 12.9인치 iPad 가로(1366×1024)에서
+  /// 키패드는 480dp인데 LCD는 약 854dp(줄 글자 약 72dp)까지 커져, 실물 비례(LCD 창이 본체보다 좁다)와 멀어진다.
+  /// 1.0이면 LCD와 키패드의 폭 비가 세로 폰 화면(둘 다 화면 폭)과 같아, 기기와 무관하게 같은 비례로 보인다
+  /// (12.9인치 iPad 가로 LCD 480dp, 줄 글자 약 39dp — 390dp 폰은 약 30dp).
+  /// 1보다 작게 두면 LCD 글자가 키 각인보다 작아질 수 있다([screenSplitKeypadMaxWidthRatio]와 같은 이유).
+  static const double screenSplitLcdMaxWidthRatio = 1.0;
 
   /// 좌우 분할 배치의 LCD와 설정 버튼 사이 간격 (dp)
   static const double screenSplitSettingsGap = 8.0;
