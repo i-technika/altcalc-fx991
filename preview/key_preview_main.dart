@@ -30,7 +30,7 @@ void main() =>
 /// 대표 기기의 화면 크기를 근사한 값이다. [padding]은 시스템 인셋이다 — 상태 표시줄(위),
 /// 홈 표시줄·내비게이션 바·작업 표시줄(아래). Android 15 이상은 edge-to-edge가 강제되어
 /// 내비게이션 바 높이(3버튼 48dp, 제스처 약 24dp)가 아래 인셋으로 들어온다.
-/// [systemGestureInsets]는 Android 제스처 내비게이션의 뒤로가기 영역(좌우) 등이다(#50).
+/// [systemGestureInsets]는 Android가 보고하는 시스템 제스처 영역이다(#50).
 @immutable
 class PreviewDevice {
   /// 표시 이름
@@ -44,8 +44,11 @@ class PreviewDevice {
 
   /// 시스템 제스처 영역 (dp) — `MediaQuery.systemGestureInsets`로 전달한다.
   ///
-  /// 이 영역에서 시작한 키 터치는 손을 뗄 때 확정된다(`CalcKeyButton`). iOS와 Android 3버튼
-  /// 내비게이션은 0으로 둔다. 위·아래 제스처 영역(알림창·홈)은 LCD·광고 슬롯 쪽이라 키에 닿지 않아 생략한다.
+  /// 이 영역에서 시작한 키 터치는 손을 뗄 때 확정된다(`CalcKeyButton`). 값은 근사다.
+  /// - iOS: Flutter가 전달하지 않으므로 0이다.
+  /// - Android: `WindowInsets.Type.systemGestures()`의 네 변이 그대로 들어온다. 위·아래는 상태 표시줄
+  ///   (알림창 끌어내리기)·내비게이션 바 영역과 같게 두고, 제스처 내비게이션이면 좌우에 뒤로가기 영역
+  ///   ([previewBackGestureWidth])을 더한다. 실제 아래 제스처 영역은 기기에 따라 이보다 클 수 있다.
   final EdgeInsets systemGestureInsets;
 
   const PreviewDevice(
@@ -60,10 +63,16 @@ class PreviewDevice {
       '$name ${size.width.toStringAsFixed(0)}×${size.height.toStringAsFixed(0)}';
 }
 
-/// Android 제스처 내비게이션의 뒤로가기 영역 근사값 (좌우 각 24dp, 기본 감도 기준).
-/// 실제 폭은 기기·제스처 감도 설정에 따라 다르다.
-const EdgeInsets previewBackGestureInsets = EdgeInsets.symmetric(
-  horizontal: 24,
+/// Android 제스처 내비게이션의 뒤로가기 영역 폭 근사값 (좌우 각각, dp).
+/// 실제 폭은 Android 버전·뒤로가기 감도 설정·제조사에 따라 다르다(더 넓은 기기도 있다).
+const double previewBackGestureWidth = 24;
+
+/// 제스처 내비게이션 Android 기기의 시스템 제스처 영역 (상태 표시줄 24, 뒤로가기 좌우, 홈 24)
+const EdgeInsets _gestureNavInsets = EdgeInsets.fromLTRB(
+  previewBackGestureWidth,
+  24,
+  previewBackGestureWidth,
+  24,
 );
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -79,6 +88,7 @@ const List<PreviewDevice> previewDevices = [
     '소형 폰',
     Size(360, 640),
     padding: EdgeInsets.only(top: 24, bottom: 48),
+    systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
   // iPhone 15 Pro Max
   PreviewDevice(
@@ -91,7 +101,7 @@ const List<PreviewDevice> previewDevices = [
     '폴더블 커버',
     Size(344, 882),
     padding: EdgeInsets.only(top: 24, bottom: 24),
-    systemGestureInsets: previewBackGestureInsets,
+    systemGestureInsets: _gestureNavInsets,
   ),
   // 대화면 좌우 분할은 #24·#25, 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
   // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다)
@@ -99,22 +109,29 @@ const List<PreviewDevice> previewDevices = [
     '폴더블 내부',
     Size(690, 829),
     padding: EdgeInsets.only(top: 24, bottom: 24),
-    systemGestureInsets: previewBackGestureInsets,
+    systemGestureInsets: _gestureNavInsets,
   ),
-  // 10인치급 Android 태블릿, 작업 표시줄 48dp
+  // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
   PreviewDevice(
     '태블릿 세로',
     Size(800, 1280),
     padding: EdgeInsets.only(top: 24, bottom: 48),
+    systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
   // Android 16 대화면은 방향 고정을 무시하므로 가로 화면도 확인 대상이다 (lib/main.dart 참조)
   PreviewDevice(
     '태블릿 가로',
     Size(1280, 800),
     padding: EdgeInsets.only(top: 24, bottom: 48),
+    systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
   // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다)
-  PreviewDevice('분할 화면 위', Size(390, 420), padding: EdgeInsets.only(top: 24)),
+  PreviewDevice(
+    '분할 화면 위',
+    Size(390, 420),
+    padding: EdgeInsets.only(top: 24),
+    systemGestureInsets: EdgeInsets.only(top: 24),
+  ),
 ];
 
 /// 기본 시스템 글자 배율
@@ -287,9 +304,9 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 
 /// 선택한 기기 크기로 [CalculatorScreen]을 그린다. 창보다 크면 비율을 유지해 축소한다.
 ///
-/// 화면 크기·인셋·시스템 제스처 영역·글자 배율은 `MediaQuery`로 전달해 화면이 실제 기기에서처럼
-/// 배치를 산출하게 한다. 화면은 패널 폭만큼 밀리고 축소되므로, MediaQuery 바로 아래에
-/// [ScreenCoordinateRoot]를 두어 키 버튼이 제스처 영역을 이 화면 기준 좌표로 판정하게 한다(#50).
+/// 화면 크기·인셋·시스템 제스처 영역·글자 배율은 [ScreenCoordinateRoot]로 `MediaQuery`를 덮어써 전달해
+/// 화면이 실제 기기에서처럼 배치를 산출하게 한다. 화면은 패널 폭만큼 밀리고 축소되므로, 같은 위젯이
+/// 이 화면을 좌표 원점으로 표시해 키 버튼이 제스처 영역을 화면 기준 좌표로 판정하게 한다(#50).
 /// 실제 기기와 다르게 남는 값:
 /// - `devicePixelRatio`·`displayFeatures`(폴더블 힌지)·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다.
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
@@ -362,7 +379,7 @@ class _DeviceFrame extends StatelessWidget {
                         child: SizedBox.fromSize(
                           key: const ValueKey('preview-device-screen'),
                           size: size,
-                          child: MediaQuery(
+                          child: ScreenCoordinateRoot(
                             data: MediaQuery.of(context).copyWith(
                               size: size,
                               padding: device.padding,
@@ -371,9 +388,7 @@ class _DeviceFrame extends StatelessWidget {
                               systemGestureInsets: device.systemGestureInsets,
                               textScaler: TextScaler.linear(textScale),
                             ),
-                            child: const ScreenCoordinateRoot(
-                              child: CalculatorScreen(),
-                            ),
+                            child: const CalculatorScreen(),
                           ),
                         ),
                       ),

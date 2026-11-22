@@ -635,6 +635,7 @@ void main() {
 
       // 화면을 흉내 내는 곳(개발용 미리보기)처럼, 400×400 화면을 전역 (300, 100)에 절반 크기로 그린다.
       // 판정은 전역 좌표가 아니라 ScreenCoordinateRoot 기준 화면 좌표로 해야 한다(#50).
+      // 키는 네 가장자리 가운데와 화면 가운데에 하나씩 두고, 위쪽 키도 셀 끝까지 눌리도록 각인 띠까지 터치 영역으로 한다.
       const screenOrigin = Offset(300, 100);
       const screenScale = 0.5;
       const screenSize = Size(400, 400);
@@ -642,15 +643,16 @@ void main() {
 
       Widget simulatedScreenHost(
         List<CalcKeyId> log, {
-        bool withRoot = true,
         EdgeInsets rootInset = EdgeInsets.zero,
       }) {
-        Widget screen = Stack(
+        final screen = Stack(
           children: [
             for (final (id, alignment) in [
               (CalcKeyId.num1, Alignment.centerLeft),
               (CalcKeyId.num2, Alignment.center),
               (CalcKeyId.num3, Alignment.centerRight),
+              (CalcKeyId.num4, Alignment.topCenter),
+              (CalcKeyId.num5, Alignment.bottomCenter),
             ])
               Align(
                 alignment: alignment,
@@ -660,17 +662,12 @@ void main() {
                   child: CalcKeyButton(
                     keyDef: keyDefOf(id),
                     onPressed: log.add,
+                    extendHitAreaToLegend: true,
                   ),
                 ),
               ),
           ],
         );
-        if (withRoot) {
-          screen = Padding(
-            padding: rootInset,
-            child: ScreenCoordinateRoot(child: screen),
-          );
-        }
         return MaterialApp(
           home: Align(
             alignment: Alignment.topLeft,
@@ -684,14 +681,15 @@ void main() {
                 child: FittedBox(
                   child: SizedBox.fromSize(
                     size: screenSize,
-                    child: MediaQuery(
-                      data: const MediaQueryData(
-                        size: screenSize,
-                        systemGestureInsets: EdgeInsets.symmetric(
-                          horizontal: 30,
+                    child: Padding(
+                      padding: rootInset,
+                      child: ScreenCoordinateRoot(
+                        data: const MediaQueryData(
+                          size: screenSize,
+                          systemGestureInsets: EdgeInsets.all(30),
                         ),
+                        child: screen,
                       ),
-                      child: screen,
                     ),
                   ),
                 ),
@@ -701,15 +699,15 @@ void main() {
         );
       }
 
-      /// 화면 좌표 [screen]을 누르고, (누른 순간 입력되었는지, 손을 뗀 뒤 입력된 키 이름)을 돌려준다.
+      /// 전역 좌표 [at]을 누르고, (누른 순간 입력되었는지, 손을 뗀 뒤 입력된 키 이름)을 돌려준다.
       /// (레코드 안의 List는 `==`로 비교되지 않으므로 이름을 문자열로 잇는다.)
-      Future<(bool, String)> pressAt(
+      Future<(bool, String)> pressAtGlobal(
         WidgetTester tester,
         List<CalcKeyId> log,
-        Offset screen,
+        Offset at,
       ) async {
         log.clear();
-        final g = await tester.startGesture(toGlobal(screen));
+        final g = await tester.startGesture(at);
         await tester.pump();
         final immediate = log.isNotEmpty;
         await g.up();
@@ -717,7 +715,7 @@ void main() {
         return (immediate, log.map((id) => id.name).join(','));
       }
 
-      testWidgets('밀리고 축소된 화면에서도 화면 기준 가장자리로 판정한다', (tester) async {
+      testWidgets('밀리고 축소된 화면에서도 화면 기준 네 가장자리로 판정한다', (tester) async {
         _recordHaptics(tester);
         final pressed = <CalcKeyId>[];
         await tester.pumpWidget(simulatedScreenHost(pressed));
@@ -726,62 +724,93 @@ void main() {
           tester.getRect(find.byType(CalcKeyButton).first),
           Rect.fromLTWH(screenOrigin.dx, 100 + 164 * screenScale, 32, 36),
         );
+        Future<(bool, String)> pressAt(Offset screen) =>
+            pressAtGlobal(tester, pressed, toGlobal(screen));
 
-        // 화면 왼쪽 가장자리(x=10) — 전역 x=305는 전역 기준이면 영역 밖이지만 화면 기준으로는 안이다.
-        expect(await pressAt(tester, pressed, const Offset(10, 200)), (
-          false,
-          'num1',
-        ));
-        // 화면 오른쪽 가장자리(x=390) — 전역 x=495는 전역 창(800) 기준이면 한참 안쪽이다.
-        expect(await pressAt(tester, pressed, const Offset(390, 200)), (
-          false,
-          'num3',
-        ));
-        // 경계 안쪽(x=50, x=350)과 가운데 키는 즉시 입력된다.
-        expect(await pressAt(tester, pressed, const Offset(50, 200)), (
-          true,
-          'num1',
-        ));
-        expect(await pressAt(tester, pressed, const Offset(350, 200)), (
-          true,
-          'num3',
-        ));
-        expect(await pressAt(tester, pressed, const Offset(200, 200)), (
-          true,
-          'num2',
-        ));
-      });
-
-      testWidgets('ScreenCoordinateRoot가 없으면 전역 좌표로 판정한다 (실제 앱과 같은 경로)', (
-        tester,
-      ) async {
-        _recordHaptics(tester);
-        final pressed = <CalcKeyId>[];
-        await tester.pumpWidget(simulatedScreenHost(pressed, withRoot: false));
-
-        // 화면 기준 x=10이지만 전역 x=305이므로 즉시 입력된다 — 루트가 필요한 이유를 보여주는 대조군.
-        expect(await pressAt(tester, pressed, const Offset(10, 200)), (
-          true,
-          'num1',
-        ));
+        // 각 가장자리(인셋 30 안쪽)에서 시작한 터치는 보류된다. 전역 좌표로 비교하면 모두 영역 밖이다
+        // (예: 왼쪽 x=10 → 전역 305, 아래 y=390 → 전역 295 < 600-30).
+        expect(await pressAt(const Offset(10, 200)), (false, 'num1'));
+        expect(await pressAt(const Offset(390, 200)), (false, 'num3'));
+        expect(await pressAt(const Offset(200, 10)), (false, 'num4'));
+        expect(await pressAt(const Offset(200, 390)), (false, 'num5'));
+        // 경계 안쪽(인셋 30 밖)과 가운데 키는 즉시 입력된다.
+        expect(await pressAt(const Offset(50, 200)), (true, 'num1'));
+        expect(await pressAt(const Offset(350, 200)), (true, 'num3'));
+        expect(await pressAt(const Offset(200, 50)), (true, 'num4'));
+        expect(await pressAt(const Offset(200, 350)), (true, 'num5'));
+        expect(await pressAt(const Offset(200, 200)), (true, 'num2'));
       });
 
       testWidgets(
-        'ScreenCoordinateRoot가 MediaQuery 영역과 크기가 다르면 디버그 assert로 알린다',
+        'ScreenCoordinateRoot가 받은 크기가 MediaQuery 크기와 다르면 첫 레이아웃 때 알린다',
         (tester) async {
-          _recordHaptics(tester);
-          final pressed = <CalcKeyId>[];
           await tester.pumpWidget(
-            simulatedScreenHost(pressed, rootInset: const EdgeInsets.all(20)),
+            simulatedScreenHost(
+              <CalcKeyId>[],
+              rootInset: const EdgeInsets.all(20),
+            ),
           );
-
-          final g = await tester.startGesture(toGlobal(const Offset(200, 200)));
           final error = tester.takeException();
-          expect(error, isA<AssertionError>());
+          expect(error, isA<FlutterError>());
           expect('$error', contains('ScreenCoordinateRoot'));
-          await g.up();
         },
       );
+
+      testWidgets('루트 없는 실제 앱 경로: 화면 안 좌우 분할에서도 기기 가장자리 기준으로 판정한다', (
+        tester,
+      ) async {
+        // #24·#25의 LCD | 키패드 분할처럼 키가 화면 오른쪽 절반에 있어도, MediaQuery를 영역 기준으로
+        // 덮어쓰지 않으면 전역 좌표 = 화면 좌표이므로 판정이 맞는다.
+        _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(800, 600),
+                systemGestureInsets: EdgeInsets.symmetric(horizontal: 30),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(child: SizedBox.expand()),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        for (final (id, alignment) in [
+                          (CalcKeyId.num1, Alignment.centerLeft),
+                          (CalcKeyId.num3, Alignment.centerRight),
+                        ])
+                          Align(
+                            alignment: alignment,
+                            child: SizedBox(
+                              width: 64,
+                              height: 72,
+                              child: CalcKeyButton(
+                                keyDef: keyDefOf(id),
+                                onPressed: pressed.add,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        expect(tester.getRect(find.byType(CalcKeyButton).first).left, 400);
+
+        // 오른쪽 영역의 왼쪽 끝 키(전역 x=405)는 화면 가운데라 즉시, 화면 오른쪽 끝 키(x=795)는 보류된다.
+        expect(await pressAtGlobal(tester, pressed, const Offset(405, 300)), (
+          true,
+          'num1',
+        ));
+        expect(await pressAtGlobal(tester, pressed, const Offset(795, 300)), (
+          false,
+          'num3',
+        ));
+      });
     });
 
     testWidgets('extendHitAreaToLegend이면 각인 띠를 눌러도 입력된다', (tester) async {
