@@ -259,59 +259,70 @@ void main() {
       }
     });
 
-    testWidgets('모든 키: 누르면 즉시 눌림 색(흰 라벨 키는 반전)이 되고, 반전 키는 떼는 즉시 돌아온다', (
-      tester,
-    ) async {
-      for (final def in allKeys) {
-        final category = def.category;
-        await tester.pumpWidget(
-          _host(
-            CalcKeyButton(keyDef: def, onPressed: (_) {}),
-            highContrast: true,
-          ),
-        );
-        final gesture = await tester.startGesture(
-          tester.getCenter(_keycap(def.id)),
-        );
-        await tester.pump();
-        var drawn = _renderedDecoration(tester, def.id);
-        expect(
-          drawn.color,
-          palette.keyPressedBackground(category),
-          reason: '$def',
-        );
-        expect(
-          drawn.border,
-          Border.all(
-            color: palette.keyPressedBorder,
-            width: CalcTheme.keyBorderWidth,
-          ),
-          reason: '$def',
-        );
-        expect(
-          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
-          palette.keyPressedForeground(category),
-          reason: '$def',
-        );
+    testWidgets(
+      '모든 키: 누르면 즉시 눌림 색(흰 라벨 키는 반전)이 되고, 떼면 배경·라벨이 함께 애니메이션 뒤 돌아온다',
+      (tester) async {
+        for (final def in allKeys) {
+          final category = def.category;
+          await tester.pumpWidget(
+            _host(
+              CalcKeyButton(keyDef: def, onPressed: (_) {}),
+              highContrast: true,
+            ),
+          );
+          final gesture = await tester.startGesture(
+            tester.getCenter(_keycap(def.id)),
+          );
+          await tester.pump();
+          var drawn = _renderedDecoration(tester, def.id);
+          expect(
+            drawn.color,
+            palette.keyPressedBackground(category),
+            reason: '$def',
+          );
+          expect(
+            drawn.border,
+            Border.all(
+              color: palette.keyPressedBorder,
+              width: CalcTheme.keyBorderWidth,
+            ),
+            reason: '$def',
+          );
+          expect(
+            tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+            palette.keyPressedForeground(category),
+            reason: '$def',
+          );
 
-        await gesture.up();
-        await tester.pump();
-        drawn = _renderedDecoration(tester, def.id);
-        if (palette.invertsOnPress(category)) {
-          // 라벨과 배경이 함께 돌아온다 — 흰 배경에 흰 라벨인 중간 프레임이 없다.
-          expect(drawn.color, palette.keyBackground(category), reason: '$def');
-        } else {
+          Color? label() =>
+              tester.widget<Text>(find.text(def.mainLabel)).style!.color;
+
+          await gesture.up();
+          await tester.pump();
+          await tester.pump(CalcTheme.keyPressAnimationDuration ~/ 2);
+          // 중간 시점: 배경은 눌림 색도 평소 색도 아니다. 반전 키는 라벨도 함께 옮겨 가는 중이라,
+          // 흰 배경(눌림)에 흰 라벨(평소)인 프레임이 없다.
+          drawn = _renderedDecoration(tester, def.id);
+          expect(
+            drawn.color,
+            isNot(palette.keyPressedBackground(category)),
+            reason: '$def',
+          );
+          expect(drawn.color, isNot(palette.keyBackground(category)));
+          if (palette.invertsOnPress(category)) {
+            expect(label(), isNot(palette.keyForeground(category)));
+            expect(label(), isNot(palette.keyPressedForeground(category)));
+          } else {
+            expect(label(), palette.keyForeground(category), reason: '$def');
+          }
+
           await tester.pump(CalcTheme.keyPressAnimationDuration);
           drawn = _renderedDecoration(tester, def.id);
           expect(drawn.color, palette.keyBackground(category), reason: '$def');
+          expect(label(), palette.keyForeground(category), reason: '$def');
         }
-        expect(
-          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
-          palette.keyForeground(category),
-          reason: '$def',
-        );
-      }
-    });
+      },
+    );
 
     testWidgets('비활성 키 라벨은 고대비 모드에서도 활성 라벨보다 키캡 대비가 낮다 (흐리게 보인다)', (
       tester,
@@ -331,6 +342,8 @@ void main() {
               highContrast: true,
             ),
           );
+          // 같은 키가 활성 ↔ 비활성으로 바뀌면 라벨 색도 뗄 때와 같은 시간 동안 옮겨 간다.
+          await tester.pump(CalcTheme.keyPressAnimationDuration);
           final color = tester
               .widget<Text>(find.text(def.mainLabel))
               .style!

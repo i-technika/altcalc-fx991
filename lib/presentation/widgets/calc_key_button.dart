@@ -631,9 +631,11 @@ class _Keycap extends StatelessWidget {
     final labelColor = enabled
         ? foreground
         : foreground.withValues(alpha: CalcTheme.keyDisabledLabelOpacity);
-    // 고대비 반전 키는 뗄 때도 애니메이션하지 않는다 — 배경만 서서히 돌아오는 동안 라벨은 이미 흰색이라
-    // 흰 배경에 흰 라벨이 몇 프레임 보이게 된다.
-    final animateRelease = !palette.invertsOnPress(category);
+    // 누를 때는 즉시, 뗄 때는 [CalcTheme.keyPressAnimationDuration] 동안 바꾼다. 라벨 색도 배경과 같은 시간에
+    // 돌아오게 해야 고대비 반전 키(#54)가 흰 배경에 흰 라벨로 보이는 프레임이 없다.
+    final duration = pressed
+        ? Duration.zero
+        : CalcTheme.keyPressAnimationDuration;
 
     // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 내며, 배경 명도와 테두리가 바뀐다(#22).
     // 누를 때는 즉시 바꾸고 뗄 때만 애니메이션한다 — 짧은 탭에서도 눌림 색이 끝까지 보이게 한다.
@@ -642,9 +644,7 @@ class _Keycap extends StatelessWidget {
       offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
       child: AnimatedContainer(
         key: CalcKeyButton.keycapKeyOf(keyDef.id),
-        duration: pressed || !animateRelease
-            ? Duration.zero
-            : CalcTheme.keyPressAnimationDuration,
+        duration: duration,
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(CalcTheme.keyBorderRadius),
@@ -666,17 +666,22 @@ class _Keycap extends StatelessWidget {
         alignment: Alignment.center,
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(
-            keyDef.mainLabel,
-            maxLines: 1,
-            softWrap: false,
-            textScaler: textScaler,
-            style: CalcTheme.keyMainLabelStyle.copyWith(
-              fontSize: fontSize,
-              color: labelColor,
-            ),
-            strutStyle: _labelStrut(
-              CalcTheme.keyMainLabelStyle.copyWith(fontSize: fontSize),
+          // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
+          child: TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: labelColor),
+            duration: duration,
+            builder: (context, color, _) => Text(
+              keyDef.mainLabel,
+              maxLines: 1,
+              softWrap: false,
+              textScaler: textScaler,
+              style: CalcTheme.keyMainLabelStyle.copyWith(
+                fontSize: fontSize,
+                color: color,
+              ),
+              strutStyle: _labelStrut(
+                CalcTheme.keyMainLabelStyle.copyWith(fontSize: fontSize),
+              ),
             ),
           ),
         ),

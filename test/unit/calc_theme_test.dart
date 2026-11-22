@@ -357,9 +357,16 @@ void main() {
       }
     });
 
-    test('설정 아이콘은 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이다', () {
+    test('설정 아이콘은 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이며, 고대비 각인보다는 덜 띈다', () {
       final hc = contrastRatio(high.settingsIcon, CalcTheme.bodyBackground);
       expect(hc, greaterThanOrEqualTo(aaa));
+      for (final legend in [high.shiftLabel, high.alphaLabel]) {
+        expect(
+          hc,
+          lessThan(contrastRatio(legend, CalcTheme.bodyBackground)),
+          reason: 'legend=$legend',
+        );
+      }
       expect(
         hc,
         greaterThanOrEqualTo(

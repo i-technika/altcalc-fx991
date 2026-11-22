@@ -615,7 +615,9 @@ class _ControlPanel extends StatelessWidget {
       // 기기의 고대비 설정 흉내 (#54) — iOS "대비 증가", Android 14 이상 "색상 대비" 중간·높음
       Row(
         children: [
-          const Expanded(child: Text('고대비 (대비 증가)', style: _label)),
+          const Expanded(
+            child: Text('고대비 (MediaQuery.highContrast)', style: _label),
+          ),
           Switch(
             key: const ValueKey('preview-high-contrast'),
             value: highContrast,
