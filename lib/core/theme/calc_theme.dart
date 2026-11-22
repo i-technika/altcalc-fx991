@@ -702,11 +702,13 @@ abstract final class CalcTheme {
   //   [screenLcdMinHeight] ~ (LCD 폭 / [screenLcdMinAspectRatio]) 범위로 제한한다.
   // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio]) 때문에 키패드가 다 쓰지 못하는
   //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
-  //   (실물의 로고·태양전지 자리, 활용은 TODO(#41)). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
+  //   (실물의 로고·태양전지 자리 — 아래 "상단 띠" 절, #41). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
+  // - 상단 띠: 남는 높이가 없어도 [screenTopStripMinHeight]만큼은 LCD·키패드보다 먼저 떼어 둔다 — 설정 진입
+  //   버튼을 어느 폰에서나 보이게 두기 위해서다(#41, 사용자 결정). LCD 목표 높이·키패드는 그 나머지로 정한다.
   // - LCD 폭: 본체 폭과 [screenLcdMaxWidth](키패드 최대 폭 기준) 중 작은 쪽이고, 키패드처럼 가운데 정렬한다 (#92).
   //   LCD 최대 높이도 이 폭으로 정하므로, 태블릿 세로처럼 폭이 상한에 걸리면 LCD가 덜 높아지고 그만큼 상단 띠가 커진다
-  //   (LCD는 그대로 키패드 바로 위). 예: 10인치 Android 세로(본체 784×1130) LCD 448 → 274dp·띠 약 34 → 208dp,
-  //   12.9인치 iPad 세로(본체 1008×1244) LCD 576 → 274dp·띠 약 20 → 약 322dp. 띠의 활용은 #41.
+  //   (LCD는 그대로 키패드 바로 위). 예: 10인치 Android 세로(인셋 24/48, 본체 784×1140) LCD 448 → 274dp·띠 약 44 → 218dp,
+  //   12.9인치 iPad 세로(인셋 24/20, 본체 1008×1254) LCD 576 → 274dp·띠 약 30 → 약 332dp. 띠에 두는 것은 "상단 띠" 절.
   //   세로 폰 폭(440dp 이하)에서는 걸리지 않는다. 짧은 변 600dp 미만의 가로 창(가로 폰·짧은 분할 화면)은 폭이
   //   480dp를 넘으면 걸린다 — 그 창의 키패드는 높이에 묶여 LCD보다 더 좁다(짧은 창 규칙은 #38).
   // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38).
@@ -718,9 +720,9 @@ abstract final class CalcTheme {
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;
 
-  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX 앞면의 LCD 창 : 키 영역 높이(대략 1 : 3, 정밀
+  /// LCD 목표 높이 (본체 높이에서 [screenTopStripMinHeight]를 뺀 높이 대비). 실물 fx-991EX 앞면의 LCD 창 : 키 영역 높이(대략 1 : 3, 정밀
   /// 실측값 아님)보다 조금 크게 잡았다 — 앱 LCD는 입력·결과 줄이 각각 분수를 담는 4행 구성이고,
-  /// 16:9 소형 폰(320×568)에서도 줄 글자 약 19dp를 확보한다. 그보다 크게 잡으면 소형 폰 키 각인 글자가
+  /// 16:9 소형 폰(320×568)에서도 줄 글자 약 18dp를 확보한다(최소 띠 #41 전에는 약 19dp). 그보다 크게 잡으면 소형 폰 키 각인 글자가
   /// 키 크기 하한(calculator_screen_test) 아래로 내려간다. 세로로 긴 폰에서는 LCD 최대 높이에 먼저 걸린다.
   static const double screenLcdHeightRatio = 0.28;
 
@@ -770,8 +772,8 @@ abstract final class CalcTheme {
   //   (접힘선 기준 배치면 접힘선 쪽)에 붙이고, 남는 폭은 패널 바깥쪽 빈 여백으로 둔다.
   //   LCD 아래 남는 자리에 설정 버튼을 둔다.
   // - 본체가 키패드 최대 높이보다 높으면(12.9인치 iPad 가로 등) 위아래 배치와 같이 키패드·LCD를 본체 아래에
-  //   붙인 채로 두고, 위쪽 남는 높이는 빈 띠로 둔다. 위쪽 띠·패널 바깥쪽 여백의 활용(과 설정 버튼 위치)은
-  //   세로 폰 상단 띠와 함께 TODO(#41).
+  //   붙인 채로 두고, 위쪽 남는 높이는 LCD 위 띠가 된다. 띠가 충분히 높으면 LCD 바로 위에 장식 줄을 둔다
+  //   ("상단 띠" 절, #41). 설정 버튼은 그대로 LCD 아래에 두고, 패널 바깥쪽 여백은 비워 둔다.
   // - 위아래 배치(태블릿 세로)·테이블톱 배치의 LCD 폭 상한은 키패드 실제 폭이 아니라 [screenLcdMaxWidth]다 (#92).
   // - 광고 슬롯: 위아래 배치와 같이 본체 아래 전체 폭 — 키패드 최하단 행 아래 안전 여백 규칙이 그대로 지켜진다.
 
@@ -791,6 +793,123 @@ abstract final class CalcTheme {
 
   /// 설정 버튼 아이콘 색 — 본체 배경([bodyBackground]) 대비 4.5:1 이상, 키 각인보다 눈에 덜 띄게 회색
   static const Color settingsIcon = Color(0xFFB0B0B0);
+
+  // ── 상단 띠 (#41) ──
+  // LCD 위에 남는 높이(실물의 로고·모델명·태양전지 자리)에 장식과 설정 진입 버튼을 둔다. 배치 계산은
+  // `CalcTopStripLayout`, 그리기는 `TopStripDecoration`·`SettingsButton`이 한다.
+  //
+  // 띠 = LCD 윗변 위쪽 전부다. 본체 위 화면 여백([screenPadding])도 띠에 넣는다 — 띠가 낮은 폰에서 그 8dp까지
+  // 써야 아이콘이 들어간다. 띠 안에서 LCD 바로 위에 붙인 "내용 줄" 하나에 모두 놓고(높이는 띠 높이,
+  // [topStripRowMaxHeight]까지), 그 위로 남는 높이는 비워 둔다(태블릿 세로 약 220~330dp).
+  //
+  //   ┌ AltCalc ············ ▮▮▮▮ ⚙ ┐ ← 내용 줄 (LCD와 같은 폭)
+  //   └────────── LCD ──────────────┘
+  //
+  // - **설정 버튼** (위아래 배치만 — 좌우 분할·접힘선 기준 배치의 버튼 위치는 #24·#25 그대로):
+  //   LCD 위에 겹친 터치 영역은 "LCD는 누를 것이 없다"는 전제에 기댄다. LCD에 터치 조작(스크롤·이력 등, M2 이후)이
+  //   생기면 오른쪽 위 약 48×28dp가 설정으로 가로채이므로 그때 이 배치를 다시 정한다.
+  //   내용 줄의 오른쪽 끝. 터치 영역은 언제나 [settingsButtonSize] 정사각형이다. 줄이 그보다 낮으면 아이콘은 줄
+  //   가운데에 그리고, 터치 영역만 줄 윗변에서 아래로 LCD 위쪽에 겹친다(LCD는 누를 것이 없다 — 겹친 곳의 스크린리더
+  //   영역은 LCD 상태 표시기가 그대로 갖는다). 아이콘 크기는 줄 높이에서 위아래 [topStripIconMargin]을 뺀 값을
+  //   [settingsIconMinSize]~[settingsIconSize]로 제한한다.
+  // - **띠 최소 높이**: 위아래 배치는 남는 높이가 없어도 [screenTopStripMinHeight]를 떼어 둔다(위 "화면 배치").
+  //   그래서 줄 높이는 어느 폰에서나 [screenPadding] + [screenTopStripMinHeight] = 20dp 이상이다.
+  //   실제 인셋으로 잰 남는 높이: 아이폰 전 기종 0dp, 360×800 0~21dp, 412×915 13~37dp, 21:9 폰 84dp,
+  //   Fold 커버 133dp, 태블릿 세로 약 220~330dp(10인치 Android 인셋 24/48 약 218dp, 12.9인치 iPad 약 332dp)
+  //   — 떼어 두지 않으면 대부분의 폰에 버튼 자리가 없다.
+  //   비용(최소 띠가 없을 때 대비), 남는 높이가 12dp 이상인 화면은 배치가 그대로다:
+  //   · iPhone 390×844(인셋 47/34): 키 터치 41.9 → 41.1dp(−1.8%)·LCD 줄 글자 27.4 → 26.9dp
+  //   · 가장 작은 폰 320×568은 테스트 하한 아래로 내려간다(calculator_screen_test가 크기별 하한으로 고정한다).
+  //     - 상태바 20dp(iPhone SE 1세대): 키 터치 28.70 → 27.96dp로 하한 [keyTouchHeightFloor](28dp) **미만**,
+  //       키 각인 글자 약 4.82 → 4.70dp(이 PR 전부터 5.0dp 미만), LCD 줄 글자 17.9 → 17.3dp.
+  //     - 인셋 0: 키 각인 글자 5.03 → 4.90dp, 배율 1.3의 LCD 줄 글자 18.3 → 17.7dp(하한 18dp 미만).
+  //     LCD·키패드 어느 한쪽이 12dp를 다 내도 인셋 0에서 두 하한을 함께 지킬 수 없다(배율 1.3 기준 필요 높이
+  //     약 508.5 > 본체 500dp). 360×640(인셋 24/48)도 본체가 같아 배율 1.3의 LCD 줄 글자가 17.7dp다.
+  //   · 짧은 가로·분할 창(#38 범위, 이미 하한 28dp 미만)도 그만큼 키가 작아진다 — 키 터치 844×390(인셋 좌우 47·
+  //     아래 21) 15.4 → 14.4dp, 640×360(상태바 24) 12.6 → 11.6dp, 568×320 11.2 → 10.2dp, 360×380 14.3 → 13.3dp.
+  //     폭 480dp를 넘는 창은 LCD 양옆이 비어 높이를 떼지 않고도 버튼을 둘 수 있다 — 짧은 창의 우선순위와 함께 #38에서 정한다.
+  // - **워드마크**(앱 이름 — CASIO 상표·모델명은 쓰지 않는다): 줄 왼쪽. 줄 높이가 [topStripWordmarkMinHeight]
+  //   이상이고 자리 폭이 [topStripWordmarkMinWidth] 이상일 때 그린다. 글자 크기는 줄 높이 ×
+  //   [topStripWordmarkFontRatio], [topStripWordmarkMaxFontSize]까지.
+  // - **태양전지 장식**(기능 없음): 설정 버튼 왼쪽(버튼이 없는 배치는 줄 오른쪽 끝). 줄 높이가
+  //   [topStripSolarMinHeight] 이상이고 워드마크 자리와 [topStripGap] 이상 떨어질 때만 그린다.
+  //   모자라면 태양전지 → 워드마크 순으로 숨긴다(워드마크가 없으면 태양전지도 없다).
+  // - 좌우 분할·접힘선 기준 배치도 LCD 위 띠에 같은 규칙으로 장식만 둔다. 장식 줄이 다른 곳에 놓인 설정 버튼
+  //   (테이블톱 위 절반 모서리)과 겹치면 장식을 모두 숨긴다.
+  // - 장식은 터치를 받지 않고 스크린리더에 읽히지 않는다. 글자 배율은 키 각인처럼 [keyMaxTextScaleFactor]까지.
+
+  /// 위아래 배치에서 LCD 위에 항상 떼어 두는 상단 띠 최소 높이 (dp, 사용자 결정 #41).
+  /// 본체 위 화면 여백([screenPadding])과 합쳐 설정 아이콘 줄이 된다.
+  static const double screenTopStripMinHeight = 12.0;
+
+  /// 상단 띠 내용 줄의 최대 높이 (dp) — 설정 버튼 터치 영역과 같다
+  static const double topStripRowMaxHeight = settingsButtonSize;
+
+  /// 내용 줄 좌우 안쪽 여백 (dp) — 워드마크·태양전지를 LCD 베젤 안쪽 선에 맞춘다
+  static const double topStripInset = 4.0;
+
+  /// 내용 줄 안 요소 사이 최소 간격 (dp)
+  static const double topStripGap = 8.0;
+
+  /// 설정 아이콘 크기 (dp) — Material 기본 아이콘 크기
+  static const double settingsIconSize = 24.0;
+
+  /// 낮은 줄에서 줄어든 설정 아이콘의 최소 크기 (dp) — Material 조밀(dense) 아이콘 크기
+  static const double settingsIconMinSize = 18.0;
+
+  /// 낮은 줄에서 설정 아이콘 위아래에 남기는 여백 (dp, 한쪽)
+  static const double topStripIconMargin = 1.0;
+
+  /// 워드마크를 그리는 줄 최소 높이 (dp) = 최소 띠에서의 줄 높이
+  static const double topStripWordmarkMinHeight =
+      screenPadding + screenTopStripMinHeight;
+
+  /// 워드마크 글자 크기 (줄 높이 대비)
+  static const double topStripWordmarkFontRatio = 0.5;
+
+  /// 워드마크 글자 크기 상한 (dp)
+  static const double topStripWordmarkMaxFontSize = 20.0;
+
+  /// 워드마크 자리 최대 폭 (줄 폭 대비)
+  static const double topStripWordmarkMaxWidthRatio = 0.4;
+
+  /// 워드마크 자리 최소 폭 (dp) — 이보다 좁으면 그리지 않는다
+  static const double topStripWordmarkMinWidth = 48.0;
+
+  /// 태양전지 장식을 그리는 줄 최소 높이 (dp)
+  static const double topStripSolarMinHeight = 32.0;
+
+  /// 태양전지 장식 높이 (줄 높이 대비)
+  static const double topStripSolarHeightRatio = 0.5;
+
+  /// 태양전지 장식 가로/세로 비
+  static const double topStripSolarAspectRatio = 3.0;
+
+  /// 태양전지 장식의 칸 수 (실물 fx-991EX 태양전지처럼 4칸)
+  static const int topStripSolarCellCount = 4;
+
+  /// 태양전지 장식 안쪽 여백·칸 사이 간격 (장식 높이 대비)
+  static const double topStripSolarCellGapRatio = 0.1;
+
+  /// 태양전지 장식 모서리 반경 (dp)
+  static const double topStripSolarBorderRadius = 2.0;
+
+  /// 태양전지 장식 바탕(칸 사이 홈) — 본체보다 어둡다
+  static const Color solarPanelBackground = Color(0xFF151515);
+
+  /// 태양전지 장식 칸 — 실물 비정질 태양전지의 어두운 갈색
+  static const Color solarPanelCell = Color(0xFF4A342E);
+
+  /// 워드마크 글자 스타일 (기준 크기 — `TopStripDecoration`이 줄 높이에 맞춰 `fontSize`를 덮어쓴다).
+  /// 색은 설정 아이콘과 같다([CalcPalette.settingsIcon]).
+  static const TextStyle topStripWordmarkStyle = TextStyle(
+    fontFamily: monoFontFamily,
+    fontFamilyFallback: monoFontFallback,
+    fontSize: topStripWordmarkMaxFontSize,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.5,
+    height: 1.0,
+  );
 
   // ── 접힘선 기준 배치 (#25) ──
   // 폴더블 내부 화면처럼 접힘선(fold·hinge)이 창을 가로지르면 접힘선을 경계로 나눈다(`FormFactor.arrangementOf`).
