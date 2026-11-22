@@ -50,12 +50,14 @@ Closes #<번호>
 gh pr create --base main --head milestone/m<번호> --draft \
   --title "<에픽 제목> (#<번호>)" \
   --body-file "<scratchpad>/ms-pr-body.md" \
-  --label milestone --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+  --label milestone --milestone "<마일스톤 이름>" --project "AltCalc FX-991" \
+  --assignee i-technika
 ```
 - Draft로 유지해야 서브이슈 개발 중 `Milestone Full Multi-Platform CI`가 돌지 않는다.
 
-## 4. 프로젝트 보드 갱신
+## 4. 담당자·프로젝트 보드 갱신
 ```bash
+gh issue edit <번호> --add-assignee i-technika   # 착수한 에픽의 담당자 (서브이슈는 /fix-issue 착수 시 지정)
 bash .claude/scripts/set-project-status.sh <번호> "In Progress"
 bash .claude/scripts/set-project-status.sh <PR번호> "In Progress"
 ```

@@ -35,6 +35,7 @@ gh issue view <번호> --json number,title,body,labels,milestone,parent,state,is
 - 상위 에픽(`parent.number`)으로 마일스톤 번호 N을 정하고 베이스 브랜치 `milestone/m<N>`을 확인한다.
 - 같은 마일스톤의 다른 서브이슈 본문도 훑어 **이번 이슈의 범위 경계**를 파악한다(다음 이슈의 일을 미리 하지 않는다).
 - 원격/로컬에 이미 `issue/<번호>-*` 브랜치나 미커밋 작업물(이전 에이전트의 WIP 등)이 있으면 내용을 검토해 재사용 여부를 판단한다.
+- 담당자 지정: `gh issue edit <번호> --add-assignee i-technika` (이미 지정돼 있으면 그대로 둔다)
 - 프로젝트 보드: `bash .claude/scripts/set-project-status.sh <번호> "In Progress"`
 
 ### 2. 브랜치 생성
@@ -82,7 +83,8 @@ Closes #<번호>
 gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   --title "<이슈 제목 그대로, 예: [M1-2] ...> (#<번호>)" \
   --body-file "<scratchpad>/pr-<번호>.md" \
-  --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+  --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991" \
+  --assignee i-technika
 ```
 
 ### 5. 적대적 코드리뷰 R1 (독립 서브에이전트)
@@ -109,9 +111,11 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 
 ### 9. 후속 이슈 문의
 - 구현·리뷰 중 이번 범위 밖으로 미룬 개선점/리팩토링/검증 과제를 정리해 사용자에게 **등록 여부를 묻는다** (AskUserQuestion, multiSelect).
-- 승인된 항목만 생성한다:
+- 승인된 항목만 생성한다. **순번은 기억이나 이전 조회값으로 정하지 않고, 항목마다 생성 직전에 스크립트로 받는다**
+  (여러 세션이 동시에 후속 이슈를 만들면 같은 순번을 집기 때문 — 과거 M1-39~47 중복):
   ```bash
-  gh issue create --title "[M<N>-<다음순번>] <제목>" --body-file <파일> \
+  SEQ=$(bash .claude/scripts/subissue-seq.sh next M<N>)   # 닫힌 이슈까지 포함한 최댓값 + 1 (예: M1-56)
+  gh issue create --title "[$SEQ] <제목>" --body-file <파일> \
     --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
   # 상위 에픽에 서브이슈로 연결
   gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
@@ -121,6 +125,15 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
     -f i="<신규 이슈 node id>" -f t="<타입 id>"
   ```
   타입 ID: Task `IT_kwDOBMwL0c4PCk6t`, Feature `IT_kwDOBMwL0c4PCk6v` (Bug는 `gh api graphql`로 `repository.issueTypes` 조회)
+- 생성 직후 순번 충돌을 검사한다. 실패하면(먼저 만든 이슈가 같은 순번) 이번 이슈가 양보한다:
+  ```bash
+  bash .claude/scripts/subissue-seq.sh check "$SEQ" <신규번호> || {
+    NEW=$(bash .claude/scripts/subissue-seq.sh next M<N>)
+    gh issue edit <신규번호> --title "[$NEW] <제목>"
+    bash .claude/scripts/subissue-seq.sh check "$NEW" <신규번호>   # 통과할 때까지 반복
+  }
+  ```
+- 후속 이슈는 아직 착수 전이므로 담당자를 지정하지 않는다 (착수할 때 1단계에서 지정).
 - 실물 대조 등 다른 마일스톤에 속하는 과제는 해당 마일스톤으로 지정한다.
 
 ### 10. Linux CI 확인
