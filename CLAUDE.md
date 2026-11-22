@@ -9,6 +9,8 @@
 
 ## 1. 핵심 아키텍처 및 기술 스택
 - **프레임워크:** Flutter (Dart 3.14+) — Android / iOS 크로스 플랫폼
+  - SDK 버전은 `pubspec.yaml`의 `environment.flutter`(정확한 버전) 하나로 고정하고 CI도 그 값을 읽는다 (#78). 버전 숫자는 그 파일만 기준으로 삼는다.
+    올릴 때는 README "Flutter SDK 버전 올리기" 절차대로 로컬 SDK·`pubspec.lock`과 함께 바꾼다.
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
 - **상태 관리:** `flutter_riverpod` (현재 2.x)
@@ -59,6 +61,11 @@
   - #67 이전 브랜치에 있어서 `M` 때문에 전환·머지가 막히면(스크립트가 아직 없다): 위 생성 파일 7개에 대해
     `git diff --stat -- <7개>`가 비어 있음을 확인한 뒤 그 7개만 `git checkout -- <7개>`로 되돌린다.
   - `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다 — 진짜 변경까지 지워진다.
+- Flutter SDK 폴더는 이 PC의 모든 브랜치·worktree가 함께 쓴다. 고정값(`environment.flutter`)과 다른 SDK로는 `pub get`이 실패하므로,
+  SDK를 바꾸면 고정값이 다른 브랜치가 모두 깨진다 — 버전 올리기는 README 절차의 "먼저 알아 둘 점"을 따른다 (#78).
+  - 버전 올리기 절차 밖에서 `flutter upgrade`를 실행하지 않는다(새 버전 알림이 떠도 무시한다).
+  - 별도 폴더의 새 SDK로 버전을 올리는 동안에는 위 PATH 안내(`~/develop/flutter`)가 옛 SDK를 가리킨다.
+    그 브랜치의 서브에이전트·리뷰 지시에는 쓸 SDK 경로를 명시한다.
 - git 워크트리는 `.claude/worktrees/` 아래나 저장소 밖(`../altcalc-wt<번호>`)에만 만든다. 저장소 안의 점으로 시작하지 않는
   폴더에 만들면, 저장소 루트를 연 VS Code 창이 떠 있을 때 Dart 확장이 그 워크트리에 묻지 않고 pub get을 돌릴 수 있다.
   `.claude/worktrees/`는 `analysis_options.yaml`의 `analyzer.exclude`로 확장의 프로젝트 목록에서 뺀다(시작 시 pub get 알림,
