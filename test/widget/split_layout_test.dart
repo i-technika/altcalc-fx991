@@ -1007,6 +1007,19 @@ void main() {
 /// 폴더블 화면: 창 크기, 시스템 인셋, 접힘 정보 (화면 좌표)
 typedef _Foldable = (String, Size, EdgeInsets, DisplayFeature);
 
+/// View(대화상자 경로가 보는 화면)에도 [padding] 인셋을 넣는다. [_pump]는 화면 MediaQuery에만 인셋을 넣으므로,
+/// 대화상자 위치가 Navigator의 인셋으로 절반 폭을 재는 테스트는 이것을 함께 부른다.
+void _setViewPadding(WidgetTester tester, EdgeInsets padding) {
+  final ratio = tester.view.devicePixelRatio;
+  tester.view.padding = FakeViewPadding(
+    left: padding.left * ratio,
+    top: padding.top * ratio,
+    right: padding.right * ratio,
+    bottom: padding.bottom * ratio,
+  );
+  addTearDown(tester.view.resetPadding);
+}
+
 DisplayFeature _foldAt(
   Rect bounds, {
   DisplayFeatureType? type,
@@ -1658,24 +1671,14 @@ void _hingeLayoutTests() {
     // 손잡이에 따라 배치가 갈리는 비대칭 세로 접힘선. 키패드가 좁은 절반에 들어가지 못하는 손잡이는 위아래 배치,
     // 반대 손잡이는 접힘선 기준 배치(버튼은 LCD 쪽 = 좁은 절반)다.
     // `_splitLikeApp`은 Navigator의 인셋으로 절반 폭을 재므로 View에도 같은 인셋을 넣는다(넣지 않으면 실제 앱에
-    // 없는 "따라가기"가 일어난다).
-    void setViewPadding(WidgetTester tester, EdgeInsets padding) {
-      final ratio = tester.view.devicePixelRatio;
-      tester.view.padding = FakeViewPadding(
-        left: padding.left * ratio,
-        top: padding.top * ratio,
-        right: padding.right * ratio,
-        bottom: padding.bottom * ratio,
-      );
-      addTearDown(tester.view.resetPadding);
-    }
+    // 없는 "따라가기"가 일어난다 — [_setViewPadding]).
 
     testWidgets(
       '비대칭 접힘선(펼친 폭 0): LCD 쪽 절반이 하한보다 좁아 대화상자는 배치가 바뀌어도 화면 전체에 그대로 뜬다 (#41 인셋 판정)',
       (tester) async {
         // x=560, 오른쪽 인셋 48 → 오른쪽 절반 233dp. 오른손잡이는 위아래 배치, 왼손잡이는 접힘선 기준 배치.
         const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
-        setViewPadding(tester, padding);
+        _setViewPadding(tester, padding);
         final (container, _) = await _pump(
           tester,
           size: const Size(841, 701),
@@ -1710,7 +1713,7 @@ void _hingeLayoutTests() {
       // 기준 배치(버튼은 왼쪽 좁은 절반). 따라가기라면 대화상자가 왼쪽으로 옮겨 가야 하는 화면이다.
       const hingeX = 281.0;
       const padding = EdgeInsets.only(left: 48, top: 24, bottom: 24);
-      setViewPadding(tester, padding);
+      _setViewPadding(tester, padding);
       final (container, _) = await _pump(
         tester,
         size: const Size(841, 701),
@@ -1821,6 +1824,153 @@ void _hingeLayoutTests() {
       expect(tester.getRect(_keypad), isNot(keypadBefore));
       expect(tester.getRect(_dialogSurface), opened);
     });
+  });
+
+  group('Flutter가 나누는 비대칭 세로 접힘선의 좁은 절반에 대화상자를 가두지 않는다 (#125)', () {
+    // 창 841×701 (Pixel Fold 내부 가로 크기). 접힘선이 한쪽에 치우쳐 한쪽 절반이 인셋을 빼고 233dp 안팎이다.
+    // (이름, 인셋, 접힘선, 손잡이, 위아래 배치인지, 버튼이 왼쪽 절반인지, 대화상자가 왼쪽 절반인지)
+    const size = Size(841, 701);
+    const rightInset = EdgeInsets.only(top: 24, right: 48, bottom: 24);
+    const leftInset = EdgeInsets.only(left: 48, top: 24, bottom: 24);
+    final cases =
+        <(String, EdgeInsets, DisplayFeature, Handedness, bool, bool, bool)>[
+          // 이슈 재현: 오른쪽 절반 233dp라 위아래 배치, 버튼은 상단 띠 오른쪽 끝(좁은 절반)
+          (
+            '반 접힘·오른쪽 좁은 절반·위아래 배치',
+            rightInset,
+            _halfOpenedAt(const Rect.fromLTWH(560, 0, 0, 701)),
+            Handedness.right,
+            true,
+            false,
+            true,
+          ),
+          (
+            '물리 힌지·오른쪽 좁은 절반·위아래 배치',
+            rightInset,
+            _foldAt(
+              const Rect.fromLTWH(560, 0, 20, 701),
+              type: DisplayFeatureType.hinge,
+            ),
+            Handedness.right,
+            true,
+            false,
+            true,
+          ),
+          // 좌우 반전: 왼쪽 절반 233dp. 오른손잡이는 접힘선 기준 배치라 버튼이 LCD 쪽(좁은 절반)에 있다.
+          (
+            '반 접힘·왼쪽 좁은 절반·접힘선 기준 배치',
+            leftInset,
+            _halfOpenedAt(const Rect.fromLTWH(281, 0, 0, 701)),
+            Handedness.right,
+            false,
+            true,
+            false,
+          ),
+          // 같은 화면의 왼손잡이: 위아래 배치라 버튼이 오른쪽 위(넓은 절반) — 원래부터 넓은 절반이다.
+          (
+            '반 접힘·왼쪽 좁은 절반·위아래 배치',
+            leftInset,
+            _halfOpenedAt(const Rect.fromLTWH(281, 0, 0, 701)),
+            Handedness.left,
+            true,
+            false,
+            false,
+          ),
+          // 왼쪽 절반이 인셋을 빼고 252dp: 배치 판정 하한(280dp, 인셋 포함)은 넘어 접힘선 기준 배치지만 카드는 좁다.
+          (
+            '물리 힌지·왼쪽 좁은 절반·접힘선 기준 배치',
+            leftInset,
+            _foldAt(
+              const Rect.fromLTWH(300, 0, 20, 701),
+              type: DisplayFeatureType.hinge,
+            ),
+            Handedness.right,
+            false,
+            true,
+            false,
+          ),
+        ];
+
+    for (final (
+          name,
+          padding,
+          fold,
+          handedness,
+          stacked,
+          buttonLeft,
+          dialogLeft,
+        )
+        in cases) {
+      for (final textScale in [1.0, 2.0]) {
+        testWidgets('$name·${handedness.name}·글자 배율 $textScale', (
+          tester,
+        ) async {
+          final hinge = fold.bounds;
+          bool onLeft(Rect r) => r.right <= hinge.left + 0.01;
+          bool onRight(Rect r) => r.left >= hinge.right - 0.01;
+          // `showDialog`의 SafeArea·절반 폭 판정은 Navigator(View)의 인셋을 본다 — 실제 앱처럼 같은 인셋을 넣는다.
+          _setViewPadding(tester, padding);
+          final (container, _) = await _pump(
+            tester,
+            size: size,
+            padding: padding,
+            textScale: textScale,
+            handedness: handedness,
+            displayFeatures: [fold],
+          );
+          expect(isStackedArrangement(tester), stacked);
+          final button = tester.getRect(_settings);
+          expect(buttonLeft ? onLeft(button) : onRight(button), isTrue);
+
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final dialog = tester.getRect(_dialogSurface);
+          expect(dialog.width, greaterThanOrEqualTo(280), reason: '$dialog');
+          expect(dialogLeft ? onLeft(dialog) : onRight(dialog), isTrue);
+          final safe = padding.deflateRect(Offset.zero & size);
+          expect(safe.intersect(dialog), dialog, reason: '인셋 안 $safe: $dialog');
+
+          // 대화상자로 손잡이를 바꿀 수 있다.
+          final other = Handedness.values.firstWhere((h) => h != handedness);
+          await tester.tap(_option(other));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(container.read(handednessProvider), other);
+        });
+      }
+    }
+
+    // 경계: 버튼 쪽 절반이 인셋을 빼고 카드 최소 폭 + 좌우 여백(280 + 40×2 = 360dp)이면 그 절반에, 그보다
+    // 1dp 좁으면 반대쪽(넓은) 절반에 뜬다. 왼손잡이라 버튼은 LCD 쪽인 오른쪽 절반이다.
+    for (final (hingeX, staysRight) in [(433.0, true), (434.0, false)]) {
+      testWidgets(
+        '경계: 버튼 쪽 절반 ${size.width - rightInset.right - hingeX}dp → ${staysRight ? '그 절반' : '반대쪽 절반'}',
+        (tester) async {
+          _setViewPadding(tester, rightInset);
+          await _pump(
+            tester,
+            size: size,
+            padding: rightInset,
+            handedness: Handedness.left,
+            displayFeatures: [_halfOpenedAt(Rect.fromLTWH(hingeX, 0, 0, 701))],
+          );
+          expect(isStackedArrangement(tester), isFalse);
+          expect(tester.getRect(_settings).left, greaterThanOrEqualTo(hingeX));
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final dialog = tester.getRect(_dialogSurface);
+          if (staysRight) {
+            expect(dialog.left, greaterThanOrEqualTo(hingeX));
+            expect(dialog.width, moreOrLessEquals(280));
+          } else {
+            expect(dialog.right, lessThanOrEqualTo(hingeX));
+            expect(dialog.width, greaterThan(280));
+          }
+        },
+      );
+    }
   });
 
   group('CalcSplitLayout (접힘선) · CalcTabletopLayout', () {
