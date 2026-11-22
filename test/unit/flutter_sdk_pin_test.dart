@@ -5,8 +5,10 @@ import 'package:yaml/yaml.dart';
 
 /// CI·로컬의 Flutter SDK 버전 고정(#78)이 깨지지 않게 지킨다.
 /// 기준값은 `pubspec.yaml`의 `environment.flutter` 하나이고, CI 워크플로의 모든 SDK 설치 단계가
-/// `flutter-version-file`로 이 값을 읽는지, `pubspec.lock`·README가 같은 버전을 가리키는지 확인한다.
+/// `flutter-version-file`로 이 값을 읽는지, README가 같은 버전을 적는지 확인한다.
 /// 실제로 그 버전이 설치되는지는 CI의 `flutter-action`과 pub의 SDK 제약 검사가 지킨다.
+/// `pubspec.lock` 커밋 누락은 여기서 검사하지 않는다 — `flutter test`가 먼저 pub get으로 lock을 다시 쓰므로
+/// 작업 트리 파일로는 알 수 없고, CI의 작업 트리 검사(`.github/scripts/verify-clean-tree.sh`)가 잡는다.
 
 /// 정확한 버전 `X.Y.Z` (범위·`^`·프리릴리스 표기 금지 — flutter-action이 정확한 버전만 받는다)
 final _exactVersion = RegExp(r'^\d+\.\d+\.\d+$');
@@ -47,12 +49,6 @@ void main() {
     expect(_pinnedVersion(), matches(_exactVersion));
   });
 
-  test('pubspec.lock이 고정 버전으로 다시 받은 것이다', () {
-    // pubspec.yaml만 고치고 lock을 커밋하지 않으면 CI의 작업 트리 검사가 실패한다 — 그 전에 여기서 잡는다
-    final sdks = _loadYaml('pubspec.lock')['sdks'] as YamlMap?;
-    expect(sdks?['flutter'], _pinnedVersion());
-  });
-
   test('워크플로의 모든 잡이 pubspec.yaml 고정 버전으로 Flutter를 설치한다', () {
     final files = _workflowFiles();
     expect(files, isNotEmpty, reason: '.github/workflows에 워크플로가 없다');
@@ -61,7 +57,14 @@ void main() {
       final jobs = _loadYaml(file.path)['jobs'] as YamlMap;
       for (final MapEntry(key: jobId, value: job) in jobs.entries) {
         final where = '${file.path} → $jobId';
-        final steps = ((job as YamlMap)['steps'] as YamlList).cast<YamlMap>();
+        final rawSteps = (job as YamlMap)['steps'];
+        // 재사용 워크플로를 부르는 잡(잡 수준 `uses:`)은 steps가 없다 — 그쪽 워크플로의 고정을 따로 확인해야 한다
+        expect(
+          rawSteps,
+          isA<YamlList>(),
+          reason: '$where: steps가 없는 잡은 이 검사가 다루지 않는다',
+        );
+        final steps = (rawSteps as YamlList).cast<YamlMap>();
         final setups = steps
             .where((s) => '${s['uses'] ?? ''}'.startsWith(_flutterAction))
             .toList();
@@ -88,11 +91,32 @@ void main() {
   });
 
   test('README 개발 환경 절이 고정 버전을 적는다', () {
-    final readme = File('README.md').readAsStringSync();
-    expect(
-      readme,
-      contains('Flutter ${_pinnedVersion()}'),
-      reason: 'README "개발 환경"의 Flutter 버전을 pubspec.yaml 고정값과 맞출 것',
+    final readme = File('README.md')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+    final start = RegExp(
+      r'^## 개발 환경[ \t]*$',
+      multiLine: true,
+    ).firstMatch(readme);
+    expect(start, isNotNull, reason: 'README에 "## 개발 환경" 절이 없다');
+    final next = RegExp(
+      r'^## ',
+      multiLine: true,
+    ).allMatches(readme).where((m) => m.start > start!.start).firstOrNull;
+    final section = readme.substring(
+      start!.start,
+      next?.start ?? readme.length,
     );
+    // README에서 구체 버전을 적는 곳은 이 한 줄뿐이다 (다른 문서는 pubspec.yaml을 가리킨다)
+    final versions = [
+      for (final m in RegExp(
+        r'^- Flutter (\S+) \(Dart',
+        multiLine: true,
+      ).allMatches(section))
+        m[1],
+    ];
+    expect(versions, [
+      _pinnedVersion(),
+    ], reason: 'README "개발 환경"의 Flutter 버전 줄을 pubspec.yaml 고정값과 맞출 것');
   });
 }
