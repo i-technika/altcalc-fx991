@@ -68,12 +68,23 @@ void main() {
       );
     });
 
-    test('비활성 상태 표시는 활성 상태보다 LCD 배경과의 대비가 낮다', () {
+    test('비활성 상태 표시는 활성 색을 3~5% 불투명도로 그린다 (#44 사용자 결정 4%)', () {
+      const inactive = CalcTheme.lcdStatusInactive;
+      const active = CalcTheme.lcdStatusActive;
       expect(
-        contrastRatio(CalcTheme.lcdStatusInactive, CalcTheme.lcdBackground),
-        lessThan(
-          contrastRatio(CalcTheme.lcdStatusActive, CalcTheme.lcdBackground),
-        ),
+        (inactive.r, inactive.g, inactive.b),
+        (active.r, active.g, active.b),
+      );
+      expect(inactive.a, inInclusiveRange(0.03, 0.05));
+      // 픽셀 색 기준: LCD 배경 위에 합성한 색이 도트 격자선 색보다 옅다 (면적·커버리지는 따지지 않는다).
+      final drawn = Color.alphaBlend(inactive, CalcTheme.lcdBackground);
+      final grid = Color.alphaBlend(
+        CalcTheme.lcdDotGrid,
+        CalcTheme.lcdBackground,
+      );
+      expect(
+        contrastRatio(drawn, CalcTheme.lcdBackground),
+        lessThan(contrastRatio(grid, CalcTheme.lcdBackground)),
       );
     });
   });

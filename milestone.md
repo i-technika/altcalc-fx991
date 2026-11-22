@@ -4,7 +4,7 @@
 - [ ] `pubspec.yaml`에 `flutter_riverpod`, `decimal`, `shared_preferences` 패키지 추가
 - [ ] `CalcKeyButton` 커스텀 버튼 위젯 구현 (메인 라벨 + 금색 SHIFT 라벨 + 빨간색 ALPHA 라벨 + 햅틱 진동 피드백)
 - [ ] fx-991EX/CW 비율에 맞춘 50개 키패드 그리드 레이아웃(`CalculatorScreen`) 구성
-- [ ] 상단 LCD 화면 프레임 및 상태 표시줄(`S`, `A`, `DEG/RAD/GRAD`, `MATH`) 구현
+- [ ] 상단 LCD 화면 프레임 및 상태 표시줄(`S`, `A`, `D/R/G`, `√◻` 등 — #44) 구현
 - [ ] 최하단 배너 광고 슬롯(`50dp~60dp`) 및 상단 안전 여백(`8dp~12dp`) 예약 배치
 - [ ] 1회성 `SHIFT` / `ALPHA` 모디파이어 상태 머신 구현
 

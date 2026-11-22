@@ -33,8 +33,10 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   LcdIndicatorSlot.angleUnit => [
     for (final unit in AngleUnit.values) LcdStatus(angleUnit: unit),
   ],
-  LcdIndicatorSlot.numberFormat => [
+  LcdIndicatorSlot.fixFormat => [
     const LcdStatus(numberFormat: NumberDisplayFormat.fix),
+  ],
+  LcdIndicatorSlot.sciFormat => [
     const LcdStatus(numberFormat: NumberDisplayFormat.sci),
   ],
   LcdIndicatorSlot.engineering => [const LcdStatus(engineering: true)],
@@ -43,9 +45,9 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
     const LcdStatus(complex: ComplexResultIndicator.rectangular),
     const LcdStatus(complex: ComplexResultIndicator.polar),
   ],
-  LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
-  LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
   LcdIndicatorSlot.historyDown => [const LcdStatus(historyDown: true)],
+  LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
+  LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
 };
 
 void main() {
@@ -140,7 +142,7 @@ void main() {
             expect(label, matches(_speakable), reason: label);
             labels.add(label!);
           }
-          // 값이 여러 개인 슬롯(D/R/G, FIX/SCI, i/∠)은 값마다 다르게 읽는다.
+          // 값이 여러 개인 슬롯(D/R/G, i/∠)은 값마다 다르게 읽는다.
           expect(
             labels,
             hasLength(_statusesWith(slot).length),
@@ -150,7 +152,8 @@ void main() {
         const allOff = LcdStatus(mathIO: false);
         for (final slot in [
           LcdIndicatorSlot.shift,
-          LcdIndicatorSlot.numberFormat,
+          LcdIndicatorSlot.fixFormat,
+          LcdIndicatorSlot.sciFormat,
           LcdIndicatorSlot.complex,
           LcdIndicatorSlot.math,
         ]) {
@@ -205,6 +208,32 @@ void main() {
         ko.statusBar(const LcdStatus(shift: true, memory: true)),
         '시프트, 메모리, 각도 단위 도, 수학 입출력',
       );
+    });
+
+    test('스크롤 표시기·중간 결과는 화면 순서(▼, ▲, ‖)대로 읽는다', () {
+      expect(
+        ko.statusBar(
+          const LcdStatus(historyUp: true, historyDown: true, disp: true),
+        ),
+        '각도 단위 도, 수학 입출력, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중',
+      );
+    });
+
+    test('FIX와 SCI는 각자의 의미로 읽고, 꺼진 쪽은 읽지 않는다 (#44 — 슬롯 분리)', () {
+      const fix = LcdStatus(numberFormat: NumberDisplayFormat.fix);
+      const sci = LcdStatus(numberFormat: NumberDisplayFormat.sci);
+      expect(ko.statusBar(fix), '각도 단위 도, 소수 자릿수 고정, 수학 입출력');
+      expect(ko.statusBar(sci), '각도 단위 도, 유효숫자 고정, 수학 입출력');
+      const en = EnSemanticStrings();
+      expect(en.statusBar(fix), 'Degrees, Fixed decimals, Math input output');
+      expect(
+        en.statusBar(sci),
+        'Degrees, Significant digits, Math input output',
+      );
+      for (final strings in CalcSemanticStrings.all) {
+        expect(strings.indicator(LcdIndicatorSlot.sciFormat, fix), isNull);
+        expect(strings.indicator(LcdIndicatorSlot.fixFormat, sci), isNull);
+      }
     });
   });
 
