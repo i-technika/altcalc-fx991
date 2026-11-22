@@ -409,19 +409,10 @@ void main() {
       expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
     });
 
-    test('분할 배치 LCD 최대 폭 비율: 1 이상이고, 12.9인치 iPad 가로에서 실제로 걸린다 (#71)', () {
-      // 1 미만이면 LCD가 키패드보다 좁아져 LCD 글자가 키 각인보다 작아질 수 있다.
-      expect(CalcTheme.screenSplitLcdMaxWidthRatio, greaterThanOrEqualTo(1));
-      // 12.9인치 iPad 가로(1366dp)의 LCD 쪽 패널 폭 — 이보다 넓은 상한은 아무 일도 하지 않는다.
-      const ipad129Panel =
-          1366 -
-          2 * CalcTheme.screenPadding -
-          CalcTheme.screenSplitGap -
-          CalcTheme.keypadMaxWidth;
-      expect(
-        CalcTheme.keypadMaxWidth * CalcTheme.screenSplitLcdMaxWidthRatio,
-        lessThan(ipad129Panel),
-      );
+    test('분할 배치 LCD 최대 폭 비율: 0 초과 1 이하 — LCD가 키패드보다 넓어지지 않는다 (#71)', () {
+      // LCD 글자가 키 각인보다 작아지지 않는지는 split_layout_test에서 실제 글자 크기로 검사한다.
+      expect(CalcTheme.screenSplitLcdMaxWidthRatio, greaterThan(0));
+      expect(CalcTheme.screenSplitLcdMaxWidthRatio, lessThanOrEqualTo(1));
     });
 
     test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
