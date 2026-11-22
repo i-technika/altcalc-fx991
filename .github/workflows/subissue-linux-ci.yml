@@ -6,7 +6,7 @@ on:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
   # 마일스톤 브랜치에 서브이슈가 머지될 때도 돌린다 (#108). 서브이슈 PR의 캐시(Flutter SDK·Gradle·NDK 등)는 그 PR 범위에만
-  # 저장되고, 다른 PR은 베이스 브랜치 범위의 캐시만 읽을 수 있다. 여기서 마일스톤 브랜치 범위에 캐시를 만들어 두면
+  # 저장되고, 다른 PR은 베이스 브랜치와 main 범위의 캐시만 읽을 수 있다. 여기서 마일스톤 브랜치 범위에 캐시를 만들어 두면
   # 다음 서브이슈 PR들이 처음부터 함께 쓴다(키가 정확히 맞으면 PR 범위에 다시 저장하지도 않는다).
   push:
     branches:
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     # push는 Sub-issue CI의 마일스톤 브랜치 캐시 예열 실행이다 (Milestone CI에는 push 트리거가 없어 늘 PR 조건만 본다)
     if: github.event_name == 'push' || github.event.pull_request.draft == false
-    # 캐시가 맞으면 약 2~3분, Android 쪽 캐시가 없으면 약 4~6분(#121 실측, 캐시 스텝이 없던 #108 초기 구성은 11.5분). 내려받기가 멈춰도 오래 잡히지 않게 한다.
+    # 캐시가 맞으면 약 2~3분, 없으면 약 4~12분(내려받기 속도 편차가 크다, #121 실측). 내려받기가 멈춰도 오래 잡히지 않게 한다.
     timeout-minutes: 25
     steps:
       - name: Checkout repository
@@ -115,7 +115,7 @@ jobs:
       - name: Generate Gradle wrapper
         run: flutter build apk --debug --config-only
 
-      # Gradle 구성 단계에서 AGP가 Flutter 기본 NDK를 설치하고(jni 플러그인이 ndkVersion을 지정한다, 14초~3.5분 — 테스트에는 안 쓴다),
+      # Gradle 구성 단계에서 AGP가 Flutter 기본 NDK를 설치하고(jni 플러그인이 ndkVersion을 지정한다, 내려받기 속도에 따라 14초~3분 25초 — 테스트에는 안 쓴다),
       # Robolectric은 테스트 대상 API 수준의 프레임워크 jar(약 700MB)를 ~/.m2에 받는다. 둘 다 Gradle 캐시 밖이라 따로 캐시한다.
       # 버전을 읽지 못하면(Flutter를 올려 FlutterExtension.kt 형식이 바뀌는 등) 경고만 남기고 캐시 없이 돈다.
       - name: Locate Android test downloads

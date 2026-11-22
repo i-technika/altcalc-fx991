@@ -206,6 +206,8 @@ gh pr merge <PR> --squash --delete-branch \
   2. `gh issue close <번호> --reason completed --comment "PR #<PR번호>로 milestone/m<N>에 머지 완료"`
   3. `bash .claude/scripts/set-project-status.sh <번호> Done` / `... <PR번호> Done`
   4. 마일스톤 PR 본문의 서브이슈 체크리스트가 있으면 해당 항목을 `[x]`로 갱신
+  5. 머지된 PR 범위의 Actions 캐시를 지운다 — 머지 뒤에는 어떤 실행도 읽지 못한다(README "Android 단위 테스트" 캐시 용량, #121):
+     `gh cache delete --all --ref refs/pull/<PR번호>/merge --succeed-on-no-caches`
 - 로컬 정리: `git checkout milestone/m<N> && git pull --ff-only origin milestone/m<N>`
 
 ### 12. 보고
