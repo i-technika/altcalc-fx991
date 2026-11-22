@@ -25,6 +25,7 @@ gh issue view <번호> --json number,title,body,labels,milestone,state,subIssues
 
 ## 2. 브랜치 생성
 1. `git status --porcelain`으로 작업 트리가 깨끗한지 확인한다. 변경 사항이 있으면 사용자에게 처리 방법을 묻는다.
+   생성 플러그인 파일만 `M`이고 `git diff`가 비어 있다면 줄바꿈 차이일 뿐이므로 CLAUDE.md "로컬 개발 환경 메모"의 절차로 정리한다 (#67).
 2. ```bash
    git checkout main && git pull --ff-only origin main
    git checkout -b milestone/m<번호>

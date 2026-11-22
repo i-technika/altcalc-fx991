@@ -1,0 +1,19 @@
+# 줄바꿈 속성 (#67)
+#
+# Flutter는 `flutter pub get`·`analyze`·`test`·`build` 때 생성 플러그인 파일을 OS와 관계없이 LF로 다시 쓴다.
+# Git for Windows 설치 마법사의 기본 선택지는 시스템 설정에 core.autocrlf=true를 넣으므로(이 저장소의 개발 PC도 그렇다),
+# 속성이 없으면 이 파일들이 CRLF로 체크아웃된다. Flutter가 LF로 다시 쓰면 파일 크기가 인덱스에 기록된 크기와 달라지고,
+# git은 크기가 다르면 내용을 비교하지 않고 수정됨으로 본다(git read-cache.c의 ie_modified).
+# 그래서 `git diff`는 비어 있는데 `git status`에는 M이 남았다. 작업본도 LF로 받도록 고정한다.
+# 저장소 blob은 원래 LF라 정규화할 것은 없다.
+#
+# 범위: 저장소 전체 규칙(* text=auto eol=lf 등)은 다른 파일의 체크아웃 형태까지 바꾸고 이 증상과 관계가 없어 두지 않는다.
+# 셸 스크립트는 LF로 받는다 — Git Bash는 CRLF 스크립트도 실행하지만 WSL·macOS·Linux의 bash는 실패한다.
+#
+# 이 속성이 생기기 전에 체크아웃한 작업 트리는 `bash .claude/scripts/normalize-generated-eol.sh`로 한 번 정리한다.
+# 검사: test/unit/gitattributes_test.dart(대상 누락·범위), Sub-issue CI(Linux)와 Milestone CI(Linux·Windows·macOS)의
+# 빌드 뒤 작업 트리 검사.
+linux/flutter/generated_plugin* text eol=lf
+windows/flutter/generated_plugin* text eol=lf
+macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
+*.sh text eol=lf

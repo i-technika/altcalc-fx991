@@ -409,6 +409,24 @@ void main() {
       expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
     });
 
+    test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
+      expect(CalcTheme.keyTouchHeightFloor, greaterThan(0));
+      expect(
+        CalcTheme.keyTouchHeightFloor,
+        lessThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+      );
+      expect(CalcTheme.tabletopKeyTouchHeightFloor, greaterThan(0));
+      expect(
+        CalcTheme.tabletopKeyTouchHeightFloor,
+        lessThan(CalcTheme.keyTouchHeightFloor),
+      );
+    });
+
+    test('접힘선 간격: 양수이고, 폭 0 접힘선 양쪽 내용 사이가 좌우 분할 간격과 같다 (#25)', () {
+      expect(CalcTheme.screenHingeMargin, greaterThan(0));
+      expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenSplitGap);
+    });
+
     test('설정 버튼은 접근성 권장 터치 대상(48dp) 이상이고 아이콘은 본체 배경 대비 4.5:1 이상이다', () {
       expect(
         CalcTheme.settingsButtonSize,
