@@ -217,6 +217,7 @@ void main() {
       for (final s in SettingsStrings.all) {
         expect(s.settingsButton.trim(), isNotEmpty);
         expect(s.handednessTitle.trim(), isNotEmpty);
+        expect(s.handednessNote.trim(), isNotEmpty);
         expect(s.close.trim(), isNotEmpty);
         final names = Handedness.values.map(s.handedness).toList();
         final details = Handedness.values.map(s.handednessDetail).toList();

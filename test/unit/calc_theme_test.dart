@@ -859,5 +859,124 @@ void main() {
         greaterThanOrEqualTo(minTextContrast),
       );
     });
+
+    group('상단 띠 (#41)', () {
+      // 최소 띠에서의 내용 줄 높이 = 본체 위 화면 여백 + 띠 최소 높이
+      const minRow =
+          CalcTheme.screenPadding + CalcTheme.screenTopStripMinHeight;
+
+      test('최소 띠에서도 설정 아이콘(최소 크기 + 위아래 여백)이 내용 줄에 들어간다', () {
+        expect(CalcTheme.screenTopStripMinHeight, greaterThan(0));
+        expect(
+          CalcTheme.settingsIconMinSize + 2 * CalcTheme.topStripIconMargin,
+          lessThanOrEqualTo(minRow),
+        );
+        expect(
+          CalcTheme.settingsIconMinSize,
+          lessThanOrEqualTo(CalcTheme.settingsIconSize),
+        );
+        // 내용 줄은 설정 버튼 터치 영역보다 높아지지 않는다 — 그 이상이면 아이콘이 터치 영역 가운데에 온다.
+        expect(CalcTheme.topStripRowMaxHeight, CalcTheme.settingsButtonSize);
+        expect(
+          CalcTheme.settingsIconSize,
+          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
+        );
+      });
+
+      test('낮은 띠에서 LCD 위로 넓힌 설정 터치 영역은 LCD 안에서 끝난다 (키패드까지 내려가지 않는다)', () {
+        // 최소 띠에서 터치 영역이 LCD 위에 겹치는 높이 = 버튼 − 줄 높이
+        expect(
+          CalcTheme.screenLcdMinHeight,
+          greaterThan(CalcTheme.settingsButtonSize - minRow),
+        );
+      });
+
+      test('간격·여백·반경은 양수다', () {
+        for (final v in [
+          CalcTheme.topStripInset,
+          CalcTheme.topStripGap,
+          CalcTheme.topStripIconMargin,
+          CalcTheme.topStripSolarBorderRadius,
+          CalcTheme.topStripSolarCellGapRatio,
+          CalcTheme.topStripWordmarkMinWidth,
+        ]) {
+          expect(v, greaterThan(0));
+        }
+      });
+
+      test('숨기는 순서: 워드마크는 최소 띠부터, 태양전지는 그보다 높은 줄부터 그린다', () {
+        expect(CalcTheme.topStripWordmarkMinHeight, minRow);
+        expect(
+          CalcTheme.topStripSolarMinHeight,
+          greaterThan(CalcTheme.topStripWordmarkMinHeight),
+        );
+        expect(
+          CalcTheme.topStripSolarMinHeight,
+          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
+        );
+      });
+
+      test('워드마크 글자는 배율 상한을 반영해도 내용 줄 높이 안에 들어간다', () {
+        for (final ratio in [
+          CalcTheme.topStripWordmarkFontRatio,
+          CalcTheme.topStripSolarHeightRatio,
+          CalcTheme.topStripWordmarkMaxWidthRatio,
+        ]) {
+          expect(ratio, inExclusiveRange(0, 1));
+        }
+        expect(
+          CalcTheme.topStripWordmarkFontRatio *
+              CalcTheme.keyMaxTextScaleFactor *
+              CalcTheme.topStripWordmarkStyle.height!,
+          lessThanOrEqualTo(1.0),
+        );
+        expect(
+          CalcTheme.topStripWordmarkMaxFontSize *
+              CalcTheme.keyMaxTextScaleFactor,
+          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
+        );
+        expect(
+          CalcTheme.topStripWordmarkStyle.fontSize,
+          CalcTheme.topStripWordmarkMaxFontSize,
+        );
+      });
+
+      test('가장 좁은 폰(320dp)에도 워드마크 자리와 설정 버튼이 함께 들어간다', () {
+        const row = 320 - 2 * CalcTheme.screenPadding;
+        final wordmark = row * CalcTheme.topStripWordmarkMaxWidthRatio;
+        expect(
+          wordmark,
+          greaterThanOrEqualTo(CalcTheme.topStripWordmarkMinWidth),
+        );
+        expect(
+          CalcTheme.topStripInset +
+              wordmark +
+              CalcTheme.topStripGap +
+              CalcTheme.settingsButtonSize,
+          lessThanOrEqualTo(row),
+        );
+      });
+
+      test('태양전지 장식: 가로로 길고 칸이 2개 이상이며, 칸은 바탕·본체와 구분된다', () {
+        expect(CalcTheme.topStripSolarAspectRatio, greaterThan(1));
+        expect(CalcTheme.topStripSolarCellCount, greaterThanOrEqualTo(2));
+        // 안쪽 여백 2 + 칸 사이 간격(칸 수 − 1)이 장식 폭보다 좁아 칸에 폭이 남는다.
+        expect(
+          (CalcTheme.topStripSolarCellCount + 1) *
+              CalcTheme.topStripSolarCellGapRatio,
+          lessThan(CalcTheme.topStripSolarAspectRatio),
+        );
+        expect(2 * CalcTheme.topStripSolarCellGapRatio, lessThan(1));
+        expect(CalcTheme.solarPanelCell, isNot(CalcTheme.solarPanelBackground));
+        expect(CalcTheme.solarPanelBackground, isNot(CalcTheme.bodyBackground));
+        expect(
+          contrastRatio(
+            CalcTheme.solarPanelCell,
+            CalcTheme.solarPanelBackground,
+          ),
+          greaterThan(1.2),
+        );
+      });
+    });
   });
 }
