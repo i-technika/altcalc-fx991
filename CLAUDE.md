@@ -37,6 +37,7 @@
 - 개발 도구: `preview/key_preview_main.dart` (실제 `CalculatorScreen`을 기기 크기 프리셋·글자 배율·입력 로그와 함께 띄우는 미리보기 — 실행 방법은 README. `lib/`에서 import 금지, 앱 빌드 제외, CI가 웹 빌드로 확인)
 - VS Code: `.vscode/` (실행 구성 `launch.json`·추천 확장 `extensions.json` — 준비 단계·SDK 탐지는 README "VS Code에서 실행". 기기마다 다른 절대경로는 넣지 않으며, 구성과 README 표의 일치와 함께 `test/unit/vscode_config_test.dart`가 검사한다)
 - 줄바꿈: `.gitattributes` (Flutter가 다시 쓰는 생성 플러그인 파일을 LF로 고정 — `test/unit/gitattributes_test.dart`가 대상 누락을, CI가 빌드 뒤 작업 트리가 깨끗한지 검사한다. 아래 "로컬 개발 환경 메모" 참조)
+- 분석 제외: `analysis_options.yaml`의 `analyzer.exclude` (플랫폼 폴더와 작업 영역 안 워크트리 `.claude/worktrees/**` — 워크트리 항목은 VS Code Dart 확장의 프로젝트 목록 제외용이며, 확장이 폴더 제외로 읽는 표기인지 `test/unit/analysis_options_test.dart`가 검사한다. README "작업 영역 안의 git 워크트리")
 - 에셋: `assets/fonts/` (번들 글꼴 Noto Sans Mono/Math 서브셋과 OFL 전문 — 출처·서브셋 재현·글리프 선택 규칙은 `assets/fonts/README.md`)
 
 ## 3. 코딩 원칙
@@ -60,8 +61,9 @@
   - `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다 — 진짜 변경까지 지워진다.
 - git 워크트리는 `.claude/worktrees/` 아래나 저장소 밖(`../altcalc-wt<번호>`)에만 만든다. 저장소 안의 점으로 시작하지 않는
   폴더에 만들면, 저장소 루트를 연 VS Code 창이 떠 있을 때 Dart 확장이 그 워크트리에 묻지 않고 pub get을 돌릴 수 있다.
-  `.claude/worktrees/`는 `analysis_options.yaml`의 `analyzer.exclude`로 확장의 프로젝트 목록에서 뺀다. 이 효과는 루트 체크아웃의
-  브랜치에 이 항목이 있을 때만 난다 (#66, README "작업 영역 안의 git 워크트리").
+  `.claude/worktrees/`는 `analysis_options.yaml`의 `analyzer.exclude`로 확장의 프로젝트 목록에서 뺀다(시작 시 pub get 알림,
+  오래된 프로젝트가 하나뿐일 때의 자동 실행). 이 목록 제외는 루트 체크아웃의 브랜치에 이 항목이 있을 때만 효과가 있으므로,
+  그 전에 분기한 브랜치는 마일스톤 브랜치를 먼저 머지한다 (#66, README "작업 영역 안의 git 워크트리").
 - GitHub CLI(`gh`)로 이슈/PR/프로젝트를 관리한다. 저장소: `i-technika/altcalc-fx991`
 - `gh`에 여러 줄 본문을 넘길 때는 셸 이스케이프 깨짐(과거 이슈 본문의 `\경로\` 깨짐 현상)을 막기 위해
   **반드시 임시 파일 + `--body-file`** 을 사용한다.

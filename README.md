@@ -114,55 +114,69 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 - **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
   - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
   - 확장이 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (package:...)` 채널에 기록된다
-    (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측 — #66 이후로는 그곳에 돌지 않는다.
-    확장이 pub get을 돌리는 경로는 [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
+    (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측했다. 루트 체크아웃이 #66이 들어간 브랜치이면
+    그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
   - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
   - 실패하는 것은 Windows 데스크톱 실행뿐이다.
 
 ### 작업 영역 안의 git 워크트리
 
-병렬 작업용 git 워크트리는 **`.claude/worktrees/` 아래**(Claude Code의 기본 위치)나 **저장소 밖**
+병렬 작업용 git 워크트리는 **`.claude/worktrees/` 아래**(Claude Code의 기본 위치, `.gitignore` 대상)나 **저장소 밖**
 (`../altcalc-wt<번호>`)에 만든다. 저장소 폴더 안의 점으로 시작하지 않는 폴더(예: `worktrees/`)에는 만들지 않는다.
-pub get은 워크트리의 `linux/`·`macos/`·`windows/` 생성 플러그인 파일을 다시 쓴다. 그래서 확장이 다른 세션의 워크트리에
-pub get을 돌리면 그 세션의 작업 트리가 바뀐다.
+확장이 다른 세션의 워크트리에 pub get을 돌리면 그 세션의 `pubspec.lock`이 다시 쓰일 수 있다. 그 세션의 test·pub과
+`.dart_tool`을 동시에 쓰게 되고, 개발자 모드가 꺼진 Windows에서는 실패 로그가 남는다.
+#67 이전에 체크아웃한 작업 트리에서는 생성 플러그인 파일도 `M`이 된다.
 
 [analysis_options.yaml](analysis_options.yaml)의 `analyzer.exclude`에 `.claude/worktrees/**`를 두어 확장이 워크트리를
 프로젝트로 보지 않게 한다(#66). 아래에서 **(소스)** 는 확장(Dart-Code 3.146) 소스로 확인한 것이다. **(실측)** 은
 사용자 설정과 분리한 VS Code(`--user-data-dir`·`--extensions-dir`)를 저장소 루트로 띄우고 확장 로그(`dart.extensionLogFile`)로 본 것이다.
 
-- **프로젝트 목록** (소스): 연 폴더 아래 깊이 5(`dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
-  점 폴더도 들어간다(analyzer가 점 폴더를 분석하지 않는 것과 다르다).
-  목록을 쓰는 곳(시작 알림, pubspec 변경 처리, `Pub: Get Packages for All Projects`, 프로젝트 선택 목록, 작업·테스트 실행 등)은
-  모두 `analyzer.exclude`와 설정 `dart.analysisExcludedFolders`로 거른 목록을 쓴다.
-  `analyzer.exclude`는 `/**`로 끝나고 다른 `*`가 없는 항목만 폴더 제외로 쓰인다. 이 표기는
-  [test/unit/analysis_options_test.dart](test/unit/analysis_options_test.dart)가 지킨다. 확장 쪽 규칙이 바뀌는 것은 테스트가 잡지 못한다.
-  analyzer는 원래 점 폴더를 건너뛰므로 `flutter analyze` 결과는 달라지지 않는다.
+- **프로젝트 목록** (소스)
+  - 연 폴더를 포함해 5단계(루트 아래 4단계, `dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
+    점 폴더도 들어간다(analyzer가 점 폴더를 분석하지 않는 것과 다르다).
+  - 목록을 쓰는 모든 곳(시작 알림, pubspec 변경 처리, `Pub: Get Packages for All Projects`, 프로젝트 선택 목록, 작업·테스트 실행 등)에
+    `analyzer.exclude`가 적용된다.
+  - `analyzer.exclude`는 끝의 `/**`를 뗀 뒤 `*`가 남지 않는 항목만 폴더 제외로 쓰인다. 저장소 쪽 표기는
+    [test/unit/analysis_options_test.dart](test/unit/analysis_options_test.dart)가 지킨다. 확장 쪽 규칙이 바뀌는 것은 테스트가 잡지 못한다.
+  - analyzer는 원래 점 폴더를 건너뛰므로 `flutter analyze` 결과는 달라지지 않는다.
+  - 목록은 5분 동안 캐시된다. 작업 영역 안 어디서든 `.dart_tool/package_config.json`이 바뀌면(pub get) 캐시가 바로 비워진다.
 - **켜질 때**
-  - (소스) 패키지가 없거나 오래된 프로젝트를 모아 "Some packages are missing or out of sync…" 알림을 띄운다.
-    SDK 메이저·마이너가 올라갔으면 `pub upgrade` 알림을 띄운다. 버튼을 누르면 알림에 든 프로젝트 **모두**에
-    pub get·upgrade를 돌린다. 이 단계에는 묻지 않고 돌리는 경로가 없다.
+  - (소스) 패키지가 없거나 오래된 프로젝트를 모아 "Some packages are missing or out of sync…" 알림으로 pub get을 묻는다.
+    마지막 pub get 때보다 Dart SDK 메이저·마이너가 올라간 프로젝트가 하나라도 있으면, 그 알림 대신 upgrade 알림 하나로
+    대상 전부에 `pub upgrade`를 묻는다. 버튼을 누르면 알림에 든 프로젝트 **모두**에 돌린다.
+    이 단계에는 묻지 않고 돌리는 경로가 없다.
   - (실측) 새 워크트리를 `.claude/worktrees/`에 만들고 창을 열면, 수정 전에는 그 워크트리가 `package_config.json` 없음으로
     알림 대상이 된다. 수정 후에는 프로젝트 목록에서 빠져 알림이 없다.
 - **켜져 있는 동안 `pubspec.yaml`·`pubspec_overrides.yaml`이 생기거나 바뀌면** (소스, `dart.runPubGetOnPubspecChanges` 기본값 `always`)
-  - 바뀐 파일의 경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 그래서 `.claude/worktrees/`에서 워크트리를
-    만들거나 브랜치를 바꿔도 돌지 않는다(실측). 반대로 워크트리 자체를 VS Code로 열면 그 창에서는 이 자동 실행이 늘 꺼진다.
-    pubspec을 바꾼 뒤 직접 `flutter pub get`을 한다.
-  - 그 밖에는 걸러진 목록에서 오래된 프로젝트를 센다. 0개이면 바뀐 폴더에, **1개이면 그 프로젝트에** 묻지 않고 돌린다.
-    2개 이상이면 알림을 띄운다. 루트 pubspec을 고쳤는데 오래된 것이 워크트리 하나뿐이면 그 워크트리에 돌 수 있다.
-    `analyzer.exclude`가 워크트리를 이 셈에서 빼서 막는다.
+  - 바뀐 파일의 절대경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 이 동작은 브랜치와 무관하다.
+    - 그래서 `.claude/worktrees/`에서 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다(실측. 대조군이라 수정 전에도 같다).
+    - 반대로 워크트리 자체를 VS Code로 열면 그 창에서는 이 자동 실행이 늘 꺼진다. pubspec을 바꾼 뒤 직접 `flutter pub get`을 한다.
+  - 그 밖에는 걸러진 목록에서 오래된 프로젝트를 센다.
+    - 0개이면 바뀐 폴더에, **1개이면 그 프로젝트에** 묻지 않고 돌린다. 2개 이상이면 알림을 띄운다.
+    - 루트 `pubspec.yaml`을 저장하면 루트 자신도 오래됨이 되어 보통 알림으로 간다.
+    - 그러나 루트가 이미 최신이면 오래된 것이 워크트리 하나뿐일 때 그 워크트리에 돈다. 예를 들어
+      루트의 `pubspec_overrides.yaml`만 바꿨을 때(오래됨 판정에 쓰이지 않는다), 또는 터미널 `flutter pub add`가
+      `package_config.json`까지 먼저 다시 썼을 때다. `analyzer.exclude`가 워크트리를 이 셈에서 빼서 막는다.
   - 바뀐 폴더 자체는 거르지 않는다. 그래서 점으로 시작하지 않는 폴더에 워크트리를 만들면, 만드는 즉시 그 워크트리에
     pub get이 돈다(실측. 저장소 안 `wt-visible-66/`). 워크트리 위치 규칙은 이것 때문이다.
-- **브랜치에 달려 있다** (소스): 확장은 **연 폴더에 체크아웃된 브랜치**의 `analysis_options.yaml`을 읽는다.
-  이 항목이 없는 브랜치(#66 머지 전에 분기해 아직 마일스톤 브랜치를 머지하지 않은 브랜치, M1 종료 전의 `main`)로 바꾸면
-  창을 다시 불러오거나 목록 캐시(5분)가 지난 뒤 워크트리가 다시 목록에 들어간다. 이때는 시작 알림에 나오고,
-  pubspec 변경 처리로 묻지 않고 pub get될 수 있다. 그런 브랜치에서 작업할 때는 먼저 마일스톤 브랜치를 머지한다.
-  과도기에 브랜치와 무관하게 막고 싶으면 **사용자** 설정에 `"dart.analysisExcludedFolders": [".claude/worktrees"]`를 둔다
-  (상대경로는 연 폴더 기준으로 풀린다. 선택 사항이며 저장소에는 넣지 않는다).
+- **루트 체크아웃의 브랜치에 달려 있다** (소스)
+  - 확장은 **연 폴더에 체크아웃된 브랜치**의 `analysis_options.yaml`을 읽는다.
+  - 이 항목이 없는 브랜치로 바꾸면, 창을 다시 불러오거나 목록 캐시가 비워진 뒤 워크트리가 다시 목록에 들어간다.
+    그런 브랜치는 #66 머지 전에 분기해 아직 마일스톤 브랜치를 머지하지 않은 브랜치, M1 종료 전의 `main` 등이다.
+  - 그러면 시작 알림에 나오고, 위의 "1개" 경로로 묻지 않고 pub get될 수 있다.
+    그런 브랜치에서 작업할 때는 먼저 마일스톤 브랜치를 머지한다.
+  - 보조로 **사용자** 설정에 `"dart.analysisExcludedFolders": [".claude/worktrees"]`를 둘 수 있다
+    (상대경로는 연 폴더 기준으로 풀린다. 선택 사항이며 저장소에는 넣지 않는다).
+    다만 이 설정에는 빈틈이 있다. 기기 연결 때 도는 플랫폼 조회가 이 설정 없이 목록을 만든다. 목록 캐시가 제외 설정과
+    무관하게 공유되므로, 그 뒤 최대 5분 동안은 다른 호출도 워크트리가 든 목록을 받을 수 있다.
 
-방법 비교: 사용자 설정은 브랜치와 무관하지만 기기마다 따로 해야 하고, 저장소가 지키거나 테스트할 수 없다.
-워크스페이스 설정 `.vscode/settings.json`의 `dart.analysisExcludedFolders`는 #52에서 도구 종속이라 넣지 않았다.
-위치 규칙만 두는 방법은 Claude Code의 기본 위치가 저장소 안 `.claude/worktrees/`여서 지키기 어렵다.
-그래서 저장소가 지키고 테스트할 수 있는 Dart 도구 공통 설정인 `analysis_options.yaml`을 쓰고, 위치 규칙은 보조로 둔다.
+방법 비교
+- 사용자 설정: 브랜치와 무관하다. 그러나 기기마다 따로 해야 하고, 저장소가 지키거나 테스트할 수 없다. 위의 빈틈도 있다.
+- 워크스페이스 설정 `.vscode/settings.json`의 `dart.analysisExcludedFolders`: #52에서 도구 종속이라 넣지 않았다.
+  사용자 설정과 같은 빈틈도 있다.
+- 위치 규칙만 두기: Claude Code가 워크트리를 저장소 안 `.claude/worktrees/`에 만들므로, 그곳의 워크트리가 시작 알림과
+  "1개" 경로에 계속 잡힌다.
+- 그래서 저장소가 지키고 테스트할 수 있는 Dart 도구 공통 설정인 `analysis_options.yaml`을 쓰고, 위치 규칙을 보조로 둔다.
 
 ## 검증
 

@@ -9,7 +9,7 @@ import 'package:yaml/yaml.dart';
 /// VS Code Dart 확장(Dart-Code 3.146 `getAnalysisOptionsExcludedFolders`)은 이 목록으로 작업 영역 안의
 /// 하위 프로젝트를 걸러 낸다. 걸러진 워크트리는 확장의 프로젝트 목록(시작 pub get 알림 등)에서 빠진다
 /// (README "작업 영역 안의 git 워크트리").
-/// 확장은 `/**`로 끝나고 그 밖에 `*`가 없는 항목만 폴더 제외로 쓰므로, analyzer는 받아들여도
+/// 확장은 끝의 `/**`를 뗀 뒤 `*`가 남지 않는 항목만 폴더 제외로 쓰므로, analyzer는 받아들여도
 /// 확장이 무시하는 표기(`.claude/worktrees/*` 등)로 바뀌면 이 테스트가 잡는다.
 /// 지키는 것은 저장소 쪽 표기다. 확장 쪽 규칙이 바뀌는 것은 잡지 못한다(규칙은 3.146 소스를 옮긴 것이다).
 /// 경로는 `flutter test`의 작업 디렉터리인 패키지 루트 기준이다.
@@ -21,7 +21,8 @@ const _worktreesDir = '.claude/worktrees';
 final _root = p.posix.join('/', 'ws', 'app');
 
 /// `analyzer.exclude` 목록. Dart-Code처럼 YAML 파서로 읽는다(중복 키는 파서가 예외로 알린다).
-/// 확장은 문자열이 아닌 항목(따옴표 없는 `123`·`true`·`~`)에서 예외가 나 그 파일의 제외를 전부 잃으므로 실패로 본다.
+/// 확장은 문자열이 아닌 항목(따옴표 없는 `123`·`true`·`~`)에서 예외가 나
+/// 그 항목 뒤의 제외를 모두 잃으므로 실패로 본다.
 List<String> analyzerExcludes(String source) {
   final doc = loadYaml(source);
   final exclude = doc is YamlMap && doc['analyzer'] is YamlMap
