@@ -373,11 +373,13 @@ void main() {
     }
 
     // 정적 값 하나로 두면 어느 순서든 처음 읽은 플랫폼으로 굳어 뒤 플랫폼이 틀린다. 두 순서로 확인한다.
+    // 앞 테스트가 이미 만든 테마를 읽기만 하지 않도록 만들어 둔 테마를 비워, 실제로 이 순서대로 만든다.
     for (final order in [
       TargetPlatform.values,
       TargetPlatform.values.reversed.toList(),
     ]) {
-      test('${order.first.name}부터 차례로 읽어도 테마마다 그 플랫폼의 터치 영역·밀도다', () {
+      test('${order.first.name}부터 차례로 만들어도 테마마다 그 플랫폼의 터치 영역·밀도다', () {
+        CalcTheme.debugResetMaterialThemes();
         for (final platform in order) {
           final (normal, high) = themesOn(platform);
           final (tap, density) = expected[platform]!;
@@ -418,7 +420,7 @@ void main() {
       },
     );
 
-    test('플랫폼만 다르고 색·모양은 같다', () {
+    test('앱이 정한 색 구성·대화상자 모양·배경은 플랫폼과 무관하다', () {
       final (androidNormal, androidHigh) = themesOn(TargetPlatform.android);
       for (final platform in TargetPlatform.values) {
         final (normal, high) = themesOn(platform);
@@ -428,6 +430,11 @@ void main() {
         ]) {
           expect(theme.colorScheme, base.colorScheme, reason: platform.name);
           expect(theme.dialogTheme, base.dialogTheme, reason: platform.name);
+          expect(
+            theme.textButtonTheme,
+            base.textButtonTheme,
+            reason: platform.name,
+          );
           expect(
             theme.scaffoldBackgroundColor,
             base.scaffoldBackgroundColor,

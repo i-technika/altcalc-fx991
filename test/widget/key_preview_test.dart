@@ -2179,10 +2179,14 @@ void main() {
     const fullLog = 50;
 
     /// 미리보기를 [panelPlatforms] 중 지금 변형의 플랫폼으로 띄운다 — 앱 테마가 그 플랫폼의 버튼 밀도를 고른다
-    /// (Windows: 데스크톱 기본값 터치 영역 줄임 + compact). 실제 Windows·웹 실행처럼 앱 전체(데스크톱 스크롤바 등)가
+    /// (데스크톱 플랫폼: 터치 영역 줄임 + compact). 실제 Windows·웹 실행처럼 앱 전체(데스크톱 스크롤바 등)가
     /// 그 플랫폼으로 돈다. 테마가 플랫폼별로 만들어지므로(#130) 변형 순서와 관계없다.
     Future<void> pumpPanel(WidgetTester tester) async {
-      final desktop = defaultTargetPlatform == TargetPlatform.windows;
+      final desktop = const {
+        TargetPlatform.linux,
+        TargetPlatform.macOS,
+        TargetPlatform.windows,
+      }.contains(defaultTargetPlatform);
       await _pumpPreview(tester);
       // 전제: 그 플랫폼의 밀도가 패널에 닿았다 — 둘 다 닿아야 하므로 값으로 확인한다.
       final theme = Theme.of(tester.element(settingsArea));
@@ -2267,8 +2271,8 @@ void main() {
       expect(_logHeader(tester), startsWith('입력 로그 · 입력 $presses회'));
     }
 
-    // 전환 높이는 잰 설정 영역 높이로 정하므로, 설정 항목(폴더블 선택 줄)·버튼 밀도(Android 터치 영역 40,
-    // 데스크톱 32)·호스트 글자 배율이 달라도 가장 낮은 고정 높이에서 로그 자리가 정확히 [minLogLines]줄이다.
+    // 전환 높이는 잰 설정 영역 높이로 정하므로, 설정 항목(폴더블 선택 줄)·버튼 밀도(Android 터치 영역 48·보이는
+    // 높이 40, 데스크톱 32)·호스트 글자 배율이 달라도 가장 낮은 고정 높이에서 로그 자리가 정확히 [minLogLines]줄이다.
     for (final (name, hostTextScale) in const [
       ('일반 폰', 1.0),
       ('폴더블 내부', 1.0),

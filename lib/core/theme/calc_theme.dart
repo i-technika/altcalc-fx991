@@ -327,6 +327,14 @@ abstract final class CalcTheme {
   static final Map<TargetPlatform, ThemeData> _materialThemes = {};
   static final Map<TargetPlatform, ThemeData> _materialHighContrastThemes = {};
 
+  /// 만들어 둔 플랫폼별 테마를 비운다 — 테스트가 같은 isolate 안에서 테마를 만드는 순서를 직접 정할 때 쓴다
+  /// (앞 테스트가 이미 만든 테마를 읽기만 하지 않게). 비운 뒤에는 앞서 받은 테마와 다른 객체가 만들어진다.
+  @visibleForTesting
+  static void debugResetMaterialThemes() {
+    _materialThemes.clear();
+    _materialHighContrastThemes.clear();
+  }
+
   /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
   /// 지금 플랫폼의 테마다(위 #130 주석).
   static ThemeData get materialTheme {
@@ -1077,7 +1085,8 @@ final class CalcPalette {
       ? highContrast
       : standard;
 
-  /// 이 팔레트와 짝인 Material 테마 (대화상자·SnackBar, #97)
+  /// 이 팔레트와 짝인 Material 테마 (대화상자·SnackBar, #97) — 지금 플랫폼([defaultTargetPlatform])의 테마다
+  /// ([CalcTheme.materialTheme] 위 #130 주석).
   ThemeData get materialTheme => isHighContrast
       ? CalcTheme.materialHighContrastTheme
       : CalcTheme.materialTheme;
