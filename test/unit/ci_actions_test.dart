@@ -24,6 +24,8 @@ const _minVersions = <String, List<int>>{
   'actions/checkout': [5, 0],
   // v5.0.0부터 runs.using: node24
   'actions/setup-java': [5, 0],
+  // v5.0.0부터 runs.using: node24 (v4는 node20) — Android 단위 테스트 잡의 NDK 캐시 (#108)
+  'actions/cache': [5, 0],
   // composite 액션 — 내부의 actions/cache가 v2.22.0부터 v5(node24)다 (v2.21.0까지는 v4, node20)
   'subosito/flutter-action': [2, 22],
 };
@@ -217,7 +219,9 @@ void main() {
         '  uses: actions/setup-java@v4.9.1\n',
         '  uses: subosito/flutter-action@$sha # v2.21.0\n',
         '  uses: actions/checkout@main\n',
-        '  uses: actions/cache@v5\n',
+        '  uses: actions/cache@v4\n',
+        // 목록에 없는 액션
+        '  uses: actions/upload-artifact@v6\n',
         // 앞에 공백 없는 `#`은 YAML에서 값의 일부다 — 주석으로 읽지 않는다
         '  uses: subosito/flutter-action@$sha#v2.23.0\n',
       ]) {

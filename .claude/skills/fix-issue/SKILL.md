@@ -54,6 +54,11 @@ git checkout -b issue/<번호>-<영문-키워드>
   flutter analyze   # No issues found! 이어야 함
   flutter test      # All tests passed! 이어야 함
   ```
+- `android/`의 Kotlin·Gradle 설정을 바꿨으면 Android 단위 테스트도 통과시킨다 (Java 21 이상 — README "Android 단위 테스트"):
+  ```bash
+  flutter build apk --debug --config-only          # 래퍼(저장소에 없다)를 만들고 local.properties를 지금 SDK로 맞춘다
+  (cd android && ./gradlew :app:testDebugUnitTest) # "Android 단위 테스트: SUCCESS" 이어야 함
+  ```
 
 ### 4. 커밋·푸시·PR
 ```bash
@@ -188,7 +193,7 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 ```bash
 gh pr checks <PR> --watch
 ```
-- `Linux Analyze, Test & Build`가 통과해야 한다. 실패 시 로그(`gh run view --log-failed`)로 원인을 고친다.
+- `Linux Analyze, Test & Build`와 `Android Unit Tests (JVM)`가 통과해야 한다. 실패 시 로그(`gh run view --log-failed`)로 원인을 고친다.
 
 ### 11. 머지·이슈 Close·보드 갱신
 ```bash
