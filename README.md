@@ -277,25 +277,34 @@ cd android
   - Mockito 인라인 모크 에이전트는 Gradle이 테스트 JVM에 `-javaagent`로 붙인다(`android/app/build.gradle.kts`의 `mockitoAgent`).
 - CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡(두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
   - 캐시는 Gradle(`setup-java`의 `cache: gradle`)과 NDK·Robolectric jar(`actions/cache`) 두 가지다.
-  - 걸리는 시간 (#121 실측, 2026-11-23):
-    - 캐시가 모두 맞으면 약 2.5분이다(2분 12초~2분 48초, 서브이슈 PR·push 실행 9회).
-    - 캐시가 없으면 4.5~11.5분이다(2회). 차이는 내려받기 속도에서 나온다. NDK 설치만 21초~3분 25초로 갈렸다.
-  - PR 실행이 저장한 캐시는 그 PR만 쓴다(GitHub 캐시 범위 규칙 — 다른 PR은 베이스 브랜치 범위만 읽는다).
-    그래서 Sub-issue CI는 마일스톤 브랜치 push(서브이슈 머지)에서도 돌아 그 브랜치 범위에 캐시를 만들고, 다음 서브이슈 PR들이
-    처음부터 그 캐시를 쓴다. 이 예열은 Flutter SDK 캐시처럼 다른 잡의 캐시에도 똑같이 효과가 있다.
+  - 걸리는 시간(#121 실측, 2026-11-23, 지금 구성으로 돈 Sub-issue CI 실행):
+    - 캐시 다섯 가지가 모두 맞으면 1분 57초~2분 48초다(중앙값 2분 21초). #117 머지 뒤의 서브이슈 PR·push 실행 13회를 쟀다.
+    - Android 쪽 캐시(Gradle·NDK/Robolectric)가 없으면 3분 51초~5분 40초다(3회).
+    - 캐시 스텝이 없던 #108 초기 구성은 11분 35초 걸렸다(1회). 그중 NDK 설치가 3분 25초였고, 지금 구성의 콜드 실행에서는 14~21초였다.
+  - 캐시 범위(GitHub 규칙): PR 실행은 자기 범위(`refs/pull/<번호>/merge`)와 베이스 브랜치, 기본 브랜치(`main`) 범위만 읽는다.
+    push·`workflow_dispatch` 실행은 자기 브랜치와 `main` 범위만 읽는다. 저장은 늘 자기 범위에 한다.
+    - 그래서 Sub-issue CI는 마일스톤 브랜치 push(서브이슈 머지)에서도 돈다. 그 브랜치 범위에 캐시를 만들어 두면, 그 브랜치를 베이스로 삼는
+      다음 서브이슈 PR들이 첫 실행부터 그 캐시를 쓴다. Flutter SDK 캐시처럼 다른 잡의 캐시도 함께 예열된다.
     - 실측: #117 머지 뒤 push 실행이 캐시 다섯 가지(Flutter SDK·pub·Gradle·Gradle 래퍼·NDK/Robolectric)를 `milestone/m1` 범위에 저장했다.
       그다음 서브이슈 PR들(#122·#123·#126·#127)은 첫 실행부터 다섯 가지를 모두 복원했다. `pubspec.lock`을 바꾼 #124는 pub 캐시만 새로 만들었다.
-    - 키가 정확히 맞으면 PR 범위에 다시 저장하지 않는다. PR 범위에는 키가 바뀐 캐시만 남는다(예: `pubspec.lock`을 바꾼 PR의 pub 캐시 43MB).
+    - 키가 정확히 맞으면 PR 범위에 다시 저장하지 않는다. PR 범위에는 키가 바뀐 캐시만 남는다.
+    - Milestone CI(마일스톤 PR → `main`)는 마일스톤 브랜치 범위를 읽지 못한다. 그래서 `/close-ms`에서 Ready로 바꾼 뒤의 첫 실행은 캐시 없이 돈다.
   - Gradle 캐시 키는 Gradle 설정 파일(`*.gradle*`·`gradle.properties`·`gradle-wrapper.properties`) 해시라, 그 파일을 고친 PR은
     Gradle 캐시 없이 돈다. NDK·Robolectric 캐시는 앞부분이 같은 키에서 부분 복원한다.
-  - `Linux Analyze, Test & Build`(약 3분)와 나란히 돈다. 캐시가 맞으면 이 잡이 먼저 끝나 서브이슈 PR의 CI 대기는 Linux 잡이 정하고,
-    캐시 없이 돌 때(Gradle 설정을 고친 PR 등)는 이 잡이 정한다.
-  - 캐시 용량: 저장소 한도는 10GB다. 넘으면 마지막으로 쓴 지 오래된 캐시부터 지워지고, 7일 동안 쓰지 않은 캐시도 지워진다.
-    - 마일스톤 브랜치 범위의 한 벌은 약 4.6GB다(Flutter SDK 1.6GB, NDK/Robolectric 1.3GB, Gradle 1.2GB, Gradle 래퍼 0.4GB, pub 43MB).
-    - PR 범위에는 바뀐 캐시만 남으므로 머지된 PR의 캐시를 지우는 워크플로는 두지 않는다. 위 축출 규칙에 맡긴다.
-    - 마일스톤이 아닌 브랜치에서 `workflow_dispatch`로 돌리면 이 한 벌을 통째로 새로 저장한다. 그 브랜치는 자기 범위와 기본 브랜치(`main`)
-      범위만 읽기 때문이다(#121에서 임시 검증 브랜치가 4.5GB를 남겼다). 다 쓴 뒤 `gh cache delete --all --ref refs/heads/<브랜치>`로 지운다.
-      Gradle 설정을 고친 PR처럼 머지된 PR이 큰 캐시를 남겼으면 `--ref refs/pull/<번호>/merge`로 지운다. 사용량은
-      `gh api repos/i-technika/altcalc-fx991/actions/cache/usage`로 본다.
+  - `Linux Analyze, Test & Build`(캐시가 맞으면 약 3분)와 나란히 돈다. 캐시가 맞으면 이 잡이 먼저 끝나므로 서브이슈 PR의 CI 대기는 Linux 잡이 정한다.
+    Android 쪽 캐시 없이 돌 때(Gradle 설정을 고친 PR 등)는 이 잡이 정한다.
+  - 캐시 용량: 저장소 한도는 10GB다(GitHub 문서 기준 — #121에서는 축출 순서를 직접 관찰하지 못했다).
+    한도를 넘으면 마지막으로 쓴 지 오래된 캐시부터 지워지고, 7일 동안 쓰지 않은 캐시도 지워진다.
+    - Sub-issue CI 캐시 한 벌은 약 4.5GiB다(Flutter SDK 1.55GiB, NDK/Robolectric 1.29GiB, Gradle 1.18GiB, Gradle 래퍼 0.38GiB, pub 0.04GiB).
+    - 한 벌이 범위를 하나 더 차지하는 경우는 셋이다. 이때 오래된 쪽(대체된 키, 끝난 마일스톤)은 더는 읽히지 않아 위 축출 순서에서 먼저 빠진다.
+      - Gradle 설정이나 `android/app/build.gradle.kts`를 고친 PR은 PR 범위에 Gradle·NDK/Robolectric 약 2.5GiB를 저장하고,
+        머지 push가 마일스톤 범위에 그만큼을 새 키로 또 저장한다.
+      - 새 마일스톤 브랜치의 첫 push는 한 벌을 통째로 새로 저장한다.
+      - 마일스톤이 아닌 브랜치에서 `workflow_dispatch`로 돌리면 한 벌을 통째로 새로 저장한다(Milestone CI는 Windows·macOS 캐시까지).
+        #102의 임시 검증 브랜치가 남긴 4.5GiB는 #121에서 지웠다.
+    - 그래서 정리 워크플로는 두지 않고 축출 규칙에 맡긴다. 다만 1GiB가 넘는데 더는 읽히지 않는 캐시(지운 브랜치, 머지된 PR, 끝난 마일스톤)는
+      바로 지워 쓰는 캐시가 밀려나지 않게 한다. 이런 캐시는 `gh cache delete --all --ref refs/heads/<브랜치>`나
+      `--ref refs/pull/<번호>/merge`로 지운다. pub 캐시(43MiB)처럼 작은 것은 그대로 둔다.
+      사용량은 `gh api repos/i-technika/altcalc-fx991/actions/cache/usage`로, 목록은 `gh cache list`로 본다.
 - 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
   릴리스 빌드(R8)의 API 36 참조 격리(#109), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).
