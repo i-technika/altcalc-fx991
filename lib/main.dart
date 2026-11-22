@@ -166,7 +166,8 @@ class AltCalcApp extends StatelessWidget {
     // 화면(루트 Navigator) 바로 위에서 가장 가까운 MediaQuery로 한 번 더 고른다 — 개발용 미리보기처럼 틀 안에서
     // 고대비를 바꾸는 곳에서도 대화상자(와 MaterialApp이 테마로 정하는 텍스트 선택 색 등, #107 [_ScreenTheme])가 따라가게
     // 하려는 것이다. 실제 앱에서는 두 곳이 같은 MediaQuery·고대비 텍스트 값을 보므로
-    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다. 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
+    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다(둘 다 기본 시간·곡선 — MaterialApp의 테마 애니메이션
+    // 설정(`themeAnimationStyle` 등)을 바꾸면 [_ScreenTheme]의 [AnimatedTheme]도 같이 바꾼다). 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
     // MaterialApp의 다른 테마 칸(darkTheme·highContrastTheme 등)은 쓰지 않는다.
     // Android "고대비 텍스트"(#95)도 고대비 판정에 들어가므로, 그 범위를 MaterialApp 바깥에 두어 두 곳의 테마
     // 선택이 모두 그 값을 보게 한다.

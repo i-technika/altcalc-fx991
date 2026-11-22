@@ -240,7 +240,9 @@ Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
 
 /// MaterialApp이 자기 테마로 정하는 앱 수준 요소 (#107) — 텍스트 선택·커서 기본 색과 Cupertino 테마의 주요 색.
 /// 아이콘 테마는 화면 테마가 Cupertino 테마를 다시 정할 때 바뀌지 않았는지 보려고 함께 본다
-/// ([CupertinoTheme]은 아래에 Cupertino 아이콘 테마를 씌운다).
+/// ([CupertinoTheme]은 아래에 Cupertino 아이콘 테마(primary 색)를 씌운다). 일반·고대비 테마의 아이콘 테마는 같으므로
+/// (둘 다 `iconTheme`을 정하지 않아 어두운 테마 기본값) 어느 테마를 따르는지(호스트·틀, 목표·전환 중)는 가려내지 못하고,
+/// Cupertino 아이콘 테마로 바뀌지 않았는지만 확인한다.
 typedef _AppLevel = ({
   Color? selection,
   Color? cursor,
@@ -385,10 +387,11 @@ void main() {
           final theme = highContrast
               ? CalcTheme.materialHighContrastTheme
               : CalcTheme.materialTheme;
-          // 비교 기준이 MaterialApp의 계산(primary 40%·primary, Material 기반 Cupertino 테마)인지 — 전제 확인
+          // 비교 기준이 MaterialApp의 계산(primary 40%·primary, Material 기반 Cupertino 테마)인지 — 전제 확인.
+          // 40%는 MaterialApp(`withOpacity`)과 같은 8비트 알파 식으로 쓴다(0.40에서는 `withValues(alpha: 0.40)`과도 같은 값).
           expect(
             reference.selection,
-            theme.colorScheme.primary.withValues(alpha: 0.40),
+            theme.colorScheme.primary.withAlpha((255.0 * 0.40).round()),
           );
           expect(reference.cursor, theme.colorScheme.primary);
           expect(reference.cupertinoPrimary, theme.colorScheme.primary);
@@ -439,6 +442,7 @@ void main() {
       }
     });
 
+    // 아이콘 테마는 두 테마에서 같아 여기서 보지 않는다 ([_AppLevel] 참조)
     testWidgets('두 테마의 값이 서로 달라 아래 틀 테스트가 어느 쪽을 따르는지 가려낸다', (tester) async {
       final standard = await _materialAppLevel(tester, false);
       final high = await _materialAppLevel(tester, true);
