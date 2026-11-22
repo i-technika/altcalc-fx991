@@ -276,12 +276,35 @@ cd android
     생명주기 테스트가 구조상 못 보는 `super.configureFlutterEngine`(플러그인 등록) 호출을 확인한다.
   - Mockito 인라인 모크 에이전트는 Gradle이 테스트 JVM에 `-javaagent`로 붙인다(`android/app/build.gradle.kts`의 `mockitoAgent`).
 - CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡(두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
-  - 캐시 없이 약 12분 걸린다. 캐시는 Gradle(`setup-java`의 `cache: gradle`)과 NDK·Robolectric jar(`actions/cache`) 두 가지다.
-  - PR 실행이 저장한 캐시는 그 PR만 쓴다(GitHub 캐시 범위 규칙 — 다른 PR은 베이스 브랜치 범위만 읽는다).
-    그래서 Sub-issue CI는 마일스톤 브랜치 push(서브이슈 머지)에서도 돌아 그 브랜치 범위에 캐시를 만들고, 다음 서브이슈 PR들이
-    처음부터 그 캐시를 쓴다. 이 예열은 Flutter SDK 캐시처럼 다른 잡의 캐시에도 똑같이 효과가 있다.
+  - 캐시는 다섯 가지이고 한 벌이 약 4.5GiB다: Flutter SDK·pub(flutter-action), Gradle·Gradle 래퍼(`setup-java`의 `cache: gradle`),
+    NDK·Robolectric jar(`actions/cache`).
+  - 걸리는 시간 (실측 기록: #121):
+    - 캐시가 모두 맞으면 약 2~3분이다(1분 57초~2분 48초, 14회).
+    - 캐시가 없으면 3분 51초~11분 35초다(4회, Flutter SDK만 복원한 경우 포함). 내려받기 속도 편차가 커서 같은 NDK 설치가 14초~3분 25초로 갈렸다.
+    - Gradle 캐시만 없는 경우는 재지 않았다. 이 둘 사이로 추정한다.
+  - 캐시 범위 (GitHub 규칙):
+    - PR 실행은 자기 범위(`refs/pull/<번호>/merge`)와 베이스 브랜치, 기본 브랜치(`main`) 범위만 읽는다.
+    - push·`workflow_dispatch` 실행은 자기 브랜치와 `main` 범위만 읽는다.
+    - 저장은 늘 자기 범위에 하고, 키가 정확히 맞으면 다시 저장하지 않는다.
+    - 그래서 Sub-issue CI는 마일스톤 브랜치 push(서브이슈 머지)에서도 돌아 그 범위에 캐시를 예열한다.
+      다음 서브이슈 PR들은 첫 실행부터 다섯 가지를 모두 복원하고, PR 범위에는 키가 바뀐 캐시만 저장한다.
+    - Milestone CI(마일스톤 PR → `main`)는 마일스톤 범위를 읽지 못한다. `main` 범위도 비어 있다(`main` push에서 도는 워크플로가 없다).
+      그래서 Ready로 바꾼 뒤의 첫 실행은 캐시 없이 돈다.
   - Gradle 캐시 키는 Gradle 설정 파일(`*.gradle*`·`gradle.properties`·`gradle-wrapper.properties`) 해시라, 그 파일을 고친 PR은
     Gradle 캐시 없이 돈다. NDK·Robolectric 캐시는 앞부분이 같은 키에서 부분 복원한다.
-  - `Linux Analyze, Test & Build`와 나란히 돌므로 서브이슈 PR의 CI 대기는 이 잡이 정한다.
+  - `Linux Analyze, Test & Build`(약 3분)와 나란히 돈다. 캐시가 맞으면 이 잡이 먼저 끝나므로 서브이슈 PR의 CI 대기는 Linux 잡이 정한다.
+    캐시가 없으면 이 잡이 정한다.
+  - 캐시 용량: 저장소 한도는 10GB다. 넘으면 마지막으로 쓴 지 오래된 캐시부터 지워지고, 7일 동안 쓰지 않은 캐시도 지워진다(GitHub 문서 기준).
+    - 머지된 PR, 끝난 마일스톤, 지운 브랜치 범위의 캐시는 더는 읽히지 않는다. 그래서 스킬이 머지 직후에 지운다.
+      `/fix-issue` 11단계가 그 PR 범위를, `/close-ms` 5단계가 마일스톤 PR 범위와 마일스톤 브랜치 범위를 지운다.
+      정리 워크플로는 따로 두지 않는다.
+    - 범위가 하나 더 커지는 주요 경우는 아래와 같다. 이때 머지 push는 같은 크기를 마일스톤 범위에 새 키로 또 저장하고, 옛 키는 7일 뒤 만료된다.
+      - Gradle 설정을 고친 PR: Gradle 1.2GiB를 저장한다. `android/app/build.gradle.kts`를 고쳤으면 NDK/Robolectric 1.3GiB, 래퍼 설정을 고쳤으면 래퍼 0.4GiB가 더해진다.
+      - Flutter SDK를 올린 PR: Flutter SDK·pub 1.6GiB를 저장한다.
+      - 마일스톤 범위가 7일 동안 쓰이지 않아 만료된 뒤의 PR: 한 벌을 통째로 저장한다.
+      - Milestone CI의 Ready 실행: 한 벌에 Windows·macOS 캐시까지 저장한다.
+      - 마일스톤이 아닌 브랜치에서 `workflow_dispatch`로 돌린 실행: 한 벌을 통째로 저장한다.
+    - 직접 지울 때는 `gh cache delete --all --ref refs/heads/<브랜치>`나 `--ref refs/pull/<번호>/merge`를 쓴다.
+      사용량은 `gh api repos/i-technika/altcalc-fx991/actions/cache/usage`로, 목록은 `gh cache list`로 본다.
 - 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
   릴리스 빌드(R8)의 API 36 참조 격리(#109), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).

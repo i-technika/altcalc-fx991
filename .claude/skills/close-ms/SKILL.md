@@ -56,6 +56,12 @@ gh issue view <번호> --json state   # Closes #<번호>로 자동 Close되었�
 bash .claude/scripts/set-project-status.sh <번호> Done
 bash .claude/scripts/set-project-status.sh <PR번호> Done
 ```
+- 마일스톤 PR 범위와 마일스톤 브랜치 범위의 Actions 캐시를 지운다. `main` 머지 뒤에는 다음 마일스톤 PR들이 읽지 못한다
+  (README "Android 단위 테스트" 캐시 용량, #121). 다음 마일스톤 브랜치의 첫 push가 다시 예열한다.
+  ```bash
+  gh cache delete --all --ref refs/pull/<PR번호>/merge --succeed-on-no-caches
+  gh cache delete --all --ref refs/heads/milestone/m<N> --succeed-on-no-caches
+  ```
 
 ## 6. 로컬 동기화 및 보고
 ```bash
