@@ -74,6 +74,9 @@ class PreviewDevice {
   /// 폴더블 내부 화면인지 — 자세·방향을 고를 수 있다([posed], #93). 접힘선([displayFeatures])이 있어야 한다.
   final bool foldable;
 
+  /// 자세·방향을 적용한 화면이면 적용하기 전의 프리셋, 프리셋이면 `null` ([base] 참조)
+  final PreviewDevice? _base;
+
   const PreviewDevice(
     this.name,
     this.size, {
@@ -81,19 +84,35 @@ class PreviewDevice {
     this.systemGestureInsets = EdgeInsets.zero,
     this.displayFeatures = const [],
     this.foldable = false,
-  });
+  }) : _base = null;
+
+  PreviewDevice._posed(
+    PreviewDevice base,
+    this.size, {
+    required this.displayFeatures,
+  }) : _base = base,
+       name = base.name,
+       padding = base.padding,
+       systemGestureInsets = base.systemGestureInsets,
+       foldable = base.foldable;
+
+  /// 자세·방향을 적용하기 전의 프리셋 (기본 방향으로 펼친 값). 프리셋이면 자기 자신이다.
+  PreviewDevice get base => _base ?? this;
 
   /// 칩에 표시할 이름 (예: `일반 폰 390×844`)
   String get label =>
       '$name ${size.width.toStringAsFixed(0)}×${size.height.toStringAsFixed(0)}';
 
-  /// 기본 방향 — 프리셋 [size]가 가로로 길면 가로, 아니면 세로 (Galaxy Z Fold 내부는 세로, Pixel Fold 내부는 가로)
-  PreviewOrientation get naturalOrientation => size.width > size.height
+  /// 기본 방향 — 프리셋([base]) 크기가 가로로 길면 가로, 아니면 세로 (Galaxy Z Fold 내부는 세로, Pixel Fold
+  /// 내부는 가로). 자세·방향을 적용한 화면도 원래 프리셋의 기본 방향을 답한다.
+  PreviewOrientation get naturalOrientation =>
+      base.size.width > base.size.height
       ? PreviewOrientation.landscape
       : PreviewOrientation.portrait;
 
   /// [posture] 자세로 [orientation] 방향으로 든 화면 (#93). [foldable]이 아니면 그대로 돌려준다.
-  /// 기본 방향으로 펼친 상태면 이 프리셋 자신이다.
+  /// 항상 [base](기본 방향으로 펼친 프리셋) 기준으로 계산하므로, 자세·방향을 적용한 화면에 다시 불러도
+  /// 결과는 [posture]·[orientation] 그대로다(겹쳐 돌지 않는다). 기본 방향으로 펼친 상태면 [base] 자신이다.
   ///
   /// - 방향이 기본 방향과 다르면 기기를 반시계 방향으로 90° 돌린 화면이다: 크기의 가로·세로가 바뀌고,
   ///   화면 특징 영역은 기본 방향 화면의 위 가장자리가 왼쪽 가장자리가 되도록 옮긴다(가운데 접힘선은 돌리는
@@ -102,23 +121,21 @@ class PreviewDevice {
   ///   WindowManager는 반 접어도 같은 영역을 보고한다. 화면 구멍 등 다른 특징은 상태를 바꾸지 않는다.
   /// - 시스템 인셋·제스처 영역은 화면 기준으로 그대로 둔다: 대화면에서는 돌려도 상태 표시줄은 위, 제스처
   ///   내비게이션 표시줄은 아래, 뒤로가기 영역은 좌우에 남는다(근사 — 화면 구멍 쪽 인셋은 흉내 내지 않는다).
-  /// - 돌리거나 반 접은 결과는 [foldable]이 `false`다 — 자세·방향이 정해진 화면이라 기본 방향으로 펼친 값이
-  ///   아니므로, 다시 [posed]해도 그대로다(겹쳐 돌리거나 반 접은 값을 기준으로 삼지 않는다).
+  /// - 결과의 [name]·인셋·[foldable]은 [base]와 같다.
   PreviewDevice posed(
     PreviewFoldPosture posture,
     PreviewOrientation orientation,
   ) {
-    if (!foldable) return this;
-    final rotate = orientation != naturalOrientation;
-    if (!rotate && posture == PreviewFoldPosture.flat) return this;
-    final w = size.width;
-    return PreviewDevice(
-      name,
-      rotate ? size.flipped : size,
-      padding: padding,
-      systemGestureInsets: systemGestureInsets,
+    final base = this.base;
+    if (!base.foldable) return base;
+    final rotate = orientation != base.naturalOrientation;
+    if (!rotate && posture == PreviewFoldPosture.flat) return base;
+    final w = base.size.width;
+    return PreviewDevice._posed(
+      base,
+      rotate ? base.size.flipped : base.size,
       displayFeatures: [
-        for (final f in displayFeatures)
+        for (final f in base.displayFeatures)
           DisplayFeature(
             bounds: rotate
                 ? Rect.fromLTRB(
