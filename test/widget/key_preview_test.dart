@@ -4,9 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
+import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../preview/key_preview_main.dart';
@@ -466,6 +470,140 @@ void main() {
       );
       expect(_deviceScreen, findsNothing);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('기기 틀 안의 대화상자 (#72)', () {
+    /// 좌우 분할 배치(설정 버튼이 있는) 태블릿 가로 프리셋
+    int tabletLandscape() {
+      final i = previewDevices.indexWhere(
+        (d) => d.size.shortestSide >= 600 && d.size.width > d.size.height,
+      );
+      expect(i, isNonNegative);
+      return i;
+    }
+
+    final dialog = find.byType(HandednessDialog);
+
+    /// 대화상자의 장벽(기기 화면 Navigator 안의 것)
+    Finder barrier() => find.descendant(
+      of: find.byKey(PreviewDeviceNavigator.navigatorKey),
+      matching: find.byType(ModalBarrier),
+    );
+
+    bool inside(Rect outer, Rect inner) =>
+        outer.inflate(0.01).contains(inner.topLeft) &&
+        outer.inflate(0.01).contains(inner.bottomRight);
+
+    testWidgets('축소된 기기 틀 안에 뜨고, 장벽은 기기 화면만 덮으며, 기기의 크기·인셋·글자 배율을 물려받는다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      final index = tabletLandscape();
+      final device = previewDevices[index];
+      await _selectDevice(tester, index);
+      await _selectTextScale(tester, 1.3);
+      final screen = tester.getRect(_deviceScreen);
+      expect(screen.width, lessThan(device.size.width)); // 축소 표시 중
+
+      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.pumpAndSettle();
+      expect(dialog, findsOneWidget);
+      expect(inside(screen, tester.getRect(dialog)), isTrue);
+      expect(barrier(), findsWidgets);
+      for (final b in tester.widgetList<ModalBarrier>(barrier())) {
+        expect(inside(screen, tester.getRect(find.byWidget(b))), isTrue);
+      }
+
+      final media = MediaQuery.of(tester.element(dialog));
+      expect(media.size, device.size);
+      // 인셋: 대화상자 경로의 SafeArea가 기기 인셋을 소비한다 — 대화상자는 기기 안전 영역 안에 있다.
+      final scale = screen.width / device.size.width;
+      final safe = Rect.fromLTRB(
+        screen.left + device.padding.left * scale,
+        screen.top + device.padding.top * scale,
+        screen.right - device.padding.right * scale,
+        screen.bottom - device.padding.bottom * scale,
+      );
+      expect(device.padding, isNot(EdgeInsets.zero));
+      expect(inside(safe, tester.getRect(dialog)), isTrue);
+      expect(media.textScaler, const TextScaler.linear(1.3));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('축소 표시 중에도 선택지·닫기 버튼을 누를 수 있고, 뒤의 키패드가 바로 옮겨진다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester, window: const Size(1000, 700));
+      await _selectDevice(tester, tabletLandscape());
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(CalculatorScreen)),
+      );
+      final keypad = find.byKey(const ValueKey('calc-keypad'));
+      final screen = tester.getRect(_deviceScreen);
+      expect(tester.getRect(keypad).center.dx, greaterThan(screen.center.dx));
+
+      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(HandednessDialog.optionKeyOf(Handedness.left)),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(handednessProvider), Handedness.left);
+      expect(tester.getRect(keypad).center.dx, lessThan(screen.center.dx));
+
+      await tester.tap(find.byKey(HandednessDialog.closeKey));
+      await tester.pumpAndSettle();
+      expect(dialog, findsNothing);
+    });
+
+    testWidgets('대화상자가 열려 있어도 옆 패널을 쓸 수 있고, 기기를 바꾸면 새 크기로 다시 그려진다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      final index = tabletLandscape();
+      await _selectDevice(tester, index);
+      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.pumpAndSettle();
+
+      // 기기 화면 밖(옆 패널)은 장벽에 막히지 않는다.
+      await _selectTextScale(tester, 2.0);
+      expect(dialog, findsOneWidget);
+      expect(
+        MediaQuery.of(tester.element(dialog)).textScaler,
+        const TextScaler.linear(2.0),
+      );
+
+      final other = previewDevices.indexWhere(
+        (d) =>
+            d.size != previewDevices[index].size &&
+            d.size.shortestSide >= 600 &&
+            d.size.width > d.size.height,
+      );
+      if (other >= 0) {
+        await _selectDevice(tester, other);
+        expect(dialog, findsOneWidget);
+        expect(
+          MediaQuery.of(tester.element(dialog)).size,
+          previewDevices[other].size,
+        );
+      }
+      expect(
+        inside(tester.getRect(_deviceScreen), tester.getRect(dialog)),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('기기 화면 장벽(바깥)을 누르면 닫힌다', (tester) async {
+      await _pumpPreview(tester);
+      await _selectDevice(tester, tabletLandscape());
+      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.pumpAndSettle();
+      final screen = tester.getRect(_deviceScreen);
+      await tester.tapAt(screen.topLeft + const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(dialog, findsNothing);
     });
   });
 }

@@ -25,8 +25,11 @@ class SettingsButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       icon: const Icon(Icons.settings),
+      // 가장 가까운 Navigator에 띄운다. 앱은 Navigator가 하나라 같지만, 화면을 흉내 내는 곳(개발용
+      // 미리보기의 기기 틀)은 자기 Navigator를 두어 대화상자가 그 화면 안에 그 화면의 MediaQuery로 뜬다 (#72).
       onPressed: () => showDialog<void>(
         context: context,
+        useRootNavigator: false,
         builder: (_) => const HandednessDialog(),
       ),
     );
