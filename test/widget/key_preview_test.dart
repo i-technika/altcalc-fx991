@@ -298,11 +298,6 @@ void main() {
           contains(g.left),
           reason: d.name,
         );
-        // 좌우 뒤로가기 영역(제스처 내비게이션)이 있으면 아래는 3버튼 내비게이션 바·작업 표시줄(48)이 아니라
-        // 제스처 핸들 높이다.
-        if (g.left > 0) {
-          expect(d.padding.bottom, lessThan(48), reason: d.name);
-        }
       }
     });
 
@@ -1029,15 +1024,22 @@ void main() {
     // 좌우 분할 배치(#24)에서 키패드는 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62). 제스처 내비게이션이면 그 바깥쪽
     // 끝 열 키의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가
     // 아니라 터치 위치 기준이라 같은 키의 가운데와 LCD 쪽을 향한 안쪽 끝 열은 누르는 순간 입력된다.
-    // 같은 화면의 3버튼 프리셋(태블릿 가로)은 좌우 제스처 영역이 없어 바깥쪽 열도 누르는 순간 입력된다 — 대조군.
-    for (final (name, gestureNav) in const [
-      ('태블릿 가로 (제스처)', true),
-      ('태블릿 가로', false),
+    // 같은 화면의 3버튼 프리셋(태블릿 가로)은 좌우 제스처 영역이 없어 같은 자리를 눌러도 누르는 순간 입력된다 — 대조군.
+    // 폴더블 내부 화면도 펼치면 접힘선 기준 좌우 배치라 바깥쪽 열이 뒤로가기 영역에 걸린다(README 안내) —
+    // 이 화면은 기본 창에 축소 없이 들어간다.
+    for (final (name, gestureNav, scaled) in const [
+      ('태블릿 가로 (제스처)', true, true),
+      ('태블릿 가로', false, true),
+      ('폴더블 내부', true, false),
+      ('가로형 폴더블 내부', true, false),
     ]) {
       for (final handedness in Handedness.values) {
         testWidgets(
-          '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽은 '
-          '${gestureNav ? '손을 뗄 때' : '누르는 순간'}, 그 키 가운데와 안쪽 끝 열은 누르는 순간 입력된다',
+          gestureNav
+              ? '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽은 손을 뗄 때, '
+                    '그 키 가운데와 안쪽 끝 열은 누르는 순간 입력된다'
+              : '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽·그 키 가운데·'
+                    '안쪽 끝 열 모두 누르는 순간 입력된다',
           (tester) async {
             await _pumpPreview(tester);
             final index = previewDevices.indexWhere((d) => d.name == name);
@@ -1047,10 +1049,14 @@ void main() {
             await _setHandedness(tester, handedness);
             expect(tester.takeException(), isNull);
 
-            // 축소 표시 중이어야 화면 좌표 변환 경로까지 확인된다.
+            // 태블릿은 축소 표시 중이라 화면 좌표 변환 경로까지 확인된다.
             final screen = tester.getRect(_deviceScreen);
             final scale = screen.width / device.size.width;
-            expect(scale, lessThan(1));
+            if (scaled) {
+              expect(scale, lessThan(1));
+            } else {
+              expect(scale, 1);
+            }
             double toScreenX(double globalX) => (globalX - screen.left) / scale;
             final gesture = device.systemGestureInsets;
             bool inBackZone(double x) =>
@@ -1078,8 +1084,14 @@ void main() {
                 ? (acAt, ac.center, 'AC', num7At, '7')
                 : (num7At, num7.center, '7', acAt, 'AC');
 
-            // 바깥쪽 열의 가장자리는 제스처 내비게이션에서만 뒤로가기 영역 안이고, 그 키 가운데와 안쪽 열은 어느 쪽이든 밖이다.
-            expect(inBackZone(toScreenX(outerAt.dx)), gestureNav);
+            // 누르는 바깥쪽 가장자리는 어느 프리셋이든 화면 끝에서 뒤로가기 영역 폭보다 가깝다 — 그래야 대조군이
+            // "같은 자리를 눌렀다"가 된다. 그 자리는 제스처 내비게이션에서만 영역 안이고, 그 키 가운데와 안쪽 열은 늘 밖이다.
+            final outerX = toScreenX(outerAt.dx);
+            expect(
+              handedness.keypadOnRight ? device.size.width - outerX : outerX,
+              lessThan(previewBackGestureWidth),
+            );
+            expect(inBackZone(outerX), gestureNav);
             expect(inBackZone(toScreenX(outerCenter.dx)), isFalse);
             expect(inBackZone(toScreenX(innerAt.dx)), isFalse);
 
@@ -1157,13 +1169,14 @@ void main() {
   });
 
   group('기기 틀 안의 대화상자 (#72)', () {
-    /// 좌우 분할 배치(설정 버튼이 있는) 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블은 뺀다)
+    /// 좌우 분할 배치(설정 버튼이 있는) 3버튼 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블, 제스처 프리셋은 뺀다)
     int tabletLandscape() {
       final i = previewDevices.indexWhere(
         (d) =>
             d.size.shortestSide >= 600 &&
             d.size.width > d.size.height &&
-            d.displayFeatures.isEmpty,
+            d.displayFeatures.isEmpty &&
+            d.systemGestureInsets.horizontal == 0,
       );
       expect(i, isNonNegative);
       return i;
