@@ -48,6 +48,10 @@
 ## 4. 로컬 개발 환경 메모
 - Flutter SDK가 시스템 PATH에 없을 수 있다. `flutter`를 찾지 못하면 Bash에서
   `export PATH="/c/Users/fmthead/develop/flutter/bin:$PATH"` 후 실행한다.
+- 생성 플러그인 파일(`linux/`·`windows/flutter/generated_plugin*`, `macos/Flutter/GeneratedPluginRegistrant.swift`)은
+  `.gitattributes`로 LF 고정이라, `flutter pub get`·`test` 뒤에도 수정됨으로 보이지 않는다 (#67).
+  이 속성이 생기기 전에 체크아웃한 작업 트리는 처음 한 번 수정됨으로 보이는데, 내용 차이는 없으므로
+  `git add -u linux/flutter macos/Flutter windows/flutter`로 한 번 정리하면 된다(스테이징되는 변경 없음).
 - GitHub CLI(`gh`)로 이슈/PR/프로젝트를 관리한다. 저장소: `i-technika/altcalc-fx991`
 - `gh`에 여러 줄 본문을 넘길 때는 셸 이스케이프 깨짐(과거 이슈 본문의 `\경로\` 깨짐 현상)을 막기 위해
   **반드시 임시 파일 + `--body-file`** 을 사용한다.

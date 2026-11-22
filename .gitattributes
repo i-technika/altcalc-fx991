@@ -1,0 +1,10 @@
+# 줄바꿈 속성 (#67)
+#
+# Flutter가 `flutter pub get`·`analyze`·`test`·`build` 때마다 다시 쓰는 생성 플러그인 파일은 OS와 관계없이 LF로 쓰인다.
+# Windows의 Git 기본값(core.autocrlf=true)으로는 이 파일들이 CRLF로 체크아웃되므로, Flutter가 LF로 다시 쓰면
+# 크기가 달라져 내용 차이 없이도 "수정됨"으로 보인다. 작업본도 LF로 받도록 고정한다.
+# 기존 체크아웃은 이 속성이 생긴 뒤 처음 한 번 `git add`가 필요하다 — CLAUDE.md "로컬 개발 환경 메모" 참조.
+# 추적 중인 생성 파일이 모두 여기에 걸리는지 test/unit/gitattributes_test.dart가 검사한다.
+linux/flutter/generated_plugin* text eol=lf
+windows/flutter/generated_plugin* text eol=lf
+macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
