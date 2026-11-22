@@ -219,22 +219,33 @@ void main() {
             }
           }
 
-          // 커서 패드 (#43): 실물처럼 ▲·▼는 넓고 ◀·▶는 좁다. 방향 키의 실제 터치 영역(구역 넓이)이
-          // 함수 키 셀(각인 띠 포함) 대비 ▲·▼는 80%, 가장 좁은 ◀·▶도 50% 이상이다.
+          // 커서 패드 (#43): 허브가 가운데를 깎아도 방향 키마다 손가락이 들어갈 치수가 남는다.
+          // - 축 방향 깊이(허브 가장자리 ~ 외곽): ▲·▼는 반높이, ◀·▶는 반폭에서 허브 반지름을 뺀 값이
+          //   함수 키캡 높이 이상이다.
+          // - 넓이: 가장 좁은 ◀·▶도 함수 키 셀(각인 띠 포함)의 절반 이상이고, ▲·▼는 ◀·▶보다 넓다.
           final pad = tester.getSize(find.byKey(const ValueKey('cursor-pad')));
           final sin = buttons.firstWhere((b) => b.keyDef.id == CalcKeyId.sin);
           final sinCell = tester.getSize(find.byWidget(sin));
-          final cellArea = sinCell.width * sinCell.height;
-          final geometry = CursorPadGeometry(pad);
-          for (final sector in CursorPadSector.values) {
-            final wide =
-                sector == CursorPadSector.up || sector == CursorPadSector.down;
-            expect(
-              geometry.sectorArea(sector),
-              greaterThanOrEqualTo((wide ? 0.8 : 0.5) * cellArea),
-              reason: sector.name,
-            );
-          }
+          final sinCap = tester.getSize(
+            find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)),
+          );
+          final g = CursorPadGeometry(pad);
+          expect(
+            g.radiusY - g.hubRadius,
+            greaterThanOrEqualTo(sinCap.height),
+            reason: '▲·▼ 깊이 $pad',
+          );
+          expect(
+            g.radiusX - g.hubRadius,
+            greaterThanOrEqualTo(sinCap.height),
+            reason: '◀·▶ 깊이 $pad',
+          );
+          final narrow = g.sectorArea(CursorPadSector.left);
+          expect(
+            narrow,
+            greaterThanOrEqualTo(0.5 * sinCell.width * sinCell.height),
+          );
+          expect(g.sectorArea(CursorPadSector.up), greaterThan(narrow));
         });
       }
     }

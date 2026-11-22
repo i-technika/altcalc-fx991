@@ -457,26 +457,62 @@ void _cursorPadR2Tests() {
       }
     });
 
-    test('시맨틱 영역은 서로 겹치지 않고 각자 자기 구역 쪽에 있다', () {
-      const size = Size(120, 100);
-      final geometry = CursorPadGeometry(size);
-      final rects = {
-        for (final s in CursorPadSector.values)
-          s: CursorPad.semanticRect(s, size),
-      };
-      for (final a in CursorPadSector.values) {
-        for (final b in CursorPadSector.values) {
-          if (a == b) continue;
-          final overlap = rects[a]!.intersect(rects[b]!);
+    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
+      // 패드 비율 하한·상한 근처와 정사각형(비율 제한 밖 극단)까지
+      for (final size in const [
+        Size(90, 64),
+        Size(116, 78),
+        Size(200, 111),
+        Size(100, 100),
+      ]) {
+        final geometry = CursorPadGeometry(size);
+        final rects = {
+          for (final s in CursorPadSector.values)
+            s: CursorPad.semanticRect(s, size),
+        };
+        for (final a in CursorPadSector.values) {
+          final rect = rects[a]!;
+          expect(rect.isEmpty, isFalse, reason: '$size ${a.name}');
           expect(
-            overlap.width <= 0 || overlap.height <= 0,
-            isTrue,
-            reason: '${a.name} × ${b.name}',
+            (Offset.zero & size).intersect(rect),
+            rect,
+            reason: '$size ${a.name}',
+          );
+          for (final b in CursorPadSector.values) {
+            if (a == b) continue;
+            final overlap = rect.intersect(rects[b]!);
+            expect(
+              overlap.width <= 0 || overlap.height <= 0,
+              isTrue,
+              reason: '$size ${a.name} × ${b.name}',
+            );
+          }
+          // 영역 안 표본 점은 모두 자기 구역이거나 외곽 밖이다 (다른 구역·허브 위가 없다).
+          var own = 0;
+          final inner = rect.deflate(0.01);
+          for (var x = inner.left; x <= inner.right; x += 0.5) {
+            for (var y = inner.top; y <= inner.bottom; y += 0.5) {
+              final p = Offset(x, y);
+              final at = geometry.sectorAt(p);
+              if (at == a) {
+                own++;
+                continue;
+              }
+              expect(at, isNull, reason: '$size ${a.name} $p → ${at?.name}');
+              expect(
+                (p - geometry.center).distance,
+                greaterThan(geometry.hubRadius),
+                reason: '$size ${a.name} $p 허브 위',
+              );
+            }
+          }
+          // 자기 구역 넓이의 40% 이상을 덮는다 (표본 점 하나 = 0.25dp²).
+          expect(
+            own * 0.25,
+            greaterThan(geometry.sectorArea(a) * 0.4),
+            reason: '$size ${a.name}',
           );
         }
-        // 영역 중심은 그 방향 구역 안이고, 영역은 허브 중심을 덮지 않는다.
-        expect(geometry.sectorAt(rects[a]!.center), a, reason: a.name);
-        expect(rects[a]!.contains(geometry.center), isFalse, reason: a.name);
       }
     });
 
@@ -615,9 +651,11 @@ void _cursorPadShapeTests() {
     test('허브 반지름 안쪽은 데드존, 바로 바깥은 방향 키다', () {
       for (final size in padSizes) {
         final g = CursorPadGeometry(size);
+        // 허브 지름은 패드 짧은 변의 약 1/4 (실물 사진 눈대중 범위)
         expect(
-          g.hubRadius,
-          CalcTheme.cursorPadHubRadiusRatio * math.min(g.radiusX, g.radiusY),
+          2 * g.hubRadius / math.min(size.width, size.height),
+          inInclusiveRange(0.2, 0.3),
+          reason: '$size',
         );
         for (final sector in CursorPadSector.values) {
           final dir = switch (sector) {
@@ -769,12 +807,40 @@ void _cursorPadShapeTests() {
       }
     });
 
+    test('fitSize: 비율 범위 안이면 셀 그대로, 벗어나면 한 변을 줄인다', () {
+      const min = CalcTheme.cursorPadMinAspectRatio;
+      const max = CalcTheme.cursorPadMaxAspectRatio;
+      expect(CursorPad.fitSize(const Size(160, 100)), const Size(160, 100));
+      // 세로로 긴 셀(일반 폰): 높이를 줄인다
+      final tall = CursorPad.fitSize(const Size(130, 100));
+      expect(tall.width, 130);
+      expect(tall.height, moreOrLessEquals(130 / min));
+      // 가로로 긴 셀(태블릿): 폭을 줄인다
+      final wide = CursorPad.fitSize(const Size(240, 110));
+      expect(wide.height, 110);
+      expect(wide.width, moreOrLessEquals(110 * max));
+      expect(CursorPad.fitSize(Size.zero), Size.zero);
+      expect(CursorPad.fitSize(const Size(-5, 10)), Size.zero);
+    });
+
+    test('유한하지 않은 좌표는 어느 방향도 아니다', () {
+      final g = CursorPadGeometry(const Size(116, 78));
+      for (final p in const [
+        Offset(double.nan, double.nan),
+        Offset(double.infinity, 0),
+        Offset(0, double.negativeInfinity),
+      ]) {
+        expect(g.sectorAt(p), isNull, reason: '$p');
+      }
+    });
+
     test('0 크기 패드는 예외 없이 빈 모양이다', () {
       final g = CursorPadGeometry(Size.zero);
       expect(g.sectorAt(Offset.zero), isNull);
       for (final s in CursorPadSector.values) {
         expect(g.sectorPath(s).getBounds().isEmpty, isTrue);
         expect(g.sectorArea(s), 0);
+        expect(g.semanticRect(s), Rect.zero);
       }
       expect(g.outlinePath().getBounds().isEmpty, isTrue);
       expect(g.grooves(), isEmpty);
@@ -840,28 +906,65 @@ void _cursorPadShapeTests() {
     });
 
     for (final area in _areas) {
-      testWidgets('${area.width}×${area.height}: 방향 라벨은 자기 구역 안, 허브 밖에 그려진다', (
-        tester,
-      ) async {
-        await tester.pumpWidget(_host(const CalcKeypad(), size: area));
-        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-        final g = CursorPadGeometry(pad.size);
-        for (final sector in CursorPadSector.values) {
-          final label = tester.getRect(
-            find.descendant(
-              of: _keycap(CursorPad.defOf(sector).id),
-              matching: find.byType(Text),
+      for (final scale in [1.0, 1.3]) {
+        testWidgets(
+          '${area.width}×${area.height}, 글자 배율 $scale: 방향 라벨은 통째로 자기 구역 안에 그려진다',
+          (tester) async {
+            await tester.pumpWidget(
+              _host(const CalcKeypad(), size: area, textScale: scale),
+            );
+            final pad = tester.getRect(
+              find.byKey(const ValueKey('cursor-pad')),
+            );
+            final g = CursorPadGeometry(pad.size);
+            for (final sector in CursorPadSector.values) {
+              final label = tester
+                  .getRect(
+                    find.descendant(
+                      of: _keycap(CursorPad.defOf(sector).id),
+                      matching: find.byType(Text),
+                    ),
+                  )
+                  .shift(-pad.topLeft);
+              // 라벨 상자의 네 모서리와 중심이 모두 자기 구역 안이다 (홈·허브·외곽에 잘리지 않는다).
+              for (final p in [
+                label.topLeft,
+                label.topRight,
+                label.bottomLeft,
+                label.bottomRight,
+                label.center,
+              ]) {
+                expect(g.sectorAt(p), sector, reason: '${sector.name} $p');
+              }
+            }
+          },
+        );
+      }
+    }
+
+    for (final area in _areas) {
+      testWidgets(
+        '${area.width}×${area.height}: 패드 상자는 셀 가운데에 정해진 가로/세로 비로 놓인다',
+        (tester) async {
+          await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          expect(
+            pad.width / pad.height,
+            inInclusiveRange(
+              CalcTheme.cursorPadMinAspectRatio - 1e-9,
+              CalcTheme.cursorPadMaxAspectRatio + 1e-9,
             ),
           );
-          final center = label.center - pad.topLeft;
-          expect(g.sectorAt(center), sector, reason: sector.name);
+          final fitted = CursorPad.fitSize(cell.size);
+          expect(pad.width, moreOrLessEquals(fitted.width, epsilon: 1e-6));
+          expect(pad.height, moreOrLessEquals(fitted.height, epsilon: 1e-6));
           expect(
-            (center - g.center).distance,
-            greaterThan(g.hubRadius * 1.5),
-            reason: sector.name,
+            (pad.center - cell.center).distance,
+            moreOrLessEquals(0, epsilon: 1e-6),
           );
-        }
-      });
+        },
+      );
     }
   });
 }

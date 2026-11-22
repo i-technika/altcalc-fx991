@@ -468,19 +468,30 @@ abstract final class CalcTheme {
   static const double cursorPadDividerWidth = 2.0;
 
   // 커서 패드 모양 (#43) — 실물 fx-991EX(Quick Start Guide 1쪽 제품 사진)처럼 가로로 긴 둥근 마름모를
-  // X자 홈으로 4분할하고, 가운데에 누를 수 없는 검은 허브를 둔다. 모든 값은 패드 크기 비례라
-  // 폰·폴더블·태블릿 어느 화면비에서도 같은 모양이 된다.
+  // X자 홈으로 4분할하고, 가운데에 누를 수 없는 검은 허브를 둔다. 치수는 패드 크기 비례이고,
+  // 패드 상자의 가로/세로 비는 [cursorPadMinAspectRatio]~[cursorPadMaxAspectRatio]로 제한해
+  // 폰·폴더블·태블릿 어디서나 "가로로 긴" 모양을 유지한다(셀이 범위를 벗어나면 가운데에 줄여 놓는다).
+
+  /// 커서 패드 상자 최소 가로/세로 비 — 세로로 긴 셀(일반 폰 약 1.3)에서도 납작한 마름모를 유지한다.
+  static const double cursorPadMinAspectRatio = 1.4;
+
+  /// 커서 패드 상자 최대 가로/세로 비 — 가로로 긴 셀(태블릿·가로 모드 약 2.2)에서 지나치게 납작해지지 않게 한다.
+  /// 실물은 약 1.6이다(제품 사진 눈대중). 범위 안이면 셀을 그대로 써서 터치 넓이를 잃지 않는다.
+  static const double cursorPadMaxAspectRatio = 1.8;
 
   /// 커서 패드 외곽 초타원 지수 n — 패드 반폭·반높이로 정규화한 좌표 (u, v)에서 |u|ⁿ + |v|ⁿ = 1.
   /// 1이면 뾰족한 마름모, 2이면 타원이다. 그 사이 값이 꼭짓점이 둥근 마름모다.
   static const double cursorPadOutlineExponent = 1.5;
 
   /// 커서 패드 X자 홈의 기울기 k — 정규화 좌표에서 |u| ≤ k·|v|이면 ▲·▼, 아니면 ◀·▶ 구역이다.
-  /// 1이면 네 구역 면적이 같고, 1보다 크면 실물처럼 ▲·▼가 넓은 사다리꼴, ◀·▶가 좁은 삼각형이 된다.
+  /// 1이면 홈이 패드 상자의 대각선이고, 1보다 크면 실물처럼 ▲·▼가 넓은 사다리꼴, ◀·▶가 좁은 삼각형이 된다.
+  /// (허브는 화면 좌표의 원이라 가로로 긴 패드에서는 ▲·▼ 쪽을 더 깎는다 — 넓이 비는 k만으로 정해지지 않는다.)
   static const double cursorPadGrooveSlope = 1.5;
 
   /// 커서 패드 가운데 허브(누를 수 없는 원) 반지름 — 패드 반높이·반폭 중 짧은 쪽 대비.
-  static const double cursorPadHubRadiusRatio = 0.3;
+  /// 허브 지름이 패드 높이의 약 1/4이 된다. 실물 사진 눈대중과, 허브가 깎는 ▲·▼ 깊이(허브~외곽)를
+  /// 함수 키캡 높이 이상으로 남기는 조건(테스트로 확인) 사이의 절충이다.
+  static const double cursorPadHubRadiusRatio = 0.25;
 
   /// 커서 패드 허브 색 — 실물의 검은 허브. 방향 키캡([keyCursor])보다 어둡고, 둘레는 [keyBorder]로 긋는다.
   static const Color cursorPadHub = Color(0xFF151515);

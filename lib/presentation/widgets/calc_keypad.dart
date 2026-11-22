@@ -484,8 +484,9 @@ enum CursorPadSector { up, down, left, right }
 /// - **X자 홈**: |u| = k·|v| (k = [CalcTheme.cursorPadGrooveSlope]). |u| ≤ k·|v|이면 ▲·▼, 아니면 ◀·▶.
 /// - **허브**: 중심에서 화면 거리 [hubRadius] 이내의 원. 어느 방향에도 속하지 않는 데드존이다.
 ///
-/// [sectorAt]이 판정 기준이고, [sectorPath]는 그 판정을 다각형으로 근사한 그림·누름 판정용 경로다
-/// (곡선 구간은 [_arcSegments]개 선분으로 나눠, 경계에서 1dp 미만 차이만 난다).
+/// [sectorAt]은 위 정의를 그대로 옮긴 명세(참값) 판정이다. 실제 그림·누름·이동 이탈 판정은 이를
+/// 다각형으로 근사한 [sectorPath]가 맡는다(곡선 구간은 [_arcSegments]개 선분, 경계에서 1dp 미만 차이).
+/// 테스트는 두 판정이 일치하는지로 경로를 검증한다.
 @immutable
 class CursorPadGeometry {
   /// 패드 상자 크기
@@ -530,9 +531,9 @@ class CursorPadGeometry {
 
   bool get _isEmpty => radiusX <= 0 || radiusY <= 0;
 
-  /// [localPosition](패드 로컬 좌표)이 속한 방향. 허브·외곽 밖이면 `null`이다.
+  /// [localPosition](패드 로컬 좌표)이 속한 방향. 허브·외곽 밖이거나 유한하지 않은 좌표면 `null`이다.
   CursorPadSector? sectorAt(Offset localPosition) {
-    if (_isEmpty) return null;
+    if (_isEmpty || !localPosition.isFinite) return null;
     final d = localPosition - center;
     if (d.distance <= hubRadius) return null;
     final u = d.dx / radiusX;
@@ -620,6 +621,49 @@ class CursorPadGeometry {
     ];
   }
 
+  /// 시맨틱 영역을 나누는 기준 — ◀·▶ 영역 반높이를 외곽 반높이의 이 비율(허브보다 작으면 허브 반지름)로 둔다.
+  static const double _semanticSplitRatio = 0.3;
+
+  /// [sector]의 시맨틱(스크린리더 터치 탐색) 영역 (패드 로컬 좌표).
+  ///
+  /// 네 영역은 서로 겹치지 않고, 각 영역은 자기 구역 또는 외곽 밖에만 걸친다(허브는 덮지 않는다).
+  /// 화면 좌표에서 홈은 |dx| = m·|dy| (m = k·[radiusX]/[radiusY])이므로, ◀·▶ 영역을 |dx| ≥ X, |dy| ≤ Y,
+  /// ▲·▼ 영역을 |dx| ≤ X, |dy| ≥ Y로 두고 X ≥ m·Y를 지키면 각 영역이 홈을 넘지 않는다.
+  Rect semanticRect(CursorPadSector sector) {
+    if (_isEmpty) return Rect.zero;
+    final m = _k * radiusX / radiusY;
+    final y0 = math.max(hubRadius, _semanticSplitRatio * radiusY);
+    final x = math.max(m * y0, hubRadius);
+    final y = x / m;
+    final c = center;
+    return switch (sector) {
+      CursorPadSector.up => Rect.fromLTRB(
+        c.dx - x,
+        c.dy - radiusY,
+        c.dx + x,
+        c.dy - y,
+      ),
+      CursorPadSector.down => Rect.fromLTRB(
+        c.dx - x,
+        c.dy + y,
+        c.dx + x,
+        c.dy + radiusY,
+      ),
+      CursorPadSector.left => Rect.fromLTRB(
+        c.dx - radiusX,
+        c.dy - y,
+        c.dx - x,
+        c.dy + y,
+      ),
+      CursorPadSector.right => Rect.fromLTRB(
+        c.dx + x,
+        c.dy - y,
+        c.dx + radiusX,
+        c.dy + y,
+      ),
+    };
+  }
+
   /// [sector] 구역 넓이 (dp², [sectorPath] 다각형의 신발끈 공식)
   double sectorArea(CursorPadSector sector) {
     if (_isEmpty) return 0;
@@ -650,6 +694,8 @@ class CursorPadGeometry {
 /// 가운데는 네 방향이 만나 손가락이 어느 쪽을 노렸는지 가장 모호한 곳이다. 가까운 방향으로 보내면
 /// 의도와 다른 방향으로 커서가 움직이는 오입력이 생기고(되돌리기 어렵다), 무시하면 다시 누르기만 하면 된다.
 /// 그래서 실물처럼 허브는 누를 수 없게 두고, 누른 채 허브로 미끄러지면 반복 입력도 멈춘다.
+///
+/// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분은 데드존).
 ///
 /// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
 /// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
@@ -686,16 +732,24 @@ class CursorPad extends StatelessWidget {
   static Path _leftPath(Size s) => sectorPath(CursorPadSector.left, s);
   static Path _rightPath(Size s) => sectorPath(CursorPadSector.right, s);
 
-  /// [size] 패드 안에서 [sector]의 시맨틱 영역 — 3×3 격자의 가장자리 가운데 칸 (서로 겹치지 않는다)
-  static Rect semanticRect(CursorPadSector sector, Size size) {
-    final w = size.width / 3;
-    final h = size.height / 3;
-    return switch (sector) {
-      CursorPadSector.up => Rect.fromLTWH(w, 0, w, h),
-      CursorPadSector.down => Rect.fromLTWH(w, 2 * h, w, h),
-      CursorPadSector.left => Rect.fromLTWH(0, h, w, h),
-      CursorPadSector.right => Rect.fromLTWH(2 * w, h, w, h),
-    };
+  /// [size] 패드 안에서 [sector]의 시맨틱 영역 ([CursorPadGeometry.semanticRect])
+  static Rect semanticRect(CursorPadSector sector, Size size) =>
+      CursorPadGeometry(size).semanticRect(sector);
+
+  /// 패드 셀([cell]) 안에 놓을 패드 상자 크기 — 가로/세로 비를
+  /// [CalcTheme.cursorPadMinAspectRatio]~[CalcTheme.cursorPadMaxAspectRatio]로 제한한 가장 큰 크기.
+  static Size fitSize(Size cell) {
+    final w = math.max(0.0, cell.width);
+    final h = math.max(0.0, cell.height);
+    if (w <= 0 || h <= 0) return Size.zero;
+    final aspect = w / h;
+    if (aspect > CalcTheme.cursorPadMaxAspectRatio) {
+      return Size(h * CalcTheme.cursorPadMaxAspectRatio, h);
+    }
+    if (aspect < CalcTheme.cursorPadMinAspectRatio) {
+      return Size(w, w / CalcTheme.cursorPadMinAspectRatio);
+    }
+    return Size(w, h);
   }
 
   /// 방향별 키 명세
@@ -738,45 +792,56 @@ class CursorPad extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = constraints.biggest;
-        if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
+        final cell = constraints.biggest;
+        if (!cell.isFinite || cell.isEmpty) return const SizedBox.shrink();
+        final size = fitSize(cell);
         final press = onKeyPressed;
         final strings = CalcSemanticStrings.of(context);
-        return Stack(
-          key: const ValueKey('cursor-pad'),
-          children: [
-            for (final sector in CursorPadSector.values)
-              Positioned.fromRect(
-                rect: sectorBox(sector, size),
-                child: ExcludeSemantics(
-                  child: buttonBuilder(defOf(sector), shapeOf(sector)),
+        return Center(
+          child: SizedBox.fromSize(
+            size: size,
+            child: Stack(
+              key: const ValueKey('cursor-pad'),
+              children: [
+                for (final sector in CursorPadSector.values)
+                  Positioned.fromRect(
+                    rect: sectorBox(sector, size),
+                    child: ExcludeSemantics(
+                      child: buttonBuilder(defOf(sector), shapeOf(sector)),
+                    ),
+                  ),
+                // X자 홈·외곽선·허브 (터치는 통과시킨다 — 허브 아래에는 키가 없어 데드존이 된다)
+                // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _CursorPadDecorationPainter(),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            // X자 홈·외곽선·허브 (터치는 통과시킨다 — 허브 아래에는 키가 없어 데드존이 된다)
-            const Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(painter: _CursorPadDecorationPainter()),
-              ),
+                // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
+                for (final sector in CursorPadSector.values)
+                  Positioned.fromRect(
+                    rect: semanticRect(sector, size),
+                    child: Semantics(
+                      container: true,
+                      button: true,
+                      enabled: press != null,
+                      label: strings.keyButton(defOf(sector).id),
+                      onTap: press == null
+                          ? null
+                          : () {
+                              if (enableHaptics) HapticFeedback.lightImpact();
+                              press(defOf(sector).id);
+                            },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+              ],
             ),
-            // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
-            for (final sector in CursorPadSector.values)
-              Positioned.fromRect(
-                rect: semanticRect(sector, size),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  enabled: press != null,
-                  label: strings.keyButton(defOf(sector).id),
-                  onTap: press == null
-                      ? null
-                      : () {
-                          if (enableHaptics) HapticFeedback.lightImpact();
-                          press(defOf(sector).id);
-                        },
-                  child: const SizedBox.expand(),
-                ),
-              ),
-          ],
+          ),
         );
       },
     );
