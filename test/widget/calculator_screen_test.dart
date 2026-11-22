@@ -514,7 +514,14 @@ void main() {
       for (final v in [l.top, l.lcdWidth, l.lcdHeight, l.gap, l.keypadHeight]) {
         expect(v, greaterThanOrEqualTo(0), reason: '$body $l');
       }
-      expect(l.lcdWidth, lessThanOrEqualTo(body.width), reason: '$body $l');
+      // LCD는 본체 안 가운데에 있다 (#92). 비유한·음수 본체는 폭 0으로 본다.
+      final width = body.width.isFinite ? math.max(0.0, body.width) : 0.0;
+      expect(l.lcdLeft, greaterThanOrEqualTo(0), reason: '$body $l');
+      expect(
+        l.lcdLeft * 2 + l.lcdWidth,
+        moreOrLessEquals(width, epsilon: 1e-9),
+        reason: '$body $l',
+      );
       expect(
         l.top + l.lcdHeight + l.gap + l.keypadHeight,
         moreOrLessEquals(body.height, epsilon: 1e-9),
@@ -561,9 +568,18 @@ void main() {
     });
 
     test('폰 폭에서는 LCD 폭이 본체 폭 그대로다 (#92 — 상한에 걸리지 않는다)', () {
-      for (final width in const [304.0, 344.0, 374.0, 396.0, 414.0, 480.0]) {
+      for (final width in const [
+        304.0,
+        344.0,
+        374.0,
+        396.0,
+        414.0,
+        424.0,
+        480.0,
+      ]) {
         final l = CalcScreenLayout.of(Size(width, 800));
         expect(l.lcdWidth, width, reason: '$l');
+        expect(l.lcdLeft, 0, reason: '$l');
       }
     });
 
@@ -572,6 +588,7 @@ void main() {
       const body = Size(1008, 1244);
       final l = CalcScreenLayout.of(body);
       expect(l.lcdWidth, CalcTheme.screenLcdMaxWidth);
+      expect(l.lcdLeft, moreOrLessEquals((1008 - 480) / 2));
       expect(l.lcdHeight, moreOrLessEquals(480 / 1.75));
       expect(l.keypadHeight, moreOrLessEquals(480 / 0.75));
       expect(l.top, moreOrLessEquals(1236 - 480 / 1.75 - 480 / 0.75));
@@ -612,6 +629,7 @@ void main() {
         final l = CalcScreenLayout.of(body);
         for (final v in [
           l.top,
+          l.lcdLeft,
           l.lcdWidth,
           l.lcdHeight,
           l.gap,
@@ -703,6 +721,7 @@ void main() {
       Size(390, 844),
       Size(412, 915),
       Size(430, 932),
+      Size(440, 956),
       Size(411, 960),
     ]) {
       for (final scale in [1.0, 1.3]) {

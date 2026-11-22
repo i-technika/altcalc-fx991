@@ -295,29 +295,34 @@ void main() {
       }
     }
 
-    testWidgets('12.9인치 iPad를 돌려도 LCD 폭은 480dp 그대로다', (tester) async {
+    testWidgets('12.9인치 iPad를 돌려도 LCD 크기와 줄 글자 크기가 그대로다', (tester) async {
       const padding = EdgeInsets.only(top: 24, bottom: 20);
+      const expected = Size(480, 480 / 1.75);
+      double lineFont() => DefaultTextStyle.of(
+        tester.element(find.byKey(const ValueKey('lcd-input-text'))),
+      ).style.fontSize!;
+
       final (container, _) = await _pump(
         tester,
         size: const Size(1024, 1366),
         padding: padding,
       );
-      expect(tester.getRect(_lcd).width, moreOrLessEquals(480));
-      await _pump(
-        tester,
-        size: const Size(1366, 1024),
-        padding: padding,
-        container: container,
-      );
-      expect(_settings, findsOneWidget); // 좌우 분할
-      expect(tester.getRect(_lcd).width, moreOrLessEquals(480));
-      await _pump(
-        tester,
-        size: const Size(1024, 1366),
-        padding: padding,
-        container: container,
-      );
-      expect(tester.getRect(_lcd).width, moreOrLessEquals(480));
+      expect(_settings, findsNothing); // 위아래 배치
+      expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
+      expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
+      final font = lineFont();
+
+      for (final size in const [Size(1366, 1024), Size(1024, 1366)]) {
+        await _pump(tester, size: size, padding: padding, container: container);
+        expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
+        expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
+        expect(lineFont(), moreOrLessEquals(font), reason: '$size');
+        // 가로는 좌우 분할(설정 버튼 있음), 세로는 위아래 배치
+        expect(
+          _settings,
+          size.width > size.height ? findsOneWidget : findsNothing,
+        );
+      }
     });
 
     // 폰·폴더블 커버 화면 폭에서는 상한에 걸리지 않는다 — LCD는 본체 폭 그대로다.
@@ -325,8 +330,10 @@ void main() {
       Size(320, 568),
       Size(390, 844),
       Size(430, 932),
+      Size(440, 956), // iPhone Pro Max
       Size(344, 882),
-      Size(844, 390), // 가로 폰 (짧은 창 #38) — 키패드는 높이에 묶여 좁지만 LCD는 본체 폭과 480 중 작은 쪽
+      // 가로 폰 (짧은 창 #38) — 폭이 480을 넘어 상한에 걸린다. 키패드는 높이에 묶여 LCD보다 좁다.
+      Size(844, 390),
     ]) {
       testWidgets('${size.width}×${size.height}: LCD 폭 = min(본체 폭, 480)', (
         tester,
