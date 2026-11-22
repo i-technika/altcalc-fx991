@@ -210,6 +210,15 @@ void main() {
       );
     });
 
+    test('스크롤 표시기·중간 결과는 화면 순서(▼, ▲, ‖)대로 읽는다', () {
+      expect(
+        ko.statusBar(
+          const LcdStatus(historyUp: true, historyDown: true, disp: true),
+        ),
+        '각도 단위 도, 수학 입출력, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중',
+      );
+    });
+
     test('FIX와 SCI는 각자의 의미로 읽고, 꺼진 쪽은 읽지 않는다 (#44 — 슬롯 분리)', () {
       const fix = LcdStatus(numberFormat: NumberDisplayFormat.fix);
       const sci = LcdStatus(numberFormat: NumberDisplayFormat.sci);

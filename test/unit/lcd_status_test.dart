@@ -47,11 +47,14 @@ void main() {
       ]);
     });
 
-    test('실물 순서 자료에 없는 잠정 슬롯은 E와 i/∠ 뿐이다', () {
-      expect(LcdIndicatorSlot.provisional, {
-        LcdIndicatorSlot.engineering,
-        LcdIndicatorSlot.complex,
-      });
+    test('잠정 슬롯은 문서에 적은 자리에 있다: E는 SCI 바로 뒤, i/∠는 √◻ 바로 뒤', () {
+      expect(
+        LcdIndicatorSlot.engineering.index,
+        LcdIndicatorSlot.sciFormat.index + 1,
+      );
+      expect(LcdIndicatorSlot.complex.index, LcdIndicatorSlot.math.index + 1);
+      // 잠정 슬롯이 늘면 위 자리 단언과 문서 주석도 함께 갱신한다.
+      expect(LcdIndicatorSlot.provisional, hasLength(2));
     });
 
     test('가이드의 표시기를 모두 표시할 수 있다 (☀는 앱에 해당 상태가 없어 제외, RCL은 가이드 표에 없음)', () {

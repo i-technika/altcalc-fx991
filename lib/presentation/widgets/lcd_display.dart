@@ -231,8 +231,8 @@ class LcdDisplay extends StatelessWidget {
   final double? resultFontSize;
 
   /// 꺼진 상태 표시기를 흐리게 보여줄지 여부 (실물 LCD의 꺼진 세그먼트 비침 효과).
-  /// 기본값 `true` — 색은 [CalcTheme.lcdStatusInactive](활성 색의 약 4%, 도트 격자보다 옅음)라
-  /// 정면에서는 사실상 보이지 않는다(#44, 실물 확인). 고대비 모드(#54)에서 불투명도를 올릴 자리로 둔다.
+  /// 기본값 `true` — 색은 [CalcTheme.lcdStatusInactive](활성 색의 약 4%, 사용자 결정)라
+  /// 정면에서는 거의 보이지 않는다(#44, 실물 확인). 고대비 모드(#54)에서 불투명도를 올릴 자리로 둔다.
   final bool showInactiveIndicators;
 
   /// 도트 매트릭스 격자 표시 여부
@@ -436,10 +436,17 @@ class LcdDisplay extends StatelessWidget {
 /// LCD 상단 상태 표시줄.
 ///
 /// [LcdIndicatorSlot] 순서대로 고정 너비 슬롯을 배치한다. 폭이 남으면 슬롯 사이를 고르게 벌려
-/// LCD 폭 전체에 분포시키고, 모자라면 줄 전체를 축소한다. 가로 위치는 이 균등 분포로 정한다(#44) —
-/// 실물 표시기의 세그먼트별 가로 좌표는 확인된 자료가 없고, 화면 폭이 기기마다 달라 고정 좌표를 옮길 수 없다. 표시기가 꺼져도 슬롯은 남으므로
-/// 다른 표시기의 위치가 바뀌지 않는다. 스크린리더에는 켜진 표시기의 의미만 읽힌다
-/// (예: "알파, 메모리, 각도 도, 수학 입출력" — [CalcSemanticStrings.statusBar]).
+/// LCD 폭 전체에 분포시키고, 모자라면 줄 전체를 축소한다. 표시기가 꺼져도 슬롯은 남으므로
+/// 다른 표시기의 위치가 바뀌지 않는다.
+///
+/// 가로 위치는 이 균등 분포로 정한다(#44). 실물 표시기의 가로 좌표 자료가 없어 LCD 폭 대비 비율 좌표를
+/// 정할 수 없기 때문이다 — 자료가 생기면 비율 좌표로 바꾼다(#58).
+///
+/// 스크린리더에는 켜진 표시기의 의미만 화면 순서대로 읽힌다
+/// (예: "시프트, 메모리, 각도 단위 도, 수학 입출력" — [CalcSemanticStrings.statusBar]).
+///
+/// 왼쪽 → 오른쪽 배치를 전제한다. [LcdDisplay]는 주변이 RTL이어도 LTR로 고정하므로, 단독으로 쓸 때도
+/// `Directionality(textDirection: TextDirection.ltr)` 아래에 둔다.
 class LcdStatusBar extends StatelessWidget {
   /// 표시할 상태
   final LcdStatus status;
@@ -468,11 +475,14 @@ class LcdStatusBar extends StatelessWidget {
         : style.copyWith(fontSize: CalcTheme.lcdStatusStyle.fontSize);
     final fontSize = textScaler.scale(resolvedStyle.fontSize!);
     final slots = LcdIndicatorSlot.values;
-    // 글자마다 글리프 폭 + 자간 (자간은 글자 배율과 무관한 dp)
-    final charWidth =
-        fontSize * CalcTheme.lcdStatusCharWidthRatio +
-        (resolvedStyle.letterSpacing ?? 0);
-    double slotWidth(LcdIndicatorSlot s) => charWidth * s.template.length;
+    // 글자마다 글리프 폭 + 자간 (자간은 글자 배율과 무관한 dp). 음수 자간이 글리프 폭보다 크면 0으로 둔다 —
+    // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 코드포인트(runes)로 센다.
+    final charWidth = math.max(
+      0.0,
+      fontSize * CalcTheme.lcdStatusCharWidthRatio +
+          (resolvedStyle.letterSpacing ?? 0),
+    );
+    double slotWidth(LcdIndicatorSlot s) => charWidth * s.template.runes.length;
     final slotsWidth = slots.map(slotWidth).fold(0.0, (a, b) => a + b);
     final minGap = fontSize * CalcTheme.lcdStatusSlotGapRatio;
 

@@ -165,6 +165,24 @@ void main() {
       });
     }
 
+    testWidgets('글리프 폭보다 큰 음수 자간을 넘겨도 예외 없이 그린다 (#44 리뷰 R2)', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox(
+              width: 300,
+              child: LcdStatusBar(
+                status: LcdStatus.initial,
+                style: CalcTheme.lcdStatusStyle.copyWith(letterSpacing: -7),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('주변이 RTL이어도 LCD는 왼쪽 → 오른쪽으로 배치된다', (tester) async {
       await _pump(
         tester,

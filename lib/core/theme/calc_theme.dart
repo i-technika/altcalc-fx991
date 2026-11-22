@@ -50,7 +50,7 @@ abstract final class CalcTheme {
 
   /// LCD 상태 표시줄 비활성 텍스트 — [lcdStatusActive]를 약 4% 불투명도로 (#44, 사용자 결정).
   /// 실물의 꺼진 표시기는 정면에서 거의 보이지 않고 비스듬히 볼 때만 희미하게 비친다(사용자 실물 확인).
-  /// 이 값은 도트 격자([lcdDotGrid])보다도 옅어 정면에서는 사실상 보이지 않는다(테스트로 고정).
+  /// 픽셀 색은 도트 격자선([lcdDotGrid])보다 옅다 — 다만 글자는 면이라 밝은 화면에서는 희미하게 보일 수 있다.
   /// 고대비 모드에서 올리는 것은 #54에서 다룬다.
   static const Color lcdStatusInactive = Color(0x0A2A2A2A);
 

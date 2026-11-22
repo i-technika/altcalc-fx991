@@ -94,7 +94,7 @@ abstract class CalcSemanticStrings {
   /// [slot] 표시기가 [status]에서 켜져 있으면 그 의미, 꺼져 있으면 `null`.
   String? indicator(LcdIndicatorSlot slot, LcdStatus status);
 
-  /// 상태 표시줄 전체 시맨틱 라벨 (켜진 표시기의 의미를 슬롯 순서로)
+  /// 상태 표시줄 전체 시맨틱 라벨 (켜진 표시기의 의미를 화면 순서 = 슬롯 순서로)
   String statusBar(LcdStatus status) =>
       [for (final slot in LcdIndicatorSlot.values) ?indicator(slot, status)]
           .join(', ');
