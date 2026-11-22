@@ -34,15 +34,17 @@ Future<void> main() async {
   );
 }
 
-/// 기기 종류([FormFactor.deviceKindOf])에 맞게 화면 방향을 고정한다 (#24).
-/// - 폰·폴더블: 세로 — 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아진다.
+/// 기기 종류([FormFactor.deviceKindOf])와 물리 화면 크기에 맞게 화면 방향을 고정한다 (#24, 폴더블은 #25).
+/// 정책은 [FormFactor.orientationPolicyOf]이다.
+/// - 폰·폴더블 커버 화면: 세로 — 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아진다.
 ///   (iPhone은 Info.plist에서도 세로만 허용해 실행 첫 프레임부터 세로로 뜬다.)
 /// - 태블릿: 가로 — LCD와 키패드를 좌우로 나눠 보여 준다. 단 Android 16 이상·iPad에서는 지켜지지 않는다
 ///   ([FormFactor] 참조). 그래서 화면 배치는 방향이 아니라 창 크기로 정한다(`CalculatorScreen`).
+/// - 폴더블 내부 화면: 네 방향 모두 — 배치가 접힘선 방향을 따른다.
 ///
-/// 폴더블은 시작 시 힌지 센서로 판정한다([FormFactor.queryHingeSensor]). 힌지 센서를 알리지 않는 폴더블에
-/// 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는 부분 정보 도착 등) 기기 종류를 다시 판정해
-/// 바뀌었을 때만 다시 요청한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
+/// 폴더블은 시작 시 힌지 센서로 판정한다([FormFactor.queryHingeSensor]). 힌지 센서를 알리지 않는 폴더블과
+/// 접기·펼치기(물리 화면이 커버 ↔ 내부로 바뀜)에 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는
+/// 부분 정보 도착 등) 정책을 다시 판정해 바뀌었을 때만 다시 요청한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
 /// 요청은 한 번에 하나씩 차례로 보내고, 성공한 요청만 기록한다 — 겹친 요청이 실패해도 기록이 어긋나지 않는다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
@@ -50,7 +52,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   /// 앱 전체에서 하나만 쓴다
   static final DeviceOrientationLock instance = DeviceOrientationLock._();
 
-  DeviceKind? _applied;
+  OrientationPolicy? _applied;
   bool _hasHingeSensor = false;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
@@ -59,11 +61,11 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   Future<void>? _pending;
   bool _observing = false;
 
-  /// 마지막으로 요청에 성공한 기기 종류 (아직 없으면 `null`)
+  /// 마지막으로 요청에 성공한 방향 정책 (아직 없으면 `null`)
   @visibleForTesting
-  DeviceKind? get appliedKind => _applied;
+  OrientationPolicy? get appliedPolicy => _applied;
 
-  /// 지금 기기 종류로 방향을 요청하고, 이후 화면 정보 변화를 관찰한다. 여러 번 불러도 관찰은 한 번이다.
+  /// 지금 화면의 방향 정책으로 방향을 요청하고, 이후 화면 정보 변화를 관찰한다. 여러 번 불러도 관찰은 한 번이다.
   Future<void> start({bool hasHingeSensor = false}) {
     _hasHingeSensor = hasHingeSensor;
     if (!_observing) {
@@ -83,19 +85,21 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _pending = null;
   }
 
-  /// 현재 기기 종류. 화면(view)이 없으면 폰으로 본다.
-  DeviceKind currentKind() {
+  /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다.
+  OrientationPolicy currentPolicy() {
     final dispatcher = WidgetsBinding.instance.platformDispatcher;
     final view = dispatcher.implicitView ?? dispatcher.views.firstOrNull;
-    if (view == null) return DeviceKind.phone;
-    return FormFactor.deviceKindOf(
-      FormFactor.displaySizeOf(view),
+    if (view == null) return OrientationPolicy.portrait;
+    final displaySize = FormFactor.displaySizeOf(view);
+    final kind = FormFactor.deviceKindOf(
+      displaySize,
       view.displayFeatures,
       hasHingeSensor: _hasHingeSensor,
     );
+    return FormFactor.orientationPolicyOf(kind, displaySize);
   }
 
-  /// 앞 요청이 끝난 뒤 지금 기기 종류로 요청한다. 실패해도 오류를 내보내지 않는다.
+  /// 앞 요청이 끝난 뒤 지금 정책으로 요청한다. 실패해도 오류를 내보내지 않는다.
   Future<void> _apply() {
     final previous = _pending;
     final next = previous == null
@@ -109,13 +113,13 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   Future<void> _applyNow() async {
-    final kind = currentKind();
-    if (kind == _applied) return;
+    final policy = currentPolicy();
+    if (policy == _applied) return;
     try {
       await SystemChrome.setPreferredOrientations(
-        FormFactor.preferredOrientationsFor(kind),
+        FormFactor.preferredOrientationsOf(policy),
       );
-      _applied = kind;
+      _applied = policy;
     } catch (error) {
       // 기록하지 않으므로 다음 화면 정보 변화 때 다시 시도한다.
       debugPrint('화면 방향 요청 실패: $error');

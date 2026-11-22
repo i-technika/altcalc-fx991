@@ -23,6 +23,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
+import '../support/touch_metrics.dart';
 
 /// 화면 크기·인셋을 지정해 [CalculatorScreen]을 띄우고 상태 컨테이너를 돌려준다.
 Future<ProviderContainer> _pumpScreen(
@@ -66,38 +67,6 @@ const _verticalFold = DisplayFeature(
 );
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
-
-/// 커서 패드 [sector] 구역에 들어가는 가장 큰 원의 지름 (0.5dp 격자 근사, dp).
-/// 구역 안 각 표본 점에서 구역 다각형 경계까지의 최소 거리 중 최댓값의 두 배다.
-double _inscribedDiameter(CursorPadGeometry g, CursorPadSector sector) {
-  final polygon = g.sectorPolygon(sector);
-  double distanceToEdge(Offset p, Offset a, Offset b) {
-    final ab = b - a;
-    final lengthSquared = ab.dx * ab.dx + ab.dy * ab.dy;
-    if (lengthSquared == 0) return (p - a).distance;
-    final ap = p - a;
-    final t = ((ap.dx * ab.dx + ap.dy * ab.dy) / lengthSquared).clamp(0.0, 1.0);
-    return (p - (a + ab * t)).distance;
-  }
-
-  final bounds = (Path()..addPolygon(polygon, true)).getBounds();
-  var best = 0.0;
-  for (var x = bounds.left; x <= bounds.right; x += 0.5) {
-    for (var y = bounds.top; y <= bounds.bottom; y += 0.5) {
-      final p = Offset(x, y);
-      if (g.sectorAt(p) != sector) continue;
-      var nearest = double.infinity;
-      for (var i = 0; i < polygon.length; i++) {
-        nearest = math.min(
-          nearest,
-          distanceToEdge(p, polygon[i], polygon[(i + 1) % polygon.length]),
-        );
-      }
-      best = math.max(best, nearest);
-    }
-  }
-  return best * 2;
-}
 
 String _lcdInputText(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(const ValueKey('lcd-input-text'))).data!;
@@ -271,31 +240,47 @@ void main() {
       );
     }
 
-    testWidgets('폴더블(힌지 센서): 펼친 내부 화면에서도 처음부터 세로만 요청하고 위아래 배치로 띄운다', (
-      tester,
-    ) async {
-      SharedPreferences.setMockInitialValues({});
-      // Fold 내부 화면을 가로로 든 상태, 접힘 정보는 아직 도착 전
-      setDevice(tester, const Size(829, 690));
-      mockHingeSensor(tester, hinge: true);
-      final calls = recordPlatformCalls(tester);
-      await app.main();
-      await tester.pump();
-      expect(orientationRequests(calls), [
-        ['DeviceOrientation.portraitUp'],
-      ]);
-      expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.foldable);
-      expect(find.byKey(SettingsButton.buttonKey), findsNothing);
-
-      // 접힘 정보가 나중에 와도 다시 요청하지 않는다.
-      tester.view.displayFeatures = const [_verticalFold];
-      addTearDown(tester.view.resetDisplayFeatures);
-      await tester.pump();
-      expect(orientationRequests(calls), hasLength(1));
-    });
+    /// 네 방향 모두 허용 요청 ([OrientationPolicy.any])
+    final anyOrientation = [
+      for (final o in FormFactor.preferredOrientationsOf(OrientationPolicy.any))
+        o.toString(),
+    ];
 
     testWidgets(
-      '힌지 센서를 알리지 않는 폴더블: 접힘 정보가 오면 세로로 다시 요청하고, 같은 종류면 다시 요청하지 않는다',
+      '폴더블(힌지 센서): 펼친 내부 화면은 처음부터 네 방향을 허용하고, 접힘 정보가 오면 접힘선 기준으로 나눈다',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // 내부 화면을 가로로 든 상태, 접힘 정보는 아직 도착 전
+        setDevice(tester, const Size(841, 701));
+        mockHingeSensor(tester, hinge: true);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.any,
+        );
+        // 접힘 정보가 오기 전에는 위아래 배치 (깜빡임 방지)
+        expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+
+        // 접힘 정보가 오면 다시 요청하지 않고, 접힘선(x = 420) 양쪽에 LCD·키패드를 나눈다.
+        tester.view.displayFeatures = const [_verticalFold];
+        addTearDown(tester.view.resetDisplayFeatures);
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(1));
+        expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+        final lcd = tester.getRect(find.byType(LcdDisplay));
+        final keypad = tester.getRect(
+          find.byKey(const ValueKey('calc-keypad')),
+        );
+        expect(lcd.right, lessThanOrEqualTo(420));
+        expect(keypad.left, greaterThanOrEqualTo(420));
+      },
+    );
+
+    testWidgets(
+      '힌지 센서를 알리지 않는 폴더블: 접힘 정보가 오면 네 방향 허용으로 다시 요청하고, 같은 정책이면 다시 요청하지 않는다',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         setDevice(tester, const Size(841, 701));
@@ -304,24 +289,84 @@ void main() {
         await tester.pump();
         // 힌지 센서 정보가 없으면 시작 시점에는 태블릿으로 판정된다(대비책 경로).
         expect(orientationRequests(calls), hasLength(1));
-        expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.tablet);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.landscape,
+        );
 
         tester.view.displayFeatures = const [_verticalFold];
         addTearDown(tester.view.resetDisplayFeatures);
         await tester.pump();
-        expect(orientationRequests(calls).last, [
-          'DeviceOrientation.portraitUp',
-        ]);
-        expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.foldable);
-        // 접힘선이 창을 지나므로 위아래 배치다 (힌지 기준 분할은 #25).
-        expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+        expect(orientationRequests(calls).last, anyOrientation);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.any,
+        );
+        // 접힘선이 창을 가로지르므로 접힘선 기준 좌우 배치다.
+        expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
 
-        // 기기 종류가 그대로인 화면 정보 변화(회전 등)에는 다시 요청하지 않는다.
+        // 정책이 그대로인 화면 정보 변화(회전 등)에는 다시 요청하지 않는다.
         tester.view.physicalSize = const Size(701, 841) * 2;
         await tester.pump();
         expect(orientationRequests(calls), hasLength(2));
       },
     );
+
+    testWidgets('폴더블: 접으면 세로로, 펴면 네 방향 허용으로 다시 요청하고 계산기 상태는 유지된다', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      const inner = Size(673, 841);
+      const cover = Size(344, 882);
+      const innerFold = DisplayFeature(
+        bounds: Rect.fromLTWH(336.5, 0, 0, 841),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureFlat,
+      );
+      setDevice(tester, inner);
+      tester.view.displayFeatures = const [innerFold];
+      addTearDown(tester.view.resetDisplayFeatures);
+      mockHingeSensor(tester, hinge: true);
+      final calls = recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      expect(orientationRequests(calls), [anyOrientation]);
+      expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+
+      // 펼친 화면에서 키를 누른다.
+      await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)));
+      await tester.pump();
+      final input = _lcdInputText(tester);
+      expect(input, isNotEmpty);
+      final lcdElement = tester.element(find.byType(LcdDisplay));
+      final keypadElement = tester.element(
+        find.byKey(const ValueKey('calc-keypad')),
+      );
+
+      // 접는다: 커버 화면으로 바뀌고 접힘 정보가 사라진다.
+      tester.view.display.size = cover * 2;
+      tester.view.physicalSize = cover * 2;
+      tester.view.displayFeatures = const [];
+      await tester.pump();
+      expect(orientationRequests(calls).last, ['DeviceOrientation.portraitUp']);
+      expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+      expect(_lcdInputText(tester), input);
+      expect(tester.element(find.byType(LcdDisplay)), same(lcdElement));
+      expect(
+        tester.element(find.byKey(const ValueKey('calc-keypad'))),
+        same(keypadElement),
+      );
+
+      // 다시 편다.
+      tester.view.display.size = inner * 2;
+      tester.view.physicalSize = inner * 2;
+      tester.view.displayFeatures = const [innerFold];
+      await tester.pump();
+      expect(orientationRequests(calls).last, anyOrientation);
+      expect(orientationRequests(calls), hasLength(3));
+      expect(_lcdInputText(tester), input);
+      expect(tester.element(find.byType(LcdDisplay)), same(lcdElement));
+    });
 
     testWidgets('방향 요청이 실패해도 앱은 뜨고, 다음 화면 정보 변화 때 다시 요청한다', (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -348,19 +393,22 @@ void main() {
       await tester.pump();
       expect(find.byType(CalculatorScreen), findsOneWidget);
       expect(attempts, 1);
-      expect(DeviceOrientationLock.instance.appliedKind, isNull);
+      expect(DeviceOrientationLock.instance.appliedPolicy, isNull);
 
       fail = false;
       tester.view.physicalSize = const Size(391, 844) * 2;
       await tester.pump();
       expect(attempts, 2);
-      expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.phone);
+      expect(
+        DeviceOrientationLock.instance.appliedPolicy,
+        OrientationPolicy.portrait,
+      );
     });
   });
 
   group('세로 폰 화면의 키 크기 하한', () {
     // 터치 높이(dp) 하한, 배율 반영 메인·각인 글자(dp) 하한
-    const minTouchHeight = 28.0;
+    const minTouchHeight = CalcTheme.keyTouchHeightFloor;
     const minMainFont = 7.0;
     const minLegendFont = 5.0;
 
@@ -441,7 +489,7 @@ void main() {
             final wide =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
             expect(
-              _inscribedDiameter(g, sector),
+              inscribedDiameter(g, sector),
               greaterThanOrEqualTo(minTouchHeight * (wide ? 1.0 : 0.9)),
               reason: '${sector.name} 내접원 $pad',
             );

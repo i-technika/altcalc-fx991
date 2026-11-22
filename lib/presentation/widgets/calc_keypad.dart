@@ -114,18 +114,44 @@ class KeypadMetrics {
   ///    `FittedBox`가 개별로 줄인다.
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
-  factory KeypadMetrics.compute(Size available, TextScaler textScaler) {
-    final size = fitSize(available);
-    final horizontalGap = size.width * CalcTheme.keyHorizontalGapRatio;
+  /// 키패드 크기 [size]의 세로 치수: (키 사이 세로 간격, 구역 간격, 함수부 행 높이, 숫자부 행 높이)
+  static (double, double, double, double) _rowsOf(Size size) {
     final verticalGap = size.height * CalcTheme.keyVerticalGapRatio;
     final sectionGap = size.height * CalcTheme.keypadSectionGapRatio;
-
     final rowUnits =
         functionRowCount +
         numberRows.length * CalcTheme.keypadNumberRowHeightRatio;
     final rowUnit = math.max(0.0, size.height - sectionGap) / rowUnits;
-    final functionRowHeight = rowUnit;
-    final numberRowHeight = rowUnit * CalcTheme.keypadNumberRowHeightRatio;
+    return (
+      verticalGap,
+      sectionGap,
+      rowUnit,
+      rowUnit * CalcTheme.keypadNumberRowHeightRatio,
+    );
+  }
+
+  /// [available] 영역에 키패드를 놓았을 때 가장 낮은 키의 터치 높이 (dp, 커서 패드 제외).
+  ///
+  /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
+  /// 넓힌 셀 높이, 아니면 키캡 높이. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
+  static double minKeyTouchHeightOf(Size available) {
+    final (verticalGap, _, functionRowHeight, numberRowHeight) = _rowsOf(
+      fitSize(available),
+    );
+    double touchOf(double rowHeight) {
+      final cell = math.max(0.0, rowHeight - verticalGap);
+      final cap = cell * (1 - CalcTheme.keyLegendHeightRatio);
+      return cap < CalcTheme.keyMinTouchTargetHeight ? cell : cap;
+    }
+
+    return math.min(touchOf(functionRowHeight), touchOf(numberRowHeight));
+  }
+
+  factory KeypadMetrics.compute(Size available, TextScaler textScaler) {
+    final size = fitSize(available);
+    final horizontalGap = size.width * CalcTheme.keyHorizontalGapRatio;
+    final (verticalGap, sectionGap, functionRowHeight, numberRowHeight) =
+        _rowsOf(size);
 
     // CalcKeyButton 내부 치수와 같은 방식으로 각인 띠·키캡 높이를 구한다.
     double capHeightOf(double rowHeight) =>
