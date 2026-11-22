@@ -32,11 +32,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
 
-      - name: Setup Java (Temurin 17)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+      # setup-java는 두지 않고 러너 이미지의 기본 JDK(현재 25, 없어도 된다)를 쓴다 — JDK를 지운 러너로 확인한 기록은 #102.
+      # 이 잡에서 JDK를 찾는 곳은 flutter doctor(진단 출력뿐)와 Linux 빌드의 jni FFI 플러그인(shared_preferences_android의
+      # 전이 의존성, jni 1.1.2 기준 JDK가 없으면 libdartjni.so만 빼고 빌드 — 앱은 Linux에서 jni를 안 쓴다)뿐이다.
+      # Java 버전이 중요한 일은 아래 android-unit-test 잡(Java 21)과 Milestone CI의 build-android 잡이 맡는다.
 
       # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
       # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
