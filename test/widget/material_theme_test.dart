@@ -153,13 +153,63 @@ Finder _ringBoxOf(Finder target) => find.descendant(
   matching: find.byKey(FocusRing.ringKey),
 );
 
+/// [target]을 감싼 [FocusRing]의 렌더 객체
+RenderFocusRing _ringRenderOf(WidgetTester tester, Finder target) =>
+    tester.renderObject<RenderFocusRing>(_ringBoxOf(target));
+
 /// [target]을 감싼 [FocusRing]이 그리는 테두리 (안 그리면 `null`)
 BorderSide? _ringOf(WidgetTester tester, Finder target) {
-  final decoration = tester.widget<DecoratedBox>(_ringBoxOf(target)).decoration;
-  return decoration is ShapeDecoration
-      ? (decoration.shape as OutlinedBorder).side
-      : null;
+  final ring = _ringRenderOf(tester, target);
+  return ring.ringRect == null ? null : ring.side;
 }
+
+/// [target]을 감싼 [FocusRing]이 테두리를 그리는 영역 (화면 좌표)
+Rect _ringRectOf(WidgetTester tester, Finder target) {
+  final ring = _ringRenderOf(tester, target);
+  return MatrixUtils.transformRect(ring.getTransformTo(null), ring.ringRect!);
+}
+
+/// [target]을 감싼 [FocusRing]이 [color] 테두리를 실제로 그리는지 — [OutlinedBorder.paint]가 모양마다 다른 호출을 쓴다
+/// (StadiumBorder: 선 그리기 rrect, RoundedRectangleBorder: 채운 drrect).
+/// [at](화면 좌표)을 주면 그 자리에 그리는지도 본다 — 기대 위치를 렌더 객체의 계산(`ringRect`)과 따로 구해야
+/// "계산은 맞고 그리기는 다른 곳" 같은 회귀를 잡는다. 기대 도형은 각 모양의 paint와 같은 계산(안쪽 정렬 2dp 선)이다.
+PaintPattern _paintsFocusRing(
+  WidgetTester tester,
+  Finder target,
+  Color color, {
+  Rect? at,
+}) {
+  final ring = _ringRenderOf(tester, target);
+  // paints 매처는 렌더 객체를 자기 원점(0, 0)에 그린다
+  final local = at?.shift(-ring.localToGlobal(Offset.zero));
+  const w = CalcTheme.materialFocusRingWidth;
+  return switch (ring.shape) {
+    StadiumBorder() =>
+      paints..rrect(
+        rrect: local == null
+            ? null
+            : RRect.fromRectAndRadius(
+                local,
+                Radius.circular(local.shortestSide / 2),
+              ).deflate(w / 2),
+        color: color,
+        style: PaintingStyle.stroke,
+      ),
+    RoundedRectangleBorder(borderRadius: BorderRadius.zero) =>
+      paints..drrect(
+        outer: local == null ? null : RRect.fromRectAndCorners(local),
+        inner: local == null
+            ? null
+            : RRect.fromRectAndCorners(local.deflate(w)),
+        color: color,
+      ),
+    final other => throw StateError('기대 도형을 모르는 모양: $other'),
+  };
+}
+
+/// [target] 안의 첫 [InkWell] (버튼·타일이 포커스를 받는 곳이자 보이는 면)
+Finder _inkWellOf(Finder target) =>
+    find.descendant(of: target, matching: find.byType(InkWell)).first;
 
 Finder _option(Handedness h) => find.byKey(HandednessDialog.optionKeyOf(h));
 final _closeButton = find.byKey(HandednessDialog.closeKey);
@@ -396,152 +446,278 @@ void main() {
     }
   });
 
-  group('고대비 설정에서 키보드 포커스 표시 (#97)', () {
-    testWidgets('포커스한 선택지·닫기 버튼에만 대화상자 면과 3:1 이상인 테두리를 그린다', (tester) async {
-      _setDevice(tester, highContrast: true);
-      await _pumpApp(tester);
-      await _openDialog(tester);
-      final surface = _dialogSurface(tester).color!;
-      final targets = [
-        for (final h in Handedness.values) _option(h),
-        _closeButton,
-      ];
-      for (final target in targets) {
-        await _focusByKeyboard(tester, target);
-        for (final other in targets) {
-          final ring = _ringOf(tester, other);
-          if (other != target) {
-            expect(ring, isNull, reason: '$target 포커스 중 $other');
-            continue;
+  group('키보드 포커스 표시 (고대비 #97, 일반 모드 #106)', () {
+    for (final highContrast in [false, true]) {
+      final mode = highContrast ? '고대비' : '일반 모드';
+      final expectedColor = highContrast
+          ? CalcTheme.materialFocusRingHighContrast
+          : CalcTheme.materialFocusRingStandard;
+
+      testWidgets(
+        '$mode: 포커스한 선택지·닫기 버튼에만 테두리를 그리고, 포커스 전 같은 자리(대화상자 면)와 3:1 이상이다',
+        (tester) async {
+          _setDevice(tester, highContrast: highContrast);
+          await _pumpApp(tester);
+          await _openDialog(tester);
+          final surface = _dialogSurface(tester).color!;
+          final theme = Theme.of(tester.element(find.byType(HandednessDialog)));
+          // 테두리 안쪽에 맞닿는 Material 기본 포커스 겹침 — 위젯이 실제로 쓰는 값을 읽는다.
+          // 선택지 타일의 InkWell은 색을 받지 않아 테마의 focusColor를 쓴다(그 전제를 먼저 확인).
+          final fills = <Finder, Color>{};
+          for (final h in Handedness.values) {
+            final ink = tester.widget<InkWell>(_inkWellOf(_option(h)));
+            expect(ink.focusColor, isNull);
+            expect(ink.overlayColor, isNull);
+            fills[_option(h)] = Color.alphaBlend(theme.focusColor, surface);
           }
-          expect(ring, isNotNull, reason: '$target');
-          expect(ring!.width, greaterThanOrEqualTo(2.0));
-          expect(ring.strokeAlign, BorderSide.strokeAlignInside);
-          expect(
-            _contrast(ring.color, surface),
-            greaterThanOrEqualTo(_nonText),
+          final closeInk = tester.widget<InkWell>(_inkWellOf(_closeButton));
+          fills[_closeButton] = Color.alphaBlend(
+            closeInk.overlayColor!.resolve({WidgetState.focused})!,
+            surface,
           );
+          for (final target in fills.keys) {
+            await _focusByKeyboard(tester, target);
+            for (final other in fills.keys) {
+              final ring = _ringOf(tester, other);
+              if (other != target) {
+                expect(ring, isNull, reason: '$target 포커스 중 $other');
+                continue;
+              }
+              expect(ring, isNotNull, reason: '$target');
+              expect(ring!.color, expectedColor, reason: '$target');
+              expect(ring.width, greaterThanOrEqualTo(2.0));
+              expect(ring.strokeAlign, BorderSide.strokeAlignInside);
+              // 실제로 그 색으로 그린다
+              expect(
+                _ringBoxOf(target),
+                _paintsFocusRing(tester, target, ring.color),
+              );
+              // WCAG 2.4.13: 포커스 전후 같은 픽셀(테두리 자리 = 대화상자 면)
+              expect(
+                _contrast(ring.color, surface),
+                greaterThanOrEqualTo(_nonText),
+                reason: '$target 대화상자 면',
+              );
+              // 추가 확인: 테두리 안쪽에 맞닿는 포커스 겹침과의 인접 대비
+              expect(
+                _contrast(ring.color, fills[target]!),
+                greaterThanOrEqualTo(_nonText),
+                reason: '$target 포커스 겹침',
+              );
+            }
+          }
+        },
+      );
+
+      testWidgets(
+        '$mode: 테두리는 보이는 버튼·타일에 맞춰 그린다 (닫기 버튼은 48dp 터치 여백이 아니라 보이는 면)',
+        (tester) async {
+          _setDevice(tester, highContrast: highContrast);
+          await _pumpApp(tester);
+          await _openDialog(tester);
+          final dialogShape =
+              _dialogSurface(tester).shape! as RoundedRectangleBorder;
+          // 고대비 대화상자 가장자리 선은 내용 위에 그려지므로 그 굵기만큼 안쪽, 선이 없는 일반 모드는 타일 전체
+          final edge = highContrast ? dialogShape.side.width : 0.0;
+          expect(edge, highContrast ? greaterThan(0) : 0);
+          for (final h in Handedness.values) {
+            await _focusByKeyboard(tester, _option(h));
+            final tile = tester.getRect(_inkWellOf(_option(h)));
+            final expected = EdgeInsets.symmetric(horizontal: edge)
+                .deflateRect(tile);
+            expect(_ringRectOf(tester, _option(h)), expected, reason: '$h');
+            expect(
+              _ringBoxOf(_option(h)),
+              _paintsFocusRing(tester, _option(h), expectedColor, at: expected),
+              reason: '$h',
+            );
+          }
+
+          await _focusByKeyboard(tester, _closeButton);
+          final visible = find
+              .descendant(of: _closeButton, matching: find.byType(Material))
+              .first;
+          // 닫기 버튼은 터치 영역(위젯)이 보이는 면보다 크다 — 이 검사가 그 차이를 실제로 다루는지 확인
+          expect(
+            tester.getSize(visible).height,
+            lessThan(tester.getSize(_closeButton).height),
+          );
+          expect(_ringRectOf(tester, _closeButton), tester.getRect(visible));
+          expect(
+            _ringBoxOf(_closeButton),
+            _paintsFocusRing(
+              tester,
+              _closeButton,
+              expectedColor,
+              at: tester.getRect(visible),
+            ),
+          );
+          expect(
+            tester.widget<Material>(visible).shape,
+            _ringRenderOf(tester, _closeButton).shape,
+          );
+        },
+      );
+
+      testWidgets(
+        '$mode: 설정 버튼에도 보이는 면에 맞춰 테두리를 그리고, 본체와 3:1 이상이며 버튼 크기는 그대로다',
+        (tester) async {
+          _setDevice(tester, highContrast: highContrast);
+          await _pumpApp(tester);
+          final sizeBefore = tester.getSize(_settingsButton);
+          expect(_ringOf(tester, _settingsButton), isNull);
+          await _focusByKeyboard(tester, _settingsButton);
+          final ring = _ringOf(tester, _settingsButton);
+          expect(ring, isNotNull);
+          expect(ring!.color, expectedColor);
+          expect(ring.width, greaterThanOrEqualTo(2.0));
+          expect(
+            _ringBoxOf(_settingsButton),
+            _paintsFocusRing(tester, _settingsButton, ring.color),
+          );
+          final visible = find
+              .descendant(of: _settingsButton, matching: find.byType(Material))
+              .first;
+          expect(_ringRectOf(tester, _settingsButton), tester.getRect(visible));
+          expect(
+            _ringBoxOf(_settingsButton),
+            _paintsFocusRing(
+              tester,
+              _settingsButton,
+              expectedColor,
+              at: tester.getRect(visible),
+            ),
+          );
+          final ink = tester.widget<InkWell>(_inkWellOf(_settingsButton));
+          final backgrounds = {
+            // WCAG 2.4.13: 포커스 전후 같은 픽셀
+            '본체': CalcTheme.bodyBackground,
+            // 추가 확인: IconButton 기본 포커스 겹침과의 인접 대비 (위젯이 실제로 쓰는 값)
+            '포커스 겹침': Color.alphaBlend(
+              ink.overlayColor!.resolve({WidgetState.focused})!,
+              CalcTheme.bodyBackground,
+            ),
+          };
+          for (final MapEntry(key: name, value: bg) in backgrounds.entries) {
+            expect(
+              _contrast(ring.color, bg),
+              greaterThanOrEqualTo(_nonText),
+              reason: name,
+            );
+          }
+          expect(tester.getSize(_settingsButton), sizeBefore);
+          expect(
+            tester.getSize(_settingsButton),
+            const Size.square(CalcTheme.settingsButtonSize),
+          );
+        },
+      );
+
+      testWidgets('$mode: 터치 조작 중(포커스 표시 꺼짐)에는 포커스가 있어도 테두리를 그리지 않는다', (
+        tester,
+      ) async {
+        _setDevice(tester, highContrast: highContrast);
+        await _pumpApp(tester);
+        await _openDialog(tester);
+        _setHighlightStrategy(FocusHighlightStrategy.alwaysTouch);
+        for (final target in [_option(Handedness.left), _closeButton]) {
+          await _focus(tester, target);
+          expect(_ringOf(tester, target), isNull, reason: '$target');
+          expect(
+            _ringBoxOf(target),
+            isNot(_paintsFocusRing(tester, target, expectedColor)),
+            reason: '$target',
+          );
+          // 키보드를 쓰기 시작하면 바로 보인다
+          FocusManager.instance.highlightStrategy =
+              FocusHighlightStrategy.alwaysTraditional;
+          await tester.pump();
+          expect(_ringOf(tester, target), isNotNull, reason: '$target');
+          FocusManager.instance.highlightStrategy =
+              FocusHighlightStrategy.alwaysTouch;
+          await tester.pump();
+          expect(_ringOf(tester, target), isNull, reason: '$target 터치로 복귀');
         }
-      }
-    });
+        // 설정 버튼도 같다
+        await tester.tap(_closeButton);
+        await tester.pumpAndSettle();
+        await _focus(tester, _settingsButton);
+        expect(_ringOf(tester, _settingsButton), isNull);
+      });
 
-    testWidgets('선택지 테두리는 대화상자 가장자리 선에 덮이지 않게 그 굵기만큼 안쪽에 그린다', (tester) async {
-      _setDevice(tester, highContrast: true);
-      await _pumpApp(tester);
-      await _openDialog(tester);
-      final dialogShape =
-          _dialogSurface(tester).shape! as RoundedRectangleBorder;
-      final surface = tester.getRect(
-        find
-            .descendant(
-              of: find.byType(AlertDialog),
-              matching: find.byType(Material),
-            )
-            .first,
-      );
-      for (final h in Handedness.values) {
-        final ring = tester.getRect(_ringBoxOf(_option(h)));
+      testWidgets('$mode: 실제 앱 설정(자동 판정)에서 키를 누르면 테두리가 보이고, 화면을 탭하면 사라진다', (
+        tester,
+      ) async {
+        _setDevice(tester, highContrast: highContrast);
         expect(
-          ring.left,
-          greaterThanOrEqualTo(surface.left + dialogShape.side.width),
+          FocusManager.instance.highlightStrategy,
+          FocusHighlightStrategy.automatic,
         );
+        await _pumpApp(tester);
+        await _openDialog(tester); // 탭으로 열었다 — 터치 조작 중
+        await _focus(tester, _option(Handedness.right));
+        expect(_ringOf(tester, _option(Handedness.right)), isNull);
+        // 선택·포커스를 바꾸지 않는 키
+        await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+        expect(_ringOf(tester, _option(Handedness.right)), isNotNull);
+        // 동작이 없는 곳(제목)을 탭하면 터치 조작으로 돌아간다
+        await tester.tap(find.text(_strings.handednessTitle));
+        await tester.pump();
+        expect(_ringOf(tester, _option(Handedness.right)), isNull);
+      });
+
+      testWidgets('$mode: 키보드 조작 중에 대화상자를 열면(포커스 표시가 이미 켜진 상태) 바로 테두리를 그린다', (
+        tester,
+      ) async {
+        _setDevice(tester, highContrast: highContrast);
+        _setHighlightStrategy(FocusHighlightStrategy.alwaysTraditional);
+        await _pumpApp(tester);
+        await _focus(tester, _settingsButton);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.byType(HandednessDialog), findsOneWidget);
+        // 대화상자가 열린 뒤 포커스 표시 방식은 바뀌지 않았다 — 테두리 위젯의 초깃값으로 그린다.
+        await _focus(tester, _option(Handedness.left));
+        expect(_ringOf(tester, _option(Handedness.left)), isNotNull);
+      });
+
+      testWidgets('$mode: 키보드 화살표로 선택지를 옮기면 테두리도 따라가고 선택도 바로 저장된다', (
+        tester,
+      ) async {
+        _setDevice(tester, highContrast: highContrast);
+        await _pumpApp(tester);
+        await _openDialog(tester);
+        await _focusByKeyboard(tester, _option(Handedness.right));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(_ringOf(tester, _option(Handedness.right)), isNull);
+        expect(_ringOf(tester, _option(Handedness.left)), isNotNull);
+        final prefs = await SharedPreferences.getInstance();
         expect(
-          ring.right,
-          lessThanOrEqualTo(surface.right - dialogShape.side.width),
+          prefs.getString(HandednessNotifier.storageKey),
+          Handedness.left.storageValue,
         );
-      }
-    });
+      });
+    }
 
-    testWidgets('설정 버튼에도 포커스 테두리를 그리고, 본체와 3:1 이상이며 버튼 크기는 그대로다', (
-      tester,
-    ) async {
-      _setDevice(tester, highContrast: true);
-      await _pumpApp(tester);
-      final sizeBefore = tester.getSize(_settingsButton);
-      expect(_ringOf(tester, _settingsButton), isNull);
-      await _focusByKeyboard(tester, _settingsButton);
-      final ring = _ringOf(tester, _settingsButton);
-      expect(ring, isNotNull);
-      expect(ring!.width, greaterThanOrEqualTo(2.0));
-      expect(
-        _contrast(ring.color, CalcTheme.bodyBackground),
-        greaterThanOrEqualTo(_nonText),
-      );
-      expect(tester.getSize(_settingsButton), sizeBefore);
-      expect(
-        tester.getSize(_settingsButton),
-        const Size.square(CalcTheme.settingsButtonSize),
-      );
-    });
-
-    testWidgets('키보드 조작 중에 대화상자를 열면(포커스 표시가 이미 켜진 상태) 바로 테두리를 그린다', (
-      tester,
-    ) async {
-      _setDevice(tester, highContrast: true);
-      _setHighlightStrategy(FocusHighlightStrategy.alwaysTraditional);
-      await _pumpApp(tester);
-      await _focus(tester, _settingsButton);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(find.byType(HandednessDialog), findsOneWidget);
-      // 대화상자가 열린 뒤 포커스 표시 방식은 바뀌지 않았다 — 테두리 위젯의 초깃값으로 그린다.
-      await _focus(tester, _option(Handedness.left));
-      expect(_ringOf(tester, _option(Handedness.left)), isNotNull);
-    });
-
-    testWidgets('터치 조작 중(포커스 표시 꺼짐)에는 포커스가 있어도 테두리를 그리지 않는다', (tester) async {
-      _setDevice(tester, highContrast: true);
-      await _pumpApp(tester);
-      await _openDialog(tester);
-      _setHighlightStrategy(FocusHighlightStrategy.alwaysTouch);
-      for (final target in [_option(Handedness.left), _closeButton]) {
-        await _focus(tester, target);
-        expect(_ringOf(tester, target), isNull, reason: '$target');
-        // 키보드를 쓰기 시작하면 바로 보인다
-        FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.alwaysTraditional;
-        await tester.pump();
-        expect(_ringOf(tester, target), isNotNull, reason: '$target');
-        FocusManager.instance.highlightStrategy =
-            FocusHighlightStrategy.alwaysTouch;
-        await tester.pump();
-        expect(_ringOf(tester, target), isNull, reason: '$target 터치로 복귀');
-      }
-      // 설정 버튼도 같다
-      await tester.tap(_closeButton);
-      await tester.pumpAndSettle();
-      await _focus(tester, _settingsButton);
-      expect(_ringOf(tester, _settingsButton), isNull);
-    });
-
-    testWidgets('일반 모드에서는 포커스 테두리를 그리지 않는다 (Material 기본 포커스 표시 그대로)', (
-      tester,
-    ) async {
+    testWidgets('키보드 포커스 중 고대비를 켜고 끄면 테두리가 그 모드의 색으로 바로 바뀐다', (tester) async {
       _setDevice(tester, highContrast: false);
       await _pumpApp(tester);
       await _focusByKeyboard(tester, _settingsButton);
-      expect(_ringOf(tester, _settingsButton), isNull);
-      await _openDialog(tester);
-      for (final target in [_option(Handedness.left), _closeButton]) {
-        await _focusByKeyboard(tester, target);
-        expect(_ringOf(tester, target), isNull, reason: '$target');
+      for (final (highContrast, expected) in [
+        (false, CalcTheme.materialFocusRingStandard),
+        (true, CalcTheme.materialFocusRingHighContrast),
+        (false, CalcTheme.materialFocusRingStandard),
+      ]) {
+        _setDevice(tester, highContrast: highContrast);
+        await tester.pump();
+        expect(
+          _ringOf(tester, _settingsButton)?.color,
+          expected,
+          reason: 'highContrast=$highContrast',
+        );
       }
-    });
-
-    testWidgets('키보드 화살표로 선택지를 옮기면 테두리도 따라가고 선택도 바로 저장된다', (tester) async {
-      _setDevice(tester, highContrast: true);
-      await _pumpApp(tester);
-      await _openDialog(tester);
-      await _focusByKeyboard(tester, _option(Handedness.right));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pumpAndSettle();
-      expect(_ringOf(tester, _option(Handedness.right)), isNull);
-      expect(_ringOf(tester, _option(Handedness.left)), isNotNull);
-      final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getString(HandednessNotifier.storageKey),
-        Handedness.left.storageValue,
-      );
     });
   });
 

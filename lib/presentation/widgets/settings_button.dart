@@ -84,7 +84,7 @@ class SettingsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = SettingsStrings.of(context);
-    // 고대비 키보드 포커스 테두리 (#97) — IconButton의 M3 기본 모양(정사각형 자리에서는 원)
+    // 키보드 포커스 테두리 (고대비 #97, 일반 모드 #106) — IconButton의 M3 기본 모양(정사각형 자리에서는 원)
     return FocusRing(
       shape: const StadiumBorder(),
       child: IconButton(
