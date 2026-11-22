@@ -598,6 +598,8 @@ void main() {
       final short = CalcScreenLayout.of(const Size(2000, 300));
       expect(short.lcdWidth, CalcTheme.screenLcdMaxWidth);
       expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
+      expect(short.lcdLeft, moreOrLessEquals((2000 - 480) / 2));
+      expectSumsToBody(const Size(2000, 300), short);
     });
 
     test('좁은 폭에서도 LCD 최대 높이는 최소 높이 아래로 내려가지 않는다', () {

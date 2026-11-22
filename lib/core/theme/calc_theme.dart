@@ -614,7 +614,7 @@ abstract final class CalcTheme {
   // - LCD 폭: 본체 폭과 [screenLcdMaxWidth](키패드 최대 폭 기준) 중 작은 쪽이고, 키패드처럼 가운데 정렬한다 (#92).
   //   LCD 최대 높이도 이 폭으로 정하므로, 태블릿 세로처럼 폭이 상한에 걸리면 LCD가 덜 높아지고 그만큼 상단 띠가 커진다
   //   (LCD는 그대로 키패드 바로 위). 예: 10인치 Android 세로(본체 784×1130) LCD 448 → 274dp·띠 약 34 → 208dp,
-  //   12.9인치 iPad 세로(본체 1008×1244) LCD 576 → 274dp·띠 0 → 약 322dp. 띠의 활용은 #41.
+  //   12.9인치 iPad 세로(본체 1008×1244) LCD 576 → 274dp·띠 약 20 → 약 322dp. 띠의 활용은 #41.
   //   세로 폰 폭(440dp 이하)에서는 걸리지 않는다. 짧은 변 600dp 미만의 가로 창(가로 폰·짧은 분할 화면)은 폭이
   //   480dp를 넘으면 걸린다 — 그 창의 키패드는 높이에 묶여 LCD보다 더 좁다(짧은 창 규칙은 #38).
   // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38).
@@ -636,7 +636,7 @@ abstract final class CalcTheme {
   static const double screenLcdMinHeight = 112.0;
 
   /// LCD 최소 가로/세로 비 — LCD 최대 높이는 LCD 폭 / 이 값이다.
-  /// 폰 폭(304~414dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
+  /// 폰 폭(304~424dp)과 위아래 배치 LCD 최대 폭([screenLcdMaxWidth], 480dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
   /// 4행 + 분수 막대)를 담는 높이다. 이보다 높여도 글자는 커지지 않고 빈 줄 여백만 늘어난다.
   static const double screenLcdMinAspectRatio = 1.75;
 

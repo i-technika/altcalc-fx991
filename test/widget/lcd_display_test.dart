@@ -771,8 +771,16 @@ void main() {
       );
     });
 
-    test('폰 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
-      for (final width in [304.0, 344.0, 374.0, 396.0, 414.0]) {
+    test('폰 폭·LCD 최대 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
+      for (final width in [
+        304.0,
+        344.0,
+        374.0,
+        396.0,
+        414.0,
+        424.0,
+        CalcTheme.screenLcdMaxWidth, // 태블릿 세로·정사각형 창 (#92)
+      ]) {
         final atMax = LcdFontSizes.forSize(
           Size(width, width / CalcTheme.screenLcdMinAspectRatio),
           TextScaler.noScaling,

@@ -348,6 +348,21 @@ void main() {
         expect(lcd.center.dx, moreOrLessEquals(size.width / 2));
       });
     }
+
+    testWidgets('좌우 인셋이 비대칭이면 창이 아니라 본체 가운데에 키패드와 함께 정렬한다', (tester) async {
+      // Android 가로 폰: 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 788 (폭 780)
+      const size = Size(844, 390);
+      const padding = EdgeInsets.only(right: 48);
+      await _pump(tester, size: size, padding: padding);
+      expect(tester.takeException(), isNull);
+      final lcd = tester.getRect(_lcd);
+      final keypad = tester.getRect(_keypad);
+      const bodyCenter = (8 + (844 - 48 - 8)) / 2;
+      expect(lcd.width, moreOrLessEquals(CalcTheme.screenLcdMaxWidth));
+      expect(lcd.center.dx, moreOrLessEquals(bodyCenter));
+      expect(keypad.center.dx, moreOrLessEquals(bodyCenter));
+      expect(keypad.width, lessThan(lcd.width)); // 키패드는 높이에 묶인다 (#38)
+    });
   });
 
   group('테이블톱 배치: LCD 폭 상한 고정값 (#92)', () {
@@ -1637,11 +1652,11 @@ void _hingeLayoutTests() {
     });
 
     test('가로 접힘선: LCD 폭 상한 (#92) — 넓은 위 절반에서 480dp, 키패드 쪽 가장자리', () {
-      // Fold 가로 반 접힘 본체 825×593 (접힘선 304.5): 키패드 약 293dp, LCD는 480dp
+      // 본체 825×593 (접힘선 304.5): 아래 절반 280.5 → 키패드 약 351dp(높이에 묶임), LCD는 480dp
       const body = Size(825, 593);
       const hinge = Rect.fromLTWH(0, 304.5, 825, 0);
       final r = CalcTabletopLayout.of(body, hinge, Handedness.right);
-      expect(r.keypad.width, lessThan(CalcTheme.screenLcdMaxWidth));
+      expect(r.keypad.width, moreOrLessEquals(280.5 * 1.25));
       expect(r.lcd.width, CalcTheme.screenLcdMaxWidth);
       expect(r.lcd.height, moreOrLessEquals(480 / 1.75));
       expect(r.lcd.right, body.width);
@@ -1691,6 +1706,23 @@ void _hingeLayoutTests() {
         ),
       );
       expect(shrunk.lcd.bottom, moreOrLessEquals(300 - 8));
+
+      // 경계: 본체 536이면 LCD 왼쪽 56 = 버튼 48 + 간격 8로 정확히 비켜 있어 줄이지 않고, 535면 줄인다.
+      for (final (width, shrinks) in const [(536.0, false), (535.0, true)]) {
+        final l = CalcTabletopLayout.of(
+          Size(width, 700),
+          Rect.fromLTWH(0, 300, width, 0),
+          Handedness.right,
+        );
+        expect(l.keypad.width, 480, reason: '$width');
+        expect(l.settingsButton.top, 0, reason: '$width');
+        expect(
+          l.lcd.height,
+          shrinks ? moreOrLessEquals(292 - 56) : moreOrLessEquals(480 / 1.75),
+          reason: '$width',
+        );
+        expect(l.lcd.overlaps(l.settingsButton), isFalse, reason: '$width');
+      }
     });
   });
 }
