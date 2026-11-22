@@ -573,7 +573,8 @@ abstract final class CalcTheme {
   static const double screenSplitGap = 16.0;
 
   /// 좌우 분할 배치에서 키패드가 차지할 수 있는 최대 폭 (본체 폭에서 간격을 뺀 폭 대비).
-  /// 이보다 넓히면 LCD 쪽이 키패드보다 좁아져 LCD 글자가 키 각인보다 작아질 수 있다.
+  /// 0.5 이하이면 LCD 쪽 패널이 항상 키패드 폭 이상이라 LCD 폭 상한(키패드 폭 × [screenSplitLcdMaxWidthRatio])이
+  /// 그대로 적용된다 — 넓히면 패널이 키패드보다 좁아져 LCD가 패널 폭으로 줄어든다.
   static const double screenSplitKeypadMaxWidthRatio = 0.5;
 
   /// 좌우 분할 배치의 LCD 최대 폭 (키패드 실제 폭 대비) (#71).
