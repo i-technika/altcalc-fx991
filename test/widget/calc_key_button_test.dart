@@ -1317,6 +1317,93 @@ void _shapeAndLegendTests() {
     });
   });
 
+  group('터치 모양 (hitShape·hitOutset, #64)', () {
+    // 버튼 상자 120×80, 그림 상자는 사방 10dp 안쪽(100×60)의 삼각형,
+    // 터치 영역은 버튼 상자의 왼쪽 3/4 (그림 밖까지 넓고, 오른쪽 끝은 좁다)
+    const outer = Size(120, 80);
+    const outset = EdgeInsets.all(10);
+    Path leftThreeQuarters(Size s) =>
+        Path()..addRect(Rect.fromLTWH(0, 0, s.width * 0.75, s.height));
+
+    Widget button({
+      ValueChanged<CalcKeyId>? onPressed,
+      ValueChanged<CalcKeyId>? onRepeat,
+    }) => _host(
+      CalcKeyButton(
+        keyDef: keyDefOf(CalcKeyId.cursorUp),
+        showLegendBand: false,
+        enableHaptics: false,
+        shape: triangle,
+        hitShape: leftThreeQuarters,
+        hitOutset: outset,
+        onPressed: onPressed ?? (_) {},
+        onRepeat: onRepeat,
+      ),
+      size: outer,
+    );
+
+    testWidgets('그림은 여백 안쪽 상자에 그대로 그린다', (tester) async {
+      await tester.pumpWidget(button());
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      expect(box.size, outer);
+      final keycap = tester.getRect(_keycap(CalcKeyId.cursorUp));
+      expect(keycap.topLeft, box.topLeft + const Offset(10, 10));
+      expect(keycap.width, 100);
+    });
+
+    testWidgets('그림 밖이라도 터치 모양 안이면 입력되고, 버튼 상자 안이라도 터치 모양 밖이면 무시된다', (
+      tester,
+    ) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(button(onPressed: pressed.add));
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      for (final (p, expected) in [
+        (const Offset(5, 75), true), // 그림 상자 밖(여백)
+        (const Offset(15, 65), true), // 그림 상자 안, 삼각형 밖
+        (const Offset(50, 25), true), // 삼각형 안
+        (const Offset(100, 30), false), // 삼각형 안이지만 터치 모양 밖 (x > 90)
+        (const Offset(115, 75), false), // 여백, 터치 모양 밖
+      ]) {
+        pressed.clear();
+        await tester.tapAt(box.topLeft + p);
+        await tester.pump();
+        expect(pressed.isNotEmpty, expected, reason: '$p');
+      }
+    });
+
+    testWidgets('누른 채 터치 모양 안(그림 밖)으로 움직이면 반복이 이어지고, 밖으로 나가면 멈춘다', (
+      tester,
+    ) async {
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(button(onRepeat: repeats.add));
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      final g = await tester.startGesture(box.topLeft + const Offset(50, 25));
+      await tester.pump(CalcKeyButton.defaultRepeatDelay);
+      expect(repeats, hasLength(1));
+      await g.moveTo(box.topLeft + const Offset(5, 75)); // 그림 밖, 터치 모양 안
+      await tester.pump(CalcKeyButton.defaultRepeatInterval * 3);
+      expect(repeats, hasLength(4));
+      await g.moveTo(box.topLeft + const Offset(100, 30)); // 터치 모양 밖
+      await tester.pump(CalcKeyButton.defaultRepeatInterval * 5);
+      expect(repeats, hasLength(4));
+      await g.up();
+    });
+
+    testWidgets('hitShape 없이 hitOutset만 주면 디버그 assert로 알린다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.cursorUp),
+            hitOutset: outset,
+            onPressed: (_) {},
+          ),
+          size: outer,
+        ),
+      );
+      expect(tester.takeException(), isA<AssertionError>());
+    });
+  });
+
   group('각인 배분', () {
     testWidgets('긴 각인 옆의 한 글자 각인은 줄어들지 않는다', (tester) async {
       await tester.pumpWidget(

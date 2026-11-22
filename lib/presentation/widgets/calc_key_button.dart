@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -41,6 +42,7 @@ import 'screen_coordinate_root.dart';
 ///   영역 기준으로 덮어쓰면 판정이 틀어지므로, 분할 배치 등에서도 View의 값을 그대로 물려준다.
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
 /// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다.
+///   [hitShape]가 있으면 그림([shape])과 별도로 버튼 상자 ∩ [hitShape]가 터치 영역이다(커서 패드, #64).
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
 ///   키패드는 스크롤 영역 밖에 배치한다.
 /// - [onRepeat]이 있으면 누르고 있는 동안 [repeatDelay] 후 [repeatInterval]마다 [onRepeat]을
@@ -81,11 +83,23 @@ class CalcKeyButton extends StatefulWidget {
   /// 메인 라벨 글자 크기 (dp). `null`이면 키캡 높이 비율로 계산.
   final double? mainLabelFontSize;
 
-  /// 키 모양 — 버튼 상자 크기를 받아 버튼 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
+  /// 키 모양 — 그림 상자 크기를 받아 그 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
   ///
-  /// 지정하면 그리기, 누름 판정(히트 테스트), 누른 채 이동할 때의 이탈 판정(반복 중단)을
-  /// 모두 이 경로 안으로 제한한다(커서 패드 방향 구역 등). 경로는 상자 크기나 함수가 바뀔 때만 다시 만든다.
+  /// 그리기를 이 경로 안으로 제한한다. [hitShape]가 없으면 누름 판정(히트 테스트)과 누른 채 이동할 때의
+  /// 이탈 판정(반복 중단)도 이 경로 안으로 제한한다(커서 패드 방향 구역 등).
+  /// 경로는 상자 크기나 함수가 바뀔 때만 다시 만든다.
   final Path Function(Size size)? shape;
+
+  /// 터치 모양 — 버튼 상자(부모가 정한 크기, [hitOutset] 포함) 크기를 받아 그 좌표의 닫힌 경로를 돌려준다.
+  ///
+  /// 지정하면 누름 판정과 이동 이탈 판정을 버튼 상자 ∩ 이 경로로 하고, [shape]는 그리기에만 쓴다.
+  /// 그려진 키보다 넓은 터치 영역을 줄 때 쓴다(커서 패드 외곽 밖·셀 여백, #64).
+  /// 이때 [extendHitAreaToLegend]는 쓰지 않는다(터치 영역은 이 경로가 정한다).
+  final Path Function(Size size)? hitShape;
+
+  /// 터치 영역만 넓힌 여백 — 버튼 상자에서 이만큼 안쪽 상자(그림 상자)에 키를 그린다.
+  /// [hitShape]가 있을 때만 쓸 수 있다(없으면 [EdgeInsets.zero]여야 한다).
+  final EdgeInsets hitOutset;
 
   const CalcKeyButton({
     super.key,
@@ -100,6 +114,8 @@ class CalcKeyButton extends StatefulWidget {
     this.legendFontSize,
     this.mainLabelFontSize,
     this.shape,
+    this.hitShape,
+    this.hitOutset = EdgeInsets.zero,
   });
 
   /// 기본 반복 시작 지연
@@ -133,33 +149,20 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// 버튼 좌표에서 터치 영역(Listener)의 원점 (각인 띠를 빼면 띠 높이만큼 아래)
   Offset _hitOrigin = Offset.zero;
 
-  /// 버튼 상자 크기에 맞춰 만든 [CalcKeyButton.shape] 경로 (그림·누름·이동 이탈 판정이 같은 인스턴스를 쓴다)
-  Path? _shapePath;
+  /// 그림 상자 크기에 맞춘 [CalcKeyButton.shape] 경로 (그림과, [CalcKeyButton.hitShape]가 없을 때의
+  /// 누름·이동 이탈 판정이 같은 인스턴스를 쓴다)
+  final _PathCache _shapePath = _PathCache();
 
-  /// [_shapePath]를 만든 상자 크기와 모양 함수 — 둘 다 같으면 다시 만들지 않는다.
-  Size? _shapePathSize;
-  Path Function(Size size)? _shapePathSource;
+  /// 버튼 상자 크기에 맞춘 [CalcKeyButton.hitShape] 경로 (누름·이동 이탈 판정이 같은 인스턴스를 쓴다)
+  final _PathCache _hitPath = _PathCache();
 
-  /// [size] 상자의 키 모양 경로 (`shape`가 없으면 `null`). 포인터 이동마다 경로를 새로 만들지 않도록 캐시한다.
-  Path? _shapeFor(Size size) {
-    final shape = widget.shape;
-    if (shape == null) {
-      _shapePathSource = null;
-      _shapePathSize = null;
-      return _shapePath = null;
-    }
-    if (!identical(shape, _shapePathSource) || size != _shapePathSize) {
-      _shapePath = shape(size);
-      _shapePathSource = shape;
-      _shapePathSize = size;
-    }
-    return _shapePath;
-  }
-
-  /// Listener 로컬 좌표가 터치 영역(사각형 ∩ 키 모양) 안인지 판정한다.
+  /// Listener 로컬 좌표가 터치 영역 안인지 판정한다.
+  /// [CalcKeyButton.hitShape]가 있으면 버튼 상자 ∩ 터치 모양, 없으면 터치 사각형 ∩ 키 모양이다.
   bool _hitAreaContains(Offset localPosition) {
     if (!(Offset.zero & _hitSize).contains(localPosition)) return false;
-    final path = _shapePath;
+    final hit = _hitPath.path;
+    if (hit != null) return hit.contains(localPosition);
+    final path = _shapePath.path;
     return path == null || path.contains(localPosition + _hitOrigin);
   }
 
@@ -181,9 +184,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   void reassemble() {
     super.reassemble();
     // 핫 리로드로 모양 상수가 바뀌어도 모양 함수는 같은 인스턴스라 캐시가 남는다 — 비워서 다시 만든다.
-    _shapePath = null;
-    _shapePathSource = null;
-    _shapePathSize = null;
+    _shapePath.clear();
+    _hitPath.clear();
   }
 
   @override
@@ -310,7 +312,11 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   }
 
   Widget _buildLayout(BuildContext context, BoxConstraints constraints) {
-    final size = constraints.constrain(
+    assert(
+      widget.hitShape != null || widget.hitOutset == EdgeInsets.zero,
+      'hitOutset은 hitShape와 함께 써야 한다 (터치 영역을 정할 경로가 없다)',
+    );
+    final outer = constraints.constrain(
       Size(
         constraints.hasBoundedWidth
             ? constraints.maxWidth
@@ -320,8 +326,12 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             : CalcKeyButton.fallbackSize.height,
       ),
     );
-    final width = size.width;
-    final height = size.height;
+    final hitPath = _hitPath.resolve(widget.hitShape, outer);
+    final hitMode = hitPath != null;
+    final outset = hitMode ? widget.hitOutset : EdgeInsets.zero;
+    // 그림 상자 = 버튼 상자에서 터치 여백을 뺀 안쪽 (여백이 상자보다 크면 0)
+    final width = math.max(0.0, outer.width - outset.horizontal);
+    final height = math.max(0.0, outer.height - outset.vertical);
 
     final legendHeight = widget.showLegendBand
         ? height * CalcTheme.keyLegendHeightRatio
@@ -332,11 +342,14 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final textScaler = MediaQuery.textScalerOf(context)
         .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
 
-    final shapePath = _shapeFor(Size(width, height));
-    _hitSize = widget.extendHitAreaToLegend
+    final shapePath = _shapePath.resolve(widget.shape, Size(width, height));
+    final extendToLegend = !hitMode && widget.extendHitAreaToLegend;
+    _hitSize = hitMode
+        ? outer
+        : extendToLegend
         ? Size(width, height)
         : Size(width, capHeight);
-    _hitOrigin = widget.extendHitAreaToLegend
+    _hitOrigin = hitMode || extendToLegend
         ? Offset.zero
         : Offset(0, legendHeight);
 
@@ -353,7 +366,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         textScaler: textScaler,
       ),
     );
-    if (!widget.extendHitAreaToLegend) keycap = _wrapHitArea(keycap);
+    if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
 
     final column = Column(
       children: [
@@ -379,12 +392,83 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final body = SizedBox(
       width: width,
       height: height,
-      child: widget.extendHitAreaToLegend ? _wrapHitArea(column) : column,
+      child: extendToLegend ? _wrapHitArea(column) : column,
     );
     // ClipPath는 그림과 히트 테스트를 함께 경로 안으로 제한한다.
-    return shapePath == null
+    final clipped = shapePath == null
         ? body
         : ClipPath(clipper: _ShapeClipper(shapePath), child: body);
+    if (!hitMode) return clipped;
+    // 터치 모양이 따로 있으면: 버튼 상자 전체를 받는 Listener를 터치 경로로 거르고,
+    // 그림은 터치 여백 안쪽에 그린다(그림 클립은 Listener 안이라 터치 영역을 줄이지 않는다).
+    return _HitTestPath(
+      path: hitPath,
+      child: _wrapHitArea(
+        SizedBox.fromSize(
+          size: outer,
+          child: Padding(padding: outset, child: clipped),
+        ),
+      ),
+    );
+  }
+}
+
+/// 모양 함수와 상자 크기로 만든 경로 캐시 — 둘 다 같으면 다시 만들지 않는다
+/// (포인터 이동마다 경로를 새로 만들지 않도록).
+class _PathCache {
+  Path? path;
+  Size? _size;
+  Path Function(Size size)? _source;
+
+  /// [source]로 [size] 상자의 경로를 돌려준다 (`source`가 없으면 `null`).
+  Path? resolve(Path Function(Size size)? source, Size size) {
+    if (source == null) {
+      clear();
+      return null;
+    }
+    if (!identical(source, _source) || size != _size) {
+      path = source(size);
+      _source = source;
+      _size = size;
+    }
+    return path;
+  }
+
+  void clear() {
+    path = null;
+    _source = null;
+    _size = null;
+  }
+}
+
+/// 히트 테스트만 [path] 안으로 제한한다 (그리기·레이아웃에는 영향 없음).
+class _HitTestPath extends SingleChildRenderObjectWidget {
+  final Path path;
+
+  const _HitTestPath({required this.path, super.child});
+
+  @override
+  _RenderHitTestPath createRenderObject(BuildContext context) =>
+      _RenderHitTestPath(path);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderHitTestPath renderObject,
+  ) {
+    renderObject.path = path;
+  }
+}
+
+class _RenderHitTestPath extends RenderProxyBox {
+  _RenderHitTestPath(this.path);
+
+  Path path;
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!path.contains(position)) return false;
+    return super.hitTest(result, position: position);
   }
 }
 

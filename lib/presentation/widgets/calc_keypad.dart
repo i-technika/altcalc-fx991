@@ -391,10 +391,14 @@ class _KeypadBody extends StatelessWidget {
     bool showLegendBand = true,
     bool extendHitArea = false,
     Path Function(Size size)? shape,
+    Path Function(Size size)? hitShape,
+    EdgeInsets hitOutset = EdgeInsets.zero,
   }) {
     return CalcKeyButton(
       keyDef: def,
       shape: shape,
+      hitShape: hitShape,
+      hitOutset: hitOutset,
       onPressed: onKeyPressed,
       onRepeat: autoRepeatKeys.contains(def.id) ? onKeyRepeat : null,
       enableHaptics: enableHaptics,
@@ -446,8 +450,13 @@ class _KeypadBody extends StatelessWidget {
                 child: Padding(
                   padding: _cellPadding,
                   child: CursorPad(
-                    buttonBuilder: (def, shape) =>
-                        _button(def, showLegendBand: false, shape: shape),
+                    buttonBuilder: (def, keyShape) => _button(
+                      def,
+                      showLegendBand: false,
+                      shape: keyShape.shape,
+                      hitShape: keyShape.hitShape,
+                      hitOutset: keyShape.hitOutset,
+                    ),
                     onKeyPressed: onKeyPressed,
                     enableHaptics: enableHaptics,
                   ),
@@ -476,6 +485,13 @@ class _KeypadBody extends StatelessWidget {
 /// 커서 패드 방향
 enum CursorPadSector { up, down, left, right }
 
+/// 커서 패드 방향 키 하나의 그림 모양·터치 모양·터치 여백 (`CalcKeyButton`의 같은 이름 인자로 넘긴다)
+typedef CursorPadKeyShape = ({
+  Path Function(Size size) shape,
+  Path Function(Size size) hitShape,
+  EdgeInsets hitOutset,
+});
+
 /// 커서 패드 모양 계산기 — 패드 상자([size]) 로컬 좌표의 외곽·X자 홈·허브와 방향 판정.
 ///
 /// 패드 중심을 원점으로, 반폭 [radiusX]·반높이 [radiusY]로 정규화한 좌표 (u, v)를 쓴다.
@@ -487,9 +503,12 @@ enum CursorPadSector { up, down, left, right }
 /// - **데드존**: 중심에서 [deadZoneRadius] 이내만 어느 방향에도 속하지 않는다. 허브보다 작아서,
 ///   허브 바깥 고리를 누르면 홈으로 나뉜 방향이 입력된다(작은 화면의 ▲·▼ 터치 깊이 확보, #43).
 ///
-/// [sectorAt]은 위 정의를 그대로 옮긴 명세(참값) 판정이다. 실제 그림·누름·이동 이탈 판정은 이를
-/// 다각형으로 근사한 [sectorPath]가 맡는다(곡선 구간은 [_arcSegments]개 선분, 경계에서 0.3dp 미만 차이).
-/// 테스트는 두 판정이 일치하는지로 경로를 검증한다.
+/// - **터치 영역** (#64): 외곽 밖과 셀 여백도 X자 홈을 연장한 선으로 나눠 가까운 방향 키에 준다.
+///   셀([hitSectorAt]의 `bounds`) 안에서 데드존만 빼면 모든 점이 어느 한 방향에 속한다.
+///
+/// [sectorAt]·[hitSectorAt]은 위 정의를 그대로 옮긴 명세(참값) 판정이다. 실제 그림은 [sectorPath],
+/// 누름·이동 이탈 판정은 [hitPath]가 다각형으로 근사해 맡는다(곡선 구간은 [_arcSegments]개 선분,
+/// 경계에서 0.3dp 미만 차이). 테스트는 명세 판정과 경로가 일치하는지로 경로를 검증한다.
 @immutable
 class CursorPadGeometry {
   /// 패드 상자 크기
@@ -680,9 +699,11 @@ class CursorPadGeometry {
   }
 
   /// [sector] 구역 넓이 (dp², [sectorPath] 다각형의 신발끈 공식)
-  double sectorArea(CursorPadSector sector) {
-    if (_isEmpty) return 0;
-    final points = sectorPolygon(sector);
+  double sectorArea(CursorPadSector sector) =>
+      _isEmpty ? 0 : polygonArea(sectorPolygon(sector));
+
+  /// 닫힌 다각형 [points]의 넓이 (dp², 신발끈 공식)
+  static double polygonArea(List<Offset> points) {
     var twice = 0.0;
     for (var i = 0; i < points.length; i++) {
       final p = points[i];
@@ -690,6 +711,93 @@ class CursorPadGeometry {
       twice += p.dx * q.dy - q.dx * p.dy;
     }
     return twice.abs() / 2;
+  }
+
+  /// [localPosition](패드 로컬 좌표)을 누르면 입력될 방향 — 셀 [bounds](패드 로컬 좌표) 안에서
+  /// 데드존만 빼고 X자 홈을 연장한 선으로 나눈다(#64). 셀 밖·데드존이거나 유한하지 않은 좌표면 `null`이다.
+  /// 외곽 안에서는 [sectorAt]과 같다.
+  CursorPadSector? hitSectorAt(Offset localPosition, Rect bounds) {
+    if (_isEmpty || !localPosition.isFinite) return null;
+    if (!_closedContains(bounds, localPosition)) return null;
+    final d = localPosition - center;
+    if (d.distance <= deadZoneRadius) return null;
+    final u = d.dx / radiusX;
+    final v = d.dy / radiusY;
+    if (u.abs() <= _k * v.abs()) {
+      return v < 0 ? CursorPadSector.up : CursorPadSector.down;
+    }
+    return u < 0 ? CursorPadSector.left : CursorPadSector.right;
+  }
+
+  /// 경계 포함 사각형 판정 ([Rect.contains]는 오른쪽·아래 변을 뺀다)
+  static bool _closedContains(Rect r, Offset p) =>
+      p.dx >= r.left && p.dx <= r.right && p.dy >= r.top && p.dy <= r.bottom;
+
+  /// [sector]의 터치 영역 다각형 (패드 로컬 좌표) — 데드존 호와, 두 홈 연장선이 셀 [bounds]와 만나 이루는
+  /// 부채꼴을 [bounds]로 자른 것. 비어 있으면 빈 목록. ([bounds]는 데드존을 품어야 한다 — 패드를 품는 셀.)
+  List<Offset> hitPolygon(CursorPadSector sector, Rect bounds) {
+    if (_isEmpty || bounds.isEmpty) return const [];
+    final (from, to) = _angles(sector);
+    // 홈 연장선 위의 먼 점: 셀을 확실히 넘는 거리. 가운데 방향에도 점을 두어 먼 쪽 변이
+    // 셀 안으로 들어오지 않게 한다(부채꼴 반각이 90°에 가까워도 가운데 점까지 약 45° 이내).
+    final far = 4 * (bounds.longestSide + (bounds.center - center).distance);
+    final wedge = [
+      _circlePoint(from, far),
+      _circlePoint((from + to) / 2, far),
+      _circlePoint(to, far),
+      ...sectorPolygon(sector).skip(_arcSegments + 1), // 데드존 호 (to → from)
+    ];
+    return _clipToRect(wedge, bounds);
+  }
+
+  /// [sector] 터치 영역 경로 (패드 로컬 좌표, [hitPolygon])
+  Path hitPath(CursorPadSector sector, Rect bounds) {
+    final points = hitPolygon(sector, bounds);
+    if (points.isEmpty) return Path();
+    return Path()..addPolygon(points, true);
+  }
+
+  /// [sector] 터치 영역 넓이 (dp², [hitPolygon])
+  double hitArea(CursorPadSector sector, Rect bounds) =>
+      polygonArea(hitPolygon(sector, bounds));
+
+  /// 다각형 [points]를 사각형 [r]로 자른다 (Sutherland–Hodgman — 자르는 쪽이 볼록이면 오목 다각형도 된다).
+  static List<Offset> _clipToRect(List<Offset> points, Rect r) {
+    var output = points;
+    for (final (inside, cross)
+        in <(bool Function(Offset), Offset Function(Offset, Offset))>[
+          ((p) => p.dx >= r.left, (a, b) => _atX(a, b, r.left)),
+          ((p) => p.dx <= r.right, (a, b) => _atX(a, b, r.right)),
+          ((p) => p.dy >= r.top, (a, b) => _atY(a, b, r.top)),
+          ((p) => p.dy <= r.bottom, (a, b) => _atY(a, b, r.bottom)),
+        ]) {
+      final input = output;
+      output = [];
+      for (var i = 0; i < input.length; i++) {
+        final current = input[i];
+        final previous = input[(i + input.length - 1) % input.length];
+        if (inside(current)) {
+          if (!inside(previous)) output.add(cross(previous, current));
+          output.add(current);
+        } else if (inside(previous)) {
+          output.add(cross(previous, current));
+        }
+      }
+      if (output.isEmpty) break;
+    }
+    return output;
+  }
+
+  /// 선분 [a]–[b]가 세로선 x = [x]와 만나는 점
+  static Offset _atX(Offset a, Offset b, double x) {
+    final t = (x - a.dx) / (b.dx - a.dx);
+    return Offset(x, a.dy + (b.dy - a.dy) * t);
+  }
+
+  /// 선분 [a]–[b]가 가로선 y = [y]와 만나는 점
+  static Offset _atY(Offset a, Offset b, double y) {
+    final t = (y - a.dy) / (b.dy - a.dy);
+    return Offset(a.dx + (b.dx - a.dx) * t, y);
   }
 }
 
@@ -702,8 +810,18 @@ class CursorPadGeometry {
 ///         ╱   ╲           외곽: 가로로 긴 둥근 마름모 (밖은 무시)
 ///      ╱    ▼    ╲
 /// ```
-/// 각 방향 키캡은 [sectorBox](패드를 반으로 나눈 사각형)에 그리고, [CalcKeyButton.shape]로 구역 경로를
-/// 넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 구역 안으로 제한한다.
+/// 각 방향 키캡은 [sectorBox](패드를 반으로 나눈 사각형)에 그리고 [CalcKeyButton.shape]로 구역 경로를
+/// 넘겨 그림을 구역 안으로 제한한다.
+///
+/// ## 터치 영역은 셀 전체를 홈 연장선으로 나눈다 (#64)
+/// 실물 모양을 따른 ◀·▶ 구역은 좁고(세로 폰에서 함수 키 셀의 약 0.55배), 패드 상자의 약 30%는 외곽 밖이다.
+/// 그래서 그림은 그대로 두고, 버튼 상자를 셀의 반쪽([sectorBox]에 셀 크기를 넣은 것)으로 넓혀
+/// [CalcKeyButton.hitShape]·[CalcKeyButton.hitOutset]으로 터치 영역을 [CursorPadGeometry.hitPolygon]으로 준다.
+/// - 나누는 기준은 거리가 아니라 **X자 홈을 연장한 선**이다. 외곽 안의 나눔과 이음매 없이 이어지고,
+///   "패드 가운데에서 본 방향"이라 예측하기 쉬우며, 누른 채 이동할 때의 이탈 판정도 같은 선을 쓴다.
+///   외곽 바로 밖을 누르면 그 외곽 변을 가진 방향이 입력된다(홈이 외곽에서 끝나는 점이 두 방향의 경계).
+/// - 셀 밖(셀 여백 `_cellPadding`)은 넓히지 않는다 — 이웃 키(ALPHA·MENU 등)와의 간격은 다른 키 사이와 같다.
+/// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
 ///
 /// ## 허브 한가운데만 데드존이다 (#43)
 /// 가운데는 네 방향이 만나 손가락이 어느 쪽을 노렸는지 가장 모호한 곳이다. 가까운 방향으로 보내면
@@ -712,15 +830,14 @@ class CursorPadGeometry {
 /// 반복 입력도 멈춘다. 다만 그려진 허브 전체를 데드존으로 두면 작은 폰에서 ▲·▼ 터치 깊이가 28dp 아래로
 /// 줄어들어, 허브 바깥 고리는 홈으로 나뉜 방향 키에 준다(실물보다 누를 수 있는 곳이 조금 넓다).
 ///
-/// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분은 데드존).
+/// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분은 가까운 방향의 터치 영역).
 ///
 /// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
 /// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
 class CursorPad extends StatelessWidget {
-  /// 방향 키 위젯 생성기. [shape]를 `CalcKeyButton.shape`에 넘겨야 한다
-  /// (보통 `showLegendBand: false`인 [CalcKeyButton]).
-  final Widget Function(CalcKeyDef def, Path Function(Size size) shape)
-  buttonBuilder;
+  /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 세 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`에
+  /// 넘겨야 한다(보통 `showLegendBand: false`인 [CalcKeyButton]).
+  final Widget Function(CalcKeyDef def, CursorPadKeyShape shape) buttonBuilder;
 
   /// 시맨틱 탭(스크린리더) 입력 콜백. `null`이면 시맨틱 노드가 비활성이다.
   final ValueChanged<CalcKeyId>? onKeyPressed;
@@ -748,6 +865,57 @@ class CursorPad extends StatelessWidget {
   static Path _downPath(Size s) => sectorPath(CursorPadSector.down, s);
   static Path _leftPath(Size s) => sectorPath(CursorPadSector.left, s);
   static Path _rightPath(Size s) => sectorPath(CursorPadSector.right, s);
+
+  /// [sector] 터치 경로 생성기 (`CalcKeyButton.hitShape`용, 정적 함수라 매 빌드 같은 인스턴스)
+  static Path Function(Size size) hitShapeOf(CursorPadSector sector) =>
+      switch (sector) {
+        CursorPadSector.up => _upHitPath,
+        CursorPadSector.down => _downHitPath,
+        CursorPadSector.left => _leftHitPath,
+        CursorPadSector.right => _rightHitPath,
+      };
+
+  static Path _upHitPath(Size s) => hitPath(CursorPadSector.up, s);
+  static Path _downHitPath(Size s) => hitPath(CursorPadSector.down, s);
+  static Path _leftHitPath(Size s) => hitPath(CursorPadSector.left, s);
+  static Path _rightHitPath(Size s) => hitPath(CursorPadSector.right, s);
+
+  /// 셀([cell]) 안에서 패드 상자가 놓이는 사각형 (셀 로컬 좌표, 가운데 정렬)
+  static Rect padRectIn(Size cell) {
+    final pad = fitSize(cell);
+    return Offset(
+          (cell.width - pad.width) / 2,
+          (cell.height - pad.height) / 2,
+        ) &
+        pad;
+  }
+
+  /// [sector] 버튼 상자(셀의 반쪽)에서 그림 상자(패드의 반쪽)까지의 여백 (`CalcKeyButton.hitOutset`)
+  static EdgeInsets hitOutsetOf(CursorPadSector sector, Size cell) {
+    final outer = sectorBox(sector, cell);
+    final pad = padRectIn(cell);
+    final inner = sectorBox(sector, pad.size).shift(pad.topLeft);
+    // 패드 중심 = 셀 중심이라 가운데 쪽 변은 0이어야 하지만 부동소수 오차로 음수가 될 수 있어 자른다.
+    double side(double v) => math.max(0.0, v);
+    return EdgeInsets.fromLTRB(
+      side(inner.left - outer.left),
+      side(inner.top - outer.top),
+      side(outer.right - inner.right),
+      side(outer.bottom - inner.bottom),
+    );
+  }
+
+  /// [sector] 버튼 상자(셀의 반쪽, 크기 [boxSize]) 로컬 좌표의 터치 경로 — 상자 크기만으로 셀·패드 크기를
+  /// 되돌려 계산한다([CursorPadGeometry.hitPolygon]).
+  static Path hitPath(CursorPadSector sector, Size boxSize) {
+    final cell = padSizeOf(sector, boxSize);
+    final pad = padRectIn(cell);
+    final box = sectorBox(sector, cell);
+    final bounds = (Offset.zero & cell).shift(-pad.topLeft); // 패드 로컬 좌표의 셀
+    return CursorPadGeometry(pad.size)
+        .hitPath(sector, bounds)
+        .shift(pad.topLeft - box.topLeft);
+  }
 
   /// [size] 패드 안에서 [sector]의 시맨틱 영역 ([CursorPadGeometry.semanticRect])
   static Rect semanticRect(CursorPadSector sector, Size size) =>
@@ -811,53 +979,66 @@ class CursorPad extends StatelessWidget {
       builder: (context, constraints) {
         final cell = constraints.biggest;
         if (!cell.isFinite || cell.isEmpty) return const SizedBox.shrink();
-        final size = fitSize(cell);
+        final padRect = padRectIn(cell);
+        final size = padRect.size;
         final press = onKeyPressed;
         final strings = CalcSemanticStrings.of(context);
-        return Center(
-          child: SizedBox.fromSize(
-            size: size,
-            child: Stack(
-              key: const ValueKey('cursor-pad'),
-              children: [
-                for (final sector in CursorPadSector.values)
-                  Positioned.fromRect(
-                    rect: sectorBox(sector, size),
-                    child: ExcludeSemantics(
-                      child: buttonBuilder(defOf(sector), shapeOf(sector)),
-                    ),
-                  ),
-                // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
-                // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
-                const Positioned.fill(
-                  child: IgnorePointer(
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        painter: _CursorPadDecorationPainter(),
-                      ),
-                    ),
+        return SizedBox.fromSize(
+          size: cell,
+          child: Stack(
+            children: [
+              // 방향 키: 버튼 상자는 셀의 반쪽(터치 영역), 그림은 그 안의 패드 반쪽 (#64)
+              for (final sector in CursorPadSector.values)
+                Positioned.fromRect(
+                  rect: sectorBox(sector, cell),
+                  child: ExcludeSemantics(
+                    child: buttonBuilder(defOf(sector), (
+                      shape: shapeOf(sector),
+                      hitShape: hitShapeOf(sector),
+                      hitOutset: hitOutsetOf(sector, cell),
+                    )),
                   ),
                 ),
-                // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
-                for (final sector in CursorPadSector.values)
-                  Positioned.fromRect(
-                    rect: semanticRect(sector, size),
-                    child: Semantics(
-                      container: true,
-                      button: true,
-                      enabled: press != null,
-                      label: strings.keyButton(defOf(sector).id),
-                      onTap: press == null
-                          ? null
-                          : () {
-                              if (enableHaptics) HapticFeedback.lightImpact();
-                              press(defOf(sector).id);
-                            },
-                      child: const SizedBox.expand(),
+              Positioned.fromRect(
+                rect: padRect,
+                child: Stack(
+                  key: const ValueKey('cursor-pad'),
+                  children: [
+                    // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
+                    // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            painter: _CursorPadDecorationPainter(),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-              ],
-            ),
+                    // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
+                    for (final sector in CursorPadSector.values)
+                      Positioned.fromRect(
+                        rect: semanticRect(sector, size),
+                        child: Semantics(
+                          container: true,
+                          button: true,
+                          enabled: press != null,
+                          label: strings.keyButton(defOf(sector).id),
+                          onTap: press == null
+                              ? null
+                              : () {
+                                  if (enableHaptics) {
+                                    HapticFeedback.lightImpact();
+                                  }
+                                  press(defOf(sector).id);
+                                },
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
