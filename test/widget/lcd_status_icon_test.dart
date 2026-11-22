@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -84,6 +85,18 @@ class _Shot {
     }
     if (top == null) return null;
     return Rect.fromLTRB(left! / dpr, top / dpr, right! / dpr, bottom! / dpr);
+  }
+
+  /// dp 가로줄 [y]에서 [r] 범위의 가장 긴 잉크 구간 길이 (dp)
+  double longestRun(double y, Rect r) {
+    final py = (y * dpr).floor();
+    var best = 0;
+    var current = 0;
+    for (var px = (r.left * dpr).floor(); px < (r.right * dpr).ceil(); px++) {
+      current = inked(px, py) ? current + 1 : 0;
+      if (current > best) best = current;
+    }
+    return best / dpr;
   }
 
   /// dp 가로줄 [y]에서 [r] 범위의 잉크 구간 수
@@ -237,11 +250,25 @@ void main() {
           _slotRect(tester, LcdIndicatorSlot.engineering),
         )!;
         // 넘지 않음: 물리 1.5px (안티에일리어싱).
-        // 닿음: 물리 2.5px — 글자는 그릴 때 기준선·대문자 높이가 픽셀 격자에 맞춰지고(힌팅·스냅)
-        // 아이콘은 정확한 좌표로 그려져, 작은 크기에서 1~2px 차이가 난다(세로 기준 계산 자체는
-        // 실제 Text 배치와 같다 — 앱 스타일에서 기준선·축소율 일치 확인).
+        // 닿음: 물리 2px — 글자는 그릴 때 기준선·대문자 높이가 픽셀 격자에 맞춰지고(힌팅·스냅) 아이콘은
+        // 정확한 좌표로 그려진다. 세로 기준 계산은 실제 Text 배치와 소수 셋째 자리까지 같고(R2 실측),
+        // 잉크 끝 행 차이는 최대 1px였다(8dp×1.3·2.625x에서 E가 계산 기준선보다 약 1.6px 위에서 끝남).
         final tolerance = 1.5 / dpr;
-        final reach = 2.5 / dpr;
+        final reach = 2.0 / dpr;
+        // 글자가 상자에 맞춰 줄어든 비율 — E의 잉크 높이(대문자 높이)로 잰다.
+        final shrink = math.min(
+          1.0,
+          letter.height /
+              (fontSize * scale * CalcTheme.lcdStatusCapHeightRatio),
+        );
+        final xHeight =
+            letter.height *
+            CalcTheme.lcdStatusXHeightRatio /
+            CalcTheme.lcdStatusCapHeightRatio;
+        final stroke =
+            letter.height /
+            CalcTheme.lcdStatusCapHeightRatio *
+            CalcTheme.lcdStatusIconStrokeRatio;
         for (final slot in LcdIndicatorSlot.values) {
           if (slot.icon == null) continue;
           final rect = _slotRect(tester, slot);
@@ -265,15 +292,16 @@ void main() {
             greaterThanOrEqualTo(letter.top - tolerance),
             reason: reason,
           );
-          // 슬롯 경계 안에 그린다.
+          // 슬롯 경계 안 — 글자가 줄면 아이콘도 같은 비율로 줄어 슬롯 가운데에 놓인다.
+          final inner = rect.width * (1 - shrink) / 2;
           expect(
             ink.left,
-            greaterThanOrEqualTo(rect.left - tolerance),
+            greaterThanOrEqualTo(rect.left + inner - tolerance),
             reason: reason,
           );
           expect(
             ink.right,
-            lessThanOrEqualTo(rect.right + tolerance),
+            lessThanOrEqualTo(rect.right - inner + tolerance),
             reason: reason,
           );
         }
@@ -285,83 +313,91 @@ void main() {
             reason: slot.name,
           );
         }
+        // →x: 화살표는 x높이 띠 가운데에 대칭이고 머리가 몸통보다 높다. x는 x높이~기준선을 채운다
+        // (곱셈 기호 ×는 기준선에 닿지 않는다).
+        final store = _slotRect(tester, LcdIndicatorSlot.store);
+        final half = store.center.dx;
+        final arrow = shot.inkBounds(
+          Rect.fromLTRB(store.left, store.top, half, store.bottom),
+        )!;
+        final xBandMid = letter.bottom - xHeight / 2;
+        expect(
+          arrow.center.dy,
+          closeTo(xBandMid, reach),
+          reason: '화살표 $arrow, x높이 가운데 $xBandMid',
+        );
+        expect(
+          arrow.height,
+          greaterThan(stroke * 2),
+          reason: '화살표 머리가 몸통보다 높아야 한다',
+        );
+        final letterX = shot.inkBounds(
+          Rect.fromLTRB(half, store.top, store.right, store.bottom),
+        )!;
+        expect(
+          letterX.top,
+          closeTo(letter.bottom - xHeight, reach),
+          reason: 'x 글자 $letterX',
+        );
+        expect(
+          letterX.bottom,
+          closeTo(letter.bottom, reach),
+          reason: 'x 글자가 기준선에 닿아야 한다 (×가 아님)',
+        );
       },
     );
   }
 
-  testWidgets('아이콘 모양: 근호 윗선이 칸을 덮고, 3칸째 연필, ‖는 두 획, →와 x가 각 칸에 있다', (
+  testWidgets('아이콘 모양: 근호 윗선이 칸을 덮고 칸은 비었으며, 연필은 오른쪽 위→왼쪽 아래로 기울고, ‖는 두 획', (
     tester,
   ) async {
     const fontSize = 60.0;
     final shot = await _render(tester, _allOn, fontSize: fontSize);
     final e = shot.inkBounds(_slotRect(tester, LcdIndicatorSlot.engineering))!;
-    final cap = e.height;
-    const glyph = fontSize * CalcTheme.lcdStatusCharWidthRatio;
-    final advance = glyph + CalcTheme.lcdStatusStyle.letterSpacing!;
     final stroke = fontSize * CalcTheme.lcdStatusIconStrokeRatio;
 
-    // √▭✎ (3칸)
+    // √▭✎ (3칸): 앞 두 칸 = √▭, 셋째 칸 = ✎
     final math = _slotRect(tester, LcdIndicatorSlot.math);
-    final boxCenterX = math.left + advance * 1.4; // 칸(▭)의 가로 가운데
-    Rect probe(double cx, double cy, [double r = 2]) =>
-        Rect.fromLTRB(cx - r, cy - r, cx + r, cy + r);
-    expect(
-      shot.anyInk(probe(boxCenterX, e.top + stroke / 2)),
-      isTrue,
-      reason: '근호 윗선이 칸 위를 덮어야 한다',
+    final third = math.width / 3;
+    final radicalBox = Rect.fromLTRB(
+      math.left,
+      e.top,
+      math.left + third * 2,
+      e.bottom,
     );
-    expect(
-      shot.anyInk(probe(boxCenterX, e.bottom - stroke / 2)),
-      isTrue,
-      reason: '칸 아랫변',
+    // 윗선 줄: 잉크 구간 하나가 칸 너비(한 칸) 이상 이어진다 — 근호 윗선이 칸을 덮는다.
+    final topRow = e.top + stroke / 2;
+    expect(shot.inkRuns(topRow, radicalBox), 1);
+    expect(shot.longestRun(topRow, radicalBox), greaterThan(third));
+    // 칸 높이 가운데 줄: 근호 대각선 + 칸 왼쪽·오른쪽 변 = 구간 셋 (칸 안쪽은 비었다).
+    expect(shot.inkRuns(e.bottom - e.height * 0.3, radicalBox), 3);
+    // 연필: 셋째 칸의 오른쪽 위·왼쪽 아래 모서리에 잉크, 왼쪽 위·오른쪽 아래 모서리는 비었다
+    // (모서리 = 가로·세로 35% 영역 — 가운데를 지나는 연필 몸통은 들어가지 않는다).
+    final pencil = Rect.fromLTRB(
+      math.left + third * 2,
+      e.top,
+      math.right,
+      e.bottom,
     );
-    expect(
-      shot.anyInk(probe(boxCenterX, e.bottom - cap * 0.3)),
-      isFalse,
-      reason: '칸 안쪽은 비어 있어야 한다',
-    );
-    expect(
-      shot.anyInk(
-        Rect.fromLTRB(
-          math.left + advance * 2,
-          e.top,
-          math.left + advance * 2 + glyph,
-          e.bottom,
-        ),
-      ),
-      isTrue,
-      reason: '3칸째에 연필이 있어야 한다',
-    );
+    Rect corner(bool right, bool bottom) {
+      final w = pencil.width * 0.35;
+      final h = pencil.height * 0.35;
+      return Rect.fromLTWH(
+        right ? pencil.right - w : pencil.left,
+        bottom ? pencil.bottom - h : pencil.top,
+        w,
+        h,
+      );
+    }
+
+    expect(shot.anyInk(corner(true, false)), isTrue, reason: '오른쪽 위');
+    expect(shot.anyInk(corner(false, true)), isTrue, reason: '왼쪽 아래');
+    expect(shot.anyInk(corner(false, false)), isFalse, reason: '왼쪽 위');
+    expect(shot.anyInk(corner(true, true)), isFalse, reason: '오른쪽 아래');
 
     // ‖ (1칸) — 대문자 높이 가운데 줄에서 잉크 구간이 둘
     final disp = _slotRect(tester, LcdIndicatorSlot.disp);
     expect(shot.inkRuns(e.center.dy, disp), 2);
-
-    // →x (2칸) — 첫 칸 x높이 가운데에 화살표, 둘째 칸에 x 글자
-    final store = _slotRect(tester, LcdIndicatorSlot.store);
-    final xMid = e.bottom - fontSize * CalcTheme.lcdStatusXHeightRatio / 2;
-    expect(
-      shot.anyInk(probe(store.left + glyph * 0.5, xMid)),
-      isTrue,
-      reason: '화살표 몸통',
-    );
-    expect(
-      shot.anyInk(
-        Rect.fromLTRB(
-          store.left + advance,
-          e.top,
-          store.left + advance + glyph,
-          e.bottom,
-        ),
-      ),
-      isTrue,
-      reason: 'x 글자',
-    );
-    expect(
-      shot.anyInk(probe(store.left + glyph * 0.5, e.top + stroke)),
-      isFalse,
-      reason: '화살표는 x높이 위로 올라가지 않는다',
-    );
   });
 
   testWidgets('꺼진 아이콘은 배경과 거의 같은 색(4%)으로 그리고, 켜짐↔꺼짐이 바뀌면 다시 그린다', (
@@ -398,10 +434,15 @@ void main() {
     expect(shot.darkest(dispRect), greaterThan(235));
   });
 
-  testWidgets('아이콘 하나만 색이 바뀌어도 픽셀에 반영된다', (tester) async {
+  testWidgets('치수를 넘겨받은 아이콘은 색만 바뀌어도 다시 그린다 (shouldRepaint)', (tester) async {
     tester.view.physicalSize = const Size(200, 100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final metrics = LcdStatusIconMetrics.of(
+      CalcTheme.lcdStatusStyle.copyWith(fontSize: 60),
+      TextScaler.noScaling,
+      84,
+    );
     Widget icon(Color color) => RepaintBoundary(
       key: _boundaryKey,
       child: Directionality(
@@ -413,10 +454,11 @@ void main() {
             child: SizedBox(
               width: 60,
               height: 84,
+              // 상태 표시줄처럼 치수를 미리 넘긴다 — 재레이아웃 없이 색만 바뀌는 경로(shouldRepaint).
               child: LcdStatusIcon(
                 icon: LcdIndicatorIcon.multiStatement,
                 color: color,
-                style: CalcTheme.lcdStatusStyle.copyWith(fontSize: 60),
+                metrics: metrics,
               ),
             ),
           ),

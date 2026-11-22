@@ -367,7 +367,7 @@ abstract final class CalcTheme {
   /// 직접 그리는 상태 아이콘(#57)이 글자와 같은 높이가 되도록 쓴다(테스트가 글꼴 파일 값과 대조).
   static const double lcdStatusCapHeightRatio = 0.714;
 
-  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 아이콘의 x·화살표 높이
+  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 아이콘의 화살표를 x높이 가운데에 놓는다
   static const double lcdStatusXHeightRatio = 0.542;
 
   /// 상태 아이콘 선 굵기 (글자 크기 대비) — SemiBold 글자 획 굵기와 비슷하게.
