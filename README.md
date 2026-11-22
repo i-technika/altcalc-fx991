@@ -60,6 +60,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
    명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다.
+   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
    `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트의 `Workspaces: Manage Workspace Trust`를 쓴다.
@@ -79,18 +80,24 @@ flutter run -d chrome -t preview/key_preview_main.dart
 
 1. 설정 `dart.flutterSdkPath`, 그다음 `dart.getFlutterSdkCommand`(SDK 경로를 출력하는 명령)
 2. 프로젝트 안에 둔 SDK (`.flutter`, `vendor/flutter` 폴더 등)
-3. 환경 변수 `DART_PATH_OVERRIDE`, 그다음 확장이 물려받은 `PATH` — VS Code가 시작될 때의 환경이다.
-   - Windows: 시작 메뉴로 켜면 사용자·시스템 PATH를 쓴다. 터미널에서 `code .`로 켜면 그 터미널의 PATH를 쓴다.
-     이미 VS Code 창이 열려 있으면 새 창도 처음 켰을 때의 환경을 따른다.
-   - macOS·Linux: 로그인 셸의 환경(예: `~/.zshrc`에서 설정한 PATH)을 가져온다.
+3. 환경 변수 `DART_PATH_OVERRIDE`, 그다음 그 창의 확장이 물려받은 `PATH`
 4. `.dart_tool/package_config.json`의 `flutterRoot` (위 준비 1단계)
 5. 환경 변수 `FLUTTER_ROOT`
-6. 고정 위치 (Linux의 `~/snap/flutter/common/flutter`, `~/flutter-sdk`, `/google/flutter`, `/opt/flutter` 순서)
+6. 고정 위치: `~/snap/flutter/common/flutter`(Linux만), `~/flutter-sdk`, `/google/flutter`, `/opt/flutter` 순서
+   (Windows에서 `/`로 시작하는 경로는 현재 드라이브의 루트 기준이다)
+
+3번의 `PATH`가 무엇인지는 확장이 아니라 VS Code가 창을 연 방식에 따라 다르다. 아래는 VS Code 본체 소스로 확인한 내용이며
+실측하지는 않았다.
+
+- 터미널에서 `code .`로 새 창을 열면 그 터미널의 환경을 쓴다. VS Code가 이미 실행 중이어도 같다.
+- 시작 메뉴·Dock·메뉴(파일 > 폴더 열기)로 연 창, 또는 이미 열린 폴더에 `code .`를 해서 기존 창으로 옮겨 간 경우에는
+  VS Code를 처음 켰을 때의 환경을 쓴다. macOS·Linux는 이때 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다.
+- 터미널 세션에서만 `export PATH=...`를 한 뒤 시작 메뉴로 연 창은 그 PATH를 보지 못한다.
 
 `~/develop/flutter`처럼 고정 위치 목록에 없는 곳에 SDK가 있고 PATH에도 없으면, `flutter pub get` 전의 새 클론이나
 `.dart_tool`을 지운 뒤에는 확장이 SDK를 찾지 못한다(확장 소스 기준이다. 이 알림은 실제로 띄워 보지 않았다).
 그때는 알림의 `Locate SDK`로 SDK 폴더를 고르거나, **사용자** 설정에 한 번 지정한다.
-사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다.
+사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다(Windows에서도 `~\`가 아니라 `~/`로 쓴다).
 
 ```jsonc
 { "dart.flutterSdkPath": "~/develop/flutter" }
@@ -102,7 +109,8 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 - **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
   - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
-  - 확장이 자동으로 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (...)` 채널에 기록된다.
+  - 확장이 패키지가 없는 프로젝트에 자동으로 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의
+    `flutter (package:...)` 채널에 기록된다(작업 영역 안의 다른 체크아웃에서 실측).
   - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
   - 실패하는 것은 Windows 데스크톱 실행뿐이다.
 
