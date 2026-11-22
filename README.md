@@ -9,6 +9,8 @@
 
 - Flutter 3.50 이상 (Dart 3.14 이상)
 - 의존성 설치: `flutter pub get`
+- 생성 플러그인 파일(`linux/flutter/generated_plugin*` 등)은 `.gitattributes`로 LF 고정이다. 이 설정 이전에 받은 Windows 작업 트리에서
+  이 파일들이 내용 차이 없이 수정됨으로 보이면 Git Bash에서 `bash .claude/scripts/normalize-generated-eol.sh`를 한 번 실행한다.
 
 ## 앱 실행
 

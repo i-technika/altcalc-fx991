@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_status_icon.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/korean_locale.dart';
@@ -57,6 +58,25 @@ Finder _content(Finder line) => find.descendant(
 Color? _colorOf(WidgetTester tester, Finder f) =>
     tester.widget<Text>(f).style?.color;
 
+/// [icon] 상태 아이콘 위젯 (#57 — 글자 대신 직접 그리는 표시기)
+Finder _statusIcon(LcdIndicatorIcon icon) => find.descendant(
+  of: find.byType(LcdStatusBar),
+  matching: find.byKey(ValueKey(icon)),
+);
+
+/// [slot]이 그려진 위젯(글자 또는 아이콘)
+Finder _slotDrawing(LcdIndicatorSlot slot) => switch (slot.icon) {
+  final icon? => _statusIcon(icon),
+  null => _statusText(slot.template),
+};
+
+/// [slot]이 그려진 색
+Color? _slotColor(WidgetTester tester, LcdIndicatorSlot slot) =>
+    switch (slot.icon) {
+      final icon? => tester.widget<LcdStatusIcon>(_statusIcon(icon)).color,
+      null => _colorOf(tester, _statusText(slot.template)),
+    };
+
 /// LCD 베젤 안쪽 영역
 Rect _innerRect(WidgetTester tester) =>
     tester.getRect(find.byType(LcdDisplay)).deflate(CalcTheme.lcdFrameWidth);
@@ -72,11 +92,11 @@ void main() {
     testWidgets('모든 슬롯이 그려지고 켜진 것만 활성 색이다', (tester) async {
       await _pump(tester, const LcdDisplay());
       for (final slot in LcdIndicatorSlot.values) {
-        expect(_statusText(slot.template), findsOneWidget, reason: slot.name);
+        expect(_slotDrawing(slot), findsOneWidget, reason: slot.name);
       }
       for (final slot in LcdIndicatorSlot.values) {
         expect(
-          _colorOf(tester, _statusText(slot.template)),
+          _slotColor(tester, slot),
           LcdStatus.initial.indicatorFor(slot) == null
               ? CalcTheme.lcdStatusInactive
               : CalcTheme.lcdStatusActive,
@@ -113,9 +133,10 @@ void main() {
     ) async {
       await _pump(tester, const LcdDisplay(showInactiveIndicators: false));
       expect(_statusText('D'), findsOneWidget);
-      expect(_statusText('√◻'), findsOneWidget);
+      expect(_slotDrawing(LcdIndicatorSlot.math), findsOneWidget);
       expect(_statusText('S'), findsNothing);
-      expect(_statusText('‖'), findsNothing);
+      expect(_slotDrawing(LcdIndicatorSlot.disp), findsNothing);
+      expect(_slotDrawing(LcdIndicatorSlot.store), findsNothing);
     });
 
     testWidgets('표시기가 켜지고 꺼져도 슬롯 위치가 바뀌지 않는다', (tester) async {
@@ -217,7 +238,7 @@ void main() {
 
     testWidgets('statusFontSize를 주입하면 상태 표시 글자 크기에 반영된다', (tester) async {
       await _pump(tester, const LcdDisplay(statusFontSize: 14));
-      expect(tester.widget<Text>(_statusText('√◻')).style?.fontSize, 14);
+      expect(tester.widget<Text>(_statusText('D')).style?.fontSize, 14);
     });
 
     testWidgets('LcdStatusBar에 글자 크기 없는 스타일을 넘겨도 기본 크기로 그린다', (tester) async {
@@ -231,7 +252,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        tester.widget<Text>(_statusText('√◻')).style?.fontSize,
+        tester.widget<Text>(_statusText('D')).style?.fontSize,
         CalcTheme.lcdStatusStyle.fontSize,
       );
     });
@@ -588,7 +609,7 @@ void main() {
         textScale: 3.0,
         height: 400,
       );
-      final status = tester.widget<Text>(_statusText('√◻'));
+      final status = tester.widget<Text>(_statusText('D'));
       expect(
         status.textScaler!.scale(10),
         closeTo(10 * CalcTheme.lcdMaxTextScaleFactor, 1e-9),
@@ -895,7 +916,7 @@ void main() {
           moreOrLessEquals(f.input, epsilon: 1e-3),
         );
         expect(
-          tester.widget<Text>(_statusText('√◻')).style?.fontSize,
+          tester.widget<Text>(_statusText('D')).style?.fontSize,
           moreOrLessEquals(f.status, epsilon: 1e-3),
         );
         for (final (line, tag) in [(_inputLine, 'i'), (_resultLine, 'r')]) {
