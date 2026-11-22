@@ -1261,7 +1261,7 @@ void main() {
 }
 
 void _shapeAndLegendTests() {
-  /// 왼쪽 위 → 오른쪽 위 → 아래 가운데 삼각형 (커서 패드 ▲ 부채꼴과 같은 모양)
+  /// 왼쪽 위 → 오른쪽 위 → 아래 가운데 삼각형 (사각형이 아닌 키 모양 예시)
   Path triangle(Size s) => Path()
     ..addPolygon([
       Offset.zero,

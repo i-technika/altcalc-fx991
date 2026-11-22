@@ -84,7 +84,7 @@ class CalcKeyButton extends StatefulWidget {
   /// 키 모양 — 버튼 상자 크기를 받아 버튼 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
   ///
   /// 지정하면 그리기, 누름 판정(히트 테스트), 누른 채 이동할 때의 이탈 판정(반복 중단)을
-  /// 모두 이 경로 안으로 제한한다(커서 패드 부채꼴 등).
+  /// 모두 이 경로 안으로 제한한다(커서 패드 방향 구역 등). 경로는 상자 크기나 함수가 바뀔 때만 다시 만든다.
   final Path Function(Size size)? shape;
 
   const CalcKeyButton({
@@ -133,14 +133,34 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// 버튼 좌표에서 터치 영역(Listener)의 원점 (각인 띠를 빼면 띠 높이만큼 아래)
   Offset _hitOrigin = Offset.zero;
 
-  /// 버튼 상자 크기 ([CalcKeyButton.shape] 판정용, 레이아웃마다 갱신)
-  Size _size = Size.zero;
+  /// 버튼 상자 크기에 맞춰 만든 [CalcKeyButton.shape] 경로 (그림·누름·이동 이탈 판정이 같은 인스턴스를 쓴다)
+  Path? _shapePath;
+
+  /// [_shapePath]를 만든 상자 크기와 모양 함수 — 둘 다 같으면 다시 만들지 않는다.
+  Size? _shapePathSize;
+  Path Function(Size size)? _shapePathSource;
+
+  /// [size] 상자의 키 모양 경로 (`shape`가 없으면 `null`). 포인터 이동마다 경로를 새로 만들지 않도록 캐시한다.
+  Path? _shapeFor(Size size) {
+    final shape = widget.shape;
+    if (shape == null) {
+      _shapePathSource = null;
+      _shapePathSize = null;
+      return _shapePath = null;
+    }
+    if (!identical(shape, _shapePathSource) || size != _shapePathSize) {
+      _shapePath = shape(size);
+      _shapePathSource = shape;
+      _shapePathSize = size;
+    }
+    return _shapePath;
+  }
 
   /// Listener 로컬 좌표가 터치 영역(사각형 ∩ 키 모양) 안인지 판정한다.
   bool _hitAreaContains(Offset localPosition) {
     if (!(Offset.zero & _hitSize).contains(localPosition)) return false;
-    final shape = widget.shape;
-    return shape == null || shape(_size).contains(localPosition + _hitOrigin);
+    final path = _shapePath;
+    return path == null || path.contains(localPosition + _hitOrigin);
   }
 
   bool get _enabled => widget.onPressed != null;
@@ -155,6 +175,15 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     } else if (widget.onRepeat == null) {
       _cancelRepeat();
     }
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // 핫 리로드로 모양 상수가 바뀌어도 모양 함수는 같은 인스턴스라 캐시가 남는다 — 비워서 다시 만든다.
+    _shapePath = null;
+    _shapePathSource = null;
+    _shapePathSize = null;
   }
 
   @override
@@ -303,7 +332,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final textScaler = MediaQuery.textScalerOf(context)
         .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
 
-    _size = Size(width, height);
+    final shapePath = _shapeFor(Size(width, height));
     _hitSize = widget.extendHitAreaToLegend
         ? Size(width, height)
         : Size(width, capHeight);
@@ -352,25 +381,25 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       height: height,
       child: widget.extendHitAreaToLegend ? _wrapHitArea(column) : column,
     );
-    final shape = widget.shape;
     // ClipPath는 그림과 히트 테스트를 함께 경로 안으로 제한한다.
-    return shape == null
+    return shapePath == null
         ? body
-        : ClipPath(clipper: _ShapeClipper(shape), child: body);
+        : ClipPath(clipper: _ShapeClipper(shapePath), child: body);
   }
 }
 
-/// [CalcKeyButton.shape]를 적용하는 클리퍼
+/// [CalcKeyButton.shape]로 만든 경로를 적용하는 클리퍼 (경로는 버튼 상자 크기에 맞춰 이미 만들어져 있다)
 class _ShapeClipper extends CustomClipper<Path> {
-  final Path Function(Size size) shape;
+  final Path path;
 
-  const _ShapeClipper(this.shape);
-
-  @override
-  Path getClip(Size size) => shape(size);
+  const _ShapeClipper(this.path);
 
   @override
-  bool shouldReclip(_ShapeClipper oldClipper) => oldClipper.shape != shape;
+  Path getClip(Size size) => path;
+
+  @override
+  bool shouldReclip(_ShapeClipper oldClipper) =>
+      !identical(oldClipper.path, path);
 }
 
 /// 키캡 위 본체 영역의 SHIFT/ALPHA 각인 띠.
