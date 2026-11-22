@@ -178,10 +178,6 @@ void main() {
       ('SnackBar 동작', s.inversePrimary, s.inverseSurface),
     ];
 
-    /// 고대비 닫기 버튼의 [states] 테두리
-    BorderSide? textButtonSide(Set<WidgetState> states) =>
-        high.textButtonTheme.style?.side?.resolve(states);
-
     test('일반 테마는 그동안의 테마(ThemeData 기본 어두운 색 구성·본체색 배경) 그대로다', () {
       final before = ThemeData(
         brightness: Brightness.dark,
@@ -189,8 +185,17 @@ void main() {
       );
       expect(normal.colorScheme, before.colorScheme);
       expect(normal.scaffoldBackgroundColor, before.scaffoldBackgroundColor);
-      expect(normal.dialogTheme, before.dialogTheme);
       expect(normal.textButtonTheme, before.textButtonTheme);
+      expect(normal.iconButtonTheme, before.iconButtonTheme);
+      // 대화상자는 모양만 직접 지정한다 (M3 기본 모양과 같은지는 위젯 테스트가 확인)
+      expect(
+        normal.dialogTheme,
+        const DialogThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(28)),
+          ),
+        ),
+      );
       expect(normal.useMaterial3, isTrue);
     });
 
@@ -251,8 +256,10 @@ void main() {
         contrastRatio(border.side.color, dimmedBody),
         greaterThanOrEqualTo(nonText),
       );
-      // 일반 테마는 가장자리 선이 없다 (M3 기본 모양)
-      expect(normal.dialogTheme.shape, isNull);
+      // 일반 테마는 가장자리 선이 없고, 모서리는 두 테마가 같다 (전환 보간 중 반경이 바뀌지 않게)
+      final normalShape = normal.dialogTheme.shape! as RoundedRectangleBorder;
+      expect(normalShape.side, BorderSide.none);
+      expect(normalShape.borderRadius, border.borderRadius);
     });
 
     test('고대비 키보드 포커스 테두리는 대화상자 면·포커스 겹침 위 모두 3:1 이상이다', () {
@@ -270,23 +277,6 @@ void main() {
         high.colorScheme.onSurfaceVariant,
       ]) {
         expect(contrastRatio(fg, focusFill), greaterThanOrEqualTo(aaa));
-      }
-    });
-
-    test('고대비 닫기 버튼(TextButton)은 포커스일 때만 포커스 테두리를 그린다', () {
-      final focused = textButtonSide({WidgetState.focused});
-      expect(focused?.color, CalcTheme.materialFocusRingHighContrast);
-      expect(focused?.width, CalcTheme.materialFocusRingWidth);
-      expect(
-        textButtonSide({WidgetState.focused, WidgetState.hovered})?.color,
-        CalcTheme.materialFocusRingHighContrast,
-      );
-      for (final states in [
-        <WidgetState>{},
-        {WidgetState.hovered},
-        {WidgetState.pressed},
-      ]) {
-        expect(textButtonSide(states), isNull, reason: '$states');
       }
     });
   });

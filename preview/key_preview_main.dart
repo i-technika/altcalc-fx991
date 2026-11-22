@@ -215,14 +215,15 @@ String? describePreviewModifierChange(KeyModifier before, KeyModifier after) {
 /// 넓은 창은 좌우, 좁은 창([narrowWidth] 미만)은 위아래로 배치한다.
 ///
 /// ## Navigator 구조 (#72)
-/// `AltCalcApp.frameBuilder`로 앱을 감싸므로 [screen]은 **앱의 루트 Navigator**(첫 화면 `CalculatorScreen`)다.
+/// `AltCalcApp.frameBuilder`로 앱을 감싸므로 [screen]은 **앱의 루트 Navigator**(첫 화면 `CalculatorScreen`)와
+/// 그 위의 대비 테마(가장 가까운 MediaQuery의 고대비 설정으로 고르는 `AnimatedTheme`, #97)다.
 /// 이것을 기기 틀 안에 그대로 넣어, 실제 앱과 같은 Navigator 구조로 띄운다. 그래서 화면이 띄우는
 /// 대화상자·툴팁·SnackBar와 프레임워크가 루트 Overlay에 그리는 것(텍스트 선택 툴바·컨텍스트 메뉴 등)이 모두
 /// 기기 틀 안에 그 기기의 MediaQuery(크기·인셋·글자 배율)로, 기기 틀의 축소와 함께 그려진다.
 /// 조작 패널은 형제인 자기 Navigator([_PanelNavigator])를 쓴다 — 계산기 화면의 조상이 아니므로 화면 쪽의
 /// `rootNavigator: true`·`rootOverlay: true` 조회를 가로채지 않는다.
 class KeyPreviewScreen extends ConsumerStatefulWidget {
-  /// 앱의 루트 Navigator (`AltCalcApp.frameBuilder`가 넘겨준다)
+  /// 앱의 루트 Navigator와 그 위 대비 테마 (`AltCalcApp.frameBuilder`가 넘겨준다)
   final Widget screen;
 
   /// 입력 로그 최대 보관 줄 수
@@ -376,7 +377,8 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
 ///
 /// 화면 자리에 앱의 루트 Navigator([screen])를 두므로, 계산기 화면이 띄우는 대화상자·툴팁 등도
-/// 기기 틀 안에 그 기기의 MediaQuery로 뜬다(#72, [KeyPreviewScreen] 참조).
+/// 기기 틀 안에 그 기기의 MediaQuery로 뜬다(#72, [KeyPreviewScreen] 참조). 대화상자 테마도 이 틀의
+/// 고대비 설정을 따른다(#97).
 class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
@@ -385,7 +387,7 @@ class _DeviceFrame extends StatelessWidget {
   /// 흉내 내는 기기의 설정이므로 패널 스위치만 따른다.
   final bool highContrast;
 
-  /// 앱의 루트 Navigator ([KeyPreviewScreen.screen])
+  /// 앱의 루트 Navigator와 그 위 대비 테마 ([KeyPreviewScreen.screen])
   final Widget screen;
 
   const _DeviceFrame({

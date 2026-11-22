@@ -268,7 +268,8 @@ abstract final class CalcTheme {
   // 글자는 이미 7:1 이상이지만 다음이 모자랐다.
   // - 대화상자 면과 그 뒤(어둡게 덮인 본체)의 대비가 1.3:1이다. 어두운 화면에서는 M3 그림자도 보이지 않아
   //   대화상자 가장자리가 거의 구분되지 않는다.
-  // - 키보드 포커스 표시(선택지 타일의 흰색 12% 겹침)가 대화상자 면과 1.5:1이다. 닫기 버튼 포커스 겹침도 비슷하다.
+  // - 키보드 포커스 표시가 거의 보이지 않는다: 선택지 타일(흰색 12% 겹침)은 대화상자 면과 1.5:1, 닫기 버튼(primary 10%
+  //   겹침)은 1.3:1, 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이다.
   // - SnackBar 동작 버튼 글자가 5.0:1이다 (지금 앱은 SnackBar를 쓰지 않지만 쓰게 되면 바로 7:1 이상이 되게 맞춘다).
   // 툴팁은 M3 기본값이 색 구성과 관계없이 밝기만 보고(어두운 테마: 흰색 90% 바탕·검은 글자) 17.5:1이라 바꾸지 않는다.
   //
@@ -277,15 +278,18 @@ abstract final class CalcTheme {
   // SnackBar 글자 16.2:1·동작 10.1:1). 여기에 계산기 고대비 팔레트 색을 더한다.
   // - 대화상자 가장자리: 고대비 키캡 테두리와 같은 색([keyBorderHighContrast]) 선 — 대화상자 면 5.9:1, 덮인 본체 7.5:1
   // - 키보드 포커스: 고대비 눌린 키캡 테두리와 같은 흰색([materialFocusRingHighContrast]) 테두리 — 대화상자 면 14.4:1,
-  //   포커스 겹침 위 9.8:1. 닫기 버튼은 테마([TextButtonThemeData])가, 선택지 타일은 `HandednessDialog`가 그린다
-  //   (ListTile은 상태별 모양을 받지 않는다).
+  //   포커스 겹침 위 9.8:1, 본체 13.8:1. 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 버튼에 그린다
+  //   (ListTile은 상태별 모양을 받지 않고, 버튼의 focused 상태는 터치 조작 중에도 켜져 있다).
+  //
+  // 대화상자 모양은 두 테마 모두 M3 기본 모양(반경 [materialDialogBorderRadius])을 직접 지정한다 — 한쪽만 지정하면
+  // 고대비를 켜고 끌 때 테마 보간이 반경을 0까지 줄였다가 되돌린다. 보간 중에는 가장자리 선만 나타나거나 사라진다.
   // 고대비 기준 색 구성은 이름·설명 글자색(onSurface·onSurfaceVariant)이 같은 흰색이다 — 위계는 글자 크기로 남는다.
 
   /// 고대비 대화상자 가장자리 선 굵기
   static const double materialHighContrastDialogBorderWidth = 1.0;
 
-  /// M3 대화상자 기본 모서리 반경 — 고대비에서 가장자리 선을 넣으려고 모양을 다시 지정할 때 같은 값을 쓴다
-  /// (일반 대화상자와 같은지 `test/widget/material_theme_test.dart`가 확인한다)
+  /// M3 대화상자 기본 모서리 반경 — 두 테마가 대화상자 모양을 직접 지정할 때 쓴다
+  /// (M3 기본 대화상자와 같은지 `test/widget/material_theme_test.dart`가 확인한다)
   static const double materialDialogBorderRadius = 28.0;
 
   /// 고대비 키보드 포커스 테두리 색 (위 "Material 화면 테마" 주석 참조)
@@ -295,11 +299,18 @@ abstract final class CalcTheme {
   /// 고대비 키보드 포커스 테두리 굵기
   static const double materialFocusRingWidth = 2.0;
 
-  /// 일반 Material 테마 (어두운 테마, 본체색 배경 — #97 이전과 같다).
+  /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
   /// 정적 값이라 핫 리로드에는 반영되지 않는다(핫 리스타트 필요).
   static final ThemeData materialTheme = ThemeData(
     brightness: Brightness.dark,
     scaffoldBackgroundColor: bodyBackground,
+    dialogTheme: const DialogThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(materialDialogBorderRadius),
+        ),
+      ),
+    ),
   );
 
   /// 고대비 Material 테마 — 위 "Material 화면 테마" 주석 참조
@@ -315,18 +326,6 @@ abstract final class CalcTheme {
         side: BorderSide(
           color: keyBorderHighContrast,
           width: materialHighContrastDialogBorderWidth,
-        ),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: ButtonStyle(
-        side: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.focused)
-              ? const BorderSide(
-                  color: materialFocusRingHighContrast,
-                  width: materialFocusRingWidth,
-                )
-              : null,
         ),
       ),
     ),
@@ -897,8 +896,7 @@ final class CalcPalette {
       ? CalcTheme.materialHighContrastTheme
       : CalcTheme.materialTheme;
 
-  /// 테마가 그리지 못하는 Material 위젯(선택지 타일 등)의 키보드 포커스 테두리 색. 일반 팔레트는 `null`
-  /// (Material 기본 포커스 겹침만 쓴다, #97).
+  /// `FocusRing`이 그리는 키보드 포커스 테두리 색. 일반 팔레트는 `null` (Material 기본 포커스 겹침만 쓴다, #97).
   Color? get materialFocusRing =>
       isHighContrast ? CalcTheme.materialFocusRingHighContrast : null;
 
