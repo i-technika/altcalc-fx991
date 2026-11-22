@@ -14,8 +14,9 @@ import '../support/workflows.dart';
 /// `pubspec.lock` 커밋 누락은 여기서 검사하지 않는다 — `flutter test`가 먼저 pub get으로 lock을 다시 쓰므로
 /// 작업 트리 파일로는 알 수 없고, CI의 작업 트리 검사(`.github/scripts/verify-clean-tree.sh`)가 잡는다.
 
-/// 정확한 버전 `X.Y.Z` (범위·`^`·프리릴리스 표기 금지 — flutter-action이 정확한 버전만 받는다)
-final _exactVersion = RegExp(r'^\d+\.\d+\.\d+$');
+/// 정확한 버전 `X.Y.Z` (범위·`^`·프리릴리스·앞자리 0 금지 — 읽기 스크립트의 판정과 같다).
+/// flutter-action은 `3.50`·`3.50.x`도 받지만 접두 일치로 그 계열의 최신 패치를 골라 고정이 되지 않는다.
+final _exactVersion = RegExp(r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$');
 
 /// Flutter SDK를 설치하는 액션
 const _flutterAction = 'subosito/flutter-action@';
@@ -161,14 +162,20 @@ void main() {
       expect(outputFile().readAsStringSync(), 'other=1\nversion=$pinned\n');
     });
 
-    test('GITHUB_OUTPUT이 없어도(로컬 실행) 버전을 출력한다', () {
-      final result = runBashScript(
-        _pinScript,
-        [fixture('environment:\n  flutter: 1.2.3\n')],
-        environment: {'GITHUB_OUTPUT': ''},
-      );
-      expect(result.exitCode, 0, reason: '${result.stderr}');
-      expect(result.stdout, '1.2.3\n');
+    test('GITHUB_OUTPUT이 없거나 비어 있어도(로컬 실행) 버전을 출력한다', () {
+      final pubspec = fixture('environment:\n  flutter: 1.2.3\n');
+      for (final result in [
+        // 변수 자체가 없는 경우 — 스크립트의 `set -u`에서도 실패하지 않아야 한다
+        runBashScript(_pinScript, [pubspec], unset: ['GITHUB_OUTPUT']),
+        runBashScript(
+          _pinScript,
+          [pubspec],
+          environment: {'GITHUB_OUTPUT': ''},
+        ),
+      ]) {
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(result.stdout, '1.2.3\n');
+      }
     });
 
     // 받아들이는 표기 — 표본의 YAML 해석 결과와 같은 값을 읽어야 한다
@@ -205,6 +212,7 @@ void main() {
         'environment:\n  sdk: >-\n    flutter: 1.2.3\n  flutter: 3.50.0\n',
         '3.50.0',
       ),
+      '파일 첫머리 BOM': ('﻿environment:\n  flutter: 3.50.0\n', '3.50.0'),
     };
     for (final MapEntry(key: name, value: (text, expected))
         in accepted.entries) {
@@ -242,6 +250,14 @@ void main() {
       '흐름 표기': 'environment: {sdk: ^3.14.0, flutter: 3.50.0}\n',
       '같은 키 두 번': 'environment:\n  flutter: 3.50.0\n  flutter: 3.50.0\n',
       'environment 블록 두 번': 'environment:\n  flutter: 3.50.0\nother: 1\nenvironment:\n  flutter: 3.50.0\n',
+      'environment 블록 두 번 (둘째에는 flutter 없음)':
+          'environment:\n  flutter: 3.50.0\nenvironment:\n  sdk: ^3.14.0\n',
+      '앞자리 0': 'environment:\n  flutter: 03.050.00\n',
+      // YAML로는 "3.50.0 beta"·"3.50.0 .1" — 첫 줄만 읽으면 다른 값이 된다
+      '다음 줄로 이어지는 값':
+          'environment:\n  flutter: 3.50.0\n   beta\n  sdk: ^3.14.0\n',
+      '빈 줄 뒤에 이어지는 값': 'environment:\n  flutter: 3.50.0\n\n    .1\n',
+      '탭 들여쓰기': 'environment:\n\tflutter: 3.50.0\n',
     };
     for (final MapEntry(key: name, value: text) in rejected.entries) {
       test('거부한다: $name', () {

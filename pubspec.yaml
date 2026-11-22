@@ -21,7 +21,7 @@ version: 1.0.0+1
 environment:
   sdk: ^3.14.0
   # CI가 쓰는 Flutter SDK 버전 (#78). CI는 .github/scripts/read-flutter-version.sh로 이 줄을 읽어 설치한다 (#90) —
-  # `environment:` 바로 아래에 `flutter: X.Y.Z` 한 줄로 둔다(다른 표기는 스크립트가 거부한다).
+  # `environment:` 바로 아래에 `flutter: X.Y.Z` 한 줄로 둔다(스크립트는 이 형태만 읽는다).
   # 정확한 버전(X.Y.Z)만 쓴다. pub도 이 값을 정확히 검사하므로 다른 SDK로는 로컬 `flutter pub get`이 실패한다.
   # 올리는 절차: README "Flutter SDK 버전 올리기" (로컬 SDK·이 값·pubspec.lock을 한 커밋에서 함께 갱신)
   flutter: 3.50.0
