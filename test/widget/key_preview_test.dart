@@ -2202,13 +2202,20 @@ void main() {
           ),
         ),
       );
-      // 전제: 고른 밀도가 패널에 닿았다 (터치 영역을 늘리면 초기화 버튼이 48dp 이상).
-      final resetHeight = tester.getSize(reset).height;
+      // 전제: 고른 밀도가 패널에 닿았다 — 둘 다 닿아야 하므로 값으로 확인한다.
+      final theme = Theme.of(tester.element(settingsArea));
       expect(
-        resetHeight,
-        desktop ? lessThan(48) : greaterThanOrEqualTo(48),
-        reason: '초기화 버튼 높이 $resetHeight',
+        theme.materialTapTargetSize,
+        desktop
+            ? MaterialTapTargetSize.shrinkWrap
+            : MaterialTapTargetSize.padded,
       );
+      expect(
+        theme.visualDensity,
+        desktop ? VisualDensity.compact : VisualDensity.standard,
+      );
+      // 초기화 버튼 높이: 터치 영역 48 / 데스크톱(줄인 터치 영역 + compact) 32
+      expect(tester.getSize(reset).height, desktop ? 32 : 48);
     }
 
     ScrollPosition panelScroll(WidgetTester tester) => tester
@@ -2398,6 +2405,24 @@ void main() {
       expect(resetInScrolling(), isFalse);
       handle.dispose();
     });
+
+    // 패널과 기기 화면 각자의 Navigator 라우트 장벽(BlockSemantics)이 먼저 그려진 형제를 가리지 않는다.
+    for (final window in const [Size(1280, 900), Size(500, 900)]) {
+      testWidgets('창 $window: 조작 패널과 기기 화면(대화상자 포함)이 모두 의미 트리에 있다', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await _pumpPreview(tester, window: window);
+        expect(find.bySemanticsLabel('초기화'), findsOneWidget);
+        expect(find.bySemanticsLabel('Shift'), findsOneWidget);
+
+        await tester.tap(find.byKey(SettingsButton.buttonKey));
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('초기화'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('Keypad position')), findsWidgets);
+        handle.dispose();
+      });
+    }
 
     testWidgets('낮은 패널에서는 설정이 로그와 함께 스크롤되어 올라간다', (tester) async {
       await _pumpPreview(tester);

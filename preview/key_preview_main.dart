@@ -452,32 +452,36 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   Widget build(BuildContext context) {
     ref.listen(calcProvider.select(_watchOf), _onChanged);
 
-    final panel = _PanelNavigator(
-      child: _ControlPanel(
-        device: _device,
-        posture: _posture,
-        orientation: _orientation,
-        textScale: _textScale,
-        highContrast: _highContrast,
-        log: _log,
-        inputTotal: _inputTotal,
-        trimmed: _trimmed,
-        // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
-        // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
-        // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
-        onDeviceChanged: (d) {
-          if (identical(d, _device)) return;
-          setState(() {
-            _device = d;
-            _posture = PreviewFoldPosture.flat;
-            _orientation = d.naturalOrientation;
-          });
-        },
-        onPostureChanged: (p) => setState(() => _posture = p),
-        onOrientationChanged: (o) => setState(() => _orientation = o),
-        onTextScaleChanged: (s) => setState(() => _textScale = s),
-        onHighContrastChanged: (v) => setState(() => _highContrast = v),
-        onReset: _reset,
+    // 패널과 기기 화면은 의미 트리에서 서로 독립된 노드로 묶는다 — [_DeviceFrame._deviceScreen] 참조 (#105).
+    final panel = Semantics(
+      container: true,
+      child: _PanelNavigator(
+        child: _ControlPanel(
+          device: _device,
+          posture: _posture,
+          orientation: _orientation,
+          textScale: _textScale,
+          highContrast: _highContrast,
+          log: _log,
+          inputTotal: _inputTotal,
+          trimmed: _trimmed,
+          // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
+          // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
+          // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
+          onDeviceChanged: (d) {
+            if (identical(d, _device)) return;
+            setState(() {
+              _device = d;
+              _posture = PreviewFoldPosture.flat;
+              _orientation = d.naturalOrientation;
+            });
+          },
+          onPostureChanged: (p) => setState(() => _posture = p),
+          onOrientationChanged: (o) => setState(() => _orientation = o),
+          onTextScaleChanged: (s) => setState(() => _textScale = s),
+          onHighContrastChanged: (v) => setState(() => _highContrast = v),
+          onReset: _reset,
+        ),
       ),
     );
     // 앱의 루트 Navigator는 WidgetsApp이 GlobalKey로 들고 있어, 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지된다.
@@ -557,9 +561,10 @@ class _DeviceFrame extends StatelessWidget {
   /// 기기 크기의 화면: 기기 MediaQuery와 좌표 원점([ScreenCoordinateRoot]) 아래에 앱 Navigator를 둔다.
   /// 접힘선은 화면(대화상자 포함) 위에 겹쳐 그린다 — 터치는 가로채지 않는다.
   ///
-  /// 의미 트리에서 화면을 독립된 노드로 묶는다(#105): 앱 Navigator의 라우트 장벽(`ModalBarrier`)은 `BlockSemantics`라
-  /// 같은 노드 안에서 먼저 그려진 형제를 가린다 — 묶지 않으면 기기 틀 앞에 그려지는 조작 패널 전체가
-  /// 의미 트리에서 빠진다(스크린리더·의미 트리 테스트에서 패널이 보이지 않음).
+  /// 의미 트리에서 화면을 독립된 노드로 묶는다(#105, 패널도 [KeyPreviewScreen]에서 같이 묶는다): 앱 Navigator와 패널
+  /// Navigator([_PanelNavigator])의 라우트 장벽(`ModalBarrier`)은 `BlockSemantics`라 같은 노드 안에서 먼저 그려진
+  /// 형제를 통째로 가린다. 묶지 않으면 넓은 배치(패널 → 기기 틀 순)에서는 패널 전체가, 좁은 배치(기기 틀 → 패널 순)에서는
+  /// 기기 화면 전체(대화상자 포함)가 의미 트리에서 빠진다. 각자를 경계로 묶어 형제로 두면 장벽이 자기 안만 가린다.
   Widget _deviceScreen(BuildContext context, {Key? key}) => SizedBox.fromSize(
     key: key,
     size: device.size,
@@ -877,6 +882,8 @@ class _ControlPanel extends StatelessWidget {
   ///
   /// SHIFT·ALPHA 조합 입력 하나가 두 줄(`[SHIFT 대기]`, 기능 입력)을 남기므로, 방금 누른 조합과 그 앞의 입력
   /// 한 줄까지 보이는 3줄로 정했다. 이보다 낮은 패널은 설정을 함께 스크롤해, 설정을 밀어 올리면 로그를 더 볼 수 있다.
+  /// 화면에 보이는 줄 기준이다 — 패널 폭(약 35자, 호스트 글자 130%면 약 27자)을 넘는 긴 입력은 두 줄로 접혀
+  /// 보이는 입력 수가 줄 수 있다(지금 문구는 대부분 이보다 짧다).
   static const int _minLogLines = 3;
 
   /// 패널 안쪽 여백 (dp)
@@ -1044,7 +1051,8 @@ class _ControlPanel extends StatelessWidget {
 
   /// 입력 로그 (최근 줄이 맨 위). 화면에 보이는 줄만 만든다(지연 생성).
   /// 줄 높이는 [strut]으로 고정한다 — 대체 글꼴로 그리는 글자(`∫`·`∑` 등 Math 글꼴, 한글)가 든 줄도 높이가 같아야
-  /// 전환 높이 계산([_logLineHeight])과 맞는다.
+  /// 전환 높이 계산([_logLineHeight])과 맞는다(`test/widget/key_preview_log_font_test.dart`가 번들 글꼴로 확인).
+  /// 대가로 Math 글꼴 글리프는 줄 상자 아래로 2dp 미만 넘칠 수 있다(자르지 않으므로 다음 줄과 살짝 겹칠 뿐이다).
   Widget _logSliver(StrutStyle strut) => log.isEmpty
       ? const SliverToBoxAdapter(
           child: Text(
@@ -1135,8 +1143,8 @@ class _ControlPanel extends StatelessWidget {
 /// ([SliverToBoxAdapter]와 같다) (#105).
 ///
 /// 판정에 쓰는 높이는 레이아웃할 때 잰 상자 높이라, 상자 내용이 바뀌면(항목 추가, 플랫폼별 터치 영역, 글자 배율)
-/// 전환 높이도 따라 바뀐다. 아래 방향으로 스크롤하는 뷰의 첫 sliver로만 쓴다(앞 sliver·겹침이 없다고 보고
-/// 뷰포트 높이만으로 판정한다 — 디버그 빌드에서 assert로 확인). 고정할 때 상자는 불투명해야 한다.
+/// 전환 높이도 따라 바뀐다. 아래 방향으로 스크롤하는 뷰의 첫 sliver로만 쓴다(앞 sliver가 없다고 보고 뷰포트 높이만으로
+/// 판정한다 — 디버그 빌드에서 assert로 확인. 겹침은 고정 기하에 그대로 반영한다). 고정할 때 상자는 불투명해야 한다.
 class _PinnedWhenRoomSliver extends SingleChildRenderObjectWidget {
   /// 상자를 고정하려면 그 아래에 남아야 하는 높이 (dp)
   final double minRemainingExtent;
