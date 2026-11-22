@@ -14,7 +14,6 @@ import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart' show listEquals;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
@@ -94,10 +93,11 @@ const EdgeInsets _gestureNavInsets = EdgeInsets.fromLTRB(
 
 /// Galaxy Z Fold5 내부 화면(690×829, 세로)을 펼쳤을 때의 접힘선 근사값.
 ///
-/// 실기기는 물리 화면(1812×2176 px) 가운데(x=906 px)에 폭 0인 세로 접힘선을 `FOLD`·`FLAT`으로 보고한다.
+/// 펼친 폴더블은 Jetpack WindowManager 문서상 폭 0인 접힘선을 `FOLD`·`FLAT`으로 보고하므로, 물리 화면
+/// (1812×2176 px) 가운데(x=906 px)에 위에서 아래까지 가로지르는 세로 접힘선이 올 것으로 본다.
 /// 밀도 2.625(420dpi, 기본 화면 크기 설정) 가정으로 dp로 바꾸면 화면 690.29×828.95, 접힘선 x=345.14이며,
-/// 프리셋 크기에 맞춰 정수로 반올림했다. 밀도는 기기 화면 크기(확대/축소) 설정에 따라 달라진다 — 실기기 미확인.
-/// 위에서 아래까지 화면 높이 전체를 가로지른다.
+/// 프리셋 크기에 맞춰 정수로 반올림했다. 밀도는 기기 화면 크기(확대/축소) 설정에 따라 달라진다.
+/// 보고 값·밀도 모두 실기기 미확인이다.
 const DisplayFeature previewFoldInnerFold = DisplayFeature(
   bounds: Rect.fromLTWH(345, 0, 0, 829),
   type: DisplayFeatureType.fold,
@@ -468,11 +468,11 @@ class _DeviceFrame extends StatelessWidget {
               SizedBox(
                 height: previewFrameCaptionHeight,
                 child: Text(
-                  // 접힘선 정보는 창이 좁을 때 말줄임으로 먼저 잘리지 않게 기기 이름 바로 뒤에 둔다.
-                  '${device.label}'
+                  // 창이 좁으면 끝부터 말줄임으로 잘린다. 패널에 보이지 않는 값(표시 배율, 접힘선)을
+                  // 앞에 두고, 패널에서 고른 글자 배율을 맨 끝에 둔다.
+                  '${device.label} · 표시 배율 ${(scale * 100).round()}%'
                   '${previewDisplayFeatureCaption(device.size, device.displayFeatures)}'
-                  ' · 글자 ${(textScale * 100).round()}% · '
-                  '표시 배율 ${(scale * 100).round()}%',
+                  ' · 글자 ${(textScale * 100).round()}%',
                   key: const ValueKey('preview-frame-caption'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -511,21 +511,35 @@ class _DeviceFrame extends StatelessWidget {
 Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
     features.where((f) => FormFactor.hasFoldOrHinge([f]) && f.bounds.isFinite);
 
-/// 앱이 [screen] 크기 화면을 가로지르는 접힘선으로 인식하는지 ([FormFactor.hingeOf]).
-/// 인식하지 않는 접힘선(화면을 끝까지 가로지르지 않음 등)은 배치에 쓰이지 않는다.
-bool _recognized(Size screen, DisplayFeature f) =>
-    FormFactor.hingeOf(screen, [f]) != null;
+/// 앱이 [screen] 크기 화면을 나누는 데 쓰는 접힘선. 없으면 `null`.
+///
+/// 앱의 배치 규칙([FormFactor.arrangementOf])과 같다: 화면을 가로지르는 접힘선 중 **첫 번째**
+/// ([FormFactor.hingeOf]) 하나만 보고, 양쪽 패널 길이([FormFactor.hingeMinPanelExtent])와 가로 접힘선의
+/// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
+/// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
+/// 반영하지 않는다.
+DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
+  final used = FormFactor.hingeOf(screen, features);
+  if (used == null) return null;
+  return switch (FormFactor.arrangementOf(screen, features)) {
+    ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked => used,
+    ScreenArrangement.stacked || ScreenArrangement.split => null,
+  };
+}
 
 /// 캡션에 덧붙일 접힘선 설명 (예: ` · 접힘선(점선) 세로 x=345`). 그릴 접힘선이 없으면 빈 문자열.
 ///
 /// 세로 접힘선은 가운데 x, 가로 접힘선은 가운데 y를 화면 좌표(dp)로 적는다. 폭이 있는 힌지는 폭도 적고,
-/// 앱이 [screen] 크기 화면에서 인식하지 않는 접힘선은 `(앱 미인식)`을 붙인다 — 점선은 있는데 배치가
-/// 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
+/// 앱이 [screen] 크기 화면을 나누는 데 쓰지 않는 접힘선([_splittingFold]가 아닌 것 — 화면을 끝까지
+/// 가로지르지 않음, 한쪽 패널이 너무 좁음, 펼친 가로 접힘선, 두 번째 접힘선)은 `(배치에 안 씀)`을 붙인다.
+/// 점선은 있는데 배치가 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
+/// 지금 프리셋에는 그런 접힘선이 없다 — 회전·자세를 흉내 내는 프리셋이 생길 때를 위한 구분이다.
 String previewDisplayFeatureCaption(
   Size screen,
   List<DisplayFeature> features,
 ) {
   final parts = <String>[];
+  final splitting = _splittingFold(screen, features);
   for (final f in _drawableFolds(features)) {
     final b = f.bounds;
     final vertical = FormFactor.isVerticalHinge(b);
@@ -533,8 +547,8 @@ String previewDisplayFeatureCaption(
         ? '세로 x=${_dp(b.center.dx)}'
         : '가로 y=${_dp(b.center.dy)}';
     final extent = vertical ? b.width : b.height;
-    final unrecognized = _recognized(screen, f) ? '' : ' (앱 미인식)';
-    parts.add('$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$unrecognized');
+    final unused = identical(f, splitting) ? '' : ' (배치에 안 씀)';
+    parts.add('$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$unused');
   }
   return parts.isEmpty ? '' : ' · 접힘선(점선) ${parts.join(', ')}';
 }
@@ -545,20 +559,20 @@ String _dp(double v) =>
 
 /// 기기 화면 위에 접힘선·힌지 위치를 점선으로 표시한다 (#51). 폭이 있는 힌지는 영역을 반투명하게 칠한다.
 ///
-/// 그리는 영역의 크기가 곧 기기 화면 크기다(화면 좌표). 앱이 인식하는 접힘선은 [recognizedColor](주황),
-/// 인식하지 않는 접힘선은 [unrecognizedColor](회색)로 그린다. 화면 구멍(cutout) 등 접힘선이 아닌 특징과
-/// 영역이 유한하지 않은 특징은 그리지 않는다.
+/// 그리는 영역의 크기가 곧 기기 화면 크기다(화면 좌표). 앱이 화면을 나누는 데 쓰는 접힘선([_splittingFold])은
+/// [splittingColor](주황), 그 밖의 접힘선은 [otherColor](회색)로 그린다. 화면 구멍(cutout) 등 접힘선이 아닌
+/// 특징과 영역이 유한하지 않은 특징은 그리지 않는다.
 /// 앱 화면 위에 그리지만 히트 테스트에 참여하지 않으므로([CustomPainter.hitTest] 기본값) 터치를 가로채지 않는다.
 class PreviewDisplayFeaturePainter extends CustomPainter {
   final List<DisplayFeature> features;
 
   const PreviewDisplayFeaturePainter(this.features);
 
-  /// 앱이 인식하는 접힘선 색 (미리보기 전용 — 앱 화면 색과 겹치지 않는 주황)
-  static const Color recognizedColor = Color(0xCCFF9800);
+  /// 앱이 화면을 나누는 데 쓰는 접힘선 색 (미리보기 전용 — 앱 화면 색과 겹치지 않는 주황)
+  static const Color splittingColor = Color(0xCCFF9800);
 
-  /// 앱이 인식하지 않는 접힘선 색
-  static const Color unrecognizedColor = Color(0xCC9E9E9E);
+  /// 배치에 쓰이지 않는 접힘선 색
+  static const Color otherColor = Color(0xCC9E9E9E);
 
   /// 점선 한 칸 길이·간격 (dp, 기기 화면 좌표)
   static const double _dash = 8;
@@ -566,8 +580,9 @@ class PreviewDisplayFeaturePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final splitting = _splittingFold(size, features);
     for (final f in _drawableFolds(features)) {
-      final color = _recognized(size, f) ? recognizedColor : unrecognizedColor;
+      final color = identical(f, splitting) ? splittingColor : otherColor;
       final line = Paint()
         ..color = color
         ..strokeWidth = 2;
