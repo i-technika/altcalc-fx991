@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'screen_coordinate_root.dart';
 
 /// fx-991EX 스타일의 단일 키 버튼.
 ///
@@ -35,6 +36,7 @@ import '../l10n/calc_semantic_strings.dart';
 ///   손가락을 미끄러뜨려도 첫 입력은 취소되지 않는다.
 /// - 단, 시스템 제스처 영역([MediaQueryData.systemGestureInsets], Android 뒤로가기 등)에서 시작된
 ///   터치는 시스템이 가로챌 수 있으므로 **손을 뗄 때** 확정하고, 취소되거나 키 밖으로 벗어나면 버린다.
+///   가장자리 판정은 화면 영역의 로컬 좌표로 한다 — 화면을 흉내 내는 곳은 [ScreenCoordinateRoot]를 둔다.
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
 /// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다.
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
@@ -194,14 +196,19 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   }
 
   /// 전역 좌표가 시스템 제스처 영역(화면 가장자리) 안인지 판정한다.
+  ///
+  /// 인셋과 화면 크기는 MediaQuery가 정의한 화면 영역의 좌표이므로, 터치 좌표도
+  /// [ScreenCoordinateRoot.globalToScreen]으로 그 영역의 로컬 좌표로 바꿔 비교한다(#50).
+  /// 화면이 원점이 아닌 곳에 있거나 축소된 경우(개발용 미리보기)에도 판정이 맞는다.
   bool _inSystemGestureZone(Offset globalPosition) {
     final insets = MediaQuery.systemGestureInsetsOf(context);
     if (insets == EdgeInsets.zero) return false;
     final screen = MediaQuery.sizeOf(context);
-    return globalPosition.dx < insets.left ||
-        globalPosition.dx > screen.width - insets.right ||
-        globalPosition.dy < insets.top ||
-        globalPosition.dy > screen.height - insets.bottom;
+    final p = ScreenCoordinateRoot.globalToScreen(context, globalPosition);
+    return p.dx < insets.left ||
+        p.dx > screen.width - insets.right ||
+        p.dy < insets.top ||
+        p.dy > screen.height - insets.bottom;
   }
 
   void _handlePointerDown(PointerDownEvent event) {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/korean_locale.dart';
@@ -631,6 +632,156 @@ void main() {
         expect(pressed, [CalcKeyId.num1]);
         await gesture.up();
       });
+
+      // 화면을 흉내 내는 곳(개발용 미리보기)처럼, 400×400 화면을 전역 (300, 100)에 절반 크기로 그린다.
+      // 판정은 전역 좌표가 아니라 ScreenCoordinateRoot 기준 화면 좌표로 해야 한다(#50).
+      const screenOrigin = Offset(300, 100);
+      const screenScale = 0.5;
+      const screenSize = Size(400, 400);
+      Offset toGlobal(Offset screen) => screenOrigin + screen * screenScale;
+
+      Widget simulatedScreenHost(
+        List<CalcKeyId> log, {
+        bool withRoot = true,
+        EdgeInsets rootInset = EdgeInsets.zero,
+      }) {
+        Widget screen = Stack(
+          children: [
+            for (final (id, alignment) in [
+              (CalcKeyId.num1, Alignment.centerLeft),
+              (CalcKeyId.num2, Alignment.center),
+              (CalcKeyId.num3, Alignment.centerRight),
+            ])
+              Align(
+                alignment: alignment,
+                child: SizedBox(
+                  width: 64,
+                  height: 72,
+                  child: CalcKeyButton(
+                    keyDef: keyDefOf(id),
+                    onPressed: log.add,
+                  ),
+                ),
+              ),
+          ],
+        );
+        if (withRoot) {
+          screen = Padding(
+            padding: rootInset,
+            child: ScreenCoordinateRoot(child: screen),
+          );
+        }
+        return MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: screenOrigin.dx,
+                top: screenOrigin.dy,
+              ),
+              child: SizedBox.fromSize(
+                size: screenSize * screenScale,
+                child: FittedBox(
+                  child: SizedBox.fromSize(
+                    size: screenSize,
+                    child: MediaQuery(
+                      data: const MediaQueryData(
+                        size: screenSize,
+                        systemGestureInsets: EdgeInsets.symmetric(
+                          horizontal: 30,
+                        ),
+                      ),
+                      child: screen,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      /// 화면 좌표 [screen]을 누르고, (누른 순간 입력되었는지, 손을 뗀 뒤 입력된 키 이름)을 돌려준다.
+      /// (레코드 안의 List는 `==`로 비교되지 않으므로 이름을 문자열로 잇는다.)
+      Future<(bool, String)> pressAt(
+        WidgetTester tester,
+        List<CalcKeyId> log,
+        Offset screen,
+      ) async {
+        log.clear();
+        final g = await tester.startGesture(toGlobal(screen));
+        await tester.pump();
+        final immediate = log.isNotEmpty;
+        await g.up();
+        await tester.pump();
+        return (immediate, log.map((id) => id.name).join(','));
+      }
+
+      testWidgets('밀리고 축소된 화면에서도 화면 기준 가장자리로 판정한다', (tester) async {
+        _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(simulatedScreenHost(pressed));
+        // 전제: 화면이 전역 (300, 100)에 절반 크기로 그려졌다.
+        expect(
+          tester.getRect(find.byType(CalcKeyButton).first),
+          Rect.fromLTWH(screenOrigin.dx, 100 + 164 * screenScale, 32, 36),
+        );
+
+        // 화면 왼쪽 가장자리(x=10) — 전역 x=305는 전역 기준이면 영역 밖이지만 화면 기준으로는 안이다.
+        expect(await pressAt(tester, pressed, const Offset(10, 200)), (
+          false,
+          'num1',
+        ));
+        // 화면 오른쪽 가장자리(x=390) — 전역 x=495는 전역 창(800) 기준이면 한참 안쪽이다.
+        expect(await pressAt(tester, pressed, const Offset(390, 200)), (
+          false,
+          'num3',
+        ));
+        // 경계 안쪽(x=50, x=350)과 가운데 키는 즉시 입력된다.
+        expect(await pressAt(tester, pressed, const Offset(50, 200)), (
+          true,
+          'num1',
+        ));
+        expect(await pressAt(tester, pressed, const Offset(350, 200)), (
+          true,
+          'num3',
+        ));
+        expect(await pressAt(tester, pressed, const Offset(200, 200)), (
+          true,
+          'num2',
+        ));
+      });
+
+      testWidgets('ScreenCoordinateRoot가 없으면 전역 좌표로 판정한다 (실제 앱과 같은 경로)', (
+        tester,
+      ) async {
+        _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(simulatedScreenHost(pressed, withRoot: false));
+
+        // 화면 기준 x=10이지만 전역 x=305이므로 즉시 입력된다 — 루트가 필요한 이유를 보여주는 대조군.
+        expect(await pressAt(tester, pressed, const Offset(10, 200)), (
+          true,
+          'num1',
+        ));
+      });
+
+      testWidgets(
+        'ScreenCoordinateRoot가 MediaQuery 영역과 크기가 다르면 디버그 assert로 알린다',
+        (tester) async {
+          _recordHaptics(tester);
+          final pressed = <CalcKeyId>[];
+          await tester.pumpWidget(
+            simulatedScreenHost(pressed, rootInset: const EdgeInsets.all(20)),
+          );
+
+          final g = await tester.startGesture(toGlobal(const Offset(200, 200)));
+          final error = tester.takeException();
+          expect(error, isA<AssertionError>());
+          expect('$error', contains('ScreenCoordinateRoot'));
+          await g.up();
+        },
+      );
     });
 
     testWidgets('extendHitAreaToLegend이면 각인 띠를 눌러도 입력된다', (tester) async {
