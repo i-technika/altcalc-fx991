@@ -48,9 +48,10 @@ abstract final class CalcTheme {
   /// LCD 상태 표시줄 활성 텍스트 (S, A, DEG 등이 켜졌을 때)
   static const Color lcdStatusActive = Color(0xFF2A2A2A);
 
-  /// LCD 상태 표시줄 비활성 텍스트 — [lcdStatusActive]를 약 4% 불투명도로 (#44).
+  /// LCD 상태 표시줄 비활성 텍스트 — [lcdStatusActive]를 약 4% 불투명도로 (#44, 사용자 결정).
   /// 실물의 꺼진 표시기는 정면에서 거의 보이지 않고 비스듬히 볼 때만 희미하게 비친다(사용자 실물 확인).
-  /// 그래서 슬롯 위치만 은은하게 남는 정도로 그린다 (제안받은 3~5% 범위, 테스트로 검증).
+  /// 이 값은 도트 격자([lcdDotGrid])보다도 옅어 정면에서는 사실상 보이지 않는다(테스트로 고정).
+  /// 고대비 모드에서 올리는 것은 #54에서 다룬다.
   static const Color lcdStatusInactive = Color(0x0A2A2A2A);
 
   /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선)
@@ -231,7 +232,7 @@ abstract final class CalcTheme {
     height: 1.3,
   );
 
-  /// LCD 상태 표시줄 텍스트 스타일 (S, A, DEG/RAD/GRAD, MATH 등).
+  /// LCD 상태 표시줄 텍스트 스타일 (S, A, D/R/G, √◻ 등 — 슬롯은 `LcdIndicatorSlot`).
   static const TextStyle lcdStatusStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -362,8 +363,10 @@ abstract final class CalcTheme {
   /// 상태 표시 슬롯 사이 간격 (상태 표시 글자 크기 대비)
   static const double lcdStatusSlotGapRatio = 0.5;
 
-  /// 상태 표시 슬롯 너비 산정용 글자당 폭 (글자 크기 대비, 고정폭 폰트 기준)
-  static const double lcdStatusCharWidthRatio = 0.65;
+  /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
+  /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
+  /// 비율에 섞어 두면 특정 글자 크기에서만 맞고 작은 LCD에서 슬롯이 축소된다(#44 리뷰 R1).
+  static const double lcdStatusCharWidthRatio = 0.6;
 
   /// 스크롤 표시(◄/►) 글자 크기 (해당 줄 글자 크기 대비)
   static const double lcdScrollArrowFontRatio = 0.6;

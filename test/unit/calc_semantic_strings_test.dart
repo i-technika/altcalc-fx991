@@ -209,6 +209,23 @@ void main() {
         '시프트, 메모리, 각도 단위 도, 수학 입출력',
       );
     });
+
+    test('FIX와 SCI는 각자의 의미로 읽고, 꺼진 쪽은 읽지 않는다 (#44 — 슬롯 분리)', () {
+      const fix = LcdStatus(numberFormat: NumberDisplayFormat.fix);
+      const sci = LcdStatus(numberFormat: NumberDisplayFormat.sci);
+      expect(ko.statusBar(fix), '각도 단위 도, 소수 자릿수 고정, 수학 입출력');
+      expect(ko.statusBar(sci), '각도 단위 도, 유효숫자 고정, 수학 입출력');
+      const en = EnSemanticStrings();
+      expect(en.statusBar(fix), 'Degrees, Fixed decimals, Math input output');
+      expect(
+        en.statusBar(sci),
+        'Degrees, Significant digits, Math input output',
+      );
+      for (final strings in CalcSemanticStrings.all) {
+        expect(strings.indicator(LcdIndicatorSlot.sciFormat, fix), isNull);
+        expect(strings.indicator(LcdIndicatorSlot.fixFormat, sci), isNull);
+      }
+    });
   });
 
   group('언어 선택', () {

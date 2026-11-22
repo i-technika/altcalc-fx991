@@ -83,6 +83,57 @@ void main() {
       }
     });
 
+    for (final scale in [1.0, 1.3]) {
+      testWidgets(
+        '상태 표시 슬롯은 글자 크기와 무관하게 표시 문자를 축소 없이 담는다 (글자 배율 $scale, #44 리뷰 R1)',
+        (tester) async {
+          const all = LcdStatus(
+            shift: true,
+            alpha: true,
+            memory: true,
+            store: true,
+            numberFormat: NumberDisplayFormat.fix,
+            engineering: true,
+            complex: ComplexResultIndicator.polar,
+            historyUp: true,
+            historyDown: true,
+            disp: true,
+          );
+          for (final fontSize in [6.0, 8.0, 10.0, 14.0]) {
+            await tester.pumpWidget(
+              MaterialApp(
+                home: Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: 2000,
+                    child: LcdStatusBar(
+                      status: all,
+                      style: CalcTheme.lcdStatusStyle.copyWith(
+                        fontSize: fontSize,
+                      ),
+                      textScaler: TextScaler.linear(scale),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            for (final slot in LcdIndicatorSlot.values) {
+              final slotBox = find.byKey(ValueKey(slot));
+              final text = find.descendant(
+                of: slotBox,
+                matching: find.byType(Text),
+              );
+              expect(
+                tester.getSize(text).width,
+                lessThanOrEqualTo(tester.getSize(slotBox).width + 0.01),
+                reason: '${slot.name} @ $fontSize',
+              );
+            }
+          }
+        },
+      );
+    }
+
     test('가장 긴 결과는 지수를 lcdExponentMaxScale 크기(자간 포함)로 그리면 여유를 두고 17칸에 들어가고, 유니코드 위첨자로 그리면 넘친다', () {
       const mantissa = '−1.234567891×10';
       const f = 20.0;

@@ -76,11 +76,16 @@ void main() {
         (active.r, active.g, active.b),
       );
       expect(inactive.a, inInclusiveRange(0.03, 0.05));
-      // LCD 배경 위에 합성한 색: 배경과 거의 같지만(1.1:1 미만) 완전히 같지는 않다.
+      // LCD 배경 위에 합성하면 도트 격자선보다도 옅다 — 정면에서는 사실상 보이지 않는다(사용자 결정).
       final drawn = Color.alphaBlend(inactive, CalcTheme.lcdBackground);
-      final ratio = contrastRatio(drawn, CalcTheme.lcdBackground);
-      expect(ratio, lessThan(1.1));
-      expect(ratio, greaterThan(1.0));
+      final grid = Color.alphaBlend(
+        CalcTheme.lcdDotGrid,
+        CalcTheme.lcdBackground,
+      );
+      expect(
+        contrastRatio(drawn, CalcTheme.lcdBackground),
+        lessThan(contrastRatio(grid, CalcTheme.lcdBackground)),
+      );
     });
   });
 

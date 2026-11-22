@@ -74,11 +74,15 @@ void main() {
       for (final slot in LcdIndicatorSlot.values) {
         expect(_statusText(slot.template), findsOneWidget, reason: slot.name);
       }
-      expect(_colorOf(tester, _statusText('D')), CalcTheme.lcdStatusActive);
-      expect(_colorOf(tester, _statusText('√◻')), CalcTheme.lcdStatusActive);
-      expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusInactive);
-      expect(_colorOf(tester, _statusText('→x')), CalcTheme.lcdStatusInactive);
-      expect(_colorOf(tester, _statusText('▲')), CalcTheme.lcdStatusInactive);
+      for (final slot in LcdIndicatorSlot.values) {
+        expect(
+          _colorOf(tester, _statusText(slot.template)),
+          LcdStatus.initial.indicatorFor(slot) == null
+              ? CalcTheme.lcdStatusInactive
+              : CalcTheme.lcdStatusActive,
+          reason: slot.name,
+        );
+      }
     });
 
     testWidgets('상태에 따라 표시 문자와 색이 바뀐다', (tester) async {
@@ -97,7 +101,7 @@ void main() {
       expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusActive);
       expect(_statusText('R'), findsOneWidget);
       expect(_statusText('D'), findsNothing);
-      expect(_statusText('SCI'), findsOneWidget);
+      expect(_colorOf(tester, _statusText('SCI')), CalcTheme.lcdStatusActive);
       // FIX는 SCI와 다른 자리라 꺼진 색으로 남는다 (#44).
       expect(_colorOf(tester, _statusText('FIX')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('i')), CalcTheme.lcdStatusActive);

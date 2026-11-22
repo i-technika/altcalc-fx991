@@ -26,10 +26,13 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
 
 void main() {
   group('LcdIndicatorSlot 불변식', () {
-    test('슬롯 구성·좌→우 순서는 #44에서 확정한 것과 같다', () {
-      // 출처는 LcdIndicatorSlot 문서 주석 (가이드 표시기 표 + 사용자 제공 fx-991EX 실물 순서).
-      // 순서를 바꾸면 모든 표시기 위치가 바뀌므로, 바꿀 때는 출처와 함께 이 목록을 갱신한다.
-      expect(LcdIndicatorSlot.values.map((s) => s.template), [
+    test('슬롯 순서는 사용자 제공 fx-991EX 실물 순서를 따른다 (잠정 슬롯 제외)', () {
+      // 출처: LcdIndicatorSlot 문서 주석 — S, A, M, →x, D/R/G, FIX, SCI, √▭✎, ▼/▲, Disp ‖ (☀ 제외)
+      final confirmed = [
+        for (final slot in LcdIndicatorSlot.values)
+          if (!LcdIndicatorSlot.provisional.contains(slot)) slot.template,
+      ];
+      expect(confirmed, [
         'S',
         'A',
         'M',
@@ -37,13 +40,18 @@ void main() {
         'D',
         'FIX',
         'SCI',
-        'E',
         '√◻',
-        '∠',
         '▼',
         '▲',
         '‖',
       ]);
+    });
+
+    test('실물 순서 자료에 없는 잠정 슬롯은 E와 i/∠ 뿐이다', () {
+      expect(LcdIndicatorSlot.provisional, {
+        LcdIndicatorSlot.engineering,
+        LcdIndicatorSlot.complex,
+      });
     });
 
     test('가이드의 표시기를 모두 표시할 수 있다 (☀는 앱에 해당 상태가 없어 제외, RCL은 가이드 표에 없음)', () {
