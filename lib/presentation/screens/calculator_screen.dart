@@ -608,31 +608,48 @@ class _Body extends ConsumerWidget {
     final Rect keypad;
     Rect? settings;
     final hinge = this.hinge;
+    final handedness = ref.watch(handednessProvider);
+    // 접힘선 기준 배치 후보. 키가 터치 하한보다 낮아지면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
+    // 인셋·광고 슬롯·접힘선 간격이 빠진 실제 키패드 크기를 본다).
+    ({Rect lcd, Rect keypad, Rect settings})? hingeLayout;
+    if (hinge != null) {
+      switch (arrangement) {
+        case ScreenArrangement.hingeSplit:
+          final l = CalcSplitLayout.of(body, handedness, hinge: hinge);
+          if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
+              CalcTheme.keyTouchHeightFloor) {
+            hingeLayout = (
+              lcd: l.lcd,
+              keypad: l.keypad,
+              settings: l.settingsButton,
+            );
+          }
+        case ScreenArrangement.hingeStacked:
+          final l = CalcTabletopLayout.of(body, hinge, handedness);
+          if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
+              CalcTheme.tabletopKeyTouchHeightFloor) {
+            hingeLayout = (
+              lcd: l.lcd,
+              keypad: l.keypad,
+              settings: l.settingsButton,
+            );
+          }
+        case ScreenArrangement.stacked || ScreenArrangement.split:
+          break;
+      }
+    }
     switch (arrangement) {
       case ScreenArrangement.split:
-        final layout = CalcSplitLayout.of(body, ref.watch(handednessProvider));
+        final layout = CalcSplitLayout.of(body, handedness);
         lcd = layout.lcd;
         keypad = layout.keypad;
         settings = layout.settingsButton;
-      case ScreenArrangement.hingeSplit when hinge != null:
-        final layout = CalcSplitLayout.of(
-          body,
-          ref.watch(handednessProvider),
-          hinge: hinge,
-        );
-        lcd = layout.lcd;
-        keypad = layout.keypad;
-        settings = layout.settingsButton;
-      case ScreenArrangement.hingeStacked when hinge != null:
-        final layout = CalcTabletopLayout.of(
-          body,
-          hinge,
-          ref.watch(handednessProvider),
-        );
-        lcd = layout.lcd;
-        keypad = layout.keypad;
-        settings = layout.settingsButton;
-      // 접힘선 기준 배치인데 접힘선이 없으면(호출 측 불일치) 위아래 배치로 그린다.
+      case ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked
+          when hingeLayout != null:
+        lcd = hingeLayout.lcd;
+        keypad = hingeLayout.keypad;
+        settings = hingeLayout.settings;
+      // 접힘선 기준 배치를 쓸 수 없으면(키가 터치 하한보다 낮음, 호출 측 불일치) 위아래 배치로 그린다.
       case ScreenArrangement.stacked ||
           ScreenArrangement.hingeSplit ||
           ScreenArrangement.hingeStacked:

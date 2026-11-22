@@ -575,6 +575,15 @@ abstract final class CalcTheme {
   //   펼친 폭 0 가로 접힘선은 나누지 않고 위아래 배치로 둔다(`FormFactor.arrangementOf`).
   // - 광고 슬롯: 다른 배치와 같이 본체 아래 전체 폭 (세로 접힘선이면 접힘선을 가로지른다 — 광고 위치는 #18).
 
+  /// 키 터치 높이 하한 (dp, 커서 패드 제외). 접힘선 기준 배치(세로 접힘선)가 이보다 낮은 키를 만들면 그 배치를
+  /// 쓰지 않고 위아래 배치로 둔다(`KeypadMetrics.minKeyTouchHeightOf`). 세로 폰 화면 키 크기 하한 테스트도 이 값을 쓴다.
+  static const double keyTouchHeightFloor = 28.0;
+
+  /// 반 접은 테이블톱 자세(가로 접힘선)의 키 터치 높이 하한 (dp). 사용자가 일부러 세워 둔 자세라 접힘선을 넘지 않는
+  /// 배치를 우선해 [keyTouchHeightFloor]보다 낮춘다 — Galaxy Z Fold 가로 반 접힘(3버튼 내비게이션)이 약 17.9dp다.
+  /// 이보다 낮아지는 창(비대칭 접힘선·큰 인셋)은 위아래 배치로 둔다.
+  static const double tabletopKeyTouchHeightFloor = 16.0;
+
   /// 접힘선(주름)과 내용 사이 간격 (dp, 접힘선 한쪽마다). 폭이 0인 접힘선이면 양쪽 내용 사이가
   /// [screenSplitGap]과 같아진다.
   static const double screenHingeMargin = 8.0;

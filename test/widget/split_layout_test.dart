@@ -552,7 +552,11 @@ DisplayFeature _halfOpenedAt(Rect bounds) =>
     _foldAt(bounds, state: DisplayFeatureState.postureHalfOpened);
 
 /// 키패드의 모든 키(커서 패드 제외)가 터치 하한 이상이고, 커서 패드 구역도 #43 하한을 지키는지 확인한다.
-void _expectTouchTargets(WidgetTester tester) {
+void _expectTouchTargets(
+  WidgetTester tester, {
+  double floor = CalcTheme.keyTouchHeightFloor,
+}) {
+  var lowest = double.infinity;
   for (final b in tester.widgetList<CalcKeyButton>(
     find.byType(CalcKeyButton),
   )) {
@@ -561,12 +565,14 @@ void _expectTouchTargets(WidgetTester tester) {
     final touch = b.extendHitAreaToLegend
         ? cell.height
         : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
-    expect(
-      touch,
-      greaterThanOrEqualTo(minKeyTouchHeight),
-      reason: b.keyDef.id.name,
-    );
+    if (touch < lowest) lowest = touch;
+    expect(touch, greaterThanOrEqualTo(floor), reason: b.keyDef.id.name);
   }
+  // 배치 판정에 쓰는 계산값이 실제로 그린 키의 최소 터치 높이와 같다.
+  expect(
+    KeypadMetrics.minKeyTouchHeightOf(tester.getSize(_keypad)),
+    moreOrLessEquals(lowest, epsilon: 0.01),
+  );
   final pad = CursorPadGeometry(
     tester.getSize(find.byKey(const ValueKey('cursor-pad'))),
   );
@@ -574,7 +580,7 @@ void _expectTouchTargets(WidgetTester tester) {
     final wide = sector == CursorPadSector.up || sector == CursorPadSector.down;
     expect(
       inscribedDiameter(pad, sector),
-      greaterThanOrEqualTo(minKeyTouchHeight * (wide ? 1.0 : 0.9)),
+      greaterThanOrEqualTo(floor * (wide ? 1.0 : 0.9)),
       reason: sector.name,
     );
   }
@@ -796,6 +802,13 @@ void _hingeLayoutTests() {
               expect(settings.overlaps(keypad), isFalse);
               expect(settings.overlaps(lcd), isFalse);
               expect(_settings.hitTestable(), findsOneWidget);
+              // 반 접은 테이블톱 자세는 완화된 하한을 지킨다 (사용자 결정, #25 R2).
+              if (scale == 1.0) {
+                _expectTouchTargets(
+                  tester,
+                  floor: CalcTheme.tabletopKeyTouchHeightFloor,
+                );
+              }
               expect(
                 ad.top - keypad.bottom,
                 greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
@@ -883,6 +896,45 @@ void _hingeLayoutTests() {
       );
     }
 
+    testWidgets('본체에서 키가 터치 하한보다 낮아지는 비대칭 접힘선은 위아래 배치로 둔다 (#25 R2)', (
+      tester,
+    ) async {
+      // 세로: 접힘선 오른쪽 281dp(창 좌표로는 사전 판정 통과) + 오른쪽 인셋 48 → 키패드 쪽이 217dp
+      await _pump(
+        tester,
+        size: const Size(841, 701),
+        padding: const EdgeInsets.only(top: 24, right: 48, bottom: 24),
+        displayFeatures: [_foldAt(const Rect.fromLTWH(560, 0, 0, 701))],
+      );
+      expect(tester.takeException(), isNull);
+      expect(_settings, findsNothing);
+      _expectTouchTargets(tester);
+
+      // 가로 반 접힘: 아래쪽 281dp + 아래 인셋 48 → 광고 슬롯까지 빼면 키가 하한(테이블톱)보다 낮다
+      await _pump(
+        tester,
+        size: const Size(841, 673),
+        padding: const EdgeInsets.only(top: 24, bottom: 48),
+        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 392, 841, 0))],
+      );
+      expect(tester.takeException(), isNull);
+      expect(_settings, findsNothing);
+    });
+
+    testWidgets('Fold 가로 반 접힘·3버튼 내비게이션(아래 인셋 48)은 테이블톱 배치를 유지한다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        size: const Size(841, 673),
+        padding: const EdgeInsets.only(top: 24, bottom: 48),
+        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
+      );
+      expect(_settings, findsOneWidget);
+      expect(tester.getRect(_keypad).top, greaterThanOrEqualTo(336.5));
+      _expectTouchTargets(tester, floor: CalcTheme.tabletopKeyTouchHeightFloor);
+    });
+
     testWidgets('접힘선이 인셋 안(창 가장자리)에 있으면 접힘선 기준으로 나누지 않는다', (tester) async {
       await _pump(
         tester,
@@ -950,25 +1002,60 @@ void _hingeLayoutTests() {
       expect(dialog.left, greaterThanOrEqualTo(574));
     });
 
-    testWidgets('반 접은 세로 접힘선의 절반 폭(약 336dp)·글자 배율 2.0에서도 넘치지 않고 선택된다', (
-      tester,
-    ) async {
-      final (container, _) = await _pump(
+    testWidgets(
+      '반 접은 세로 접힘선의 절반 폭(약 336dp)·글자 배율 2.0·왼손잡이: 오른쪽 절반에 넘치지 않고 뜨고 선택된다',
+      (tester) async {
+        final (container, _) = await _pump(
+          tester,
+          size: const Size(673, 841),
+          padding: const EdgeInsets.only(top: 32, bottom: 24),
+          textScale: 2.0,
+          handedness: Handedness.left,
+          displayFeatures: [
+            _halfOpenedAt(const Rect.fromLTWH(336.5, 0, 0, 841)),
+          ],
+        );
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        // 왼손잡이: 설정 버튼은 오른쪽 절반 → 대화상자도 오른쪽 절반 (anchor 없으면 왼쪽에 뜬다)
+        expect(
+          tester.getRect(_dialogSurface).left,
+          greaterThanOrEqualTo(336.5),
+        );
+        await tester.tap(_option(Handedness.right));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(container.read(handednessProvider), Handedness.right);
+      },
+    );
+
+    testWidgets('펼친 폭 0 세로 접힘선: 앱처럼 나눠 대화상자가 주름을 가로지르지 않는다', (tester) async {
+      await _pump(
         tester,
         size: const Size(673, 841),
         padding: const EdgeInsets.only(top: 32, bottom: 24),
-        textScale: 2.0,
-        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(336.5, 0, 0, 841))],
+        displayFeatures: [_foldAt(const Rect.fromLTWH(336.5, 0, 0, 841))],
       );
       await tester.tap(_settings);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      // 오른손잡이: 설정 버튼은 왼쪽 절반 → 대화상자도 왼쪽 절반
+      // 오른손잡이: 설정 버튼은 왼쪽 절반
       expect(tester.getRect(_dialogSurface).right, lessThanOrEqualTo(336.5));
-      await tester.tap(_option(Handedness.left));
+    });
+
+    testWidgets('반 접은 테이블톱: 대화상자는 설정 버튼이 있는 아래 절반에 뜬다', (tester) async {
+      await _pump(
+        tester,
+        size: const Size(701, 841),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
+        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 420.5, 701, 0))],
+      );
+      expect(tester.getRect(_settings).top, greaterThanOrEqualTo(420.5));
+      await tester.tap(_settings);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(container.read(handednessProvider), Handedness.left);
+      expect(tester.getRect(_dialogSurface).top, greaterThanOrEqualTo(420.5));
     });
   });
 

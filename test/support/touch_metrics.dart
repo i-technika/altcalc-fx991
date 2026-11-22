@@ -36,7 +36,3 @@ double inscribedDiameter(CursorPadGeometry g, CursorPadSector sector) {
   }
   return best * 2;
 }
-
-/// [WidgetTester]로 그린 키패드의 터치 치수 하한을 확인할 때 쓰는 값 (dp).
-/// 세로 폰 화면 키 크기 하한 테스트(`calculator_screen_test`)와 같은 기준이다.
-const double minKeyTouchHeight = 28.0;

@@ -251,7 +251,7 @@ void main() {
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         // 내부 화면을 가로로 든 상태, 접힘 정보는 아직 도착 전
-        setDevice(tester, const Size(829, 690));
+        setDevice(tester, const Size(841, 701));
         mockHingeSensor(tester, hinge: true);
         final calls = recordPlatformCalls(tester);
         await app.main();
@@ -408,7 +408,7 @@ void main() {
 
   group('세로 폰 화면의 키 크기 하한', () {
     // 터치 높이(dp) 하한, 배율 반영 메인·각인 글자(dp) 하한
-    const minTouchHeight = 28.0;
+    const minTouchHeight = CalcTheme.keyTouchHeightFloor;
     const minMainFont = 7.0;
     const minLegendFont = 5.0;
 

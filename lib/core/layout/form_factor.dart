@@ -181,9 +181,10 @@ abstract final class FormFactor {
   /// 접힘선이 창을 다 가로지르는지 볼 때의 허용 오차 (dp)
   static const double _hingeSpanTolerance = 1.0;
 
-  /// 접힘선 기준으로 나눌 때 접힘선 양쪽 각각이 가져야 하는 최소 길이 (dp, 접힘선에 수직인 방향).
-  /// 가장 작은 폰 폭(약 280dp)의 키패드·LCD가 들어갈 자리다. 이보다 짧은 쪽이 생기면(접힘선이 창 가장자리에
-  /// 치우친 창, 인셋 안의 접힘선) 접힘선 기준으로 나누지 않는다 — 한쪽 패널이 쓸 수 없게 좁아지기 때문이다.
+  /// 접힘선 기준으로 나눌 때 접힘선 양쪽 각각이 가져야 하는 최소 길이 (dp, 창 좌표·접힘선에 수직인 방향).
+  /// 접힘선이 창 가장자리에 치우친 창이나 인셋 안의 접힘선처럼 한쪽 패널(LCD 쪽 포함)이 쓸 수 없게 좁아지는
+  /// 경우를 걸러 내는 거친 사전 판정이다. 인셋·광고 슬롯을 뺀 실제 키패드가 터치 하한을 지키는지는 화면이
+  /// 본체 크기로 다시 판정한다(`CalculatorScreen`, `KeypadMetrics.minKeyTouchHeightOf`).
   static const double hingeMinPanelExtent = 280.0;
 
   /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge). 영역은 창 좌표다.
@@ -211,9 +212,18 @@ abstract final class FormFactor {
       final spansWidth = b.left <= t && b.right >= windowSize.width - t;
       final insideX = b.left >= -t && b.right <= windowSize.width + t;
       final insideY = b.top >= -t && b.bottom <= windowSize.height + t;
-      // 세로 접힘선: 위에서 아래까지, 좌우로는 창 안 (가로 접힘선은 반대)
-      if (spansHeight && insideX && b.width < windowSize.width - t) return f;
-      if (spansWidth && insideY && b.height < windowSize.height - t) return f;
+      // 세로 접힘선: 위에서 아래까지 정확히 창 높이만큼, 좌우로는 창 안 (가로 접힘선은 반대).
+      // 창보다 긴 접힘 정보는 받지 않는다 — 회전 직후 창 크기는 새 값인데 접힘 정보는 이전 방향 값으로
+      // 몇 프레임 늦게 올 수 있다(#25 R2). 그동안은 접힘선이 없는 것으로 본다(폴더블이면 위아래 배치).
+      if (spansHeight && insideX && insideY && b.width < windowSize.width - t) {
+        return f;
+      }
+      if (spansWidth &&
+          insideX &&
+          insideY &&
+          b.height < windowSize.height - t) {
+        return f;
+      }
     }
     return null;
   }
@@ -221,9 +231,11 @@ abstract final class FormFactor {
   /// [hinge]가 세로 접힘선(위에서 아래로 가로지름)인지. 폭이 0인 접힘선도 판정된다.
   static bool isVerticalHinge(Rect hinge) => hinge.height >= hinge.width;
 
-  /// [hinge]가 화면을 실제로 두 부분으로 나누는지 — 폭이 있는 물리 힌지이거나 반 접힌 상태.
-  /// Android `FoldingFeature.isSeparating`, Flutter `DisplayFeatureSubScreen`과 같은 기준이다.
+  /// [hinge]가 화면을 실제로 두 부분으로 나누는지 — 물리 힌지(종류가 hinge이거나 폭이 있음)이거나 반 접힌 상태.
+  /// Android `FoldingFeature.isSeparating`(HINGE 종류는 항상 나눔)에 맞추고, Flutter `DisplayFeatureSubScreen`의
+  /// 기준(폭이 있거나 반 접힘)을 포함한다.
   static bool separates(DisplayFeature hinge) =>
+      hinge.type == DisplayFeatureType.hinge ||
       hinge.bounds.shortestSide > 0 ||
       hinge.state == DisplayFeatureState.postureHalfOpened;
 

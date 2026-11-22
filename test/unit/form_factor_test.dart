@@ -291,6 +291,29 @@ void main() {
       expect(FormFactor.hingeOf(window, const []), isNull);
     });
 
+    test('창보다 긴 접힘 정보(회전 직후 이전 방향 값)는 접힘선이 아니다 (#25 R2)', () {
+      // 841×673으로 돌았는데 접힘 정보는 아직 세로(673×841) 기준
+      expect(
+        FormFactor.hingeOf(const Size(841, 673), [
+          feature(const Rect.fromLTWH(336.5, 0, 0, 841)),
+        ]),
+        isNull,
+      );
+      expect(
+        FormFactor.arrangementOf(const Size(841, 673), [
+          feature(const Rect.fromLTWH(336.5, 0, 0, 841)),
+        ], foldableDevice: true),
+        ScreenArrangement.stacked,
+      );
+      // 반대 방향도 같다
+      expect(
+        FormFactor.hingeOf(window, [
+          feature(const Rect.fromLTWH(0, 336.5, 841, 0)),
+        ]),
+        isNull,
+      );
+    });
+
     test('여러 개면 창을 가로지르는 첫 접힘선을 쓴다', () {
       final hinge = FormFactor.hingeOf(window, [
         _cutout,
@@ -318,6 +341,17 @@ void main() {
       );
       expect(
         FormFactor.separates(f(30, DisplayFeatureState.postureFlat)),
+        isTrue,
+      );
+      // 물리 힌지 종류는 폭·상태와 무관하게 나눈다 (Android isSeparating)
+      expect(
+        FormFactor.separates(
+          const DisplayFeature(
+            bounds: Rect.fromLTWH(0, 336, 841, 0),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ),
         isTrue,
       );
     });
