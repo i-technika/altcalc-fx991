@@ -89,7 +89,7 @@
 - 마일스톤 브랜치: `milestone/m<N>` (base: `main`, Draft PR로 유지 → Draft 동안 CI 미실행)
 - 서브이슈 브랜치: `issue/<번호>-<영문-키워드>` (base: `milestone/m<N>`)
 - 서브이슈 PR 제목: `[M<N>-<순번>] <이슈 제목> (#<번호>)` — 이슈 제목의 `[M1-2]` 접두사를 그대로 사용
-- 서브이슈 순번(`M<N>-<순번>`)은 닫힌 이슈까지 포함해 겹치지 않게 `bash .claude/scripts/subissue-seq.sh next M<N>`으로 받고, 생성 직후 `check`로 충돌을 검사한다
+- 서브이슈 순번(`M<N>-<순번>`)은 닫힌 이슈까지 포함해 겹치지 않아야 한다. 서브이슈는 `bash .claude/scripts/subissue-seq.sh create M<N> "<제목>" <gh 인자...>`로 만들고(발급·생성·충돌 검사·양보를 한 번에), 착수 시 `ensure <번호>`로 다시 확인한다 (#110, 검사: `test/unit/subissue_seq_test.dart`)
 - 담당자(Assignee): 착수하는 이슈(`/open-ms`의 에픽, `/fix-issue`의 서브이슈)와 생성하는 PR은 `i-technika`로 지정한다 (미착수 후속 이슈는 지정하지 않음)
 - 라벨: 에픽 `milestone`, 서브이슈 `sub-issue` / 프로젝트: `AltCalc FX-991` (#7)
 - 서브이슈 PR은 기본 브랜치가 아닌 마일스톤 브랜치로 머지되므로 `Closes #N`으로 **이슈가 자동 Close되지 않는다.** 머지 후 직접 `gh issue close`한다.

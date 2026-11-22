@@ -35,6 +35,8 @@ gh issue view <번호> --json number,title,body,labels,milestone,parent,state,is
 - 상위 에픽(`parent.number`)으로 마일스톤 번호 N을 정하고 베이스 브랜치 `milestone/m<N>`을 확인한다.
 - 같은 마일스톤의 다른 서브이슈 본문도 훑어 **이번 이슈의 범위 경계**를 파악한다(다음 이슈의 일을 미리 하지 않는다).
 - 원격/로컬에 이미 `issue/<번호>-*` 브랜치나 미커밋 작업물(이전 에이전트의 WIP 등)이 있으면 내용을 검토해 재사용 여부를 판단한다.
+- 순번 확인: `bash .claude/scripts/subissue-seq.sh ensure <번호>` — 먼저 만든 이슈와 순번이 겹치면 이 이슈가 새 순번으로 양보한다
+  (구버전 스킬 세션·수동 생성으로 생긴 중복을 착수 전에 잡는다). 출력 `<번호> <순번>`의 순번을 이후 PR 제목에 쓴다.
 - 담당자 지정: `gh issue edit <번호> --add-assignee i-technika` (이미 지정돼 있으면 그대로 둔다)
 - 프로젝트 보드: `bash .claude/scripts/set-project-status.sh <번호> "In Progress"`
 
@@ -86,6 +88,7 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991" \
   --assignee i-technika
 ```
+- 이 브랜치의 PR이 이미 있으면(이전 작업 재사용) 새로 만들지 않고 담당자만 붙인다: `gh pr edit <PR> --add-assignee i-technika`
 
 ### 5. 적대적 코드리뷰 R1 (독립 서브에이전트)
 - 구현자의 편향을 피하기 위해 **새 컨텍스트의 `general-purpose` 서브에이전트**에게 리뷰를 맡긴다. 프롬프트에 포함할 것:
@@ -111,30 +114,29 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 
 ### 9. 후속 이슈 문의
 - 구현·리뷰 중 이번 범위 밖으로 미룬 개선점/리팩토링/검증 과제를 정리해 사용자에게 **등록 여부를 묻는다** (AskUserQuestion, multiSelect).
-- 승인된 항목만 생성한다. **순번은 기억이나 이전 조회값으로 정하지 않고, 항목마다 생성 직전에 스크립트로 받는다**
-  (여러 세션이 동시에 후속 이슈를 만들면 같은 순번을 집기 때문 — 과거 M1-39~47 중복):
+- 승인된 항목만 생성한다. **순번을 직접 정하거나 `gh issue create`를 직접 부르지 않고 `subissue-seq.sh create`로 만든다.**
+  여러 세션이 동시에 후속 이슈를 만들면 같은 순번을 집기 때문이다(과거 M1-39~47 중복). `create`는 다음 순번 발급 → 생성 →
+  충돌 검사 → (먼저 만든 이슈와 겹치면) 새 순번으로 양보를 한 번에 하고, 마지막 줄에 `<신규번호> <최종 순번>`을 출력한다.
+- **마일스톤 기준**: `M<N>`·`<마일스톤 이름>`·`<에픽번호>`는 지금 작업 중인 마일스톤이 아니라 **그 후속 이슈가 속할 마일스톤** 기준이다
+  (실물 대조 등 다른 마일스톤 과제는 그 마일스톤의 접두사·에픽으로 만든다 — 예: M3 과제면 `create M3 ...`, 에픽 #3).
+- 셸 변수는 Bash 도구 호출 사이에 남지 않으므로, 항목마다 아래를 **한 번의 Bash 호출**로 실행한다:
   ```bash
-  SEQ=$(bash .claude/scripts/subissue-seq.sh next M<N>)   # 닫힌 이슈까지 포함한 최댓값 + 1 (예: M1-56)
-  gh issue create --title "[$SEQ] <제목>" --body-file <파일> \
-    --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+  OUT=$(bash .claude/scripts/subissue-seq.sh create M<N> "<제목 — [M..] 접두사 없이>" --body-file <파일> \
+    --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991") || exit 1
+  NUM=${OUT%% *}; SEQ=${OUT##* }; echo "생성: #$NUM [$SEQ]"
   # 상위 에픽에 서브이슈로 연결
   gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
-    -f p="$(gh issue view <에픽번호> --json id --jq .id)" -f c="$(gh issue view <신규번호> --json id --jq .id)"
+    -f p="$(gh issue view <에픽번호> --json id --jq .id)" -f c="$(gh issue view "$NUM" --json id --jq .id)"
   # 이슈 타입(Task/Bug/Feature) 지정
   gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
-    -f i="<신규 이슈 node id>" -f t="<타입 id>"
+    -f i="$(gh issue view "$NUM" --json id --jq .id)" -f t="<타입 id>"
   ```
   타입 ID: Task `IT_kwDOBMwL0c4PCk6t`, Feature `IT_kwDOBMwL0c4PCk6v` (Bug는 `gh api graphql`로 `repository.issueTypes` 조회)
-- 생성 직후 순번 충돌을 검사한다. 실패하면(먼저 만든 이슈가 같은 순번) 이번 이슈가 양보한다:
-  ```bash
-  bash .claude/scripts/subissue-seq.sh check "$SEQ" <신규번호> || {
-    NEW=$(bash .claude/scripts/subissue-seq.sh next M<N>)
-    gh issue edit <신규번호> --title "[$NEW] <제목>"
-    bash .claude/scripts/subissue-seq.sh check "$NEW" <신규번호>   # 통과할 때까지 반복
-  }
-  ```
+- `create`가 실패하면(종료 코드 ≠ 0) 이슈가 만들어졌는지 `gh issue list`로 확인하고 원인을 보고한다. 충돌은 스크립트 안에서 처리되므로
+  실패는 gh 오류·인자 오류·양보 재시도 초과다 — 임의로 순번을 정해 다시 만들지 않는다.
+- 12단계 보고에는 `create`가 출력한 **최종 순번**을 쓴다(양보로 바뀌었을 수 있다).
 - 후속 이슈는 아직 착수 전이므로 담당자를 지정하지 않는다 (착수할 때 1단계에서 지정).
-- 실물 대조 등 다른 마일스톤에 속하는 과제는 해당 마일스톤으로 지정한다.
+- 스크립트 사용법·종료 코드는 `.claude/scripts/subissue-seq.sh` 머리 주석, 동작 검사는 `test/unit/subissue_seq_test.dart`.
 
 ### 10. Linux CI 확인
 ```bash

@@ -21,6 +21,7 @@ gh issue view <번호> --json number,title,body,labels,milestone,state,subIssues
 - `labels`에 `milestone`이 없으면 중단하고 안내한다:
   > ⚠️ 이슈 #<번호>는 마일스톤 에픽 이슈가 아닙니다. `/open-ms`에는 에픽 번호(예: #1)를 지정해 주세요. 서브이슈는 `/fix-issue`를 사용합니다.
 - 이미 `milestone/m<번호>` 브랜치나 열린 마일스톤 PR이 있으면(`gh pr list --head milestone/m<번호>`) 새로 만들지 말고 현황만 보고한다.
+  이때도 담당자는 맞춰 둔다: `gh issue edit <번호> --add-assignee i-technika`, `gh pr edit <PR번호> --add-assignee i-technika`
 - 이전 마일스톤이 아직 `main`에 머지되지 않았다면 사용자에게 알리고 진행 여부를 묻는다 (마일스톤은 순차 진행이 원칙).
 
 ## 2. 브랜치 생성
