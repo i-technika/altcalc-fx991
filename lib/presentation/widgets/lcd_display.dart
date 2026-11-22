@@ -230,7 +230,9 @@ class LcdDisplay extends StatelessWidget {
   /// 결과 줄 글자 크기 (dp). `null`이면 [CalcTheme.lcdResultStyle]의 크기. 줄 높이를 넘으면 줄어든다.
   final double? resultFontSize;
 
-  /// 꺼진 상태 표시기를 흐리게 보여줄지 여부 (실물 LCD의 꺼진 세그먼트 비침 효과)
+  /// 꺼진 상태 표시기를 흐리게 보여줄지 여부 (실물 LCD의 꺼진 세그먼트 비침 효과).
+  /// 기본값 `true` — 색은 [CalcTheme.lcdStatusInactive](활성 색의 약 4%)라 정면에서는 거의 보이지 않고
+  /// 슬롯 위치만 은은하게 남는다(#44, 실물 확인).
   final bool showInactiveIndicators;
 
   /// 도트 매트릭스 격자 표시 여부

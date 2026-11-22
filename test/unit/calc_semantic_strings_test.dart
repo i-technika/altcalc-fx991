@@ -33,8 +33,10 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   LcdIndicatorSlot.angleUnit => [
     for (final unit in AngleUnit.values) LcdStatus(angleUnit: unit),
   ],
-  LcdIndicatorSlot.numberFormat => [
+  LcdIndicatorSlot.fixFormat => [
     const LcdStatus(numberFormat: NumberDisplayFormat.fix),
+  ],
+  LcdIndicatorSlot.sciFormat => [
     const LcdStatus(numberFormat: NumberDisplayFormat.sci),
   ],
   LcdIndicatorSlot.engineering => [const LcdStatus(engineering: true)],
@@ -43,9 +45,9 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
     const LcdStatus(complex: ComplexResultIndicator.rectangular),
     const LcdStatus(complex: ComplexResultIndicator.polar),
   ],
-  LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
-  LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
   LcdIndicatorSlot.historyDown => [const LcdStatus(historyDown: true)],
+  LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
+  LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
 };
 
 void main() {
@@ -140,7 +142,7 @@ void main() {
             expect(label, matches(_speakable), reason: label);
             labels.add(label!);
           }
-          // 값이 여러 개인 슬롯(D/R/G, FIX/SCI, i/∠)은 값마다 다르게 읽는다.
+          // 값이 여러 개인 슬롯(D/R/G, i/∠)은 값마다 다르게 읽는다.
           expect(
             labels,
             hasLength(_statusesWith(slot).length),
@@ -150,7 +152,8 @@ void main() {
         const allOff = LcdStatus(mathIO: false);
         for (final slot in [
           LcdIndicatorSlot.shift,
-          LcdIndicatorSlot.numberFormat,
+          LcdIndicatorSlot.fixFormat,
+          LcdIndicatorSlot.sciFormat,
           LcdIndicatorSlot.complex,
           LcdIndicatorSlot.math,
         ]) {

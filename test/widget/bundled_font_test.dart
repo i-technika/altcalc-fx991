@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
@@ -63,6 +64,24 @@ void main() {
         }
       });
     }
+
+    test('상태 표시줄 글자는 모두 한 칸(0.6em)이다 — 슬롯 폭은 글자 수 × 고정 비율로 잡는다 (#44)', () {
+      final glyphs = {
+        for (final slot in LcdIndicatorSlot.values) ...slot.template.split(''),
+        for (final c in ComplexResultIndicator.values)
+          ...(c.indicator ?? '').split(''),
+        for (final unit in AngleUnit.values) ...unit.indicator.split(''),
+        for (final f in NumberDisplayFormat.values)
+          ...(f.indicator ?? '').split(''),
+      };
+      for (final ch in glyphs) {
+        expect(
+          _emWidth(ch, CalcTheme.lcdStatusStyle),
+          moreOrLessEquals(cell, epsilon: 0.005),
+          reason: ch,
+        );
+      }
+    });
 
     test('가장 긴 결과는 지수를 lcdExponentMaxScale 크기(자간 포함)로 그리면 여유를 두고 17칸에 들어가고, 유니코드 위첨자로 그리면 넘친다', () {
       const mantissa = '−1.234567891×10';

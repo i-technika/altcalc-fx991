@@ -26,27 +26,50 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
 
 void main() {
   group('LcdIndicatorSlot 불변식', () {
-    test('이슈 #10에서 요구한 표시기 슬롯을 모두 갖는다', () {
+    test('슬롯 구성·좌→우 순서는 #44에서 확정한 것과 같다', () {
+      // 출처는 LcdIndicatorSlot 문서 주석 (가이드 표시기 표 + 사용자 제공 fx-991EX 실물 순서).
+      // 순서를 바꾸면 모든 표시기 위치가 바뀌므로, 바꿀 때는 출처와 함께 이 목록을 갱신한다.
+      expect(LcdIndicatorSlot.values.map((s) => s.template), [
+        'S',
+        'A',
+        'M',
+        '→x',
+        'D',
+        'FIX',
+        'SCI',
+        'E',
+        '√◻',
+        '∠',
+        '▼',
+        '▲',
+        '‖',
+      ]);
+    });
+
+    test('가이드의 표시기를 모두 표시할 수 있다 (☀는 앱에 해당 상태가 없어 제외, RCL은 가이드 표에 없음)', () {
       final all = _possibleIndicators().values.expand((e) => e).toSet();
       for (final required in [
         'S',
         'A',
+        'M',
+        '→x',
         'D',
         'R',
         'G',
         'FIX',
         'SCI',
-        'M',
-        'STO',
-        'Math',
         'E',
+        '√◻',
         'i',
         '∠',
-        'Disp',
         '▲',
         '▼',
+        '‖',
       ]) {
         expect(all, contains(required), reason: required);
+      }
+      for (final excluded in ['☀', 'RCL', 'STO', 'Math', 'Disp']) {
+        expect(all, isNot(contains(excluded)), reason: excluded);
       }
     });
 
@@ -92,8 +115,8 @@ void main() {
   });
 
   group('LcdStatus', () {
-    test('초기 상태는 Deg·Norm·MathI/MathO로 D와 Math만 켜진다', () {
-      expect(LcdStatus.initial.activeIndicators, ['D', 'Math']);
+    test('초기 상태는 Deg·Norm·MathI/MathO로 D와 √◻만 켜진다', () {
+      expect(LcdStatus.initial.activeIndicators, ['D', '√◻']);
     });
 
     test('각도 단위는 항상 켜져 있다', () {
@@ -105,10 +128,27 @@ void main() {
       }
     });
 
-    test('Norm과 복소수 아님은 표시기를 끈다', () {
+    test('Norm과 복소수 표시 안 함은 표시기를 끈다', () {
       const s = LcdStatus();
-      expect(s.indicatorFor(LcdIndicatorSlot.numberFormat), isNull);
+      expect(s.indicatorFor(LcdIndicatorSlot.fixFormat), isNull);
+      expect(s.indicatorFor(LcdIndicatorSlot.sciFormat), isNull);
       expect(s.indicatorFor(LcdIndicatorSlot.complex), isNull);
+    });
+
+    test('FIX와 SCI는 서로 다른 자리이고 동시에 켜지지 않는다', () {
+      for (final f in NumberDisplayFormat.values) {
+        final s = LcdStatus(numberFormat: f);
+        expect(
+          s.indicatorFor(LcdIndicatorSlot.fixFormat),
+          f == NumberDisplayFormat.fix ? 'FIX' : null,
+          reason: f.name,
+        );
+        expect(
+          s.indicatorFor(LcdIndicatorSlot.sciFormat),
+          f == NumberDisplayFormat.sci ? 'SCI' : null,
+          reason: f.name,
+        );
+      }
     });
 
     test('activeIndicators는 슬롯 순서를 따른다', () {
@@ -120,7 +160,7 @@ void main() {
         angleUnit: AngleUnit.radian,
         mathIO: false,
       );
-      expect(s.activeIndicators, ['S', 'R', 'SCI', '∠', 'Disp']);
+      expect(s.activeIndicators, ['S', 'R', 'SCI', '∠', '‖']);
     });
 
     test('copyWith는 지정한 필드만 바꾸고 동등성·해시를 지킨다', () {

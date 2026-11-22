@@ -48,8 +48,10 @@ abstract final class CalcTheme {
   /// LCD 상태 표시줄 활성 텍스트 (S, A, DEG 등이 켜졌을 때)
   static const Color lcdStatusActive = Color(0xFF2A2A2A);
 
-  /// LCD 상태 표시줄 비활성 텍스트 (꺼진 세그먼트가 희미하게 비치는 효과)
-  static const Color lcdStatusInactive = Color(0xFFB8CCB0);
+  /// LCD 상태 표시줄 비활성 텍스트 — [lcdStatusActive]를 약 4% 불투명도로 (#44).
+  /// 실물의 꺼진 표시기는 정면에서 거의 보이지 않고 비스듬히 볼 때만 희미하게 비친다(사용자 실물 확인).
+  /// 그래서 슬롯 위치만 은은하게 남는 정도로 그린다 (제안받은 3~5% 범위, 테스트로 검증).
+  static const Color lcdStatusInactive = Color(0x0A2A2A2A);
 
   /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선)
   static const Color lcdDotGrid = Color(0x0F000000);
