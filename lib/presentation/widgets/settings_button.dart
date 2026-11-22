@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/layout/form_factor.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/settings_strings.dart';
+import 'focus_ring.dart';
 import 'handedness_dialog.dart';
 
 /// 설정 진입 버튼 (#24). 누르면 키패드 위치(손잡이) 선택 대화상자([HandednessDialog])를 띄운다.
@@ -83,14 +84,18 @@ class SettingsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = SettingsStrings.of(context);
-    return IconButton(
-      key: buttonKey,
-      tooltip: strings.settingsButton,
-      color: CalcPalette.of(context).settingsIcon,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      icon: const Icon(Icons.settings),
-      onPressed: () => _open(context),
+    // 고대비 키보드 포커스 테두리 (#97) — IconButton의 M3 기본 모양(정사각형 자리에서는 원)
+    return FocusRing(
+      shape: const StadiumBorder(),
+      child: IconButton(
+        key: buttonKey,
+        tooltip: strings.settingsButton,
+        color: CalcPalette.of(context).settingsIcon,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: const Icon(Icons.settings),
+        onPressed: () => _open(context),
+      ),
     );
   }
 }

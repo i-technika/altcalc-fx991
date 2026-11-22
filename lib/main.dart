@@ -143,11 +143,12 @@ class AltCalcApp extends StatelessWidget {
   /// 첫 화면 (기본: [CalculatorScreen])
   final Widget home;
 
-  /// Android "고대비 텍스트" 켜짐 여부 (#95, [HighTextContrastScope]로 화면에 알린다).
+  /// Android "고대비 텍스트" 켜짐 여부 (#95, [HighTextContrastScope]로 앱 전체에 알린다).
   /// `null`이면 [SystemHighTextContrast.instance] — 테스트가 값을 바꿔 끼울 때만 넘긴다.
   final ValueListenable<bool>? highTextContrast;
 
-  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 [AnimatedTheme]으로 감싼 것)을 감싸는
+  /// 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
 
@@ -160,25 +161,36 @@ class AltCalcApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AltCalc fx-991',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: CalcTheme.bodyBackground,
+    // 고대비 판정은 [CalcPalette.of] 하나로 한다 (#97). 앱 바깥쪽(View 바로 아래)에서 고른 테마를 MaterialApp에 주고,
+    // 화면(루트 Navigator) 바로 위에서 가장 가까운 MediaQuery로 한 번 더 고른다 — 개발용 미리보기처럼 틀 안에서
+    // 고대비를 바꾸는 곳에서도 대화상자가 따라가게 하려는 것이다. 실제 앱에서는 두 곳이 같은 MediaQuery·고대비 텍스트 값을 보므로
+    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다. 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
+    // MaterialApp의 다른 테마 칸(darkTheme·highContrastTheme 등)은 쓰지 않는다.
+    // Android "고대비 텍스트"(#95)도 고대비 판정에 들어가므로, 그 범위를 MaterialApp 바깥에 두어 두 곳의 테마
+    // 선택이 모두 그 값을 보게 한다.
+    return HighTextContrastScope(
+      notifier: highTextContrast ?? SystemHighTextContrast.instance,
+      child: Builder(
+        builder: (context) => MaterialApp(
+          title: 'AltCalc fx-991',
+          debugShowCheckedModeBanner: false,
+          theme: CalcPalette.of(context).materialTheme,
+          builder: (context, child) {
+            final navigator = child ?? const SizedBox.shrink();
+            final screen = Builder(
+              builder: (context) => AnimatedTheme(
+                data: CalcPalette.of(context).materialTheme,
+                child: navigator,
+              ),
+            );
+            // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
+            return DeviceLocaleScope(
+              child: frameBuilder?.call(context, screen) ?? screen,
+            );
+          },
+          home: home,
+        ),
       ),
-      // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20).
-      // 고대비 팔레트가 Android "고대비 텍스트"도 따르도록 그 값을 알린다 (#95).
-      builder: (context, child) {
-        final screen = child ?? const SizedBox.shrink();
-        return DeviceLocaleScope(
-          child: HighTextContrastScope(
-            notifier: highTextContrast ?? SystemHighTextContrast.instance,
-            child: frameBuilder?.call(context, screen) ?? screen,
-          ),
-        );
-      },
-      home: home,
     );
   }
 }

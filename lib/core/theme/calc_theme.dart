@@ -261,6 +261,81 @@ abstract final class CalcTheme {
   static const Color settingsIconHighContrast = Color(0xFFC8C8C8);
 
   // ───────────────────────────────────────────
+  // Material 화면 테마 (대화상자·SnackBar) — #97
+  // ───────────────────────────────────────────
+  // 설정 대화상자([HandednessDialog] 등) 같은 Material 위젯은 앱 테마를 쓴다. 앱은 플랫폼 밝기와 관계없이 항상
+  // 어두운 테마이고, 기기 고대비 설정에서는 [materialHighContrastTheme]으로 바꾼다([CalcPalette.materialTheme]이
+  // 고르고, 고대비 판정은 [CalcPalette.of] 하나를 쓴다). 기준은 `test/unit/calc_theme_test.dart`·
+  // `test/widget/material_theme_test.dart`가 검증한다.
+  //
+  // 일반 테마로 잰 대비 (대화상자 면 기준): 제목 11.1:1, 선택지 설명·닫기 버튼·라디오 8.4:1, SnackBar 글자 10.2:1.
+  // 글자는 이미 7:1 이상이지만 다음이 모자랐다.
+  // - 대화상자 면과 그 뒤(어둡게 덮인 본체)의 대비가 1.3:1이다. 어두운 화면에서는 M3 그림자도 보이지 않아
+  //   대화상자 가장자리가 거의 구분되지 않는다.
+  // - 키보드 포커스 표시가 거의 보이지 않는다: 선택지 타일(흰색 12% 겹침)은 대화상자 면과 1.5:1, 닫기 버튼(primary 10%
+  //   겹침)은 1.3:1, 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이다.
+  // - SnackBar 동작 버튼 글자가 5.0:1이다 (지금 앱은 SnackBar를 쓰지 않지만 쓰게 되면 바로 7:1 이상이 되게 맞춘다).
+  // 툴팁은 M3 기본값이 색 구성과 관계없이 밝기만 보고(어두운 테마: 흰색 90% 바탕·검은 글자) 17.5:1이라 바꾸지 않는다.
+  //
+  // 고대비 테마는 Flutter가 제공하는 M3 고대비 기준 색 구성(`ThemeData`의 `contrastLevel: ContrastLevel.high`)을
+  // 쓴다. 대화상자 면 색은 일반 테마와 같고 글자·버튼만 밝아진다(제목·설명 14.4:1, 닫기 버튼·라디오 12.6:1,
+  // SnackBar 글자 16.2:1·동작 10.1:1). 여기에 계산기 고대비 팔레트 색을 더한다.
+  // - 대화상자 가장자리: 고대비 키캡 테두리와 같은 색([keyBorderHighContrast]) 선 — 대화상자 면 5.9:1, 덮인 본체 7.5:1
+  // - 키보드 포커스: 고대비 눌린 키캡 테두리와 같은 흰색([materialFocusRingHighContrast]) 테두리 — 대화상자 면 14.4:1,
+  //   포커스 겹침 위 9.8:1, 본체 13.8:1. 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 버튼에 그린다
+  //   (ListTile은 상태별 모양을 받지 않고, 버튼의 focused 상태는 터치 조작 중에도 켜져 있다).
+  //
+  // 대화상자 모양은 두 테마 모두 M3 기본 모양(반경 [materialDialogBorderRadius])을 직접 지정한다 — 한쪽만 지정하면
+  // 고대비를 켜고 끌 때 테마 보간이 반경을 0까지 줄였다가 되돌린다. 보간 중에는 가장자리 선만 나타나거나 사라진다.
+  // 고대비 기준 색 구성은 이름·설명 글자색(onSurface·onSurfaceVariant)이 같은 흰색이다 — 위계는 글자 크기로 남는다.
+
+  /// 고대비 대화상자 가장자리 선 굵기
+  static const double materialHighContrastDialogBorderWidth = 1.0;
+
+  /// M3 대화상자 기본 모서리 반경 — 두 테마가 대화상자 모양을 직접 지정할 때 쓴다
+  /// (M3 기본 대화상자와 같은지 `test/widget/material_theme_test.dart`가 확인한다)
+  static const double materialDialogBorderRadius = 28.0;
+
+  /// 고대비 키보드 포커스 테두리 색 (위 "Material 화면 테마" 주석 참조)
+  static const Color materialFocusRingHighContrast =
+      keyPressedBorderHighContrast;
+
+  /// 고대비 키보드 포커스 테두리 굵기
+  static const double materialFocusRingWidth = 2.0;
+
+  /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
+  /// 정적 값이라 핫 리로드에는 반영되지 않는다(핫 리스타트 필요).
+  static final ThemeData materialTheme = ThemeData(
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: bodyBackground,
+    dialogTheme: const DialogThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(materialDialogBorderRadius),
+        ),
+      ),
+    ),
+  );
+
+  /// 고대비 Material 테마 — 위 "Material 화면 테마" 주석 참조
+  static final ThemeData materialHighContrastTheme = ThemeData(
+    brightness: Brightness.dark,
+    contrastLevel: ContrastLevel.high,
+    scaffoldBackgroundColor: bodyBackground,
+    dialogTheme: const DialogThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(materialDialogBorderRadius),
+        ),
+        side: BorderSide(
+          color: keyBorderHighContrast,
+          width: materialHighContrastDialogBorderWidth,
+        ),
+      ),
+    ),
+  );
+
+  // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
   // ───────────────────────────────────────────
 
@@ -558,7 +633,7 @@ abstract final class CalcTheme {
 
   /// 키패드 최대 폭 (dp) — 태블릿처럼 큰 화면에서 키가 과도하게 커지지 않게 한다 (#24).
   /// 1dp는 약 1/160인치라 480dp ≈ 76mm로, 실물 fx-991EX 본체 폭(약 77mm)과 비슷하다.
-  /// 키패드 최대 높이는 이 값 / [keypadMinAspectRatio] (640dp). 폰 폭(430dp 이하)에서는 걸리지 않는다.
+  /// 키패드 최대 높이는 이 값 / [keypadMinAspectRatio] (640dp). 폰 폭(440dp 이하)에서는 걸리지 않는다.
   static const double keypadMaxWidth = 480.0;
 
   /// 키캡 터치 영역 최소 높이 (dp). 키캡이 이보다 낮으면 각인 띠까지 터치 영역을 넓힌다.
@@ -615,6 +690,12 @@ abstract final class CalcTheme {
   // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio]) 때문에 키패드가 다 쓰지 못하는
   //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
   //   (실물의 로고·태양전지 자리, 활용은 TODO(#41)). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
+  // - LCD 폭: 본체 폭과 [screenLcdMaxWidth](키패드 최대 폭 기준) 중 작은 쪽이고, 키패드처럼 가운데 정렬한다 (#92).
+  //   LCD 최대 높이도 이 폭으로 정하므로, 태블릿 세로처럼 폭이 상한에 걸리면 LCD가 덜 높아지고 그만큼 상단 띠가 커진다
+  //   (LCD는 그대로 키패드 바로 위). 예: 10인치 Android 세로(본체 784×1130) LCD 448 → 274dp·띠 약 34 → 208dp,
+  //   12.9인치 iPad 세로(본체 1008×1244) LCD 576 → 274dp·띠 약 20 → 약 322dp. 띠의 활용은 #41.
+  //   세로 폰 폭(440dp 이하)에서는 걸리지 않는다. 짧은 변 600dp 미만의 가로 창(가로 폰·짧은 분할 화면)은 폭이
+  //   480dp를 넘으면 걸린다 — 그 창의 키패드는 높이에 묶여 LCD보다 더 좁다(짧은 창 규칙은 #38).
   // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38).
   // 대화면 가로 창의 좌우 분할은 아래 "좌우 분할 배치"(#24), 폴더블 접힘선 기준 배치는 "접힘선 기준 배치"(#25).
 
@@ -634,45 +715,60 @@ abstract final class CalcTheme {
   static const double screenLcdMinHeight = 112.0;
 
   /// LCD 최소 가로/세로 비 — LCD 최대 높이는 LCD 폭 / 이 값이다.
-  /// 폰 폭(304~414dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
+  /// 폰 폭(304~424dp)과 위아래 배치 LCD 최대 폭([screenLcdMaxWidth], 480dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
   /// 4행 + 분수 막대)를 담는 높이다. 이보다 높여도 글자는 커지지 않고 빈 줄 여백만 늘어난다.
   static const double screenLcdMinAspectRatio = 1.75;
+
+  /// LCD 최대 폭 비율 (키패드 폭 대비) (#71, #92). 대화면에서 LCD가 키패드보다 지나치게 넓어지지 않게 한다.
+  ///
+  /// 상한이 없으면 대화면에서 LCD가 키패드보다 훨씬 넓어진다 — 12.9인치 iPad 가로(1366×1024)에서 키패드는
+  /// 480dp인데 LCD는 약 854dp(줄 글자 약 72dp), 세로(1024×1366)에서는 약 1008×576dp로, 실물 비례(LCD 창이
+  /// 본체보다 좁다)와 멀어지고 회전할 때마다 LCD 폭이 크게 바뀐다.
+  ///
+  /// 1.0은 디자인 결정이다: LCD와 키패드 폭 비를 세로 폰 화면(둘 다 화면 폭)과 같게 한다
+  /// (실물 LCD 창 폭 실측값이 아니다). 1보다 크게 두면 LCD가 키패드(최대 폭)보다 넓어져 실물 비례에서 멀어진다.
+  /// 배치마다 기준 키패드 폭이 달라, "LCD ≤ 키패드 폭"이 늘 성립하는 것은 좌우 분할뿐이다.
+  /// - **좌우 분할**: 키패드 **실제** 폭 기준. LCD가 키패드 옆에서 높이를 나눠 쓰므로 키패드와 같은 폭이 된다.
+  ///   접힘선이 없으면 키패드 폭이 (본체 폭 − 간격) × [screenSplitKeypadMaxWidthRatio](0.5) 이하라
+  ///   LCD 쪽 패널이 항상 키패드 이상이므로, **LCD 폭은 언제나 키패드 폭**이 된다(10인치 Android 1280×800도
+  ///   768 → 480dp). 12.9인치 iPad 가로 LCD는 480dp, 줄 글자 약 39dp다(390×844 폰은 약 27dp,
+  ///   키패드 480dp의 메인 각인은 약 16dp). 패널이 더 좁은 경우는 접힘선 기준 배치뿐이다.
+  /// - **위아래·테이블톱**: 키패드 **최대** 폭([keypadMaxWidth]) 기준 — [screenLcdMaxWidth].
+  ///   이 배치의 키패드는 폭이 아니라 남는 높이에 묶여 좁아지는 일이 있다(짧은 창 #38, 테이블톱 아래 절반 #80).
+  ///   그때 LCD까지 실제 키패드 폭으로 줄이면 분할 화면의 폰처럼 폭이 넉넉한 창에서도 LCD 글자만 작아진다.
+  ///   그래서 이 배치에서는 키패드가 높이에 묶이면 **LCD가 실제 키패드보다 넓을 수 있다**
+  ///   (Fold 가로 반 접힘: LCD 480 / 키패드 약 293dp ≈ 1.6배, 가로 폰 844×390: 약 2배). 키패드가 폭 상한까지
+  ///   쓰는 창(태블릿 세로·정사각형 창)에서는 LCD 폭 = 키패드 폭이다.
+  static const double screenLcdMaxWidthRatio = 1.0;
+
+  /// 위아래·테이블톱 배치의 LCD 최대 폭 (dp) = [keypadMaxWidth] × [screenLcdMaxWidthRatio] (#92).
+  /// 가장 넓은 세로 폰의 본체 폭(440 − 좌우 여백)보다 넓어 세로 폰에는 걸리지 않는다(불변식 테스트).
+  /// TODO(#80): 테이블톱 전용 키패드 배치가 키패드 최대 폭을 480dp보다 넓히면, 테이블톱 LCD 상한도 그 최대 폭으로
+  /// 바꾼다 — 그대로 두면 LCD가 키패드보다 좁은 채 손 쪽 끝만 맞는다.
+  static const double screenLcdMaxWidth =
+      keypadMaxWidth * screenLcdMaxWidthRatio;
 
   // ── 좌우 분할 배치 (#24) ──
   // 대화면 가로 창(`FormFactor.arrangementOf`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
   // - 키패드: 주로 쓰는 손 쪽 가장자리, 광고 슬롯 바로 위에 붙인다. 폭은 본체 폭의
   //   [screenSplitKeypadMaxWidthRatio] 이하(그리고 [keypadMaxWidth] 이하), 높이는 본체 높이까지.
-  // - LCD: 나머지 폭(LCD 쪽 패널) 안에서 폭은 키패드 폭 × [screenSplitLcdMaxWidthRatio] 이하이고, 높이는
+  // - LCD: 나머지 폭(LCD 쪽 패널) 안에서 폭은 키패드 폭 × [screenLcdMaxWidthRatio] 이하이고, 높이는
   //   그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다 (#71). 상한에 걸리면 키패드 쪽
   //   (접힘선 기준 배치면 접힘선 쪽)에 붙이고, 남는 폭은 패널 바깥쪽 빈 여백으로 둔다.
   //   LCD 아래 남는 자리에 설정 버튼을 둔다.
   // - 본체가 키패드 최대 높이보다 높으면(12.9인치 iPad 가로 등) 위아래 배치와 같이 키패드·LCD를 본체 아래에
   //   붙인 채로 두고, 위쪽 남는 높이는 빈 띠로 둔다. 위쪽 띠·패널 바깥쪽 여백의 활용(과 설정 버튼 위치)은
   //   세로 폰 상단 띠와 함께 TODO(#41).
-  // - 위아래 배치(태블릿 세로)·테이블톱 배치의 LCD는 여전히 본체(절반) 폭 전체다 — 이 상한은 좌우 분할에만 걸린다
-  //   (위아래·테이블톱 배치의 LCD 폭 상한은 TODO(#92)).
+  // - 위아래 배치(태블릿 세로)·테이블톱 배치의 LCD 폭 상한은 키패드 실제 폭이 아니라 [screenLcdMaxWidth]다 (#92).
   // - 광고 슬롯: 위아래 배치와 같이 본체 아래 전체 폭 — 키패드 최하단 행 아래 안전 여백 규칙이 그대로 지켜진다.
 
   /// 좌우 분할 배치의 LCD 쪽과 키패드 쪽 사이 간격 (dp)
   static const double screenSplitGap = 16.0;
 
   /// 좌우 분할 배치에서 키패드가 차지할 수 있는 최대 폭 (본체 폭에서 간격을 뺀 폭 대비).
-  /// 0.5 이하이면 LCD 쪽 패널이 항상 키패드 폭 이상이라 LCD 폭 상한(키패드 폭 × [screenSplitLcdMaxWidthRatio])이
+  /// 0.5 이하이면 LCD 쪽 패널이 항상 키패드 폭 이상이라 LCD 폭 상한(키패드 폭 × [screenLcdMaxWidthRatio])이
   /// 그대로 적용된다 — 넓히면 패널이 키패드보다 좁아져 LCD가 패널 폭으로 줄어든다.
   static const double screenSplitKeypadMaxWidthRatio = 0.5;
-
-  /// 좌우 분할 배치의 LCD 최대 폭 (키패드 실제 폭 대비) (#71).
-  ///
-  /// 상한이 없으면 태블릿 가로에서 LCD가 키패드보다 훨씬 넓어진다 — 12.9인치 iPad 가로(1366×1024)에서
-  /// 키패드는 480dp인데 LCD는 약 854dp(줄 글자 약 72dp)까지 커져, 실물 비례(LCD 창이 본체보다 좁다)와 멀어진다.
-  ///
-  /// 1.0은 디자인 결정이다: 좌우 분할 배치의 LCD와 키패드 폭 비를 세로 폰 화면(둘 다 화면 폭)과 같게 한다
-  /// (실물 LCD 창 폭 실측값이 아니다). 12.9인치 iPad 가로 LCD는 480dp, 줄 글자 약 39dp다
-  /// (390×844 폰은 약 27dp, 키패드 480dp의 메인 각인은 약 16dp).
-  /// 접힘선이 없는 좌우 분할에서는 키패드 폭이 (본체 폭 − 간격) × [screenSplitKeypadMaxWidthRatio](0.5) 이하라
-  /// LCD 쪽 패널이 항상 키패드 이상이므로, **LCD 폭은 언제나 키패드 폭**이 된다(10인치 Android 1280×800도 768 → 480dp).
-  /// 패널이 더 좁은 경우는 접힘선 기준 배치뿐이다. 1보다 크게 두면 LCD가 키패드보다 넓어져 실물 비례에서 멀어진다.
-  static const double screenSplitLcdMaxWidthRatio = 1.0;
 
   /// 좌우 분할 배치의 LCD와 설정 버튼 사이 간격 (dp)
   static const double screenSplitSettingsGap = 8.0;
@@ -687,6 +783,7 @@ abstract final class CalcTheme {
   // 폴더블 내부 화면처럼 접힘선(fold·hinge)이 창을 가로지르면 접힘선을 경계로 나눈다(`FormFactor.arrangementOf`).
   // - 세로 접힘선(책 자세): 주로 쓰는 손 쪽 절반에 키패드, 다른 절반에 LCD·설정 버튼 — 좌우 분할과 같은 규칙.
   // - 가로 접힘선(반 접은 테이블톱 자세·물리 힌지만): 위 절반에 LCD, 아래 절반에 키패드(주로 쓰는 손 쪽)·설정 버튼.
+  //   LCD 폭은 [screenLcdMaxWidth] 이하이고, 상한에 걸리면 키패드와 같은 쪽(주로 쓰는 손 쪽) 가장자리에 붙인다 (#92).
   //   펼친 폭 0 가로 접힘선은 나누지 않고 위아래 배치로 둔다(`FormFactor.arrangementOf`).
   // - 광고 슬롯: 다른 배치와 같이 본체 아래 전체 폭 (세로 접힘선이면 접힘선을 가로지른다 — 광고 위치는 #18).
 
@@ -822,6 +919,15 @@ final class CalcPalette {
       MediaQuery.highContrastOf(context) || HighTextContrastScope.of(context)
       ? highContrast
       : standard;
+
+  /// 이 팔레트와 짝인 Material 테마 (대화상자·SnackBar, #97)
+  ThemeData get materialTheme => isHighContrast
+      ? CalcTheme.materialHighContrastTheme
+      : CalcTheme.materialTheme;
+
+  /// `FocusRing`이 그리는 키보드 포커스 테두리 색. 일반 팔레트는 `null` (Material 기본 포커스 겹침만 쓴다, #97).
+  Color? get materialFocusRing =>
+      isHighContrast ? CalcTheme.materialFocusRingHighContrast : null;
 
   /// [category] 키캡 배경색
   Color keyBackground(KeyCategory category) {

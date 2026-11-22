@@ -338,6 +338,34 @@ void main() {
       );
     });
 
+    testWidgets(
+      '고대비 텍스트가 켜지면 MaterialApp 테마와 화면 쪽 테마(대화상자용)도 고대비가 된다 (#97 연동)',
+      (tester) async {
+        final highText = ValueNotifier(false);
+        addTearDown(highText.dispose);
+        await tester.pumpWidget(
+          ProviderScope(child: AltCalcApp(highTextContrast: highText)),
+        );
+        ThemeData screenTheme() =>
+            Theme.of(tester.element(find.byType(CalcKeyButton).first));
+        ThemeData appTheme() =>
+            tester.widget<MaterialApp>(find.byType(MaterialApp)).theme!;
+        expect(appTheme(), same(CalcPalette.standard.materialTheme));
+        expect(
+          screenTheme().colorScheme,
+          CalcPalette.standard.materialTheme.colorScheme,
+        );
+
+        highText.value = true;
+        await tester.pumpAndSettle();
+        expect(appTheme(), same(CalcPalette.highContrast.materialTheme));
+        expect(
+          screenTheme().colorScheme,
+          CalcPalette.highContrast.materialTheme.colorScheme,
+        );
+      },
+    );
+
     testWidgets('값을 넘기지 않으면 앱 전체 수신기(SystemHighTextContrast.instance)를 쓴다', (
       tester,
     ) async {
