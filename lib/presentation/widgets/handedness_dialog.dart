@@ -27,11 +27,12 @@ class HandednessDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = SettingsStrings.of(context);
-    // 대화상자 가장자리 선(고대비)은 내용 위에 그려지므로, 선택지 포커스 테두리를 그 굵기만큼 안쪽에 그린다.
-    // 선이 없는 일반 모드는 0 — 테두리가 타일 전체를 두른다.
+    // 대화상자 가장자리 선(고대비)은 내용 위에 그려지므로, 선택지 포커스 테두리를 선이 안쪽으로 들어오는 폭만큼
+    // 안쪽에 그린다. 선이 없는 일반 모드는 0 — 테두리가 타일 전체를 두른다.
+    // 대화상자 모양은 테마에서 온다 — 아래 AlertDialog에 shape를 따로 주면 여기서도 그 모양을 읽어야 한다.
     final dialogEdge = switch (DialogTheme.of(context).shape) {
       OutlinedBorder(:final side) when side.style != BorderStyle.none =>
-        side.width,
+        side.strokeInset,
       _ => 0.0,
     };
     return AlertDialog(

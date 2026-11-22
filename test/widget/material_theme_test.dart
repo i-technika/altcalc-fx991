@@ -171,14 +171,41 @@ Rect _ringRectOf(WidgetTester tester, Finder target) {
 
 /// [target]을 감싼 [FocusRing]이 [color] 테두리를 실제로 그리는지 — [OutlinedBorder.paint]가 모양마다 다른 호출을 쓴다
 /// (StadiumBorder: 선 그리기 rrect, RoundedRectangleBorder: 채운 drrect).
+/// [at](화면 좌표)을 주면 그 자리에 그리는지도 본다 — 기대 위치를 렌더 객체의 계산(`ringRect`)과 따로 구해야
+/// "계산은 맞고 그리기는 다른 곳" 같은 회귀를 잡는다. 기대 도형은 각 모양의 paint와 같은 계산(안쪽 정렬 2dp 선)이다.
 PaintPattern _paintsFocusRing(
   WidgetTester tester,
   Finder target,
-  Color color,
-) => switch (_ringRenderOf(tester, target).shape) {
-  StadiumBorder() => paints..rrect(color: color, style: PaintingStyle.stroke),
-  _ => paints..drrect(color: color),
-};
+  Color color, {
+  Rect? at,
+}) {
+  final ring = _ringRenderOf(tester, target);
+  // paints 매처는 렌더 객체를 자기 원점(0, 0)에 그린다
+  final local = at?.shift(-ring.localToGlobal(Offset.zero));
+  const w = CalcTheme.materialFocusRingWidth;
+  return switch (ring.shape) {
+    StadiumBorder() =>
+      paints..rrect(
+        rrect: local == null
+            ? null
+            : RRect.fromRectAndRadius(
+                local,
+                Radius.circular(local.shortestSide / 2),
+              ).deflate(w / 2),
+        color: color,
+        style: PaintingStyle.stroke,
+      ),
+    RoundedRectangleBorder(borderRadius: BorderRadius.zero) =>
+      paints..drrect(
+        outer: local == null ? null : RRect.fromRectAndCorners(local),
+        inner: local == null
+            ? null
+            : RRect.fromRectAndCorners(local.deflate(w)),
+        color: color,
+      ),
+    final other => throw StateError('기대 도형을 모르는 모양: $other'),
+  };
+}
 
 /// [target] 안의 첫 [InkWell] (버튼·타일이 포커스를 받는 곳이자 보이는 면)
 Finder _inkWellOf(Finder target) =>
@@ -496,9 +523,12 @@ void main() {
           for (final h in Handedness.values) {
             await _focusByKeyboard(tester, _option(h));
             final tile = tester.getRect(_inkWellOf(_option(h)));
+            final expected = EdgeInsets.symmetric(horizontal: edge)
+                .deflateRect(tile);
+            expect(_ringRectOf(tester, _option(h)), expected, reason: '$h');
             expect(
-              _ringRectOf(tester, _option(h)),
-              EdgeInsets.symmetric(horizontal: edge).deflateRect(tile),
+              _ringBoxOf(_option(h)),
+              _paintsFocusRing(tester, _option(h), expectedColor, at: expected),
               reason: '$h',
             );
           }
@@ -513,6 +543,15 @@ void main() {
             lessThan(tester.getSize(_closeButton).height),
           );
           expect(_ringRectOf(tester, _closeButton), tester.getRect(visible));
+          expect(
+            _ringBoxOf(_closeButton),
+            _paintsFocusRing(
+              tester,
+              _closeButton,
+              expectedColor,
+              at: tester.getRect(visible),
+            ),
+          );
           expect(
             tester.widget<Material>(visible).shape,
             _ringRenderOf(tester, _closeButton).shape,
@@ -540,6 +579,15 @@ void main() {
               .descendant(of: _settingsButton, matching: find.byType(Material))
               .first;
           expect(_ringRectOf(tester, _settingsButton), tester.getRect(visible));
+          expect(
+            _ringBoxOf(_settingsButton),
+            _paintsFocusRing(
+              tester,
+              _settingsButton,
+              expectedColor,
+              at: tester.getRect(visible),
+            ),
+          );
           final ink = tester.widget<InkWell>(_inkWellOf(_settingsButton));
           final backgrounds = {
             // WCAG 2.4.13: 포커스 전후 같은 픽셀
