@@ -171,7 +171,7 @@ class LcdStatus {
   /// 공학 기호 On (E)
   final bool engineering;
 
-  /// MathI 입출력 (√◻)
+  /// MathI 입출력 (√▭✎ 아이콘, 표시 문자 `√◻`)
   final bool mathIO;
 
   /// 복소수 결과 형식 설정 (i/∠)

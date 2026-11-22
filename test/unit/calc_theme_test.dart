@@ -204,6 +204,24 @@ void main() {
       expect(CalcTheme.adSlotLargeScreenShortestSide, greaterThan(0));
     });
 
+    test(
+      '상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘다 (#57)',
+      () {
+        expect(CalcTheme.lcdStatusXHeightRatio, greaterThan(0));
+        expect(
+          CalcTheme.lcdStatusXHeightRatio,
+          lessThan(CalcTheme.lcdStatusCapHeightRatio),
+        );
+        expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
+        expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
+        // ‖ 두 획 중심 간격 = 칸 폭(0.6em)의 40% — 획 굵기가 그보다 작아야 사이가 빈다.
+        expect(
+          CalcTheme.lcdStatusIconStrokeRatio,
+          lessThan(0.4 * CalcTheme.lcdStatusCharWidthRatio),
+        );
+      },
+    );
+
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
       for (final v in [
         CalcTheme.lcdFrameWidth,
