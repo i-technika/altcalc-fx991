@@ -30,7 +30,8 @@ if printf '%s\n' "$status" | grep -q ' pubspec\.lock$'; then
   echo "::error::pubspec.lock이 바뀌었다. 고정된 SDK(pubspec.yaml의 environment.flutter)로 로컬에서 flutter pub get을 실행해 갱신된 pubspec.lock을 커밋할 것 (#78)."
   # head가 먼저 닫혀 git이 SIGPIPE로 끝나도 pipefail로 여기서 멈추지 않게 한다
   { git diff -- pubspec.lock || true; } | head -40 || true
-  exit 1
+  # lock 말고 다른 변경도 있으면 아래 일반 오류 안내도 함께 낸다
+  printf '%s\n' "$status" | grep -qv ' pubspec\.lock$' || exit 1
 fi
 
 echo "::error::빌드 뒤 작업 트리가 깨끗하지 않다 (#67). 위 eol 표와 내용 차이로 원인(줄바꿈 속성·생성 파일 커밋 누락·.gitignore 누락)을 확인할 것."

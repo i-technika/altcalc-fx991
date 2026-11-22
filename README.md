@@ -7,7 +7,7 @@
 
 ## 개발 환경
 
-- Flutter 3.50.0 (Dart 3.14.0) — `pubspec.yaml`의 `environment.flutter`로 고정한다. CI도 같은 값을 읽고(#78),
+- Flutter 3.50.0 — `pubspec.yaml`의 `environment.flutter`로 고정한다. CI도 같은 값을 읽고(#78),
   다른 버전의 SDK로는 `flutter pub get`이 `requires Flutter SDK version ...`으로 실패한다.
 - 의존성 설치: `flutter pub get`
 - 생성 플러그인 파일(`linux/flutter/generated_plugin*` 등)은 `.gitattributes`로 LF 고정이다. 이 설정 이전에 받은 Windows 작업 트리에서
@@ -19,10 +19,16 @@
 
 **먼저 알아 둘 점:** 고정값은 정확한 버전이라, SDK를 바꾸는 순간 옛 고정값을 가진 **같은 PC의 다른 브랜치·worktree**에서
 `flutter pub get`·`test`·`analyze`·VS Code 실행이 모두 실패한다(SDK 폴더는 하나를 공유한다).
+같은 이유로 버전 올리기 절차 밖에서는 `flutter upgrade`를 실행하지 않는다(새 버전 알림이 떠도 무시한다).
 
 - 버전 올리기는 진행 중인 서브이슈 브랜치가 없는 마일스톤 경계에서 한다.
-- 그럴 수 없으면 새 버전을 별도 폴더(예: `~/develop/flutter-X.Y.Z`)에 받아 그 브랜치의 셸 PATH에만 넣는다.
-  기존 SDK는 나머지 브랜치가 고정값을 올릴 때까지 그대로 둔다.
+  SDK를 바꾸기 전에 다른 세션의 `flutter` 명령과 VS Code 창을 닫는다(Windows에서 SDK 파일이 잠겨 있으면 전환이 실패할 수 있다).
+- 그럴 수 없으면 새 버전을 별도 폴더에 받아(`git clone -b X.Y.Z https://github.com/flutter/flutter.git ~/develop/flutter-X.Y.Z`)
+  그 작업에 쓰는 셸의 PATH 앞에만 넣는다. 기존 SDK는 나머지 브랜치가 고정값을 올릴 때까지 그대로 둔다.
+  - PATH는 브랜치가 아니라 셸마다 적용된다. 그 셸에서 실행한 명령만 새 SDK를 쓴다.
+  - VS Code는 사용자 설정 `dart.flutterSdkPath`가 PATH보다 앞선다(아래 "Flutter SDK를 찾는 순서").
+    그 설정이 없으면 새 SDK를 PATH에 넣은 셸에서 `code <worktree 폴더>`로 **새 창**을 연다.
+    설정이 있으면 그 창에서 명령 팔레트의 `Flutter: Change SDK`로 새 폴더를 고른다.
 
 1. 올릴 stable 버전 `X.Y.Z`를 정한다 ([릴리스 목록](https://docs.flutter.dev/install/archive)).
 2. 로컬 SDK를 그 버전으로 바꾼다.

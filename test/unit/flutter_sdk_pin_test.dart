@@ -110,7 +110,7 @@ void main() {
     // README에서 구체 버전을 적는 곳은 이 한 줄뿐이다 (다른 문서는 pubspec.yaml을 가리킨다)
     final versions = [
       for (final m in RegExp(
-        r'^- Flutter (\S+) \(Dart',
+        r'^- Flutter (\S+) — ',
         multiLine: true,
       ).allMatches(section))
         m[1],
