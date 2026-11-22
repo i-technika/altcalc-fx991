@@ -139,7 +139,8 @@ class AltCalcApp extends StatelessWidget {
   /// 첫 화면 (기본: [CalculatorScreen])
   final Widget home;
 
-  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 [Theme]로 감싼 것)을 감싸는
+  /// 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
 
@@ -154,13 +155,24 @@ class AltCalcApp extends StatelessWidget {
     return MaterialApp(
       title: 'AltCalc fx-991',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: CalcTheme.bodyBackground,
-      ),
+      // 플랫폼 밝기와 관계없이 같은 어두운 테마를 쓰고, 기기 고대비 설정에서는 고대비 테마로 바꾼다 (#97).
+      // MaterialApp은 밝기(어두운 모드 여부)·고대비 조합마다 다른 칸을 보므로 네 칸을 모두 채운다.
+      theme: CalcPalette.standard.materialTheme,
+      darkTheme: CalcPalette.standard.materialTheme,
+      highContrastTheme: CalcPalette.highContrast.materialTheme,
+      highContrastDarkTheme: CalcPalette.highContrast.materialTheme,
       // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
       builder: (context, child) {
-        final screen = child ?? const SizedBox.shrink();
+        final navigator = child ?? const SizedBox.shrink();
+        // MaterialApp은 View의 고대비 설정만 보므로, 화면(루트 Navigator) 바로 위에서 가장 가까운 MediaQuery로
+        // 테마를 다시 고른다 — 개발용 미리보기처럼 틀 안에서 고대비를 바꾸는 곳에서도 대화상자·툴팁이 따라간다.
+        // 실제 앱에서는 MaterialApp이 고른 테마와 같다 (#97).
+        final screen = Builder(
+          builder: (context) => Theme(
+            data: CalcPalette.of(context).materialTheme,
+            child: navigator,
+          ),
+        );
         return DeviceLocaleScope(
           child: frameBuilder?.call(context, screen) ?? screen,
         );

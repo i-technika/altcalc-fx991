@@ -257,6 +257,61 @@ abstract final class CalcTheme {
   static const Color settingsIconHighContrast = Color(0xFFC8C8C8);
 
   // ───────────────────────────────────────────
+  // Material 화면 테마 (대화상자·툴팁·SnackBar) — #97
+  // ───────────────────────────────────────────
+  // 설정 대화상자([HandednessDialog] 등) 같은 Material 위젯은 `MaterialApp`의 테마를 쓴다. 앱은 플랫폼 밝기와
+  // 관계없이 항상 어두운 테마이고, 기기 고대비 설정에서는 [materialHighContrastTheme]으로 바꾼다
+  // ([CalcPalette.materialTheme]이 고른다). 기준은 `test/unit/calc_theme_test.dart`·
+  // `test/widget/material_theme_test.dart`가 검증한다.
+  //
+  // 일반 테마로 잰 대비 (대화상자 면 기준): 제목 11.1:1, 선택지 설명·닫기 버튼·라디오 8.4:1, 툴팁 17.5:1,
+  // SnackBar 글자 10.2:1. 글자는 이미 7:1 이상이지만 다음 두 가지가 모자랐다.
+  // - 대화상자 면과 그 뒤(어둡게 덮인 본체)의 대비가 1.3:1이다. 어두운 화면에서는 M3 그림자도 보이지 않아
+  //   대화상자 가장자리가 거의 구분되지 않는다.
+  // - SnackBar 동작 버튼 글자가 5.0:1이다 (지금 앱은 SnackBar를 쓰지 않지만 쓰게 되면 바로 7:1이 되도록 맞춘다).
+  //
+  // 일반 테마는 그동안의 `ThemeData` 기본 어두운 색 구성 그대로다. 고대비 테마는 그 기본 색 구성을 만든 씨앗
+  // ([materialSeedColor])으로 대비를 최대로 올린 색 구성(`ColorScheme.fromSeed`의 `contrastLevel: 1.0`)을 써서
+  // 같은 앱으로 보이게 하면서 글자·버튼을 모두 7:1 이상으로 올리고(제목·설명 11.2:1, 버튼·라디오 9.8:1,
+  // SnackBar 동작 7.0:1), 대화상자 가장자리에는 고대비 키캡 테두리와 같은 색([keyBorderHighContrast])의 선을 둔다.
+
+  /// 고대비 Material 색 구성의 씨앗 — M3 기본 색 구성(일반 테마가 그대로 쓰는 `ThemeData` 기본값)을 만든 씨앗과 같다.
+  static const Color materialSeedColor = Color(0xFF6750A4);
+
+  /// 고대비 대화상자 가장자리 선 굵기
+  static const double materialHighContrastDialogBorderWidth = 1.0;
+
+  /// M3 대화상자 기본 모서리 반경 — 고대비에서 가장자리 선을 넣으려고 모양을 다시 지정할 때 같은 값을 쓴다
+  static const double materialDialogBorderRadius = 28.0;
+
+  /// 일반 Material 테마 (어두운 테마, 본체색 배경)
+  static final ThemeData materialTheme = ThemeData(
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: bodyBackground,
+  );
+
+  /// 고대비 Material 테마 — 위 "Material 화면 테마" 주석 참조
+  static final ThemeData materialHighContrastTheme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: materialSeedColor,
+      brightness: Brightness.dark,
+      contrastLevel: 1.0,
+    ),
+    scaffoldBackgroundColor: bodyBackground,
+    dialogTheme: const DialogThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(materialDialogBorderRadius),
+        ),
+        side: BorderSide(
+          color: keyBorderHighContrast,
+          width: materialHighContrastDialogBorderWidth,
+        ),
+      ),
+    ),
+  );
+
+  // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
   // ───────────────────────────────────────────
 
@@ -815,6 +870,11 @@ final class CalcPalette {
   /// 그 설정에만 의존하므로 다른 MediaQuery 값(크기·인셋 등)이 바뀌어도 다시 빌드되지 않는다.
   static CalcPalette of(BuildContext context) =>
       MediaQuery.highContrastOf(context) ? highContrast : standard;
+
+  /// 이 팔레트와 짝인 Material 테마 (대화상자·툴팁·SnackBar, #97)
+  ThemeData get materialTheme => isHighContrast
+      ? CalcTheme.materialHighContrastTheme
+      : CalcTheme.materialTheme;
 
   /// [category] 키캡 배경색
   Color keyBackground(KeyCategory category) {
