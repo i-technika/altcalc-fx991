@@ -139,7 +139,8 @@ class AltCalcApp extends StatelessWidget {
   /// 첫 화면 (기본: [CalculatorScreen])
   final Widget home;
 
-  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 [AnimatedTheme]으로 감싼 것)을 감싸는
+  /// 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
 
@@ -151,16 +152,24 @@ class AltCalcApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 고대비 판정은 [CalcPalette.of] 하나로 한다 (#97). 여기(View 바로 아래)서 고른 테마를 MaterialApp에 주고,
+    // 화면(루트 Navigator) 바로 위에서 가장 가까운 MediaQuery로 한 번 더 고른다 — 개발용 미리보기처럼 틀 안에서
+    // 고대비를 바꾸는 곳에서도 대화상자가 따라가게 하려는 것이다. 실제 앱에서는 두 곳이 같은 MediaQuery를 보므로
+    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다. 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
+    // MaterialApp의 다른 테마 칸(darkTheme·highContrastTheme 등)은 쓰지 않는다.
     return MaterialApp(
       title: 'AltCalc fx-991',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: CalcTheme.bodyBackground,
-      ),
-      // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
+      theme: CalcPalette.of(context).materialTheme,
       builder: (context, child) {
-        final screen = child ?? const SizedBox.shrink();
+        final navigator = child ?? const SizedBox.shrink();
+        final screen = Builder(
+          builder: (context) => AnimatedTheme(
+            data: CalcPalette.of(context).materialTheme,
+            child: navigator,
+          ),
+        );
+        // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
         return DeviceLocaleScope(
           child: frameBuilder?.call(context, screen) ?? screen,
         );

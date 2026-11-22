@@ -160,6 +160,127 @@ void main() {
     });
   });
 
+  group('Material 테마 (#97)', () {
+    final normal = CalcPalette.standard.materialTheme;
+    final high = CalcPalette.highContrast.materialTheme;
+    // 기준값은 리터럴로 둔다 (상수를 낮춰도 테스트가 느슨해지지 않게)
+    const aaa = 7.0; // WCAG AAA 일반 텍스트
+    const nonText = 3.0; // WCAG 1.4.11 비텍스트 대비
+
+    // 대화상자가 쓰는 색 역할 (M3 기본값): 면 surfaceContainerHigh, 제목·선택지 이름 onSurface,
+    // 선택지 설명·꺼진 라디오 onSurfaceVariant, 닫기 버튼·켜진 라디오 primary.
+    // SnackBar: 면 inverseSurface, 글자 onInverseSurface, 동작 버튼 inversePrimary.
+    List<(String, Color, Color)> textPairs(ColorScheme s) => [
+      ('대화상자 onSurface', s.onSurface, s.surfaceContainerHigh),
+      ('대화상자 onSurfaceVariant', s.onSurfaceVariant, s.surfaceContainerHigh),
+      ('대화상자 primary', s.primary, s.surfaceContainerHigh),
+      ('SnackBar 글자', s.onInverseSurface, s.inverseSurface),
+      ('SnackBar 동작', s.inversePrimary, s.inverseSurface),
+    ];
+
+    test('일반 테마는 그동안의 테마(ThemeData 기본 어두운 색 구성·본체색 배경) 그대로다', () {
+      final before = ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: CalcTheme.bodyBackground,
+      );
+      expect(normal.colorScheme, before.colorScheme);
+      expect(normal.scaffoldBackgroundColor, before.scaffoldBackgroundColor);
+      expect(normal.textButtonTheme, before.textButtonTheme);
+      expect(normal.iconButtonTheme, before.iconButtonTheme);
+      // 대화상자는 모양만 직접 지정한다 (M3 기본 모양과 같은지는 위젯 테스트가 확인)
+      expect(
+        normal.dialogTheme,
+        const DialogThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(28)),
+          ),
+        ),
+      );
+      expect(normal.useMaterial3, isTrue);
+    });
+
+    test('고대비 테마는 Flutter M3 고대비 기준 색 구성을 쓰고, 어두운 테마·본체색 배경이다', () {
+      expect(
+        high.colorScheme,
+        ThemeData(
+          brightness: Brightness.dark,
+          contrastLevel: ContrastLevel.high,
+        ).colorScheme,
+      );
+      for (final t in [normal, high]) {
+        expect(t.brightness, Brightness.dark);
+        expect(t.scaffoldBackgroundColor, CalcTheme.bodyBackground);
+      }
+      expect(high.useMaterial3, isTrue);
+      // 대화상자 면은 일반 테마와 같다 (글자·버튼만 밝아진다)
+      expect(
+        high.colorScheme.surfaceContainerHigh,
+        normal.colorScheme.surfaceContainerHigh,
+      );
+    });
+
+    test('고대비 테마의 대화상자·SnackBar 글자는 7:1 이상이고 일반 테마 이상이다', () {
+      final hc = textPairs(high.colorScheme);
+      final std = textPairs(normal.colorScheme);
+      for (var i = 0; i < hc.length; i++) {
+        final (name, fg, bg) = hc[i];
+        final (_, stdFg, stdBg) = std[i];
+        expect(fg.a, 1.0, reason: name);
+        expect(bg.a, 1.0, reason: name);
+        expect(contrastRatio(fg, bg), greaterThanOrEqualTo(aaa), reason: name);
+        expect(
+          contrastRatio(fg, bg),
+          greaterThanOrEqualTo(contrastRatio(stdFg, stdBg)),
+          reason: name,
+        );
+      }
+    });
+
+    test('고대비 대화상자 가장자리 선은 고대비 키캡 테두리 색이고 대화상자 면·어둡게 덮인 본체 모두와 3:1 이상이다', () {
+      final shape = high.dialogTheme.shape;
+      expect(shape, isA<RoundedRectangleBorder>());
+      final border = shape! as RoundedRectangleBorder;
+      expect(border.side.color, CalcPalette.highContrast.keyBorder);
+      expect(border.side.width, greaterThanOrEqualTo(1.0));
+      // showDialog 기본 장벽(black54)으로 덮인 본체
+      final dimmedBody = Color.alphaBlend(
+        Colors.black54,
+        CalcTheme.bodyBackground,
+      );
+      final surface = high.colorScheme.surfaceContainerHigh;
+      expect(
+        contrastRatio(border.side.color, surface),
+        greaterThanOrEqualTo(nonText),
+      );
+      expect(
+        contrastRatio(border.side.color, dimmedBody),
+        greaterThanOrEqualTo(nonText),
+      );
+      // 일반 테마는 가장자리 선이 없고, 모서리는 두 테마가 같다 (전환 보간 중 반경이 바뀌지 않게)
+      final normalShape = normal.dialogTheme.shape! as RoundedRectangleBorder;
+      expect(normalShape.side, BorderSide.none);
+      expect(normalShape.borderRadius, border.borderRadius);
+    });
+
+    test('고대비 키보드 포커스 테두리는 대화상자 면·포커스 겹침 위 모두 3:1 이상이다', () {
+      const ring = CalcTheme.materialFocusRingHighContrast;
+      expect(CalcPalette.highContrast.materialFocusRing, ring);
+      expect(CalcPalette.standard.materialFocusRing, isNull);
+      expect(CalcTheme.materialFocusRingWidth, greaterThanOrEqualTo(2.0));
+      final surface = high.colorScheme.surfaceContainerHigh;
+      final focusFill = Color.alphaBlend(high.focusColor, surface);
+      expect(contrastRatio(ring, surface), greaterThanOrEqualTo(nonText));
+      expect(contrastRatio(ring, focusFill), greaterThanOrEqualTo(nonText));
+      // 포커스 겹침 위의 글자도 7:1 이상 남는다
+      for (final fg in [
+        high.colorScheme.onSurface,
+        high.colorScheme.onSurfaceVariant,
+      ]) {
+        expect(contrastRatio(fg, focusFill), greaterThanOrEqualTo(aaa));
+      }
+    });
+  });
+
   group('고대비 팔레트 (#54)', () {
     const normal = CalcPalette.standard;
     const high = CalcPalette.highContrast;

@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/theme/calc_theme.dart';
 import '../../domain/models/handedness.dart';
 import '../l10n/settings_strings.dart';
 import '../providers/settings_provider.dart';
+import 'focus_ring.dart';
 
 /// 키패드 위치(손잡이) 선택 대화상자 (#24).
 ///
@@ -11,6 +13,8 @@ import '../providers/settings_provider.dart';
 /// 바깥 탭·뒤로가기로 한다 — 고를 때 닫지 않는 이유: 표준 라디오 그룹([RadioGroup])은 키보드 화살표로
 /// 포커스를 옮기면 선택도 함께 바뀌므로, 고를 때 닫으면 화살표 한 번에 설정이 바뀌고 대화상자가 닫힌다.
 /// 스크린리더에는 단일 선택 그룹·선택 상태로 알려진다.
+///
+/// 기기 고대비 설정에서는 키보드 포커스가 있는 선택지·닫기 버튼에 [FocusRing] 테두리를 그린다 (#97).
 class HandednessDialog extends ConsumerWidget {
   const HandednessDialog({super.key});
 
@@ -41,26 +45,32 @@ class HandednessDialog extends ConsumerWidget {
               for (final value in Handedness.values)
                 // 키보드 화살표로 포커스가 옮겨 가면 그 선택지를 화면 안으로 스크롤한다 — RadioGroup의 화살표
                 // 이동은 포커스만 옮기고 스크롤하지 않는다.
-                Builder(
-                  builder: (tileContext) => RadioListTile<Handedness>(
-                    key: optionKeyOf(value),
-                    value: value,
-                    title: Text(strings.handedness(value)),
-                    subtitle: Text(strings.handednessDetail(value)),
-                    onFocusChange: (focused) {
-                      if (focused) {
-                        Scrollable.ensureVisible(
-                          tileContext,
-                          alignmentPolicy:
-                              ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-                        );
-                        Scrollable.ensureVisible(
-                          tileContext,
-                          alignmentPolicy:
-                              ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-                        );
-                      }
-                    },
+                // 대화상자 가장자리 선(고대비)은 내용 위에 그려지므로, 그 굵기만큼 안쪽에 포커스 테두리를 그린다.
+                FocusRing(
+                  inset: const EdgeInsets.symmetric(
+                    horizontal: CalcTheme.materialHighContrastDialogBorderWidth,
+                  ),
+                  child: Builder(
+                    builder: (tileContext) => RadioListTile<Handedness>(
+                      key: optionKeyOf(value),
+                      value: value,
+                      title: Text(strings.handedness(value)),
+                      subtitle: Text(strings.handednessDetail(value)),
+                      onFocusChange: (focused) {
+                        if (focused) {
+                          Scrollable.ensureVisible(
+                            tileContext,
+                            alignmentPolicy:
+                                ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                          );
+                          Scrollable.ensureVisible(
+                            tileContext,
+                            alignmentPolicy: ScrollPositionAlignmentPolicy
+                                .keepVisibleAtStart,
+                          );
+                        }
+                      },
+                    ),
                   ),
                 ),
             ],
@@ -68,10 +78,14 @@ class HandednessDialog extends ConsumerWidget {
         ),
       ),
       actions: [
-        TextButton(
-          key: closeKey,
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.close),
+        // TextButton의 M3 기본 모양
+        FocusRing(
+          shape: const StadiumBorder(),
+          child: TextButton(
+            key: closeKey,
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(strings.close),
+          ),
         ),
       ],
     );
