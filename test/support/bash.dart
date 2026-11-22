@@ -12,8 +12,8 @@ import 'dart:io';
 /// CI의 Windows 러너가 `shell: bash`로 쓰는 것과 같은 bash다.
 final String bashPath = _findBash();
 
-/// `git --exec-path`에서 git 설치 루트까지의 최대 단계 수
-/// (예: `<루트>/mingw64/libexec/git-core` → 3단계 위가 루트)
+/// `git --exec-path`에서 위로 올라가며 찾는 최대 단계 수
+/// (Git for Windows는 `<루트>/mingw64/libexec/git-core`라 3단계 위가 설치 루트다)
 const _maxLevelsUp = 3;
 
 String _findBash() {
@@ -35,7 +35,7 @@ String _findBash() {
     throw StateError('git --exec-path 실패: ${result.stderr}');
   }
   // 예: C:/Program Files/Git/mingw64/libexec/git-core → C:/Program Files/Git/bin/bash.exe
-  // 설치 루트 위로는 올라가지 않는다 — 드라이브 루트의 `C:\bin\bash.exe` 같은 무관한 bash를 잡지 않게.
+  // 최대 3단계까지만 올라간다 — 드라이브 루트의 `C:\bin\bash.exe` 같은 무관한 bash를 잡지 않게.
   final start = (result.stdout as String).trim();
   final dirs = <Directory>[Directory(start)];
   for (var i = 0; i < _maxLevelsUp; i++) {
@@ -43,15 +43,17 @@ String _findBash() {
     if (parent.path == dirs.last.path) break;
     dirs.add(parent);
   }
-  // `bin/bash.exe`(환경을 갖춰 주는 실행기)를 먼저, 없으면 `usr/bin/bash.exe`(본체)를 쓴다
-  for (final relative in ['bin/bash.exe', 'usr/bin/bash.exe']) {
-    for (final dir in dirs) {
+  // 가까운 폴더부터 본다. 한 폴더에서는 `bin/bash.exe`(환경을 갖춰 주는 실행기)를 먼저,
+  // 없으면 `usr/bin/bash.exe`(본체)를 쓴다.
+  for (final dir in dirs) {
+    for (final relative in ['bin/bash.exe', 'usr/bin/bash.exe']) {
       final bash = File('${dir.path}/$relative');
       if (bash.existsSync()) return bash.path;
     }
   }
   throw StateError(
-    'Git for Windows의 bash(bin/bash.exe)를 찾지 못했다 — git --exec-path: $start',
+    'Git for Windows의 bash(bin/bash.exe 또는 usr/bin/bash.exe)를 찾지 못했다 — '
+    'git --exec-path: $start',
   );
 }
 

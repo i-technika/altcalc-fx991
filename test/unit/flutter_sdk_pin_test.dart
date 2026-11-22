@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -212,7 +213,19 @@ void main() {
         'environment:\n  sdk: >-\n    flutter: 1.2.3\n  flutter: 3.50.0\n',
         '3.50.0',
       ),
-      '파일 첫머리 BOM': ('﻿environment:\n  flutter: 3.50.0\n', '3.50.0'),
+      // flutter 줄 뒤의 더 깊은 줄이 flutter 값의 연속으로 오인되지 않아야 한다
+      'flutter 뒤 다음 키의 여러 줄 값': (
+        'environment:\n  flutter: 3.50.0\n  sdk:\n    ">=3.14.0 <4.0.0"\n',
+        '3.50.0',
+      ),
+      'flutter 뒤 더 깊은 주석 줄': (
+        'environment:\n  flutter: 3.50.0\n    # 고정 버전\n  sdk: ^3.14.0\n',
+        '3.50.0',
+      ),
+      '공백 들여쓰기 뒤의 탭은 블록 스칼라의 내용이다': (
+        'environment:\n  sdk: |\n    \tfoo\n  flutter: 3.50.0\n',
+        '3.50.0',
+      ),
     };
     for (final MapEntry(key: name, value: (text, expected))
         in accepted.entries) {
@@ -258,6 +271,8 @@ void main() {
           'environment:\n  flutter: 3.50.0\n   beta\n  sdk: ^3.14.0\n',
       '빈 줄 뒤에 이어지는 값': 'environment:\n  flutter: 3.50.0\n\n    .1\n',
       '탭 들여쓰기': 'environment:\n\tflutter: 3.50.0\n',
+      '탭으로 들여쓴 주석 줄': 'environment:\n\t# c\n  flutter: 3.50.0\n',
+      '폼 피드 들여쓰기': 'environment:\n\f flutter: 3.50.0\n',
     };
     for (final MapEntry(key: name, value: text) in rejected.entries) {
       test('거부한다: $name', () {
@@ -272,6 +287,40 @@ void main() {
         );
       });
     }
+
+    test('읽는다: 파일 첫머리 BOM', () {
+      // BOM은 눈에 보이지 않아 문자열 리터럴에 두면 편집기가 지워도 모른다 — 바이트로 쓴다.
+      const text = 'name: x\nenvironment:\n  sdk: ^3.14.0\n  flutter: 3.50.0\n';
+      final file = File('${tmp.path}/pubspec.yaml')
+        ..writeAsBytesSync([0xEF, 0xBB, 0xBF, ...utf8.encode(text)]);
+      expect(file.readAsBytesSync().take(3), [0xEF, 0xBB, 0xBF]);
+      // pub·loadYamlFile과 같은 경로(파일을 문자열로 읽으면 BOM이 벗겨진다)로 대조한다
+      final env =
+          (loadYaml(file.readAsStringSync()) as YamlMap)['environment']
+              as YamlMap;
+      expect(env['flutter'], '3.50.0');
+
+      final result = run(_posix(file.path));
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(result.stdout, '3.50.0\n');
+    });
+
+    test('오류 문구는 로캘과 관계없이 나온다 (변수 이름 뒤에 한글이 붙어도)', () {
+      // 단일 바이트 로캘에서는 bash가 한글의 첫 바이트를 변수 이름의 일부로 읽을 수 있다
+      for (final text in [
+        'environment:\n  flutter: 3.50.0\n  flutter: 3.50.0\n',
+        'environment:\n  flutter: 3.50.0\nenvironment:\n  sdk: ^3.14.0\n',
+      ]) {
+        final result = runBashScript(
+          _pinScript,
+          [fixture(text)],
+          environment: {'GITHUB_OUTPUT': '', 'LC_ALL': 'en_US.ISO-8859-1'},
+        );
+        expect(result.exitCode, 1);
+        expect(result.stderr, startsWith('::error::'));
+        expect(result.stderr, isNot(contains('unbound variable')));
+      }
+    });
 
     test('거부한다: 파일 없음', () {
       final result = run('${_posix(tmp.path)}/없는-pubspec.yaml');
