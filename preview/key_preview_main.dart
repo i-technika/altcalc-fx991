@@ -11,6 +11,9 @@
 // TODO(#18): M6의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 슬롯을 빈 슬롯으로
 // 덮어쓸 수 있게(provider 주입 등) 연결 구조를 정한다. CI가 이 파일을 웹으로 빌드한다(Sub-issue Linux CI).
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
+
+import 'package:flutter/foundation.dart' show listEquals;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -36,6 +39,7 @@ void main() => runApp(
 /// 홈 표시줄·내비게이션 바·작업 표시줄(아래). Android 15 이상은 edge-to-edge가 강제되어
 /// 내비게이션 바 높이(3버튼 48dp, 제스처 약 24dp)가 아래 인셋으로 들어온다.
 /// [systemGestureInsets]는 Android가 보고하는 시스템 제스처 영역이다(#50).
+/// [displayFeatures]는 폴더블의 접힘선(힌지) 등 화면 특징이다(#51).
 @immutable
 class PreviewDevice {
   /// 표시 이름
@@ -56,11 +60,18 @@ class PreviewDevice {
   ///   ([previewBackGestureWidth])을 더한다. 실제 아래 제스처 영역은 기기에 따라 이보다 클 수 있다.
   final EdgeInsets systemGestureInsets;
 
+  /// 화면 특징 (접힘선·힌지 등, 영역은 화면 좌표 dp) — `MediaQuery.displayFeatures`로 전달한다 (#51).
+  ///
+  /// 실제 앱에서는 Android Jetpack WindowManager의 `FoldingFeature`가 들어온다. 화면을 펼친 폴더블은
+  /// 폭 0인 접힘선(`DisplayFeatureType.fold`, `postureFlat`)을 보고한다. 값은 근사다.
+  final List<DisplayFeature> displayFeatures;
+
   const PreviewDevice(
     this.name,
     this.size, {
     this.padding = EdgeInsets.zero,
     this.systemGestureInsets = EdgeInsets.zero,
+    this.displayFeatures = const [],
   });
 
   /// 칩에 표시할 이름 (예: `일반 폰 390×844`)
@@ -78,6 +89,16 @@ const EdgeInsets _gestureNavInsets = EdgeInsets.fromLTRB(
   24,
   previewBackGestureWidth,
   24,
+);
+
+/// Galaxy Z Fold5 내부 화면(690×829, 세로)을 펼쳤을 때의 접힘선 근사값.
+///
+/// 실기기는 가운데(물리 픽셀 폭 1812의 906)에 폭 0인 세로 접힘선을 `FOLD`·`FLAT`으로 보고한다.
+/// 위에서 아래까지 화면 높이 전체를 가로지른다.
+const DisplayFeature previewFoldInnerHinge = DisplayFeature(
+  bounds: Rect.fromLTWH(345, 0, 0, 829),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
 );
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -109,12 +130,13 @@ const List<PreviewDevice> previewDevices = [
     systemGestureInsets: _gestureNavInsets,
   ),
   // 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
-  // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다 — #51)
+  // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 LCD/키패드를 좌우로 나눈다(#25).
   PreviewDevice(
     '폴더블 내부',
     Size(690, 829),
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
+    displayFeatures: [previewFoldInnerHinge],
   ),
   // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
   PreviewDevice(
@@ -334,12 +356,16 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 
 /// 선택한 기기 크기로 [CalculatorScreen]을 그린다. 창보다 크면 비율을 유지해 축소한다.
 ///
-/// 화면 크기·인셋·시스템 제스처 영역·글자 배율은 [ScreenCoordinateRoot]로 `MediaQuery`를 덮어써 전달해
+/// 화면 크기·인셋·시스템 제스처 영역·화면 특징(접힘선)·글자 배율은 [ScreenCoordinateRoot]로 `MediaQuery`를 덮어써 전달해
 /// 화면이 실제 기기에서처럼 배치를 산출하게 한다. 화면은 패널 폭만큼 밀리고 축소되므로, 같은 위젯이
 /// 이 화면을 좌표 원점으로 표시해 키 버튼이 제스처 영역을 화면 기준 좌표로 판정하게 한다(#50).
+/// 접힘선 영역도 화면 크기·제스처 영역처럼 화면 좌표이며, 기기 화면 위에 점선([_DisplayFeaturePainter])으로
+/// 표시한다(#51). 호스트(브라우저)의 화면 특징은 넘기지 않는다 — 축소된 화면 좌표와 맞지 않는다.
 /// 실제 기기와 다르게 남는 값:
-/// - `devicePixelRatio`·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다. `displayFeatures`(폴더블 힌지)는
-///   비워 둔다(#51).
+/// - `devicePixelRatio`·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다.
+/// - 폴더블 여부(`foldableDeviceProvider`, 앱은 힌지 센서로 판정)는 덮어쓰지 않는다(기본값: 폴더블 아님).
+///   접힘선이 있는 프리셋은 접힘선이 배치를 정하므로 결과가 같다. 접힘 정보가 늦게 오는 시작 구간은
+///   흉내 내지 않는다. 폴더블 커버 프리셋은 폭이 좁아 폴더블 여부와 상관없이 위아래 배치다.
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
 ///
 /// 화면 자리에 앱의 루트 Navigator([screen])를 두므로, 계산기 화면이 띄우는 대화상자·툴팁 등도
@@ -358,21 +384,28 @@ class _DeviceFrame extends StatelessWidget {
   });
 
   /// 기기 크기의 화면: 기기 MediaQuery와 좌표 원점([ScreenCoordinateRoot]) 아래에 앱 Navigator를 둔다.
+  /// 접힘선은 화면(대화상자 포함) 위에 겹쳐 그린다 — 터치는 가로채지 않는다.
   Widget _deviceScreen(BuildContext context, {Key? key}) => SizedBox.fromSize(
     key: key,
     size: device.size,
-    child: ScreenCoordinateRoot(
-      data: MediaQuery.of(context).copyWith(
-        size: device.size,
-        padding: device.padding,
-        viewPadding: device.padding,
-        viewInsets: EdgeInsets.zero,
-        systemGestureInsets: device.systemGestureInsets,
-        // 호스트의 힌지 정보가 축소된 화면 좌표에 새지 않게 비운다(주입은 #51).
-        displayFeatures: const [],
-        textScaler: TextScaler.linear(textScale),
+    child: CustomPaint(
+      key: const ValueKey('preview-display-features'),
+      foregroundPainter: device.displayFeatures.isEmpty
+          ? null
+          : _DisplayFeaturePainter(device.displayFeatures),
+      child: ScreenCoordinateRoot(
+        data: MediaQuery.of(context).copyWith(
+          size: device.size,
+          padding: device.padding,
+          viewPadding: device.padding,
+          viewInsets: EdgeInsets.zero,
+          systemGestureInsets: device.systemGestureInsets,
+          // 프리셋 값만 넘긴다 — 호스트의 화면 특징은 축소된 화면 좌표와 맞지 않는다.
+          displayFeatures: device.displayFeatures,
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: screen,
       ),
-      child: screen,
     ),
   );
 
@@ -433,7 +466,8 @@ class _DeviceFrame extends StatelessWidget {
                 height: previewFrameCaptionHeight,
                 child: Text(
                   '${device.label} · 글자 ${(textScale * 100).round()}% · '
-                  '표시 배율 ${(scale * 100).round()}%',
+                  '표시 배율 ${(scale * 100).round()}%'
+                  '${previewDisplayFeatureCaption(device.displayFeatures)}',
                   key: const ValueKey('preview-frame-caption'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -466,6 +500,81 @@ class _DeviceFrame extends StatelessWidget {
       },
     );
   }
+}
+
+/// 캡션에 덧붙일 접힘선 설명 (예: ` · 접힘선(점선) 세로 x=345`). 접힘선·힌지가 없으면 빈 문자열.
+/// 세로 접힘선은 가운데 x, 가로 접힘선은 가운데 y를 화면 좌표(dp)로 적는다. 폭이 있는 힌지는 폭도 적는다.
+String previewDisplayFeatureCaption(List<DisplayFeature> features) {
+  final parts = <String>[];
+  for (final f in features) {
+    if (f.type != DisplayFeatureType.fold &&
+        f.type != DisplayFeatureType.hinge) {
+      continue;
+    }
+    final b = f.bounds;
+    final vertical = b.height >= b.width;
+    final position = vertical
+        ? '세로 x=${_dp(b.center.dx)}'
+        : '가로 y=${_dp(b.center.dy)}';
+    final extent = vertical ? b.width : b.height;
+    parts.add(extent > 0 ? '$position 폭 ${_dp(extent)}' : position);
+  }
+  return parts.isEmpty ? '' : ' · 접힘선(점선) ${parts.join(', ')}';
+}
+
+/// dp 값을 짧게 적는다 (정수면 소수점 없이, 아니면 소수 첫째 자리까지)
+String _dp(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
+/// 기기 화면 위에 접힘선·힌지 위치를 점선으로 표시한다 (#51). 폭이 있는 힌지는 영역을 반투명하게 칠한다.
+///
+/// 앱 화면 위에 그리지만 히트 테스트에 참여하지 않으므로([CustomPainter.hitTest] 기본값) 터치를 가로채지 않는다.
+/// 화면 구멍(cutout) 등 접힘선이 아닌 특징은 그리지 않는다.
+class _DisplayFeaturePainter extends CustomPainter {
+  final List<DisplayFeature> features;
+
+  const _DisplayFeaturePainter(this.features);
+
+  /// 표시 색 (미리보기 전용 — 앱 화면 색과 겹치지 않는 주황)
+  static const Color _color = Color(0xCCFF9800);
+
+  /// 점선 한 칸 길이·간격 (dp, 기기 화면 좌표)
+  static const double _dash = 8;
+  static const double _gap = 6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = _color
+      ..strokeWidth = 2;
+    final fill = Paint()..color = _color.withValues(alpha: 0.25);
+    for (final f in features) {
+      if (f.type != DisplayFeatureType.fold &&
+          f.type != DisplayFeatureType.hinge) {
+        continue;
+      }
+      final b = f.bounds;
+      if (!b.isFinite) continue;
+      if (b.width > 0 && b.height > 0) canvas.drawRect(b, fill);
+      final vertical = b.height >= b.width;
+      final from = vertical ? b.topCenter : b.centerLeft;
+      final to = vertical ? b.bottomCenter : b.centerRight;
+      final length = (to - from).distance;
+      if (length <= 0) continue;
+      final step = (to - from) / length;
+      for (var d = 0.0; d < length; d += _dash + _gap) {
+        canvas.drawLine(
+          from + step * d,
+          from + step * math.min(d + _dash, length),
+          line,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DisplayFeaturePainter oldDelegate) =>
+      !listEquals(oldDelegate.features, features);
 }
 
 /// 조작 패널 전용 Navigator (#72).
