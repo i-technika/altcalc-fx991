@@ -25,11 +25,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies
@@ -62,11 +68,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies
@@ -143,11 +155,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies
@@ -172,12 +190,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          # Windows 러너에는 yq가 없어 액션이 매번 Chocolatey로 설치한다(약 16초) — 이 단계 실패 시 Chocolatey 장애를 먼저 의심한다
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies
@@ -202,11 +225,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Install dependencies

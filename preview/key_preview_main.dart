@@ -283,6 +283,17 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 48),
     systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
+  // 같은 태블릿을 제스처 내비게이션으로 쓰는 경우 (#62): 좌우에 뒤로가기 영역이 생겨, 화면 오른쪽(왼손잡이면
+  // 왼쪽) 끝에 붙은 키패드의 바깥쪽 열 키 중 화면 가장자리 쪽 일부(뒤로가기 영역 안)에서 시작한 터치는 손을 뗄 때
+  // 입력된다 — 같은 키라도 가운데를 누르면 바로 입력된다. 아래는 AOSP·Pixel 대화면의 임시 작업 표시줄(평소에는
+  // 숨고 제스처 핸들만 남음)을 가정해 폴더블 내부와 같게 근사했다. Samsung 등 제스처 내비게이션에서도 작업
+  // 표시줄을 항상 보이게 하는 기기는 아래 인셋이 이보다 크다. 값은 실기기 미확인이다.
+  PreviewDevice(
+    '태블릿 가로 (제스처)',
+    Size(1280, 800),
+    padding: EdgeInsets.only(top: 24, bottom: 24),
+    systemGestureInsets: _gestureNavInsets,
+  ),
   // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음)
   PreviewDevice(
     '분할 화면 위',
