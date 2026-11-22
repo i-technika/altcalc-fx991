@@ -32,7 +32,10 @@ Future<void> _pumpPreview(
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
     ProviderScope(
-      child: AltCalcApp(home: KeyPreviewScreen(logCapacity: logCapacity)),
+      child: AltCalcApp(
+        frameBuilder: (context, screen) =>
+            KeyPreviewScreen(screen: screen, logCapacity: logCapacity),
+      ),
     ),
   );
 }
@@ -264,8 +267,11 @@ void main() {
         await _press(tester, CalcKeyId.num7);
       }
       await tester.pumpWidget(
-        const ProviderScope(
-          child: AltCalcApp(home: KeyPreviewScreen(logCapacity: 2)),
+        ProviderScope(
+          child: AltCalcApp(
+            frameBuilder: (context, screen) =>
+                KeyPreviewScreen(screen: screen, logCapacity: 2),
+          ),
         ),
       );
       expect(_logLines(tester), ['5. 7', '4. 7']);
@@ -491,11 +497,14 @@ void main() {
         .descendant(of: find.byType(Dialog), matching: find.byType(Material))
         .first;
 
-    /// 기기 화면 Navigator 안의 장벽들
-    Finder deviceBarriers() => find.descendant(
-      of: find.byType(PreviewDeviceNavigator),
-      matching: find.byType(ModalBarrier),
-    );
+    /// 기기 화면 안의 앱 루트 Navigator
+    Finder appNavigator() => find
+        .descendant(of: _deviceScreen, matching: find.byType(Navigator))
+        .first;
+
+    /// 기기 화면 안의 장벽들
+    Finder deviceBarriers() =>
+        find.descendant(of: _deviceScreen, matching: find.byType(ModalBarrier));
 
     bool inside(Rect outer, Rect inner) =>
         outer.inflate(0.01).contains(inner.topLeft) &&
@@ -624,29 +633,60 @@ void main() {
       }
     });
 
-    testWidgets('창 배치가 좌우 ↔ 위아래로 바뀌어도 기기 Navigator와 열린 대화상자가 유지된다', (
-      tester,
-    ) async {
-      await _pumpPreview(tester);
-      await _selectDevice(tester, tabletLandscape());
-      await openSettings(tester);
-      final navigator = tester.state(find.byType(PreviewDeviceNavigator));
+    testWidgets(
+      '창 배치가 좌우 ↔ 위아래로 바뀌거나 창이 잠시 너무 작아져도 앱 Navigator와 열린 대화상자가 유지된다',
+      (tester) async {
+        await _pumpPreview(tester);
+        await _selectDevice(tester, tabletLandscape());
+        await openSettings(tester);
+        final navigator = tester.state<NavigatorState>(appNavigator());
 
-      for (final window in const [Size(600, 900), _window]) {
-        tester.view.physicalSize = window * tester.view.devicePixelRatio;
+        for (final window in const [Size(600, 900), _window]) {
+          tester.view.physicalSize = window * tester.view.devicePixelRatio;
+          await tester.pumpAndSettle();
+          expect(dialog, findsOneWidget, reason: '$window');
+          expect(
+            identical(tester.state<NavigatorState>(appNavigator()), navigator),
+            isTrue,
+            reason: '$window',
+          );
+          expect(tester.takeException(), isNull);
+        }
+
+        // 기기 화면을 그릴 수 없을 만큼 작은 창(넓은 배치에서 높이가 여백+캡션보다 낮음):
+        // 안내 문구만 보이고 앱 화면은 숨겨진 채 남는다.
+        tester.view.physicalSize =
+            const Size(1280, 50) * tester.view.devicePixelRatio;
         await tester.pumpAndSettle();
-        expect(dialog, findsOneWidget, reason: '$window');
         expect(
-          identical(
-            tester.state(find.byType(PreviewDeviceNavigator)),
-            navigator,
-          ),
+          find.byKey(const ValueKey('preview-frame-too-small')),
+          findsOneWidget,
+        );
+        expect(dialog, findsNothing);
+        expect(
+          find.byType(HandednessDialog, skipOffstage: false),
+          findsOneWidget,
+        );
+        // 숨겨진 쪽에는 기기 화면 키가 없으므로, 살아 있는 Navigator 중에 원래 State가 있는지로 확인한다.
+        expect(
+          tester
+              .stateList<NavigatorState>(
+                find.byType(Navigator, skipOffstage: false),
+              )
+              .any((s) => identical(s, navigator)),
           isTrue,
-          reason: '$window',
+        );
+
+        tester.view.physicalSize = _window * tester.view.devicePixelRatio;
+        await tester.pumpAndSettle();
+        expect(dialog, findsOneWidget);
+        expect(
+          identical(tester.state<NavigatorState>(appNavigator()), navigator),
+          isTrue,
         );
         expect(tester.takeException(), isNull);
-      }
-    });
+      },
+    );
 
     testWidgets('Esc와 시스템 뒤로가기는 기기 화면의 대화상자를 먼저 닫는다', (tester) async {
       await _pumpPreview(tester);
@@ -667,32 +707,28 @@ void main() {
       expect(find.byType(CalculatorScreen), findsOneWidget);
     });
 
-    testWidgets('툴팁도 기기 화면 Navigator의 Overlay에 그려진다', (tester) async {
+    testWidgets('툴팁도 기기 틀 안에 기기 축소 배율로 그려진다', (tester) async {
       await _pumpPreview(tester);
-      await _selectDevice(tester, tabletLandscape());
+      final index = tabletLandscape();
+      await _selectDevice(tester, index);
+      final screen = tester.getRect(_deviceScreen);
+      final scale = screen.width / previewDevices[index].size.width;
+      expect(scale, lessThan(1));
+
       await tester.longPress(find.byKey(SettingsButton.buttonKey));
       await tester.pump(const Duration(milliseconds: 100));
       final tooltip = find.text('Settings');
       expect(tooltip, findsOneWidget);
+      // 요소 트리상 위치(OverlayPortal 자식은 포털 아래)가 아니라 실제로 그려진 곳으로 판정한다:
+      // 기기 Overlay에 그려지면 기기 틀의 축소가 함께 적용되고, 기기 화면 안에 있다.
+      final drawn = tester.getRect(tooltip);
+      final local = tester.getSize(tooltip);
       expect(
-        find.descendant(
-          of: find.byType(PreviewDeviceNavigator),
-          matching: tooltip,
-        ),
-        findsOneWidget,
+        drawn.height / local.height,
+        moreOrLessEquals(scale, epsilon: 1e-6),
       );
+      expect(inside(screen, drawn), isTrue);
       await tester.pumpAndSettle(const Duration(seconds: 3));
-    });
-
-    testWidgets('알 수 없는 라우트 이름은 계산기 화면을 쌓지 않고 오류를 낸다', (tester) async {
-      await _pumpPreview(tester);
-      final context = tester.element(find.byType(CalculatorScreen));
-      expect(
-        () => Navigator.of(context).pushNamed('/unknown'),
-        throwsA(isA<FlutterError>()),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byType(CalculatorScreen), findsOneWidget);
     });
   });
 }

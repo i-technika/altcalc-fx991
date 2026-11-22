@@ -22,8 +22,13 @@ import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.d
 import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
 
-void main() =>
-    runApp(const ProviderScope(child: AltCalcApp(home: KeyPreviewScreen())));
+void main() => runApp(
+  ProviderScope(
+    child: AltCalcApp(
+      frameBuilder: (context, screen) => KeyPreviewScreen(screen: screen),
+    ),
+  ),
+);
 
 /// 미리보기 화면 크기 프리셋 (논리 픽셀, dp).
 ///
@@ -183,12 +188,26 @@ String? describePreviewModifierChange(KeyModifier before, KeyModifier after) {
 
 /// 조작 패널(기기·글자 배율·입력 로그) + 기기 틀 속 실제 계산기 화면.
 /// 넓은 창은 좌우, 좁은 창([narrowWidth] 미만)은 위아래로 배치한다.
+///
+/// ## Navigator 구조 (#72)
+/// `AltCalcApp.frameBuilder`로 앱을 감싸므로 [screen]은 **앱의 루트 Navigator**(첫 화면 `CalculatorScreen`)다.
+/// 이것을 기기 틀 안에 그대로 넣어, 실제 앱과 같은 Navigator 구조로 띄운다. 그래서 화면이 띄우는
+/// 대화상자·툴팁·SnackBar와 프레임워크가 루트 Overlay에 그리는 것(텍스트 선택 툴바·컨텍스트 메뉴 등)이 모두
+/// 기기 틀 안에 그 기기의 MediaQuery(크기·인셋·글자 배율)로, 기기 틀의 축소와 함께 그려진다.
+/// 조작 패널은 형제인 자기 Navigator([_PanelNavigator])를 쓴다 — 계산기 화면의 조상이 아니므로 화면 쪽의
+/// `rootNavigator: true`·`rootOverlay: true` 조회를 가로채지 않는다.
 class KeyPreviewScreen extends ConsumerStatefulWidget {
+  /// 앱의 루트 Navigator (`AltCalcApp.frameBuilder`가 넘겨준다)
+  final Widget screen;
+
   /// 입력 로그 최대 보관 줄 수
   final int logCapacity;
 
-  const KeyPreviewScreen({super.key, this.logCapacity = previewLogCapacity})
-    : assert(logCapacity > 0, 'logCapacity는 양수여야 한다');
+  const KeyPreviewScreen({
+    super.key,
+    required this.screen,
+    this.logCapacity = previewLogCapacity,
+  }) : assert(logCapacity > 0, 'logCapacity는 양수여야 한다');
 
   /// 좌우 배치에서 조작 패널 폭 (dp)
   static const double panelWidth = 280;
@@ -206,11 +225,6 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   final List<PreviewLogEntry> _log = [];
   int _inputTotal = 0;
   bool _trimmed = false;
-
-  /// 기기 화면 Navigator를 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지한다 — 열린 대화상자가 닫히지 않게 (#72).
-  final GlobalKey _deviceNavigatorKey = GlobalKey(
-    debugLabel: 'preview-device-navigator',
-  );
 
   @override
   void didUpdateWidget(KeyPreviewScreen oldWidget) {
@@ -268,25 +282,31 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   Widget build(BuildContext context) {
     ref.listen(calcProvider.select(_watchOf), _onChanged);
 
-    final panel = _ControlPanel(
-      device: _device,
-      textScale: _textScale,
-      log: _log,
-      inputTotal: _inputTotal,
-      trimmed: _trimmed,
-      onDeviceChanged: (d) => setState(() => _device = d),
-      onTextScaleChanged: (s) => setState(() => _textScale = s),
-      onReset: _reset,
+    final panel = _PanelNavigator(
+      child: _ControlPanel(
+        device: _device,
+        textScale: _textScale,
+        log: _log,
+        inputTotal: _inputTotal,
+        trimmed: _trimmed,
+        onDeviceChanged: (d) => setState(() => _device = d),
+        onTextScaleChanged: (s) => setState(() => _textScale = s),
+        onReset: _reset,
+      ),
     );
+    // 앱의 루트 Navigator는 WidgetsApp이 GlobalKey로 들고 있어, 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지된다.
     final frame = _DeviceFrame(
       device: _device,
       textScale: _textScale,
-      navigatorKey: _deviceNavigatorKey,
+      screen: widget.screen,
     );
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
+    // Scaffold가 아니라 Material을 쓴다 — 계산기 화면의 Scaffold가 앱의 ScaffoldMessenger에 루트 Scaffold로
+    // 등록되어야 SnackBar가 기기 틀 안에 뜬다(바깥에 Scaffold가 있으면 그쪽에 뜬다). Material은 캡션 글자의
+    // 기본 글꼴 스타일을 준다.
+    return Material(
+      color: Colors.black,
+      child: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth < KeyPreviewScreen.narrowWidth) {
@@ -322,20 +342,39 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 ///   비워 둔다(#51).
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
 ///
-/// 화면 안에 자기 Navigator([PreviewDeviceNavigator])를 두어, 계산기 화면이 띄우는 대화상자·툴팁도
-/// 기기 틀 안에 그 기기의 MediaQuery로 뜨게 한다(#72).
+/// 화면 자리에 앱의 루트 Navigator([screen])를 두므로, 계산기 화면이 띄우는 대화상자·툴팁 등도
+/// 기기 틀 안에 그 기기의 MediaQuery로 뜬다(#72, [KeyPreviewScreen] 참조).
 class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
 
-  /// 기기 화면 Navigator([PreviewDeviceNavigator])의 키 — 미리보기 화면이 들고 있어 배치가 바뀌어도 유지된다
-  final GlobalKey navigatorKey;
+  /// 앱의 루트 Navigator ([KeyPreviewScreen.screen])
+  final Widget screen;
 
   const _DeviceFrame({
     required this.device,
     required this.textScale,
-    required this.navigatorKey,
+    required this.screen,
   });
+
+  /// 기기 크기의 화면: 기기 MediaQuery와 좌표 원점([ScreenCoordinateRoot]) 아래에 앱 Navigator를 둔다.
+  Widget _deviceScreen(BuildContext context, {Key? key}) => SizedBox.fromSize(
+    key: key,
+    size: device.size,
+    child: ScreenCoordinateRoot(
+      data: MediaQuery.of(context).copyWith(
+        size: device.size,
+        padding: device.padding,
+        viewPadding: device.padding,
+        viewInsets: EdgeInsets.zero,
+        systemGestureInsets: device.systemGestureInsets,
+        // 호스트의 힌지 정보가 축소된 화면 좌표에 새지 않게 비운다(주입은 #51).
+        displayFeatures: const [],
+        textScaler: TextScaler.linear(textScale),
+      ),
+      child: screen,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -358,16 +397,31 @@ class _DeviceFrame extends StatelessWidget {
           ),
         );
 
-        // 여백·캡션조차 들어가지 않는 창: 안내 문구만 그린다.
+        // 여백·캡션조차 들어가지 않는 창: 안내 문구만 보인다. 앱 화면은 트리에서 빼지 않고 숨겨 둔다 —
+        // 빼면 앱의 루트 Navigator와 열린 라우트(대화상자 등)가 사라진다.
         if (scale <= 0) {
-          return const Center(
-            child: Text(
-              '창이 너무 작아 기기 화면을 표시할 수 없습니다.',
-              key: ValueKey('preview-frame-too-small'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
+          return Stack(
+            children: [
+              const Center(
+                child: Text(
+                  '창이 너무 작아 기기 화면을 표시할 수 없습니다.',
+                  key: ValueKey('preview-frame-too-small'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ),
+              Offstage(
+                child: OverflowBox(
+                  alignment: Alignment.topLeft,
+                  minWidth: size.width,
+                  maxWidth: size.width,
+                  minHeight: size.height,
+                  maxHeight: size.height,
+                  child: _deviceScreen(context),
+                ),
+              ),
+            ],
           );
         }
 
@@ -397,22 +451,9 @@ class _DeviceFrame extends StatelessWidget {
                       width: size.width * scale,
                       height: size.height * scale,
                       child: FittedBox(
-                        child: SizedBox.fromSize(
+                        child: _deviceScreen(
+                          context,
                           key: const ValueKey('preview-device-screen'),
-                          size: size,
-                          child: ScreenCoordinateRoot(
-                            data: MediaQuery.of(context).copyWith(
-                              size: size,
-                              padding: device.padding,
-                              viewPadding: device.padding,
-                              viewInsets: EdgeInsets.zero,
-                              systemGestureInsets: device.systemGestureInsets,
-                              // 호스트의 힌지 정보가 축소된 화면 좌표에 새지 않게 비운다(주입은 #51).
-                              displayFeatures: const [],
-                              textScaler: TextScaler.linear(textScale),
-                            ),
-                            child: PreviewDeviceNavigator(key: navigatorKey),
-                          ),
                         ),
                       ),
                     ),
@@ -427,55 +468,28 @@ class _DeviceFrame extends StatelessWidget {
   }
 }
 
-/// 기기 화면 안의 Navigator — 첫 화면은 [CalculatorScreen] (#72).
+/// 조작 패널 전용 Navigator (#72).
 ///
-/// 미리보기 앱의 Navigator(루트)는 기기 틀 바깥(미리보기 창 전체)에 있다. 계산기 화면은 대화상자를
-/// 가장 가까운 Navigator에 띄우므로(`showScreenDialog`), 이 Navigator가 있으면 대화상자가 기기 틀 안에 뜬다:
-/// - 크기·인셋·글자 배율: 이 Navigator가 기기 MediaQuery([ScreenCoordinateRoot]) 아래에 있어 그대로 물려받는다.
-/// - 축소 표시: 기기 틀의 축소(FittedBox)가 대화상자에도 함께 적용되고, 터치 좌표도 그 변환을 따른다.
-/// - 장벽(barrier)은 기기 화면만 덮는다 — 대화상자가 열려 있어도 옆 패널(기기 선택·로그)은 쓸 수 있다.
-/// - 툴팁 등 [Overlay]를 쓰는 것, SnackBar([ScaffoldMessenger])도 기기 화면 안에 그려진다.
-/// - Hero 애니메이션: 루트 Navigator는 하위 Navigator에 HeroController를 물려주지 않으므로 따로 둔다.
-/// - 시스템 뒤로가기·Esc는 이 Navigator의 맨 위 라우트(대화상자)를 먼저 닫는다([NavigatorPopHandler]).
-///
-/// 미리보기 화면이 GlobalKey를 주므로 기기·글자 배율을 바꾸거나 창 배치(좌우 ↔ 위아래)가 바뀌어도 이 State와
-/// 열린 대화상자가 유지된다. 창이 기기 화면을 그릴 수 없을 만큼 작아지면(안내 문구만 표시) 함께 사라진다.
-class PreviewDeviceNavigator extends StatefulWidget {
-  const PreviewDeviceNavigator({super.key});
+/// 패널의 드롭다운 메뉴 등은 Navigator·Overlay가 필요한데, 앱의 루트 Navigator는 기기 틀 안에 있으므로
+/// 패널에 따로 둔다. 기기 틀의 형제라 계산기 화면의 조상이 아니다 — 화면 쪽의 루트 조회를 가로채지 않는다.
+/// 페이지 목록(`pages`)으로 만들어, 패널 내용이 바뀌면(로그 추가 등) 같은 키의 페이지가 갱신되어 다시 그려진다.
+class _PanelNavigator extends StatelessWidget {
+  final Widget child;
 
-  @override
-  State<PreviewDeviceNavigator> createState() => _PreviewDeviceNavigatorState();
-}
-
-class _PreviewDeviceNavigatorState extends State<PreviewDeviceNavigator> {
-  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
-  final HeroController _heroController =
-      MaterialApp.createMaterialHeroController();
-
-  @override
-  void dispose() {
-    _heroController.dispose();
-    super.dispose();
-  }
-
-  /// 기본 라우트만 만든다. 그 밖의 이름은 `null` — 앱과 같이 알 수 없는 라우트 오류가 나게 한다.
-  Route<void>? _onGenerateRoute(RouteSettings settings) {
-    if (settings.name != Navigator.defaultRouteName) return null;
-    return MaterialPageRoute<void>(
-      settings: settings,
-      builder: (_) => const CalculatorScreen(),
-    );
-  }
+  const _PanelNavigator({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return NavigatorPopHandler<Object?>(
-      onPopWithResult: (_) => _navigator.currentState?.maybePop(),
-      child: ScaffoldMessenger(
-        child: HeroControllerScope(
-          controller: _heroController,
-          child: Navigator(key: _navigator, onGenerateRoute: _onGenerateRoute),
-        ),
+    // 앱의 HeroController는 앱 Navigator 몫이다 — 한 HeroController를 두 Navigator가 나눠 쓸 수 없으므로 끊는다.
+    return HeroControllerScope.none(
+      child: Navigator(
+        pages: [
+          MaterialPage<void>(
+            key: const ValueKey('preview-panel-page'),
+            child: Material(color: Colors.black, child: child),
+          ),
+        ],
+        onDidRemovePage: (_) {},
       ),
     );
   }

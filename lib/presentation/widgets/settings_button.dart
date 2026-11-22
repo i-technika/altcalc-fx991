@@ -3,7 +3,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/settings_strings.dart';
 import 'handedness_dialog.dart';
-import 'screen_dialog.dart';
 
 /// 설정 진입 버튼 (#24). 누르면 키패드 위치(손잡이) 선택 대화상자([HandednessDialog])를 띄운다.
 ///
@@ -26,7 +25,7 @@ class SettingsButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       icon: const Icon(Icons.settings),
-      onPressed: () => showScreenDialog<void>(
+      onPressed: () => showDialog<void>(
         context: context,
         builder: (_) => const HandednessDialog(),
       ),

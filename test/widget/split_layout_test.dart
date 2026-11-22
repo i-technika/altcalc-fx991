@@ -360,6 +360,62 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets(
+      '열린 채 창이 아주 낮아지면 제목·닫기 버튼은 고정되고 선택지만 스크롤되며, 화살표로 옮긴 선택지는 화면 안으로 스크롤된다',
+      (tester) async {
+        const small = Size(700, 300);
+        final (container, _) = await _pump(
+          tester,
+          size: const Size(1280, 800),
+          textScale: 2.0,
+        );
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+
+        // 멀티 윈도 등으로 창이 줄어든다 (대화상자는 열린 채)
+        await _pump(tester, size: small, textScale: 2.0, container: container);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final window = Offset.zero & small;
+        expect(
+          window.contains(tester.getCenter(find.text('Keypad position'))),
+          isTrue,
+        );
+        expect(
+          find.byKey(HandednessDialog.closeKey).hitTestable(),
+          findsOneWidget,
+        );
+
+        final scrollable = find
+            .descendant(
+              of: find.byType(HandednessDialog),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        expect(
+          tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
+          greaterThan(0),
+        );
+
+        // 키보드: 첫 선택지로 포커스 → 아래 화살표 → 옮겨 간 선택지가 보이는 영역 안에 있다.
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(container.read(handednessProvider), Handedness.left);
+        final viewport = tester.getRect(scrollable).inflate(0.5);
+        final option = tester.getRect(
+          find.byKey(HandednessDialog.optionKeyOf(Handedness.left)),
+        );
+        expect(
+          viewport.contains(option.topLeft) &&
+              viewport.contains(option.bottomRight),
+          isTrue,
+          reason: 'viewport $viewport, option $option',
+        );
+      },
+    );
+
     testWidgets('작은 대화면(960×600)·글자 배율 2.0에서도 대화상자가 넘치지 않고 선택된다', (
       tester,
     ) async {
