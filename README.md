@@ -48,6 +48,48 @@
 
 다른 개발 PC는 이 커밋을 받은 뒤 2번처럼 SDK를 맞춘다.
 
+### CI 액션 고정 버전 올리기
+
+워크플로(`.github/workflows/`)의 모든 `uses:`는 커밋 SHA로 고정하고, 같은 줄 끝에 그 SHA의 릴리스 태그를 적는다 (#88).
+태그(`@v2`)는 움직여서, 가리키는 커밋이 바뀌면 CI 동작도 조용히 바뀐다.
+
+```yaml
+uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+```
+
+- 같은 액션은 두 워크플로에서 같은 SHA로 고정한다. 올릴 때도 한꺼번에 올린다.
+- 검사는 두 곳에서 한다.
+  - `test/unit/ci_actions_test.dart`(오프라인): 모든 `uses:`가 SHA 40자리 + `# vX.Y.Z`인지, 워크플로끼리 같은지,
+    주석의 버전이 Node 24 최소 버전(`_minVersions`, #79) 이상인지 본다.
+  - CI Linux 잡의 `Verify action pins` 단계(`bash .github/scripts/action-pins.sh verify`): GitHub API로 SHA가 정말 그 태그의 커밋인지 확인한다.
+- 한계: composite 액션이 안에서 쓰는 액션은 고정되지 않는다. 예를 들어 flutter-action v2.23.0은 내부에서 `actions/cache@v5`를 쓴다.
+  바깥 SHA를 고정해도 그 내부 참조는 `actions/cache`의 v5 태그를 따라 움직인다.
+
+**갱신 방법: 수동 절차, 마일스톤 착수 때 점검.** `/open-ms`가 새 마일스톤 브랜치에서 `action-pins.sh outdated`를 돌린다.
+새 릴리스가 있으면 그 마일스톤의 서브이슈로 등록해 아래 절차로 올린다. 보안 권고처럼 급한 갱신은 바로 서브이슈를 만든다.
+
+Dependabot(`github-actions` 생태계)은 쓰지 않는다.
+
+- Dependabot PR은 기본 브랜치(`main`)로 바로 간다. 서브이슈 → 마일스톤 흐름(이슈·라벨·마일스톤·`Sub-issue Linux CI`)을 건너뛰고,
+  캐시가 없는 멀티플랫폼 CI가 돈다.
+- `target-branch`는 고정된 이름이라 마일스톤마다 바뀌는 `milestone/m<N>`을 따라가지 못한다.
+- 주 버전이 바뀌면 어차피 사람이 `runs.using`을 확인하고 `_minVersions`를 고쳐야 한다(아래 2번).
+- 저장소 설정의 Dependabot 경고(alerts)는 PR 없이 알림만 보내므로 이 흐름과 부딪히지 않는다.
+  2026-11-23 기준 이 저장소에서는 꺼져 있다. 켤지는 저장소 관리자가 정한다.
+
+1. `bash .github/scripts/action-pins.sh outdated`로 액션마다 고정 버전과 새 릴리스를 본다(`gh` 로그인 필요).
+   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 새 릴리스가 있어도 실패하지 않는다.
+2. 주 버전이 바뀌면 그 버전의 `action.yml`(`action.yaml`)과 릴리스 노트를 확인한다.
+   - `runs.using`이 `node24`여야 한다. `composite`면 내부에서 쓰는 액션들이 node24여야 한다.
+   - 입력·기본값 변경(예: 캐시 키 형식)이 워크플로에 영향을 주는지 본다.
+   - `test/unit/ci_actions_test.dart`의 `_minVersions` 주석과 최소 버전을 갱신한다.
+3. 두 워크플로의 해당 `uses:` 줄을 모두 `@<새 SHA> # <새 태그>`로 바꾼다.
+   - SHA는 1번 출력을 쓰거나 `gh api repos/<owner>/<repo>/commits/refs/tags/<태그> --jq .sha`로 얻는다.
+   - `gh api …/git/ref/tags/<태그>`는 쓰지 않는다. 주석 달린 태그에서 커밋이 아니라 태그 객체의 SHA를 낸다.
+4. `bash .github/scripts/action-pins.sh verify`, `flutter analyze`, `flutter test`를 통과시킨 뒤 커밋한다.
+5. 서브이슈 PR의 CI에서 새 액션으로 잡이 돌고, 실행 주석(annotation)에 Node 런타임 경고가 없는지 확인한다.
+   Milestone CI에만 있는 잡(Windows·macOS·웹 빌드)은 마일스톤 PR을 Ready로 바꿀 때 확인된다.
+
 ## 앱 실행
 
 ```bash

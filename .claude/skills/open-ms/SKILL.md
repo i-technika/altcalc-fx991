@@ -65,5 +65,17 @@ bash .claude/scripts/set-project-status.sh <번호> "In Progress"
 bash .claude/scripts/set-project-status.sh <PR번호> "In Progress"
 ```
 
-## 5. 완료 보고
-- 브랜치명, PR URL, 서브이슈 목록(번호·제목·상태)을 보고하고 첫 서브이슈를 `/fix-issue <번호>`로 착수할 수 있음을 안내한다.
+## 5. CI 액션 새 릴리스 점검 (#88)
+CI 워크플로의 액션은 커밋 SHA로 고정돼 있어 저절로 올라가지 않는다. 마일스톤을 시작할 때마다 새 릴리스를 본다
+(README "CI 액션 고정 버전 올리기"):
+```bash
+bash .github/scripts/action-pins.sh outdated
+```
+- 모두 최신이면 보고에 그렇다고만 적는다.
+- 새 릴리스가 있으면 이 마일스톤의 서브이슈 하나로 등록한다(`/fix-issue` 9단계의 A·B 블록, 타입 Task).
+  제목 예: `CI 액션 고정 버전 올리기 (actions/cache v5.1.0 → v6.1.0)`. 본문에 스크립트 출력과 README 절차의 링크를 넣고,
+  주 버전이 바뀌는 액션은 `runs.using`·릴리스 노트 확인이 필요하다고 적는다. 마일스톤 PR 본문의 서브이슈 체크리스트에도 추가한다.
+- 조회가 실패하면(gh 인증·네트워크) 착수는 그대로 마치고 보고에 실패를 적는다.
+
+## 6. 완료 보고
+- 브랜치명, PR URL, 서브이슈 목록(번호·제목·상태), 5단계 점검 결과를 보고하고 첫 서브이슈를 `/fix-issue <번호>`로 착수할 수 있음을 안내한다.
