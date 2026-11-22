@@ -4,6 +4,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
@@ -24,9 +25,31 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // 시스템 "고대비 텍스트" 켜짐 여부 (#95)
+        val handler = HighTextContrastStreamHandler(applicationContext)
+        highTextContrast = handler
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, HIGH_TEXT_CONTRAST_CHANNEL)
+            .setStreamHandler(handler)
     }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, HIGH_TEXT_CONTRAST_CHANNEL)
+            .setStreamHandler(null)
+        highTextContrast?.onCancel(null)
+        highTextContrast = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 앱이 뒤에 있는 동안 바뀐 설정을 놓쳤어도 다시 앞에 올 때 맞춘다.
+        highTextContrast?.refresh()
+    }
+
+    private var highTextContrast: HighTextContrastStreamHandler? = null
 
     companion object {
         private const val DEVICE_CHANNEL = "altcalc/device"
+        private const val HIGH_TEXT_CONTRAST_CHANNEL = "altcalc/accessibility/high_text_contrast"
     }
 }

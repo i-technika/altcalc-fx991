@@ -28,6 +28,7 @@
 - `core/constants/key_definitions.dart`: 50개 버튼 레이아웃 및 SHIFT/ALPHA 키 매핑 정의
 - `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트 및 LCD 폰트 스타일, 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)와 짝인 Material 테마(대화상자·SnackBar·키보드 포커스 테두리)
 - `core/theme/font_licenses.dart`: 번들 글꼴 OFL 라이선스를 `LicenseRegistry`에 등록
+- `core/theme/high_text_contrast.dart`: Android 접근성 "고대비 텍스트" 켜짐 여부 수신(이벤트 채널, Android 쪽 `HighTextContrastStreamHandler.kt`)과 화면 전달 범위 — `CalcPalette.of`가 `MediaQuery.highContrast`와 함께 쓴다
 - `core/layout/form_factor.dart`: 기기 종류(폰·폴더블·태블릿) 판정·방향 고정 규칙, 창 크기·접힘선 기준 배치 판정
 - `domain/models/`: `math_node.dart` (수식 AST 노드), `calc_state.dart` (계산기 전체 상태), `lcd_status.dart` (LCD 상태 표시기 스냅샷), `handedness.dart` (손잡이 설정 — 좌우 분할 시 키패드 위치)
 - `domain/engine/`: `cursor_navigator.dart` (방향키 커서 이동), `ast_evaluator.dart` (수식 계산기), `numerical_methods.dart` (수치해석)

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:itechnika_altcalc_fx991/core/theme/high_text_contrast.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/main.dart' as app show main;
@@ -165,6 +166,24 @@ void main() {
         if (c.method == 'SystemChrome.setPreferredOrientations') c.arguments,
     ];
 
+    /// 고대비 텍스트 채널이 구독 시작 때 [enabled]를 보내게 한다. 앱 전체 수신기는 테스트가 끝나면 멈춘다.
+    void mockHighTextContrast(WidgetTester tester, {required bool enabled}) {
+      tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+        SystemHighTextContrast.channel,
+        MockStreamHandler.inline(
+          onListen: (arguments, events) => events.success(enabled),
+        ),
+      );
+      // 정리는 나중에 등록한 것부터 실행된다 — 구독을 먼저 끝낸 뒤 목을 푼다.
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+          SystemHighTextContrast.channel,
+          null,
+        ),
+      );
+      addTearDown(SystemHighTextContrast.instance.stop);
+    }
+
     /// 물리 화면과 창을 [size](dp)로 맞춘다 (화면 배율 2).
     void setDevice(WidgetTester tester, Size size) {
       tester.view.display.devicePixelRatio = 2;
@@ -186,6 +205,8 @@ void main() {
           null,
         ),
       );
+      // 고대비 텍스트 채널(#95): 기본은 "꺼짐". 흉내 내지 않으면 첫 값을 기다리다 가짜 비동기 안에서 끝나지 않는다.
+      mockHighTextContrast(tester, enabled: false);
     }
 
     testWidgets('폰: 세로로 고정하고 계산기 화면을 띄운다', (tester) async {
@@ -211,6 +232,47 @@ void main() {
         ['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'],
       ]);
       expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+    });
+
+    testWidgets('Android 고대비 텍스트가 켜져 있으면 첫 화면부터 고대비 팔레트다 (#95)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(390, 844));
+      // 첫 값을 다른 시작 작업이 모두 끝난 뒤에 보내, main()이 그 값을 기다린 뒤에야 화면을 띄우는지 본다.
+      MockStreamHandlerEventSink? sink;
+      tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+        SystemHighTextContrast.channel,
+        MockStreamHandler.inline(
+          onListen: (arguments, events) {
+            sink = events;
+          },
+        ),
+      );
+      recordPlatformCalls(tester);
+      var started = false;
+      final running = app.main().then((_) => started = true);
+      await tester.pump();
+      await tester.pump();
+      expect(sink, isNotNull);
+      expect(started, isFalse);
+      expect(find.byType(CalculatorScreen), findsNothing);
+
+      sink!.success(true);
+      await running;
+      // runApp 뒤 첫 프레임
+      await tester.pump();
+      final keycap =
+          tester
+                  .widget<AnimatedContainer>(
+                    find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.add)),
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(
+        keycap.color,
+        CalcPalette.highContrast.keyBackground(KeyCategory.operator),
+      );
     });
 
     testWidgets('저장된 왼손잡이 설정이 첫 화면부터 반영된다', (tester) async {
