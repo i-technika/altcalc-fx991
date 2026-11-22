@@ -747,12 +747,15 @@ void main() {
   });
 
   group('대화면·좌우 분할 배치 (#24)', () {
-    test('키패드 최대 폭은 가장 넓은 폰(430dp)의 키패드 폭보다 넓다 — 폰에는 걸리지 않는다', () {
-      const widestPhoneKeypad = 430 - 2 * CalcTheme.screenPadding;
-      expect(CalcTheme.keypadMaxWidth, greaterThan(widestPhoneKeypad));
-      // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
-      expect(CalcTheme.keypadMaxWidth, lessThanOrEqualTo(77 / 25.4 * 160));
-    });
+    test(
+      '키패드 최대 폭은 가장 넓은 폰(440dp, iPhone Pro Max)의 키패드 폭보다 넓다 — 폰에는 걸리지 않는다',
+      () {
+        const widestPhoneKeypad = 440 - 2 * CalcTheme.screenPadding;
+        expect(CalcTheme.keypadMaxWidth, greaterThan(widestPhoneKeypad));
+        // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
+        expect(CalcTheme.keypadMaxWidth, lessThanOrEqualTo(77 / 25.4 * 160));
+      },
+    );
 
     test('분할 배치 상수: 간격은 양수, 키패드 몫은 0.3~0.5 (LCD 쪽 패널이 키패드보다 좁아지지 않는다)', () {
       expect(CalcTheme.screenSplitGap, greaterThan(0));
@@ -763,10 +766,26 @@ void main() {
       expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
     });
 
-    test('분할 배치 LCD 최대 폭 비율: 0 초과 1 이하 — LCD가 키패드보다 넓어지지 않는다 (#71)', () {
+    test('LCD 최대 폭 비율: 0 초과 1 이하 — 좌우 분할 LCD가 키패드보다 넓어지지 않는다 (#71)', () {
       // LCD 줄 글자가 키 메인 각인보다 큰지는 split_layout_test에서 번들 글꼴로 실측한다.
-      expect(CalcTheme.screenSplitLcdMaxWidthRatio, greaterThan(0));
-      expect(CalcTheme.screenSplitLcdMaxWidthRatio, lessThanOrEqualTo(1));
+      expect(CalcTheme.screenLcdMaxWidthRatio, greaterThan(0));
+      expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
+    });
+
+    test('위아래·테이블톱 LCD 최대 폭: 키패드 최대 폭을 넘지 않고, 가장 넓은 폰 본체보다 넓다 (#92)', () {
+      // 위아래 배치에서 LCD가 키패드(최대 폭)보다 넓어지지 않는다.
+      expect(
+        CalcTheme.screenLcdMaxWidth,
+        lessThanOrEqualTo(CalcTheme.keypadMaxWidth),
+      );
+      // 세로 폰 폭에서는 걸리지 않는다 (가장 넓은 폰 440dp − 좌우 여백).
+      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
+      expect(CalcTheme.screenLcdMaxWidth, greaterThan(widestPhoneBody));
+      // 상한 폭에서도 LCD 최대 높이가 최소 높이 이상이다.
+      expect(
+        CalcTheme.screenLcdMaxWidth / CalcTheme.screenLcdMinAspectRatio,
+        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+      );
     });
 
     test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {

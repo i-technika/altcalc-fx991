@@ -511,9 +511,17 @@ void main() {
 
   group('화면 배치 기준 (CalcScreenLayout)', () {
     void expectSumsToBody(Size body, CalcScreenLayout l) {
-      for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
+      for (final v in [l.top, l.lcdWidth, l.lcdHeight, l.gap, l.keypadHeight]) {
         expect(v, greaterThanOrEqualTo(0), reason: '$body $l');
       }
+      // LCD는 본체 안 가운데에 있다 (#92). 비유한·음수 본체는 폭 0으로 본다.
+      final width = body.width.isFinite ? math.max(0.0, body.width) : 0.0;
+      expect(l.lcdLeft, greaterThanOrEqualTo(0), reason: '$body $l');
+      expect(
+        l.lcdLeft * 2 + l.lcdWidth,
+        moreOrLessEquals(width, epsilon: 1e-9),
+        reason: '$body $l',
+      );
       expect(
         l.top + l.lcdHeight + l.gap + l.keypadHeight,
         moreOrLessEquals(body.height, epsilon: 1e-9),
@@ -559,6 +567,41 @@ void main() {
       expectSumsToBody(body, l);
     });
 
+    test('폰 폭에서는 LCD 폭이 본체 폭 그대로다 (#92 — 상한에 걸리지 않는다)', () {
+      for (final width in const [
+        304.0,
+        344.0,
+        374.0,
+        396.0,
+        414.0,
+        424.0,
+        480.0,
+      ]) {
+        final l = CalcScreenLayout.of(Size(width, 800));
+        expect(l.lcdWidth, width, reason: '$l');
+        expect(l.lcdLeft, 0, reason: '$l');
+      }
+    });
+
+    test('넓은 본체에서는 LCD 폭이 상한에 걸리고, 최대 높이도 그 폭으로 정해 남는 높이는 상단 띠가 된다 (#92)', () {
+      // 12.9인치 iPad 세로 본체 1008×1244: 상한 전이면 LCD 1008 × 576(= 1008 / 1.75)
+      const body = Size(1008, 1244);
+      final l = CalcScreenLayout.of(body);
+      expect(l.lcdWidth, CalcTheme.screenLcdMaxWidth);
+      expect(l.lcdLeft, moreOrLessEquals((1008 - 480) / 2));
+      expect(l.lcdHeight, moreOrLessEquals(480 / 1.75));
+      expect(l.keypadHeight, moreOrLessEquals(480 / 0.75));
+      expect(l.top, moreOrLessEquals(1236 - 480 / 1.75 - 480 / 0.75));
+      expectSumsToBody(body, l);
+
+      // 짧고 넓은 본체(가로 폰·분할 화면, #38)도 폭 상한만 걸리고 높이 규칙은 같다.
+      final short = CalcScreenLayout.of(const Size(2000, 300));
+      expect(short.lcdWidth, CalcTheme.screenLcdMaxWidth);
+      expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
+      expect(short.lcdLeft, moreOrLessEquals((2000 - 480) / 2));
+      expectSumsToBody(const Size(2000, 300), short);
+    });
+
     test('좁은 폭에서도 LCD 최대 높이는 최소 높이 아래로 내려가지 않는다', () {
       final l = CalcScreenLayout.of(const Size(100, 900));
       expect(l.lcdHeight, CalcTheme.screenLcdMinHeight);
@@ -586,7 +629,14 @@ void main() {
         Size(-10, -10),
       ]) {
         final l = CalcScreenLayout.of(body);
-        for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
+        for (final v in [
+          l.top,
+          l.lcdLeft,
+          l.lcdWidth,
+          l.lcdHeight,
+          l.gap,
+          l.keypadHeight,
+        ]) {
           expect(v, 0, reason: '$body $l');
         }
       }
@@ -673,6 +723,7 @@ void main() {
       Size(390, 844),
       Size(412, 915),
       Size(430, 932),
+      Size(440, 956),
       Size(411, 960),
     ]) {
       for (final scale in [1.0, 1.3]) {
