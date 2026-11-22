@@ -238,7 +238,9 @@ Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
   return node;
 }
 
-/// MaterialApp이 자기 테마로 정하는 앱 수준 요소 (#107) — 텍스트 선택·커서 기본 색과 Cupertino 테마의 주요 색
+/// MaterialApp이 자기 테마로 정하는 앱 수준 요소 (#107) — 텍스트 선택·커서 기본 색과 Cupertino 테마의 주요 색.
+/// 아이콘 테마는 화면 테마가 Cupertino 테마를 다시 정할 때 바뀌지 않았는지 보려고 함께 본다
+/// ([CupertinoTheme]은 아래에 Cupertino 아이콘 테마를 씌운다).
 typedef _AppLevel = ({
   Color? selection,
   Color? cursor,
@@ -246,6 +248,7 @@ typedef _AppLevel = ({
   Color cupertinoPrimary,
   Color cupertinoPrimaryContrasting,
   Color cupertinoScaffold,
+  IconThemeData icon,
 });
 
 /// [context]에서 보이는 앱 수준 요소
@@ -259,6 +262,7 @@ _AppLevel _appLevelOf(BuildContext context) {
     cupertinoPrimary: cupertino.primaryColor,
     cupertinoPrimaryContrasting: cupertino.primaryContrastingColor,
     cupertinoScaffold: cupertino.scaffoldBackgroundColor,
+    icon: IconTheme.of(context),
   );
 }
 
@@ -389,10 +393,51 @@ void main() {
           expect(reference.cursor, theme.colorScheme.primary);
           expect(reference.cupertinoPrimary, theme.colorScheme.primary);
           expect(reference.cupertinoBrightness, Brightness.dark);
+          // 아이콘 테마는 Material 테마의 것 (Cupertino 아이콘 테마의 primary 색이 아니다)
+          expect(reference.icon.color, isNot(theme.colorScheme.primary));
+          expect(reference.icon.color, theme.iconTheme.color);
           await _expectScreenAppLevel(tester, reference);
         },
       );
     }
+
+    testWidgets('실제 앱에서 고대비 전환 애니메이션 중에도 화면의 값은 MaterialApp이 정한 값과 같다', (
+      tester,
+    ) async {
+      final references = {
+        for (final v in [false, true]) v: await _materialAppLevel(tester, v),
+      };
+      _setDevice(tester, highContrast: false);
+      late BuildContext appContext;
+      await _pumpApp(
+        tester,
+        frameBuilder: (context, screen) {
+          appContext = context;
+          return screen;
+        },
+      );
+      for (final value in [true, false]) {
+        _setDevice(tester, highContrast: value);
+        await tester.pump();
+        await tester.pump(kThemeAnimationDuration ~/ 2);
+        final app = _appLevelOf(appContext);
+        // 전환 중인지 — Cupertino 테마(전환 중인 테마로 만든다)가 양 끝 값과 다르다
+        for (final end in references.values) {
+          expect(app.cupertinoPrimary, isNot(end.cupertinoPrimary));
+        }
+        expect(
+          _appLevelOf(tester.element(_settingsButton)),
+          app,
+          reason: '전환 중 고대비=$value',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          _appLevelOf(tester.element(_settingsButton)),
+          references[value],
+          reason: '전환 뒤 고대비=$value',
+        );
+      }
+    });
 
     testWidgets('두 테마의 값이 서로 달라 아래 틀 테스트가 어느 쪽을 따르는지 가려낸다', (tester) async {
       final standard = await _materialAppLevel(tester, false);

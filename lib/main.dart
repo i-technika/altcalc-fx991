@@ -198,12 +198,15 @@ class AltCalcApp extends StatelessWidget {
 /// 가장 가까운 MediaQuery로 고른 테마([CalcPalette.of])를 [AnimatedTheme]으로 주고, [MaterialApp]이 자기 테마
 /// (`MaterialApp.theme`)로 정해 두는 앱 수준 요소도 이 테마로 다시 정한다. 안쪽에 겹친 [Theme]만으로는 이 둘이 바뀌지 않는다.
 /// - 텍스트 선택·커서 기본 색([DefaultSelectionStyle]): MaterialApp은 테마의 `textSelectionTheme`이 비어 있으면
-///   primary 40%·primary로 정하고, [Theme]은 `textSelectionTheme`에 값이 있을 때만 바꾼다. 계산 방식은 MaterialApp과 같다.
+///   primary 40%·primary로 정하고, [Theme]은 `textSelectionTheme`에 값이 있을 때만 바꾼다. MaterialApp처럼 목표 테마로
+///   바로 정하고, 40%도 MaterialApp(`withOpacity`)과 같게 8비트 알파로 만든다.
 /// - Cupertino 테마([CupertinoTheme]): [Theme]은 위에 Cupertino 테마가 이미 있으면 그것을 물려받는다 — MaterialApp 쪽
-///   [Theme]이 바깥 테마로 만든 것이다. 여기서는 [Theme]과 같은 방식(전환 중인 테마 기준)으로 이 테마로 만든다.
+///   [Theme]이 바깥 테마로 만든 것이다. 여기서는 바깥 [Theme]처럼 전환 중인 테마로 만든다.
+///   [CupertinoTheme]은 아래에 Cupertino 아이콘 테마(primary 색)를 씌우므로, [Theme]이 Cupertino 테마 안쪽에서 하듯
+///   Material 아이콘 테마([ThemeData.iconTheme])를 다시 씌운다 — 빼면 색을 정하지 않은 아이콘이 primary 색이 된다.
 ///
-/// 실제 앱에서는 바깥 테마와 같은 테마라 달라지는 것이 없다. 개발용 미리보기처럼 틀 안에서 고대비를 바꾸면, 틀 안 화면이
-/// 호스트(기기) 쪽이 아니라 틀의 테마를 따르게 한다.
+/// 실제 앱에서는 바깥 테마와 같은 테마라 화면이 보는 값이 바뀌지 않는다(전환 중 포함, `test/widget/material_theme_test.dart`).
+/// 개발용 미리보기처럼 틀 안에서 고대비를 바꾸면, 틀 안 화면이 호스트(기기) 쪽이 아니라 틀의 테마를 따르게 한다.
 class _ScreenTheme extends StatelessWidget {
   final Widget child;
 
@@ -218,15 +221,17 @@ class _ScreenTheme extends StatelessWidget {
       data: theme,
       child: DefaultSelectionStyle(
         selectionColor:
-            selection.selectionColor ?? primary.withValues(alpha: 0.40),
+            selection.selectionColor ??
+            primary.withAlpha((255.0 * 0.40).round()),
         cursorColor: selection.cursorColor ?? primary,
         child: Builder(
-          builder: (context) => CupertinoTheme(
-            data: MaterialBasedCupertinoThemeData(
-              materialTheme: Theme.of(context),
-            ),
-            child: child,
-          ),
+          builder: (context) {
+            final animated = Theme.of(context);
+            return CupertinoTheme(
+              data: MaterialBasedCupertinoThemeData(materialTheme: animated),
+              child: IconTheme(data: animated.iconTheme, child: child),
+            );
+          },
         ),
       ),
     );
