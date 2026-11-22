@@ -242,8 +242,8 @@ void main() {
       final hinge = FormFactor.hingeOf(window, [
         feature(const Rect.fromLTWH(336, 0, 0, 841)),
       ]);
-      expect(hinge, const Rect.fromLTWH(336, 0, 0, 841));
-      expect(FormFactor.isVerticalHinge(hinge!), isTrue);
+      expect(hinge?.bounds, const Rect.fromLTWH(336, 0, 0, 841));
+      expect(FormFactor.isVerticalHinge(hinge!.bounds), isTrue);
     });
 
     test('창을 왼쪽에서 오른쪽으로 가로지르는 가로 접힘선', () {
@@ -251,7 +251,7 @@ void main() {
         feature(const Rect.fromLTWH(0, 336, 841, 0)),
       ]);
       expect(hinge, isNotNull);
-      expect(FormFactor.isVerticalHinge(hinge!), isFalse);
+      expect(FormFactor.isVerticalHinge(hinge!.bounds), isFalse);
     });
 
     test('폭이 있는 물리 힌지도 접힘선이다', () {
@@ -261,8 +261,8 @@ void main() {
           type: DisplayFeatureType.hinge,
         ),
       ]);
-      expect(hinge, const Rect.fromLTWH(540, 0, 34, 720));
-      expect(FormFactor.isVerticalHinge(hinge!), isTrue);
+      expect(hinge?.bounds, const Rect.fromLTWH(540, 0, 34, 720));
+      expect(FormFactor.isVerticalHinge(hinge!.bounds), isTrue);
     });
 
     test('화면 구멍, 창을 다 가로지르지 않는 접힘 정보, 창 밖 접힘 정보는 접힘선이 아니다', () {
@@ -297,7 +297,29 @@ void main() {
         feature(const Rect.fromLTWH(336, 100, 0, 600)),
         feature(const Rect.fromLTWH(336, 0, 0, 841)),
       ]);
-      expect(hinge, const Rect.fromLTWH(336, 0, 0, 841));
+      expect(hinge?.bounds, const Rect.fromLTWH(336, 0, 0, 841));
+    });
+
+    test('화면을 실제로 나누는 접힘선: 폭이 있는 힌지 또는 반 접힘 (isSeparating과 같은 기준)', () {
+      DisplayFeature f(double width, DisplayFeatureState state) =>
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 336, 841, width),
+            type: DisplayFeatureType.fold,
+            state: state,
+          );
+      expect(
+        FormFactor.separates(f(0, DisplayFeatureState.postureFlat)),
+        isFalse,
+      );
+      expect(FormFactor.separates(f(0, DisplayFeatureState.unknown)), isFalse);
+      expect(
+        FormFactor.separates(f(0, DisplayFeatureState.postureHalfOpened)),
+        isTrue,
+      );
+      expect(
+        FormFactor.separates(f(30, DisplayFeatureState.postureFlat)),
+        isTrue,
+      );
     });
   });
 
@@ -379,16 +401,83 @@ void main() {
       );
     });
 
-    test('가로 접힘선이 창을 가로지르면 접힘선 기준 위아래 배치다 (테이블톱)', () {
+    DisplayFeature horizontal(
+      Size window,
+      double y, {
+      DisplayFeatureState state = DisplayFeatureState.postureHalfOpened,
+      double height = 0,
+      DisplayFeatureType type = DisplayFeatureType.fold,
+    }) => DisplayFeature(
+      bounds: Rect.fromLTWH(0, y, window.width, height),
+      type: type,
+      state: state,
+    );
+
+    test('가로 접힘선은 반 접은 테이블톱 자세·물리 힌지일 때만 위아래로 나눈다', () {
+      for (final (window, y) in const [
+        (Size(841, 673), 336.5), // Fold 내부를 가로로
+        (Size(701, 841), 420.5), // Pixel Fold 내부를 세로로
+        (Size(411, 1005), 502.5), // Flip 내부 (Flex 모드)
+      ]) {
+        expect(
+          FormFactor.arrangementOf(window, [
+            horizontal(window, y),
+          ], foldableDevice: true),
+          ScreenArrangement.hingeStacked,
+          reason: '$window 반 접힘',
+        );
+        // 펼친 폭 0 가로 접힘선은 나누지 않는다 (키패드가 아래 절반에 갇혀 터치 하한 아래로 작아진다).
+        expect(
+          FormFactor.arrangementOf(window, [
+            horizontal(window, y, state: DisplayFeatureState.postureFlat),
+          ], foldableDevice: true),
+          ScreenArrangement.stacked,
+          reason: '$window 펼침',
+        );
+      }
+      // 폭이 있는 물리 힌지는 펼쳐도 나눈다.
+      const duo = Size(720, 1114);
       expect(
-        FormFactor.arrangementOf(const Size(841, 673), [
-          const DisplayFeature(
-            bounds: Rect.fromLTWH(0, 336, 841, 0),
-            type: DisplayFeatureType.fold,
-            state: DisplayFeatureState.postureHalfOpened,
+        FormFactor.arrangementOf(duo, [
+          horizontal(
+            duo,
+            540,
+            state: DisplayFeatureState.postureFlat,
+            height: 34,
+            type: DisplayFeatureType.hinge,
           ),
-        ], foldableDevice: true),
+        ]),
         ScreenArrangement.hingeStacked,
+      );
+    });
+
+    test('접힘선 한쪽이 최소 길이보다 짧으면 접힘선 기준으로 나누지 않는다', () {
+      const min = FormFactor.hingeMinPanelExtent;
+      const window = Size(841, 701);
+      DisplayFeature vertical(double x) => DisplayFeature(
+        bounds: Rect.fromLTWH(x, 0, 0, 701),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureFlat,
+      );
+      for (final x in [20.0, min - 1, window.width - min + 1, 830.0]) {
+        expect(
+          FormFactor.arrangementOf(window, [vertical(x)], foldableDevice: true),
+          ScreenArrangement.stacked,
+          reason: 'x=$x',
+        );
+      }
+      for (final x in [min, window.width - min]) {
+        expect(
+          FormFactor.arrangementOf(window, [vertical(x)], foldableDevice: true),
+          ScreenArrangement.hingeSplit,
+          reason: 'x=$x',
+        );
+      }
+      // 가로 접힘선도 같다 (위 절반이 짧은 창)
+      const tall = Size(701, 841);
+      expect(
+        FormFactor.arrangementOf(tall, [horizontal(tall, 200)]),
+        ScreenArrangement.stacked,
       );
     });
 

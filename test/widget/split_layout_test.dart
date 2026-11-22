@@ -19,6 +19,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
+import '../support/touch_metrics.dart';
 
 /// 대화면 가로 창의 좌우 분할 배치와 손잡이 설정 (#24).
 
@@ -33,6 +34,11 @@ final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
 final _ad = find.byKey(const ValueKey('banner-ad-slot'));
 final _settings = find.byKey(SettingsButton.buttonKey);
+
+/// 설정 대화상자의 보이는 면 (대화상자 위젯 자체는 화면 전체를 덮는다)
+final _dialogSurface = find
+    .descendant(of: find.byType(AlertDialog), matching: find.byType(Material))
+    .first;
 
 Finder _option(Handedness h) => find.byKey(HandednessDialog.optionKeyOf(h));
 
@@ -49,6 +55,10 @@ Future<(ProviderContainer, SharedPreferences)> _pump(
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
+  // 대화상자 경로(Navigator)는 화면 위쪽에서 빌드되어 View의 MediaQuery를 본다 — 실제 앱처럼 View에도
+  // 접힘 정보를 넣어 `DisplayFeatureSubScreen`이 쓰게 한다.
+  tester.view.displayFeatures = displayFeatures;
+  addTearDown(tester.view.resetDisplayFeatures);
   SharedPreferences.setMockInitialValues({
     if (handedness != null)
       HandednessNotifier.storageKey: handedness.storageValue,
@@ -527,12 +537,48 @@ void main() {
 /// 폴더블 화면: 창 크기, 시스템 인셋, 접힘 정보 (화면 좌표)
 typedef _Foldable = (String, Size, EdgeInsets, DisplayFeature);
 
-DisplayFeature _foldAt(Rect bounds, {DisplayFeatureType? type}) =>
-    DisplayFeature(
-      bounds: bounds,
-      type: type ?? DisplayFeatureType.fold,
-      state: DisplayFeatureState.postureFlat,
+DisplayFeature _foldAt(
+  Rect bounds, {
+  DisplayFeatureType? type,
+  DisplayFeatureState state = DisplayFeatureState.postureFlat,
+}) => DisplayFeature(
+  bounds: bounds,
+  type: type ?? DisplayFeatureType.fold,
+  state: state,
+);
+
+/// 반 접은 상태의 접힘선
+DisplayFeature _halfOpenedAt(Rect bounds) =>
+    _foldAt(bounds, state: DisplayFeatureState.postureHalfOpened);
+
+/// 키패드의 모든 키(커서 패드 제외)가 터치 하한 이상이고, 커서 패드 구역도 #43 하한을 지키는지 확인한다.
+void _expectTouchTargets(WidgetTester tester) {
+  for (final b in tester.widgetList<CalcKeyButton>(
+    find.byType(CalcKeyButton),
+  )) {
+    if (b.keyDef.category == KeyCategory.cursor) continue;
+    final cell = tester.getSize(find.byWidget(b));
+    final touch = b.extendHitAreaToLegend
+        ? cell.height
+        : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+    expect(
+      touch,
+      greaterThanOrEqualTo(minKeyTouchHeight),
+      reason: b.keyDef.id.name,
     );
+  }
+  final pad = CursorPadGeometry(
+    tester.getSize(find.byKey(const ValueKey('cursor-pad'))),
+  );
+  for (final sector in CursorPadSector.values) {
+    final wide = sector == CursorPadSector.up || sector == CursorPadSector.down;
+    expect(
+      inscribedDiameter(pad, sector),
+      greaterThanOrEqualTo(minKeyTouchHeight * (wide ? 1.0 : 0.9)),
+      reason: sector.name,
+    );
+  }
+}
 
 /// [rect]가 접힘선 [hinge]와 그 양쪽 간격([CalcTheme.screenHingeMargin]) 띠에 걸치지 않는지 (화면 좌표)
 bool _clearOfHinge(Rect rect, Rect hinge, {required bool vertical}) {
@@ -654,6 +700,8 @@ void _hingeLayoutTests() {
                 keypad.width,
                 lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 0.01),
               );
+              // 절반 폭 키패드도 터치 하한을 지킨다 (글자 배율과 무관한 치수라 배율 1.0에서만 본다).
+              if (scale == 1.0) _expectTouchTargets(tester);
             },
           );
         }
@@ -675,19 +723,26 @@ void _hingeLayoutTests() {
 
   group('접힘선 기준 위아래 배치 (가로 접힘선, 테이블톱 자세)', () {
     final devices = <_Foldable>[
-      // Galaxy Z Fold 내부 화면을 가로로 돌림
+      // Galaxy Z Fold 내부 화면을 가로로 돌려 반 접음
       (
-        'Fold 내부 가로',
+        'Fold 내부 가로·반 접힘',
         const Size(841, 673),
         const EdgeInsets.only(top: 24, bottom: 24),
-        _foldAt(const Rect.fromLTWH(0, 336.5, 841, 0)),
+        _halfOpenedAt(const Rect.fromLTWH(0, 336.5, 841, 0)),
       ),
-      // Pixel Fold 내부 화면을 세로로 돌림
+      // Pixel Fold 내부 화면을 세로로 돌려 반 접음
       (
-        'Pixel Fold 내부 세로',
+        'Pixel Fold 내부 세로·반 접힘',
         const Size(701, 841),
         const EdgeInsets.only(top: 32, bottom: 24),
-        _foldAt(const Rect.fromLTWH(0, 420.5, 701, 0)),
+        _halfOpenedAt(const Rect.fromLTWH(0, 420.5, 701, 0)),
+      ),
+      // Galaxy Z Flip 내부 화면을 반 접음 (Flex 모드)
+      (
+        'Flip 내부·반 접힘',
+        const Size(411, 1005),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        _halfOpenedAt(const Rect.fromLTWH(0, 502.5, 411, 0)),
       ),
     ];
 
@@ -765,11 +820,11 @@ void _hingeLayoutTests() {
     final keypadElement = tester.element(find.byType(CalcKeypad));
     final lcdElement = tester.element(_lcd);
 
-    // 가로로 돌림 → 가로 접힘선 (테이블톱)
+    // 가로로 돌려 반 접음 → 가로 접힘선 (테이블톱)
     await _pump(
       tester,
       size: const Size(841, 673),
-      displayFeatures: [_foldAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
+      displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
       container: container,
     );
     expect(
@@ -792,6 +847,129 @@ void _hingeLayoutTests() {
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
       isTrue,
     );
+  });
+
+  group('펼친 가로 접힘선은 나누지 않는다 (#25 R1)', () {
+    for (final (name, size, fold) in [
+      (
+        'Fold 내부 가로',
+        const Size(841, 673),
+        const Rect.fromLTWH(0, 336.5, 841, 0),
+      ),
+      (
+        'Pixel Fold 내부 세로',
+        const Size(701, 841),
+        const Rect.fromLTWH(0, 420.5, 701, 0),
+      ),
+      ('Flip 내부', const Size(411, 1005), const Rect.fromLTWH(0, 502.5, 411, 0)),
+    ]) {
+      testWidgets(
+        '$name ${size.width}×${size.height}: 위아래 배치, 설정 버튼 없음, 키는 터치 하한 이상',
+        (tester) async {
+          await _pump(
+            tester,
+            size: size,
+            padding: const EdgeInsets.only(top: 24, bottom: 24),
+            displayFeatures: [_foldAt(fold)],
+          );
+          expect(tester.takeException(), isNull);
+          expect(_settings, findsNothing);
+          expect(
+            tester.getRect(_lcd).bottom,
+            lessThanOrEqualTo(tester.getRect(_keypad).top),
+          );
+          _expectTouchTargets(tester);
+        },
+      );
+    }
+
+    testWidgets('접힘선이 인셋 안(창 가장자리)에 있으면 접힘선 기준으로 나누지 않는다', (tester) async {
+      await _pump(
+        tester,
+        size: const Size(841, 701),
+        padding: const EdgeInsets.only(left: 32, top: 24, bottom: 24),
+        displayFeatures: [_foldAt(const Rect.fromLTWH(20, 0, 0, 701))],
+      );
+      expect(tester.takeException(), isNull);
+      expect(_settings, findsNothing);
+      expect(tester.getRect(_lcd).width, greaterThan(300));
+    });
+  });
+
+  testWidgets('디버그 검사: 화면이 원점에서 화면 전체를 채우지 않으면 접힘선 좌표 가정 위반을 보고한다', (
+    tester,
+  ) async {
+    const size = Size(841, 701);
+    const fold = DisplayFeature(
+      bounds: Rect.fromLTWH(420.5, 0, 0, 701),
+      type: DisplayFeatureType.fold,
+      state: DisplayFeatureState.postureFlat,
+    );
+    tester.view.physicalSize = size * tester.view.devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: size, displayFeatures: [fold]),
+            // 화면을 왼쪽으로 40dp 밀어 넣는다 (가정 위반)
+            child: Padding(
+              padding: EdgeInsets.only(left: 40),
+              child: CalculatorScreen(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final error = tester.takeException();
+    expect(error, isA<FlutterError>());
+    expect('$error', contains('본체 원점'));
+  });
+
+  group('접힘선 기준 배치의 설정 대화상자 (#25 R1)', () {
+    testWidgets('물리 힌지·왼손잡이: 대화상자는 설정 버튼이 있는 쪽(오른쪽) 절반에 뜬다', (tester) async {
+      await _pump(
+        tester,
+        size: const Size(1114, 720),
+        handedness: Handedness.left,
+        displayFeatures: [
+          _foldAt(
+            const Rect.fromLTWH(540, 0, 34, 720),
+            type: DisplayFeatureType.hinge,
+          ),
+        ],
+      );
+      expect(tester.getRect(_settings).left, greaterThanOrEqualTo(574));
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final dialog = tester.getRect(_dialogSurface);
+      expect(dialog.left, greaterThanOrEqualTo(574));
+    });
+
+    testWidgets('반 접은 세로 접힘선의 절반 폭(약 336dp)·글자 배율 2.0에서도 넘치지 않고 선택된다', (
+      tester,
+    ) async {
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(673, 841),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
+        textScale: 2.0,
+        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(336.5, 0, 0, 841))],
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      // 오른손잡이: 설정 버튼은 왼쪽 절반 → 대화상자도 왼쪽 절반
+      expect(tester.getRect(_dialogSurface).right, lessThanOrEqualTo(336.5));
+      await tester.tap(_option(Handedness.left));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(handednessProvider), Handedness.left);
+    });
   });
 
   group('CalcSplitLayout (접힘선) · CalcTabletopLayout', () {

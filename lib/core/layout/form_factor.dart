@@ -1,5 +1,11 @@
 import 'dart:ui'
-    show DisplayFeature, DisplayFeatureType, FlutterView, Rect, Size;
+    show
+        DisplayFeature,
+        DisplayFeatureState,
+        DisplayFeatureType,
+        FlutterView,
+        Rect,
+        Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -28,7 +34,7 @@ enum ScreenArrangement {
   /// 다른 절반에 LCD. 어느 것도 접힘선을 가로지르지 않는다.
   hingeSplit,
 
-  /// 가로 접힘선 기준 위아래 배치 (폴더블 내부 화면을 돌린 상태, 반 접으면 테이블톱 자세):
+  /// 가로 접힘선 기준 위아래 배치 (반 접어 세운 테이블톱 자세, 물리 힌지 — 펼친 폭 0 가로 접힘선은 제외):
   /// 접힘선 위 절반에 LCD, 아래 절반에 키패드. 어느 것도 접힘선을 가로지르지 않는다.
   hingeStacked,
 }
@@ -136,11 +142,11 @@ abstract final class FormFactor {
   /// 기기 종류([kind])와 물리 화면 크기([displaySize], dp)별 방향 정책.
   /// - 폰: 세로 — 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아진다.
   /// - 태블릿: 가로 — LCD와 키패드를 좌우로 나눠 보여 준다 (지켜지는 범위는 클래스 설명 참조).
-  /// - 폴더블 커버 화면(짧은 변 [largeScreenMinShortestSide] 미만): 폰과 같이 세로.
-  /// - 폴더블 내부 화면: 네 방향 모두 허용한다 (#25). 내부 화면의 기본 방향이 기기마다 달라(Galaxy Z Fold는
-  ///   세로, Pixel Fold는 가로) 세로로 고정하면 Pixel Fold에서는 오히려 접힘선이 가로로 눕는다. 배치는 고정
-  ///   대신 접힘선 방향을 따른다([arrangementOf]: 세로 접힘선 → [ScreenArrangement.hingeSplit],
-  ///   가로 접힘선 → [ScreenArrangement.hingeStacked]). Android 16 이상은 내부 화면 같은 대화면에서 어차피
+  /// - 폴더블의 짧은 변 [largeScreenMinShortestSide] 미만 화면: 폰과 같이 세로. Fold 계열의 접은 커버 화면과
+  ///   Galaxy Z Flip 계열의 내부 화면(세로로 긴 폰 크기, 가로 접힘선)이 여기에 든다.
+  /// - 폴더블 대화면(Fold 계열 내부 화면): 네 방향 모두 허용한다 (#25). 내부 화면의 기본 방향이 기기마다
+  ///   달라(Galaxy Z Fold는 세로, Pixel Fold는 가로) 세로로 고정하면 Pixel Fold에서는 오히려 접힘선이 가로로
+  ///   눕는다. 배치는 고정 대신 접힘선 방향을 따른다([arrangementOf]). Android 16 이상은 대화면에서 어차피
   ///   방향 고정을 무시하므로, 어떤 버전에서도 같은 동작이 된다.
   static OrientationPolicy orientationPolicyOf(
     DeviceKind kind,
@@ -175,11 +181,19 @@ abstract final class FormFactor {
   /// 접힘선이 창을 다 가로지르는지 볼 때의 허용 오차 (dp)
   static const double _hingeSpanTolerance = 1.0;
 
-  /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge)의 영역 (창 좌표).
+  /// 접힘선 기준으로 나눌 때 접힘선 양쪽 각각이 가져야 하는 최소 길이 (dp, 접힘선에 수직인 방향).
+  /// 가장 작은 폰 폭(약 280dp)의 키패드·LCD가 들어갈 자리다. 이보다 짧은 쪽이 생기면(접힘선이 창 가장자리에
+  /// 치우친 창, 인셋 안의 접힘선) 접힘선 기준으로 나누지 않는다 — 한쪽 패널이 쓸 수 없게 좁아지기 때문이다.
+  static const double hingeMinPanelExtent = 280.0;
+
+  /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge). 영역은 창 좌표다.
   /// 없으면 `null`. 화면 구멍(cutout)과, 창 밖에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는 세지 않는다.
   ///
   /// 접힘 정보의 좌표는 그 정보를 담은 `MediaQuery`가 가리키는 화면(창)의 좌표다. 실제 앱에서는 창 = 화면이다.
-  static Rect? hingeOf(Size windowSize, Iterable<DisplayFeature> features) {
+  static DisplayFeature? hingeOf(
+    Size windowSize,
+    Iterable<DisplayFeature> features,
+  ) {
     const t = _hingeSpanTolerance;
     for (final f in features) {
       if (f.type != DisplayFeatureType.fold &&
@@ -198,8 +212,8 @@ abstract final class FormFactor {
       final insideX = b.left >= -t && b.right <= windowSize.width + t;
       final insideY = b.top >= -t && b.bottom <= windowSize.height + t;
       // 세로 접힘선: 위에서 아래까지, 좌우로는 창 안 (가로 접힘선은 반대)
-      if (spansHeight && insideX && b.width < windowSize.width - t) return b;
-      if (spansWidth && insideY && b.height < windowSize.height - t) return b;
+      if (spansHeight && insideX && b.width < windowSize.width - t) return f;
+      if (spansWidth && insideY && b.height < windowSize.height - t) return f;
     }
     return null;
   }
@@ -207,12 +221,21 @@ abstract final class FormFactor {
   /// [hinge]가 세로 접힘선(위에서 아래로 가로지름)인지. 폭이 0인 접힘선도 판정된다.
   static bool isVerticalHinge(Rect hinge) => hinge.height >= hinge.width;
 
+  /// [hinge]가 화면을 실제로 두 부분으로 나누는지 — 폭이 있는 물리 힌지이거나 반 접힌 상태.
+  /// Android `FoldingFeature.isSeparating`, Flutter `DisplayFeatureSubScreen`과 같은 기준이다.
+  static bool separates(DisplayFeature hinge) =>
+      hinge.bounds.shortestSide > 0 ||
+      hinge.state == DisplayFeatureState.postureHalfOpened;
+
   /// 앱 창([windowSize], dp)의 배치.
   ///
-  /// 1. 접힘선이 창을 가로지르면([hingeOf]) 접힘선을 경계로 나눈다 (#25) — 세로 접힘선이면
-  ///    [ScreenArrangement.hingeSplit], 가로 접힘선이면 [ScreenArrangement.hingeStacked].
-  ///    펼친 상태(flat)와 반 접은 상태(half-opened)를 구분하지 않는다 — 펼쳐도 주름이 보이고 만지면 느껴진다.
-  /// 2. 접힘 정보는 있는데 창을 끝까지 가로지르지 않거나, 폴더블 기기([foldableDevice])인데 접힘선이 없으면
+  /// 1. 창을 가로지르는 접힘선([hingeOf]) 양쪽이 모두 [hingeMinPanelExtent] 이상이면 접힘선을 경계로 나눈다 (#25).
+  ///    - 세로 접힘선: 항상 [ScreenArrangement.hingeSplit]. 펼친 상태(flat)여도 나눈다 — 주름이 키·글자 한가운데를
+  ///      지나지 않게 하는 것이 이슈 요구이고, 좌우로 나눠도 각 절반이 폰 폭이라 키 크기 손해가 작다.
+  ///    - 가로 접힘선: 화면을 실제로 나눌 때([separates] — 반 접은 테이블톱 자세, 물리 힌지)만
+  ///      [ScreenArrangement.hingeStacked]. 펼친 폭 0 가로 접힘선(Fold 내부 화면을 가로로 돌림, Flip을 펼침)은
+  ///      나누면 키패드가 아래 절반에 갇혀 터치 하한(28dp) 아래로 작아지므로 나누지 않는다(아래 2번).
+  /// 2. 접힘 정보는 있는데 위 조건에 맞지 않거나, 폴더블 기기([foldableDevice])인데 접힘선이 없으면
   ///    위아래 배치다. 폴더블 내부 화면은 접힘 정보가 창이 붙은 뒤 늦게 오므로, 그 전 몇 프레임 동안
   ///    접힘선을 무시한 좌우 분할로 그렸다가 바뀌는 깜빡임을 막는다. 접은 커버 화면은 어차피 위아래 배치다.
   ///    제약: 폴더블 여부는 기기 단위라, 폴더블을 외부 디스플레이(DeX 등)에 띄운 넓은 창도 위아래 배치다.
@@ -228,9 +251,16 @@ abstract final class FormFactor {
   }) {
     final hinge = hingeOf(windowSize, features);
     if (hinge != null) {
-      return isVerticalHinge(hinge)
-          ? ScreenArrangement.hingeSplit
-          : ScreenArrangement.hingeStacked;
+      final b = hinge.bounds;
+      final vertical = isVerticalHinge(b);
+      final before = vertical ? b.left : b.top;
+      final after = vertical
+          ? windowSize.width - b.right
+          : windowSize.height - b.bottom;
+      if (before >= hingeMinPanelExtent && after >= hingeMinPanelExtent) {
+        if (vertical) return ScreenArrangement.hingeSplit;
+        if (separates(hinge)) return ScreenArrangement.hingeStacked;
+      }
     }
     if (foldableDevice || hasFoldOrHinge(features)) {
       return ScreenArrangement.stacked;

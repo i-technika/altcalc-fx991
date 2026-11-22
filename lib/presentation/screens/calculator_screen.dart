@@ -16,6 +16,7 @@ import '../providers/settings_provider.dart';
 import '../widgets/banner_ad_slot.dart';
 import '../widgets/calc_keypad.dart';
 import '../widgets/lcd_display.dart';
+import '../widgets/screen_coordinate_root.dart';
 import '../widgets/settings_button.dart';
 
 /// 광고 슬롯을 뺀 본체 영역의 세로 배치 (위 → 아래: 상단 띠 · LCD · 간격 · 키패드).
@@ -202,8 +203,8 @@ class CalcSplitLayout {
       'settings: $settingsButton)';
 }
 
-/// 가로 접힘선 기준 위아래 배치 (#25, [ScreenArrangement.hingeStacked]) — 폴더블 내부 화면을 돌려 접힘선이
-/// 가로로 눕거나, 반 접어 세워 둔 테이블톱 자세. 기준은 [CalcTheme]의 "접힘선 기준 배치" 절을 따른다.
+/// 가로 접힘선 기준 위아래 배치 (#25, [ScreenArrangement.hingeStacked]) — 반 접어 세워 둔 테이블톱 자세(Flip의
+/// Flex 모드 포함)나 물리 힌지. 기준은 [CalcTheme]의 "접힘선 기준 배치" 절을 따른다.
 ///
 /// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭):
 /// ```
@@ -343,14 +344,17 @@ class CalculatorScreen extends ConsumerWidget {
     );
     // 접힘선(화면 좌표)을 본체 좌표로 옮긴다. 이 화면은 화면 전체를 채우므로(앱 바 없음) 본체 원점은
     // 시스템 인셋(SafeArea) + 화면 여백 만큼 떨어져 있다. 미리보기처럼 화면을 흉내 내는 곳도
-    // `ScreenCoordinateRoot`가 화면 크기 그대로 이 화면을 채우므로 같다.
+    // `ScreenCoordinateRoot`가 화면 크기 그대로 이 화면을 채우므로 같다. 이 가정이 깨지면
+    // 디버그 모드에서 [_BodyOriginCheck]가 오류로 알린다.
     final padding = MediaQuery.paddingOf(context);
-    final hinge = FormFactor.hingeOf(window, features)?.shift(
-      Offset(
-        -(padding.left + CalcTheme.screenPadding),
-        -(padding.top + CalcTheme.screenPadding),
-      ),
+    final bodyOrigin = Offset(
+      padding.left + CalcTheme.screenPadding,
+      padding.top + CalcTheme.screenPadding,
     );
+    final hinge = FormFactor.hingeOf(
+      window,
+      features,
+    )?.bounds.shift(-bodyOrigin);
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       body: Column(
@@ -367,10 +371,14 @@ class CalculatorScreen extends ConsumerWidget {
                   0,
                 ),
                 child: LayoutBuilder(
-                  builder: (context, constraints) => _Body(
-                    body: constraints.biggest,
-                    arrangement: arrangement,
-                    hinge: hinge,
+                  builder: (context, constraints) => _BodyOriginCheck(
+                    expected: bodyOrigin,
+                    enabled: hinge != null,
+                    child: _Body(
+                      body: constraints.biggest,
+                      arrangement: arrangement,
+                      hinge: hinge,
+                    ),
                   ),
                 ),
               ),
@@ -381,6 +389,55 @@ class CalculatorScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// 본체 원점을 시스템 인셋 + 화면 여백으로 추정한 값([expected], 화면 좌표)이 실제 위치와 같은지 디버그
+/// 모드에서 확인한다 (#25 R1). 접힘선을 본체 좌표로 옮길 때만([enabled]) 확인하며, 다르면 접힘선 기준
+/// 배치가 접힘선에서 어긋나므로 [FlutterError.reportError]로 알린다(그리기는 계속한다). 릴리스에서는 아무것도 하지 않는다.
+class _BodyOriginCheck extends StatelessWidget {
+  final Offset expected;
+  final bool enabled;
+  final Widget child;
+
+  const _BodyOriginCheck({
+    required this.expected,
+    required this.enabled,
+    required this.child,
+  });
+
+  /// 위치 비교 허용 오차 (dp)
+  static const double _tolerance = 0.5;
+
+  @override
+  Widget build(BuildContext context) {
+    assert(() {
+      if (!enabled) return true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        final box = context.findRenderObject();
+        if (box is! RenderBox || !box.attached || !box.hasSize) return;
+        final actual = ScreenCoordinateRoot.globalToScreen(
+          context,
+          box.localToGlobal(Offset.zero),
+        );
+        if ((actual - expected).distance > _tolerance) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: FlutterError(
+                '계산기 본체 원점($actual)이 추정값($expected)과 다르다.\n'
+                '접힘선을 본체 좌표로 옮길 때 CalculatorScreen이 화면 원점에서 화면 전체를 채운다고 가정한다. '
+                '화면을 다른 위젯 안에 넣거나 앱 바를 더하면 접힘선 기준 배치가 접힘선에서 어긋난다.',
+              ),
+              library: 'altcalc layout',
+              context: ErrorDescription('접힘선 기준 배치 확인 중'),
+            ),
+          );
+        }
+      });
+      return true;
+    }());
+    return child;
   }
 }
 
