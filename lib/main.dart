@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoTheme;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -147,7 +148,7 @@ class AltCalcApp extends StatelessWidget {
   /// `null`이면 [SystemHighTextContrast.instance] — 테스트가 값을 바꿔 끼울 때만 넘긴다.
   final ValueListenable<bool>? highTextContrast;
 
-  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 [AnimatedTheme]으로 감싼 것)을 감싸는
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 테마로 감싼 것, [_ScreenTheme])을 감싸는
   /// 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
@@ -163,8 +164,10 @@ class AltCalcApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // 고대비 판정은 [CalcPalette.of] 하나로 한다 (#97). 앱 바깥쪽(View 바로 아래)에서 고른 테마를 MaterialApp에 주고,
     // 화면(루트 Navigator) 바로 위에서 가장 가까운 MediaQuery로 한 번 더 고른다 — 개발용 미리보기처럼 틀 안에서
-    // 고대비를 바꾸는 곳에서도 대화상자가 따라가게 하려는 것이다. 실제 앱에서는 두 곳이 같은 MediaQuery·고대비 텍스트 값을 보므로
-    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다. 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
+    // 고대비를 바꾸는 곳에서도 대화상자(와 MaterialApp이 테마로 정하는 텍스트 선택 색 등, #107 [_ScreenTheme])가 따라가게
+    // 하려는 것이다. 실제 앱에서는 두 곳이 같은 MediaQuery·고대비 텍스트 값을 보므로
+    // 같은 테마이고, 둘 다 같은 시간 동안 전환 애니메이션을 한다(둘 다 기본 시간·곡선 — MaterialApp의 테마 애니메이션
+    // 설정(`themeAnimationStyle` 등)을 바꾸면 [_ScreenTheme]의 [AnimatedTheme]도 같이 바꾼다). 앱은 플랫폼 밝기와 관계없이 항상 어두운 테마라
     // MaterialApp의 다른 테마 칸(darkTheme·highContrastTheme 등)은 쓰지 않는다.
     // Android "고대비 텍스트"(#95)도 고대비 판정에 들어가므로, 그 범위를 MaterialApp 바깥에 두어 두 곳의 테마
     // 선택이 모두 그 값을 보게 한다.
@@ -176,12 +179,8 @@ class AltCalcApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: CalcPalette.of(context).materialTheme,
           builder: (context, child) {
-            final navigator = child ?? const SizedBox.shrink();
-            final screen = Builder(
-              builder: (context) => AnimatedTheme(
-                data: CalcPalette.of(context).materialTheme,
-                child: navigator,
-              ),
+            final screen = _ScreenTheme(
+              child: child ?? const SizedBox.shrink(),
             );
             // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
             return DeviceLocaleScope(
@@ -189,6 +188,51 @@ class AltCalcApp extends StatelessWidget {
             );
           },
           home: home,
+        ),
+      ),
+    );
+  }
+}
+
+/// 화면(루트 Navigator) 바로 위의 테마 (#97, #107).
+///
+/// 가장 가까운 MediaQuery로 고른 테마([CalcPalette.of])를 [AnimatedTheme]으로 주고, [MaterialApp]이 자기 테마
+/// (`MaterialApp.theme`)로 정해 두는 앱 수준 요소도 이 테마로 다시 정한다. 안쪽에 겹친 [Theme]만으로는 이 둘이 바뀌지 않는다.
+/// - 텍스트 선택·커서 기본 색([DefaultSelectionStyle]): MaterialApp은 테마의 `textSelectionTheme`이 비어 있으면
+///   primary 40%·primary로 정하고, [Theme]은 `textSelectionTheme`에 값이 있을 때만 바꾼다. MaterialApp처럼 목표 테마로
+///   바로 정하고, 40%도 MaterialApp(`withOpacity`)과 같게 8비트 알파로 만든다.
+/// - Cupertino 테마([CupertinoTheme]): [Theme]은 위에 Cupertino 테마가 이미 있으면 그것을 물려받는다 — MaterialApp 쪽
+///   [Theme]이 바깥 테마로 만든 것이다. 여기서는 바깥 [Theme]처럼 전환 중인 테마로 만든다.
+///   [CupertinoTheme]은 아래에 Cupertino 아이콘 테마(primary 색)를 씌우므로, [Theme]이 Cupertino 테마 안쪽에서 하듯
+///   Material 아이콘 테마([ThemeData.iconTheme])를 다시 씌운다 — 빼면 색을 정하지 않은 아이콘이 primary 색이 된다.
+///
+/// 실제 앱에서는 바깥 테마와 같은 테마라 화면이 보는 값이 바뀌지 않는다(전환 중 포함, `test/widget/material_theme_test.dart`).
+/// 개발용 미리보기처럼 틀 안에서 고대비를 바꾸면, 틀 안 화면이 호스트(기기) 쪽이 아니라 틀의 테마를 따르게 한다.
+class _ScreenTheme extends StatelessWidget {
+  final Widget child;
+
+  const _ScreenTheme({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = CalcPalette.of(context).materialTheme;
+    final selection = theme.textSelectionTheme;
+    final primary = theme.colorScheme.primary;
+    return AnimatedTheme(
+      data: theme,
+      child: DefaultSelectionStyle(
+        selectionColor:
+            selection.selectionColor ??
+            primary.withAlpha((255.0 * 0.40).round()),
+        cursorColor: selection.cursorColor ?? primary,
+        child: Builder(
+          builder: (context) {
+            final animated = Theme.of(context);
+            return CupertinoTheme(
+              data: MaterialBasedCupertinoThemeData(materialTheme: animated),
+              child: IconTheme(data: animated.iconTheme, child: child),
+            );
+          },
         ),
       ),
     );
