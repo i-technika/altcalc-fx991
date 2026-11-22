@@ -25,7 +25,7 @@ class LcdStatusIcon extends StatelessWidget {
   /// 그릴 아이콘
   final LcdIndicatorIcon icon;
 
-  /// 선·면·글자 색 (켜짐 [CalcTheme.lcdStatusActive] / 꺼짐 [CalcTheme.lcdStatusInactive])
+  /// 선·면·글자 색 (켜짐 [CalcTheme.lcdStatusActive] / 꺼짐 [CalcPalette.lcdStatusInactive] — 고대비 설정에 따라 다르다)
   final Color color;
 
   /// 옆 슬롯 글자와 같은 스타일 ([metrics]가 없을 때만 쓴다)

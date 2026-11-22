@@ -180,22 +180,40 @@ abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 고대비 모드 (High Contrast) — #54
   // ───────────────────────────────────────────
-  // 기기의 고대비 설정(`MediaQuery.highContrastOf` — iOS "대비 증가", Android "고대비 텍스트")이 켜지면
-  // [CalcPalette.highContrast]가 아래 색을 쓴다. 여기 없는 색은 일반 모드와 같다.
+  // `MediaQuery.highContrastOf`가 켜지면 [CalcPalette.highContrast]가 아래 색을 쓴다. 여기 없는 색은 일반 모드와 같다.
+  // 플랫폼마다 켜지는 설정이 다르다(Flutter 엔진 기준):
+  // - iOS: 손쉬운 사용 › 디스플레이 및 텍스트 크기 › "대비 증가" (`UIAccessibility.isDarkerSystemColorsEnabled`)
+  // - Android 14(API 34) 이상: 접근성 › 색상 및 동작 › "색상 대비"가 '표준'보다 높을 때('중간'·'높음',
+  //   `UiModeManager.getContrast() > 0`). Android 13 이하에서는 켜지지 않고, "고대비 텍스트" 설정은 읽지 않는다.
+  //
   // 기준(`test/unit/calc_theme_test.dart`가 검증):
-  // - 일반 팔레트에 있는 대비(라벨·각인·테두리·눌림 단서·비활성 표시기)는 모두 일반 팔레트 이상이다.
-  // - 키 메인 라벨과 SHIFT/ALPHA 각인은 [highContrastMinTextContrast](WCAG AAA 7:1) 이상이다.
+  // - 키 메인 라벨과 SHIFT/ALPHA 각인(평소 상태)은 [highContrastMinTextContrast](WCAG AAA 7:1) 이상이다.
   //   일반 모드에서 5.3~5.8:1인 연산자·=·AC·ALPHA 키캡만 같은 색조로 어둡게 한다.
+  // - 아래 대비는 일반 팔레트 이상이다: 메인 라벨·각인·설정 아이콘, 본체·커서 패드 허브·방향 키캡과 맞닿는 테두리,
+  //   눌림 명도 차·눌린 라벨·눌린 키캡과 본체의 차, 눌림 테두리와 본체, LCD 배경과 꺼진 표시기.
+  // - 일반 팔레트보다 낮아지는 것 (의도한 맞바꿈 — 테스트가 하한을 따로 지킨다):
+  //   · 밝은 키캡(숫자·SHIFT)과 테두리의 안쪽 경계(숫자 3.2 → 2.0:1, SHIFT 1.9 → 1.2:1). 밝은 키캡은 자기 색으로
+  //     본체와 크게 구분되므로(본체 대비 숫자 11:1·SHIFT 6.5:1) 테두리는 어두운 키캡의 경계를 위해 밝힌다.
+  //   · LCD 켜진 표시기와 꺼진 표시기의 대비(10.4 → 8.5:1) — 꺼진 표시기를 진하게 하는 대가다. 7:1 이상 남긴다.
+  //   · 연산자와 함수 키의 명도 차(ΔL* 13.8 → 5.5). 연산자를 7:1로 어둡게 하면서 차를 유지하려면 함수·MENU·ON 키를
+  //     본체(L* 18.5) 가까이(L* 23 이하) 어둡게 해야 한다. 그러면 키캡 30여 개가 본체에 묻혀, 키 종류 구분(배치·라벨로도
+  //     알 수 있다)보다 잃는 것이 크다고 보았다.
   // - 눌림: 흰 라벨 키는 **반전**한다(흰 키캡 [keyPressedInvertedBackground] + 어두운 라벨
-  //   [keyPressedInvertedText], 사용자 결정). 7:1 키캡(L* 38 이하)을 일반 모드처럼 명도만 바꾸면 #22의 눌림 기준을
-  //   함께 지킬 수 없다 — 어둡게 하면 본체(L* 18.5)에 묻히고, 밝게 하면 눌린 라벨이 4.5:1 아래가 된다.
-  //   반전하면 명도 차·눌린 라벨 대비·본체와의 차가 모두 일반 모드보다 커진다.
-  //   어두운 라벨 키(숫자·SHIFT)는 일반 모드와 같은 방식(검정 20%)으로 어둡게 한다.
+  //   [keyPressedInvertedText], 사용자 결정). 7:1 키캡(L* 38 이하)을 일반 모드처럼 명도만 바꾸면 눌린 라벨 대비가
+  //   일반 모드(눌린 연산자 8.7:1 등)보다 낮아진다 — 밝히면 #22 기준을 겨우(눌린 라벨 4.6:1) 지키고, 어둡게 하면 본체에
+  //   묻힌다. 반전하면 명도 차·눌린 라벨 대비·본체와의 차가 모두 일반 모드보다 커진다.
+  //   반전한 키캡은 눌림 테두리와 같은 흰색이라 #22의 공통 눌림 테두리는 보이지 않는다 — 키캡 전체가 흰색으로 바뀌는 것이
+  //   그보다 강한 단서이고, 바깥쪽 경계(본체와 13.8:1)는 그대로 남는다.
+  // - 어두운 라벨 키(숫자·SHIFT)는 일반 모드와 같은 방식(검정 20%)으로 어둡게 한다. 눌린 SHIFT 라벨은 일반 모드와 같은
+  //   5.3:1로 7:1에 못 미친다 — 밝은 금색 키캡을 7:1로 누르려면 명도 차가 5 이하가 되어 눌림이 보이지 않는다.
+  // - 팔레트 밖(두 모드 공통) 색: 본체·LCD 배경·LCD 글자·켜진 표시기·LCD 베젤·도트 격자·커서 패드 허브·키 그림자.
+  //   대비가 이미 충분하거나(LCD 글자 11:1 등) 경계 대비를 다른 색(테두리)이 맡는다.
 
   /// 고대비 모드의 키 메인 라벨·SHIFT/ALPHA 각인 최소 명암비 (WCAG AAA 일반 텍스트)
   static const double highContrastMinTextContrast = 7.0;
 
-  /// 고대비 연산자 키 — [keyOperator]를 어둡게 (흰 라벨 7.2:1). 함수 키([keyFunction])보다는 밝게 두어 구분을 남긴다.
+  /// 고대비 연산자 키 — [keyOperator]를 어둡게 (흰 라벨 7.2:1). 함수 키([keyFunction])보다는 밝게 두어 구분을 남긴다
+  /// (ΔL* 5.5 — 위 "일반 팔레트보다 낮아지는 것" 참조).
   static const Color keyOperatorHighContrast = Color(0xFF575757);
 
   /// 고대비 등호 키 — [keyEquals]를 어둡게 (흰 라벨 7.5:1)
@@ -225,9 +243,13 @@ abstract final class CalcTheme {
   /// 고대비 모드에서 흰 라벨 키가 눌렸을 때의 메인 라벨 (반전)
   static const Color keyPressedInvertedText = Color(0xFF1A1A1A);
 
-  /// 고대비 LCD 비활성 상태 표시기 — [lcdStatusActive]를 약 15% 불투명도로.
-  /// 꺼진 표시기 자리가 보이되, 켜진 표시기와의 대비(켜짐 ↔ 꺼짐)는 [highContrastMinTextContrast] 이상 남긴다.
+  /// 고대비 LCD 비활성 상태 표시기 — [lcdStatusActive]를 약 15% 불투명도로 (#44에서 정한 "고대비에서 올린다"는 방침).
+  /// LCD 배경 대비 1.3:1로 꺼진 표시기 자리가 희미하게 보이고(일반 4%는 1.07:1), 켜진 표시기 색과의 대비는
+  /// [highContrastMinTextContrast] 이상 남겨 켜짐과 꺼짐을 헷갈리지 않게 한다.
   static const Color lcdStatusInactiveHighContrast = Color(0x262A2A2A);
+
+  /// 고대비 설정 버튼 아이콘 — 본체 배경 대비 7:1 이상 ([settingsIcon]을 밝게)
+  static const Color settingsIconHighContrast = Color(0xFFE0E0E0);
 
   // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
@@ -728,6 +750,9 @@ final class CalcPalette {
   /// LCD 비활성 상태 표시기 색
   final Color lcdStatusInactive;
 
+  /// 설정 버튼 아이콘 색
+  final Color settingsIcon;
+
   const CalcPalette._({
     required this.isHighContrast,
     required this.keyBorder,
@@ -735,6 +760,7 @@ final class CalcPalette {
     required this.shiftLabel,
     required this.alphaLabel,
     required this.lcdStatusInactive,
+    required this.settingsIcon,
   });
 
   /// 일반 팔레트
@@ -745,6 +771,7 @@ final class CalcPalette {
     shiftLabel: CalcTheme.shiftLabel,
     alphaLabel: CalcTheme.alphaLabel,
     lcdStatusInactive: CalcTheme.lcdStatusInactive,
+    settingsIcon: CalcTheme.settingsIcon,
   );
 
   /// 고대비 팔레트
@@ -755,9 +782,10 @@ final class CalcPalette {
     shiftLabel: CalcTheme.shiftLabelHighContrast,
     alphaLabel: CalcTheme.alphaLabelHighContrast,
     lcdStatusInactive: CalcTheme.lcdStatusInactiveHighContrast,
+    settingsIcon: CalcTheme.settingsIconHighContrast,
   );
 
-  /// 기기의 고대비 설정([MediaQuery.highContrastOf])에 맞는 팔레트.
+  /// 기기의 고대비 설정([MediaQuery.highContrastOf] — 플랫폼별 의미는 [CalcTheme] "고대비 모드" 주석)에 맞는 팔레트.
   /// 그 설정에만 의존하므로 다른 MediaQuery 값(크기·인셋 등)이 바뀌어도 다시 빌드되지 않는다.
   static CalcPalette of(BuildContext context) =>
       MediaQuery.highContrastOf(context) ? highContrast : standard;

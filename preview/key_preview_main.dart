@@ -352,7 +352,8 @@ class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
 
-  /// 기기의 고대비 설정 (`MediaQuery.highContrast`, #54)
+  /// 기기의 고대비 설정 (`MediaQuery.highContrast`, #54). 호스트(브라우저·OS)의 고대비 설정은 쓰지 않는다 —
+  /// 흉내 내는 기기의 설정이므로 패널 스위치만 따른다.
   final bool highContrast;
 
   /// 앱의 루트 Navigator ([KeyPreviewScreen.screen])
@@ -611,7 +612,7 @@ class _ControlPanel extends StatelessWidget {
         selected: {textScale},
         onSelectionChanged: (v) => onTextScaleChanged(v.first),
       ),
-      // 기기의 고대비 설정 흉내 (#54) — iOS "대비 증가", Android "고대비 텍스트"
+      // 기기의 고대비 설정 흉내 (#54) — iOS "대비 증가", Android 14 이상 "색상 대비" 중간·높음
       Row(
         children: [
           const Expanded(child: Text('고대비 (대비 증가)', style: _label)),

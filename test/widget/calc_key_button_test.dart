@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -311,17 +313,36 @@ void main() {
       }
     });
 
-    testWidgets('비활성 키 라벨은 고대비 모드에서도 흐리게 그린다', (tester) async {
-      final def = keyDefOf(CalcKeyId.add);
-      await tester.pumpWidget(
-        _host(CalcKeyButton(keyDef: def), highContrast: true),
-      );
-      expect(
-        tester.widget<Text>(find.text(def.mainLabel)).style!.color,
-        palette
-            .keyForeground(def.category)
-            .withValues(alpha: CalcTheme.keyDisabledLabelOpacity),
-      );
+    testWidgets('비활성 키 라벨은 고대비 모드에서도 활성 라벨보다 키캡 대비가 낮다 (흐리게 보인다)', (
+      tester,
+    ) async {
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance();
+        final lb = b.computeLuminance();
+        return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+      }
+
+      for (final def in allKeys) {
+        final background = palette.keyBackground(def.category);
+        Future<double> labelContrast({required bool enabled}) async {
+          await tester.pumpWidget(
+            _host(
+              CalcKeyButton(keyDef: def, onPressed: enabled ? (_) {} : null),
+              highContrast: true,
+            ),
+          );
+          final color = tester
+              .widget<Text>(find.text(def.mainLabel))
+              .style!
+              .color!;
+          return contrast(Color.alphaBlend(color, background), background);
+        }
+
+        final enabled = await labelContrast(enabled: true);
+        final disabled = await labelContrast(enabled: false);
+        expect(disabled, lessThan(enabled), reason: '$def');
+        expect(disabled, greaterThan(1.0), reason: '$def');
+      }
     });
   });
 

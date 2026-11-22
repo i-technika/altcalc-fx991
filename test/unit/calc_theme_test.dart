@@ -163,7 +163,8 @@ void main() {
   group('고대비 팔레트 (#54)', () {
     const normal = CalcPalette.standard;
     const high = CalcPalette.highContrast;
-    const aaa = CalcTheme.highContrastMinTextContrast;
+    // 기준값은 테스트 대상 상수가 아니라 리터럴로 둔다 — 상수를 낮춰도 테스트가 따라 느슨해지지 않게.
+    const aaa = 7.0; // WCAG AAA 일반 텍스트
     const bodies = [
       CalcTheme.bodyBackground,
       CalcTheme.bodyFrame,
@@ -180,6 +181,10 @@ void main() {
                 lightness(CalcTheme.bodyBackground))
             .abs();
 
+    test('고대비 텍스트 기준 상수는 WCAG AAA(7:1)다', () {
+      expect(CalcTheme.highContrastMinTextContrast, aaa);
+    });
+
     test('일반 팔레트는 테마 상수·카테고리 색 그대로다 (일반 모드 화면이 바뀌지 않는다)', () {
       expect(normal.isHighContrast, isFalse);
       expect(high.isHighContrast, isTrue);
@@ -188,6 +193,7 @@ void main() {
       expect(normal.shiftLabel, CalcTheme.shiftLabel);
       expect(normal.alphaLabel, CalcTheme.alphaLabel);
       expect(normal.lcdStatusInactive, CalcTheme.lcdStatusInactive);
+      expect(normal.settingsIcon, CalcTheme.settingsIcon);
       for (final c in KeyCategory.values) {
         expect(normal.keyBackground(c), c.background, reason: c.name);
         expect(normal.keyForeground(c), c.foreground, reason: c.name);
@@ -219,10 +225,12 @@ void main() {
           reason: c.name,
         );
       }
-      // 회색 두 카테고리(연산자·함수)가 같은 색이 되지 않게 한다.
+      // 회색 두 카테고리(연산자·함수)의 명도 차는 일반(13.8)보다 줄지만(테마 "고대비 모드" 주석의 맞바꿈),
+      // 함수 키와 커서 키 사이(약 5)만큼은 남긴다.
       expect(
-        lightness(high.keyBackground(KeyCategory.operator)),
-        greaterThan(lightness(high.keyBackground(KeyCategory.function)) + 3),
+        lightness(high.keyBackground(KeyCategory.operator)) -
+            lightness(high.keyBackground(KeyCategory.function)),
+        greaterThanOrEqualTo(5.0),
       );
     });
 
@@ -304,6 +312,27 @@ void main() {
         lightness(high.keyPressedBorder) - lightness(high.keyBorder),
         greaterThanOrEqualTo(30),
       );
+      // 어두운(흰 라벨) 키캡과의 안쪽 경계도 일반 이상이다.
+      for (final c in KeyCategory.values.where(high.invertsOnPress)) {
+        expect(
+          contrastRatio(high.keyBorder, high.keyBackground(c)),
+          greaterThanOrEqualTo(
+            contrastRatio(normal.keyBorder, normal.keyBackground(c)),
+          ),
+          reason: c.name,
+        );
+      }
+      // 밝은 키캡(숫자·SHIFT)과의 안쪽 경계는 낮아지는 맞바꿈이다 — 대신 키캡 자체가 본체와 4.5:1 이상 구분된다
+      // (비텍스트 기준 3:1보다 넉넉하다).
+      for (final c in KeyCategory.values.where(
+        (c) => !high.invertsOnPress(c),
+      )) {
+        expect(
+          contrastRatio(high.keyBackground(c), CalcTheme.bodyBackground),
+          greaterThanOrEqualTo(minTextContrast),
+          reason: c.name,
+        );
+      }
       expect(high.keyBorder.a, 1.0);
       expect(high.keyPressedBorder.a, 1.0);
     });
@@ -328,7 +357,18 @@ void main() {
       }
     });
 
-    test('LCD 비활성 표시기: 일반보다 진하되 켜진 표시기와 7:1 이상 구분된다', () {
+    test('설정 아이콘은 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이다', () {
+      final hc = contrastRatio(high.settingsIcon, CalcTheme.bodyBackground);
+      expect(hc, greaterThanOrEqualTo(aaa));
+      expect(
+        hc,
+        greaterThanOrEqualTo(
+          contrastRatio(normal.settingsIcon, CalcTheme.bodyBackground),
+        ),
+      );
+    });
+
+    test('LCD 비활성 표시기: 일반보다 진하되(배경 대비) 켜진 표시기 색과는 7:1 이상 떨어진다', () {
       final hc = high.lcdStatusInactive;
       const active = CalcTheme.lcdStatusActive;
       expect((hc.r, hc.g, hc.b), (active.r, active.g, active.b));
