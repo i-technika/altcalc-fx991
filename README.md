@@ -9,6 +9,8 @@
 
 - Flutter 3.50.0 — `pubspec.yaml`의 `environment.flutter`로 고정한다. CI도 같은 값을 읽고(#78),
   다른 버전의 SDK로는 `flutter pub get`이 `requires Flutter SDK version ...`으로 실패한다.
+  - CI는 `.github/scripts/read-flutter-version.sh`로 이 값을 읽어 설치 액션에 넘긴다(#90, 러너의 yq·Chocolatey에 기대지 않는다).
+    `flutter test`가 이 스크립트를 bash로 실행해 검사하므로, Windows에서는 Git for Windows(bash 포함)가 있어야 한다.
 - 의존성 설치: `flutter pub get`
 - 생성 플러그인 파일(`linux/flutter/generated_plugin*` 등)은 `.gitattributes`로 LF 고정이다. 이 설정 이전에 받은 Windows 작업 트리에서
   이 파일들이 내용 차이 없이 수정됨으로 보이면 Git Bash에서 `bash .claude/scripts/normalize-generated-eol.sh`를 한 번 실행한다.
