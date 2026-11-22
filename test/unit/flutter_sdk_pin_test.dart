@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
+import '../support/workflows.dart';
+
 /// CI·로컬의 Flutter SDK 버전 고정(#78)이 깨지지 않게 지킨다.
 /// 기준값은 `pubspec.yaml`의 `environment.flutter` 하나이고, CI 워크플로의 모든 SDK 설치 단계가
 /// `flutter-version-file`로 이 값을 읽는지, README가 같은 버전을 적는지 확인한다.
@@ -16,13 +18,9 @@ final _exactVersion = RegExp(r'^\d+\.\d+\.\d+$');
 /// Flutter SDK를 설치하는 액션
 const _flutterAction = 'subosito/flutter-action@';
 
-YamlMap _loadYaml(String path) =>
-    loadYaml(File(path).readAsStringSync(), sourceUrl: Uri.file(path))
-        as YamlMap;
-
 /// `pubspec.yaml`의 `environment.flutter` 고정값
 String _pinnedVersion() {
-  final env = _loadYaml('pubspec.yaml')['environment'] as YamlMap?;
+  final env = loadYamlFile('pubspec.yaml')['environment'] as YamlMap?;
   final flutter = env?['flutter'];
   expect(
     flutter,
@@ -32,29 +30,17 @@ String _pinnedVersion() {
   return flutter as String;
 }
 
-/// `.github/workflows/`의 워크플로 파일
-List<File> _workflowFiles() {
-  final files =
-      Directory('.github/workflows')
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.yml') || f.path.endsWith('.yaml'))
-          .toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
-  return files;
-}
-
 void main() {
   test('environment.flutter는 정확한 버전(X.Y.Z) 하나다', () {
     expect(_pinnedVersion(), matches(_exactVersion));
   });
 
   test('워크플로의 모든 잡이 pubspec.yaml 고정 버전으로 Flutter를 설치한다', () {
-    final files = _workflowFiles();
+    final files = workflowFiles();
     expect(files, isNotEmpty, reason: '.github/workflows에 워크플로가 없다');
 
     for (final file in files) {
-      final jobs = _loadYaml(file.path)['jobs'] as YamlMap;
+      final jobs = loadYamlFile(file.path)['jobs'] as YamlMap;
       for (final MapEntry(key: jobId, value: job) in jobs.entries) {
         final where = '${file.path} → $jobId';
         final rawSteps = (job as YamlMap)['steps'];
