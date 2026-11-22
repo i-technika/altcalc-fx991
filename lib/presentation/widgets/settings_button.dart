@@ -36,9 +36,14 @@ import 'handedness_dialog.dart';
 ///   앱도 화면을 나누지 않았으므로 대화상자를 한쪽 절반에 가두지 않는다.
 /// - 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상이다. 그보다 좁으면 대화상자
 ///   카드가 150dp 안팎으로 줄어 읽기 어려우므로, 주름을 가로지르더라도 화면 전체에 띄운다.
-///   이 하한은 앱 배치 판정과 같은 값이라, 절반이 280~360dp이면 카드가 Material 최소 폭(280dp)보다 좁은
-///   200~280dp로 나뉘어 뜬다(대칭인 Galaxy Z Fold 내부 세로 화면은 절반 336.5dp, 카드 256dp — 주름을 피하는 쪽을
-///   택했다, #25).
+///
+/// 나눌 때 어느 절반에 띄울지는 아래 "좁은 하위 화면"과 같은 규칙이다 (#129). 버튼 쪽 절반이 하한 이상이어도
+/// 대화상자 최소 크기([dialogMinRegionOf], 폭 360dp)에 못 미치면 카드가 Material 최소 폭(280dp)보다 좁게
+/// 나뉘므로, 반대쪽 절반이 최소 크기를 넘으면 그 절반에 띄운다. 양쪽 모두 못 미치면 버튼 쪽 절반 그대로다 —
+/// 대칭인 Galaxy Z Fold 내부 세로 화면(절반 336.5dp)은 카드 256dp로 주름을 피하는 쪽을 택했다 (#25).
+/// 하한보다 좁으면 반대쪽 절반이 아니라 화면 전체인 이유: 그 화면은 손잡이를 바꾸면 배치가 위아래 배치로 바뀌어
+/// (키패드가 그 절반에 들어가지 못한다) 열린 대화상자가 화면 전체로 옮겨 가야 한다 — 처음부터 화면 전체면 그대로다
+/// (아래 "대화상자가 열린 채 손잡이를 바꾸면"). 하한 이상이면 어느 손잡이로도 접힘선 기준 배치라 그대로 남는다.
 ///
 /// ### 좁은 하위 화면 (#125)
 /// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 `showDialog`
@@ -51,7 +56,8 @@ import 'handedness_dialog.dart';
 /// 화면 전체에 띄우지 않는 이유: `showDialog`를 쓰는 한 경로의 나눔을 끌 수 없고(끄려면 `RawDialogRoute`를 직접
 /// 만들어야 한다), 물리 힌지는 가로지르면 내용이 힌지 틈에 가려진다. 버튼과 다른 절반이지만 모달이라 대화상자만
 /// 다루면 된다. 그 결과 이런 화면에서는 손잡이와 무관하게 대화상자가 넓은 절반에 뜬다.
-/// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아 바로 위 규칙(앱이 나눌 때만 나누고, 좁으면 화면 전체)만 쓴다.
+/// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아 바로 위 절의 조건(앱이 나눌 때만 나누고, 버튼 쪽 절반이 하한보다
+/// 좁으면 화면 전체)을 먼저 따지고, 나눌 때 이 규칙으로 절반을 고른다 (#129).
 ///
 /// ## 대화상자가 열린 동안 배치가 바뀌면
 /// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]가 바뀌면 다음 프레임에 열린 대화상자에도
@@ -65,7 +71,8 @@ import 'handedness_dialog.dart';
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 버튼이 반대쪽 절반으로 옮겨 가도, 대화상자는 연 자리(연 시점의
 /// 버튼 쪽 절반)에 남는다. 고른 뒤에는 버튼과 대화상자가 서로 다른 절반에 있고 옮겨 간 키패드를 대화상자가
 /// 가리지만, 고르는 순간 반대쪽 절반에서 키패드가 빠지고 LCD가 들어오는 것은 대화상자 바깥에서 보인다(미리 보기).
-/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다(좁은 절반 예외는 위 "좁은 하위 화면"). 다른 두 방식을 쓰지 않는
+/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다(좁은 절반 예외는 위 "좁은 하위 화면" — 그 경우 연 자리가 처음부터
+/// 반대쪽 넓은 절반이고, 거기 그대로 남는다). 다른 두 방식을 쓰지 않는
 /// 이유:
 /// - 버튼 쪽으로 따라가기: 키보드 화살표로 선택지를 옮기면 선택도 바뀌므로([HandednessDialog]) 화살표를 누를
 ///   때마다 대화상자가 접힘선 건너로 뛴다. 손가락·스크린리더 터치 탐색 위치에서도 대화상자가 사라진다.
@@ -254,17 +261,21 @@ class _SettingsButtonState extends State<SettingsButton> {
   }
 
   /// 앱이 화면을 나누는데 Flutter는 나누지 않는 접힘선(펼친 폭 0 세로 접힘선)을, 대화상자 배치에서는
-  /// 나누는 접힘선(반 접힘)으로 바꾼다. 바꿀 것이 없으면 `null`.
-  /// 앱이 실제로 세로 접힘선 기준 배치로 그렸고([arrangement]), [anchor] 쪽 절반이 충분히 넓을 때만 바꾼다
-  /// ([SettingsButton] "접힘선이 있을 때 대화상자 위치").
+  /// 나누는 접힘선(반 접힘)으로 바꾼 접힘 정보와, 대화상자를 둘 절반을 고르는 기준점을 돌려준다.
+  /// 바꿀 것이 없으면(화면 전체에 띄우면) `null`.
+  /// 앱이 실제로 세로 접힘선 기준 배치로 그렸고([arrangement]), [anchor] 쪽 절반이 하한 이상일 때만 바꾼다.
+  /// 기준점은 [SettingsButton.dialogAnchorPointOf]로 고른다 — 버튼 쪽 절반이 대화상자 최소 크기([minRegion])에
+  /// 못 미치면 최소 크기를 넘는 반대쪽 절반이다 ([SettingsButton] "접힘선이 있을 때 대화상자 위치", #129).
   ///
   /// [screenPadding]은 화면의 시스템 인셋이다. 대화상자 내용은 `showDialog`의 SafeArea 안이라 [media]의 인셋이
-  /// 이미 0이므로 Navigator의 MediaQuery 값을 따로 받는다.
-  static List<DisplayFeature>? _splitLikeApp(
+  /// 이미 0이므로 Navigator의 MediaQuery 값을 따로 받는다(키보드 인셋 `viewInsets`는 SafeArea가 지우지 않아
+  /// [media]의 값을 쓴다).
+  static ({List<DisplayFeature> features, Offset? anchorPoint})? _splitLikeApp(
     MediaQueryData media,
     ScreenArrangement arrangement,
     Offset? anchor,
     EdgeInsets screenPadding,
+    Size minRegion,
   ) {
     if (arrangement != ScreenArrangement.hingeSplit) return null;
     bool splitByAppOnly(DisplayFeature f) =>
@@ -280,7 +291,7 @@ class _SettingsButtonState extends State<SettingsButton> {
         ? math.min(left, right)
         : (anchor.dx < hinge.bounds.center.dx ? left : right);
     if (half < FormFactor.hingeMinPanelExtent) return null;
-    return [
+    final features = [
       for (final f in media.displayFeatures)
         splitByAppOnly(f)
             ? DisplayFeature(
@@ -290,6 +301,15 @@ class _SettingsButtonState extends State<SettingsButton> {
               )
             : f,
     ];
+    return (
+      features: features,
+      // 나눈 접힘 정보와 화면 인셋으로 Flutter가 나누는 접힘선과 같은 규칙(#125)을 적용한다.
+      anchorPoint: SettingsButton.dialogAnchorPointOf(
+        media.copyWith(displayFeatures: features, padding: screenPadding),
+        anchor,
+        minRegion,
+      ),
+    );
   }
 
   void _open(BuildContext context) {
@@ -321,19 +341,20 @@ class _SettingsButtonState extends State<SettingsButton> {
             showLayoutNote: !layout.handednessApplies,
           );
           final media = MediaQuery.of(dialogContext);
-          final features = _splitLikeApp(
+          final split = _splitLikeApp(
             media,
             layout.arrangement,
             layout.anchor,
             MediaQuery.paddingOf(navigator.context),
+            SettingsButton.dialogMinRegionOf(DialogTheme.of(dialogContext)),
           );
-          if (features == null) return dialog;
+          if (split == null) return dialog;
           // 바깥 `DisplayFeatureSubScreen`이 나누지 않아 화면 전체(경로 좌표 = 이 좌표)를 받았으므로,
-          // 지금 버튼 중심으로 앱 기준 절반을 고른다.
+          // 지금 버튼 중심으로 앱 기준 절반을 고른다(버튼 쪽이 좁으면 넓은 반대쪽 절반).
           return MediaQuery(
-            data: media.copyWith(displayFeatures: features),
+            data: media.copyWith(displayFeatures: split.features),
             child: DisplayFeatureSubScreen(
-              anchorPoint: layout.anchor,
+              anchorPoint: split.anchorPoint,
               child: dialog,
             ),
           );
