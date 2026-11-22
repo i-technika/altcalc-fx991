@@ -11,7 +11,9 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -86,13 +88,16 @@ void main() {
       (Size(1024, 768), EdgeInsets.only(top: 24, bottom: 20)),
       (Size(1194, 834), EdgeInsets.only(top: 24, bottom: 20)),
       (Size(1366, 1024), EdgeInsets.only(top: 24, bottom: 20)),
+      // 가로 화면 좌우 인셋 (카메라 컷아웃·측면 내비게이션 바)
+      (Size(1280, 800), EdgeInsets.only(left: 32, top: 24, right: 48)),
     ];
 
     for (final (size, padding) in windows) {
       for (final handedness in Handedness.values) {
         for (final scale in [1.0, 2.0]) {
           testWidgets(
-            '${size.width}×${size.height}·${handedness.name}·배율 $scale',
+            '${size.width}×${size.height}·${handedness.name}·배율 $scale'
+            '${padding.horizontal > 0 ? '·좌우 인셋' : ''}',
             (tester) async {
               await _pump(
                 tester,
@@ -108,20 +113,22 @@ void main() {
               final keypad = tester.getRect(_keypad);
               final ad = tester.getRect(_ad);
               final settings = tester.getRect(_settings);
-              const edge = CalcTheme.screenPadding;
+              final left = padding.left + CalcTheme.screenPadding;
+              final right =
+                  size.width - padding.right - CalcTheme.screenPadding;
 
               // 좌우: 키패드는 손 쪽 가장자리, LCD는 반대쪽, 사이에 간격. 설정 버튼은 키패드에서 먼 끝.
               if (handedness.keypadOnRight) {
-                expect(keypad.right, moreOrLessEquals(size.width - edge));
-                expect(lcd.left, moreOrLessEquals(edge));
+                expect(keypad.right, moreOrLessEquals(right));
+                expect(lcd.left, moreOrLessEquals(left));
                 expect(
                   keypad.left - lcd.right,
                   moreOrLessEquals(CalcTheme.screenSplitGap),
                 );
                 expect(settings.left, moreOrLessEquals(lcd.left));
               } else {
-                expect(keypad.left, moreOrLessEquals(edge));
-                expect(lcd.right, moreOrLessEquals(size.width - edge));
+                expect(keypad.left, moreOrLessEquals(left));
+                expect(lcd.right, moreOrLessEquals(right));
                 expect(
                   lcd.left - keypad.right,
                   moreOrLessEquals(CalcTheme.screenSplitGap),
@@ -142,7 +149,11 @@ void main() {
                 ad.bottom,
                 lessThanOrEqualTo(size.height - padding.bottom + 0.01),
               );
-              expect(ad.width, moreOrLessEquals(size.width));
+              // 광고는 전체 폭에서 좌우 시스템 인셋만 피한다 (BannerAdSlot 계약)
+              expect(
+                ad.width,
+                moreOrLessEquals(size.width - padding.horizontal),
+              );
 
               // 설정 버튼: LCD 아래, 키패드 높이 안, 겹치지 않음, 48dp, 눌린다
               expect(settings.top, greaterThanOrEqualTo(lcd.bottom));
@@ -211,6 +222,8 @@ void main() {
       Size(800, 1280),
       Size(1366, 1024),
       Size(2000, 1400),
+      // 폴더블 내부 화면(위아래 배치)에도 같은 상한이 걸린다 — Fold5 내부 키패드 폭 약 674 → 480dp (의도)
+      Size(690, 829),
     ]) {
       testWidgets('${size.width}×${size.height}: 키패드는 최대 폭·높이를 넘지 않는다', (
         tester,
@@ -306,6 +319,24 @@ void main() {
         isSemantics(isChecked: false, isInMutuallyExclusiveGroup: true),
       );
       handle.dispose();
+    });
+
+    testWidgets('작은 대화면(960×600)·글자 배율 2.0에서도 대화상자가 넘치지 않고 선택된다', (
+      tester,
+    ) async {
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(960, 600),
+        padding: const EdgeInsets.only(top: 24, bottom: 48),
+        textScale: 2.0,
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(_option(Handedness.left));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(handednessProvider), Handedness.left);
     });
 
     testWidgets('한국어 기기에서는 설정 문구가 한국어다', (tester) async {

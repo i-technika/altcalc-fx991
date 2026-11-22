@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
@@ -5,6 +6,8 @@ import 'package:itechnika_altcalc_fx991/presentation/l10n/settings_strings.dart'
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
 
 /// [values]로 저장소를 채우고 그 저장소를 쓰는 컨테이너를 만든다.
 Future<(ProviderContainer, SharedPreferences)> _containerWith(
@@ -17,6 +20,47 @@ Future<(ProviderContainer, SharedPreferences)> _containerWith(
   );
   addTearDown(container.dispose);
   return (container, prefs);
+}
+
+/// 불러오기·저장이 실패하는 가짜 저장소
+class _FailingStore extends InMemorySharedPreferencesStore {
+  /// 불러오기를 실패시킬지
+  final bool failLoad;
+
+  /// 저장 결과: `false`면 실패 응답, 예외 객체면 그 예외를 던진다.
+  final Object saveResult;
+
+  _FailingStore({this.failLoad = false, this.saveResult = true})
+    : super.empty();
+
+  Future<Map<String, Object>> _load(
+    Future<Map<String, Object>> Function() ok,
+  ) async {
+    if (failLoad) throw PlatformException(code: 'io');
+    return ok();
+  }
+
+  @override
+  Future<Map<String, Object>> getAll() => _load(super.getAll);
+
+  @override
+  Future<Map<String, Object>> getAllWithParameters(
+    GetAllParameters parameters,
+  ) => _load(() => super.getAllWithParameters(parameters));
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    final result = saveResult;
+    if (result is bool) return result;
+    throw result;
+  }
+}
+
+/// [store]를 저장소 플랫폼으로 쓰고, 테스트가 끝나면 빈 메모리 저장소로 되돌린다.
+void _useStore(SharedPreferencesStorePlatform store) {
+  SharedPreferences.resetStatic();
+  SharedPreferencesStorePlatform.instance = store;
+  addTearDown(() => SharedPreferences.setMockInitialValues({}));
 }
 
 void main() {
@@ -94,6 +138,54 @@ void main() {
       expect(notified, 0);
       container.read(handednessProvider.notifier).set(Handedness.left);
       expect(notified, 1);
+    });
+
+    test('같은 키에 문자열이 아닌 값이 있으면 기본값으로 시작한다 (화면이 깨지지 않는다)', () async {
+      for (final value in <Object>[
+        true,
+        1,
+        2.5,
+        <String>['left'],
+      ]) {
+        final (container, _) = await _containerWith({
+          HandednessNotifier.storageKey: value,
+        });
+        expect(
+          container.read(handednessProvider),
+          Handedness.right,
+          reason: '$value',
+        );
+      }
+    });
+
+    for (final (name, result) in <(String, Object)>[
+      ('false 응답', false),
+      ('예외 발생', PlatformException(code: 'io')),
+    ]) {
+      test('저장 실패($name)에도 오류 없이 이번 실행 동안은 바꾼 값을 쓴다', () async {
+        _useStore(_FailingStore(saveResult: result));
+        final prefs = await SharedPreferences.getInstance();
+        final container = ProviderContainer(
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        );
+        addTearDown(container.dispose);
+        container.read(handednessProvider.notifier).set(Handedness.left);
+        await pumpEventQueue();
+        expect(container.read(handednessProvider), Handedness.left);
+      });
+    }
+
+    test('저장소를 열지 못하면 openSettingsStorage는 null이고 설정은 기본값으로 동작한다', () async {
+      _useStore(_FailingStore(failLoad: true));
+      final prefs = await openSettingsStorage();
+      expect(prefs, isNull);
+      final container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+      expect(container.read(handednessProvider), Handedness.right);
+      container.read(handednessProvider.notifier).set(Handedness.left);
+      expect(container.read(handednessProvider), Handedness.left);
     });
 
     test('openSettingsStorage는 저장소를 연다', () async {

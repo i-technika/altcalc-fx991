@@ -10,12 +10,13 @@ import '../../core/theme/calc_theme.dart';
 import '../../domain/models/calc_state.dart';
 import '../../domain/models/handedness.dart';
 import '../l10n/calc_semantic_strings.dart';
-import '../l10n/settings_strings.dart';
 import '../providers/calc_provider.dart';
+import '../providers/device_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/banner_ad_slot.dart';
 import '../widgets/calc_keypad.dart';
 import '../widgets/lcd_display.dart';
+import '../widgets/settings_button.dart';
 
 /// 광고 슬롯을 뺀 본체 영역의 세로 배치 (위 → 아래: 상단 띠 · LCD · 간격 · 키패드).
 ///
@@ -178,7 +179,7 @@ class CalcSplitLayout {
 
 /// 계산기 메인 화면: LCD + 50키 키패드 + 최하단 광고 슬롯.
 ///
-/// 창 크기에 따라 두 배치 중 하나를 쓴다 ([FormFactor.usesSplitLayout]).
+/// 창 크기에 따라 두 배치 중 하나를 쓴다 ([FormFactor.arrangementOf]).
 /// - **위아래 배치** (폰 세로 화면, 태블릿 세로·좁은 창): 아래 그림, [CalcScreenLayout].
 /// - **좌우 분할 배치** (대화면 가로 창): LCD와 키패드를 좌우로 나누고, 주로 쓰는 손([handednessProvider])
 ///   쪽에 키패드를 둔다. [CalcSplitLayout]. 광고 슬롯은 두 배치 모두 본체 아래 전체 폭이다.
@@ -202,15 +203,16 @@ class CalcSplitLayout {
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
-///   폴더블 내부 화면(힌지 보고)은 아직 위아래 배치다. TODO(#25).
-class CalculatorScreen extends StatelessWidget {
+///   폴더블 기기([foldableDeviceProvider])는 아직 위아래 배치다. TODO(#25).
+class CalculatorScreen extends ConsumerWidget {
   const CalculatorScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final split = FormFactor.usesSplitLayout(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final arrangement = FormFactor.arrangementOf(
       MediaQuery.sizeOf(context),
       MediaQuery.displayFeaturesOf(context),
+      foldableDevice: ref.watch(foldableDeviceProvider),
     );
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
@@ -229,7 +231,7 @@ class CalculatorScreen extends StatelessWidget {
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    if (split) {
+                    if (arrangement == ScreenArrangement.split) {
                       return _SplitBody(body: constraints.biggest);
                     }
                     final layout = CalcScreenLayout.of(constraints.biggest);
@@ -421,76 +423,6 @@ class _SplitBody extends ConsumerWidget {
           rect: layout.settingsButton,
           child: const SettingsButton(),
         ),
-      ],
-    );
-  }
-}
-
-/// 설정 진입 버튼 (#24). 누르면 키패드 위치(손잡이) 선택 대화상자를 띄운다.
-///
-/// 손잡이 설정은 좌우 분할 배치에만 영향이 있으므로 좌우 분할 배치에서만 보인다.
-/// 위아래 배치(폰)의 설정 진입은 상단 띠 활용과 함께 정한다 — TODO(#41).
-@visibleForTesting
-class SettingsButton extends StatelessWidget {
-  const SettingsButton({super.key});
-
-  /// 버튼 위젯 키
-  static const Key buttonKey = ValueKey('settings-button');
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = SettingsStrings.of(context);
-    return IconButton(
-      key: buttonKey,
-      tooltip: strings.settingsButton,
-      color: CalcTheme.settingsIcon,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      icon: const Icon(Icons.settings),
-      onPressed: () => showDialog<void>(
-        context: context,
-        builder: (_) => const HandednessDialog(),
-      ),
-    );
-  }
-}
-
-/// 키패드 위치(손잡이) 선택 대화상자 (#24). 고르면 설정을 저장하고 닫는다.
-@visibleForTesting
-class HandednessDialog extends ConsumerWidget {
-  const HandednessDialog({super.key});
-
-  /// [value] 선택지의 위젯 키
-  static Key optionKeyOf(Handedness value) =>
-      ValueKey('handedness-option-${value.storageValue}');
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final strings = SettingsStrings.of(context);
-    final current = ref.watch(handednessProvider);
-    return SimpleDialog(
-      title: Text(strings.handednessTitle),
-      children: [
-        for (final value in Handedness.values)
-          Semantics(
-            inMutuallyExclusiveGroup: true,
-            checked: value == current,
-            child: ListTile(
-              key: optionKeyOf(value),
-              selected: value == current,
-              leading: Icon(
-                value == current
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              title: Text(strings.handedness(value)),
-              subtitle: Text(strings.handednessDetail(value)),
-              onTap: () {
-                ref.read(handednessProvider.notifier).set(value);
-                Navigator.of(context).pop();
-              },
-            ),
-          ),
       ],
     );
   }

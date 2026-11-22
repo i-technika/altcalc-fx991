@@ -506,7 +506,7 @@ abstract final class CalcTheme {
   static const double screenLcdMinAspectRatio = 1.75;
 
   // ── 좌우 분할 배치 (#24) ──
-  // 대화면 가로 창(`FormFactor.usesSplitLayout`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
+  // 대화면 가로 창(`FormFactor.arrangementOf`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
   // - 키패드: 주로 쓰는 손 쪽 가장자리, 광고 슬롯 바로 위에 붙인다. 폭은 본체 폭의
   //   [screenSplitKeypadMaxWidthRatio] 이하(그리고 [keypadMaxWidth] 이하), 높이는 본체 높이까지.
   // - LCD: 나머지 폭을 채우고, 높이는 그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다.

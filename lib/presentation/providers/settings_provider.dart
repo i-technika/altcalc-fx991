@@ -24,8 +24,10 @@ class HandednessNotifier extends Notifier<Handedness> {
 
   @override
   Handedness build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    return Handedness.fromStorage(prefs?.getString(storageKey));
+    final stored = ref.watch(sharedPreferencesProvider)?.get(storageKey);
+    // 같은 키에 문자열이 아닌 값(손상·다른 버전의 저장 형식)이 있으면 기본값으로 읽는다.
+    // `getString`은 타입이 다르면 캐스트 오류를 던져 화면 전체가 깨진다.
+    return Handedness.fromStorage(stored is String ? stored : null);
   }
 
   /// 설정을 [value]로 바꾸고 저장한다. 화면에는 바로 반영하고, 저장은 기다리지 않는다.

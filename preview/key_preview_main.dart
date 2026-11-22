@@ -86,7 +86,8 @@ const List<PreviewDevice> previewDevices = [
     Size(800, 1280),
     padding: EdgeInsets.only(top: 24, bottom: 48),
   ),
-  // 태블릿 가로: LCD/키패드 좌우 분할 배치 (#24). 손잡이는 화면의 설정 버튼으로 바꾼다.
+  // 태블릿 가로: LCD/키패드 좌우 분할 배치 (#24). 손잡이는 화면의 설정 버튼으로 바꾼다 —
+  // 대화상자는 미리보기 앱의 Navigator에 뜨므로 기기 틀이 아니라 미리보기 창 전체 위에 보인다.
   PreviewDevice(
     '태블릿 가로',
     Size(1280, 800),

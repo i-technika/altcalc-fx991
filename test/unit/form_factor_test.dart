@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
@@ -25,7 +26,22 @@ const _cutout = DisplayFeature(
   state: DisplayFeatureState.unknown,
 );
 
+/// 좌우 분할 배치인지
+bool _split(
+  Size window,
+  List<DisplayFeature> features, {
+  bool foldableDevice = false,
+}) =>
+    FormFactor.arrangementOf(
+      window,
+      features,
+      foldableDevice: foldableDevice,
+    ) ==
+    ScreenArrangement.split;
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('기기 종류 판정', () {
     test('짧은 변 600dp 미만은 폰이다 (가로·세로 무관)', () {
       for (final size in const [
@@ -73,6 +89,60 @@ void main() {
       );
       expect(FormFactor.hasFoldOrHinge(const [_cutout, _fold]), isTrue);
     });
+
+    test('힌지 센서가 있으면 접힘 정보가 오기 전에도 폴더블이다 (커버 화면 포함)', () {
+      for (final size in const [Size(841, 701), Size(344, 882)]) {
+        expect(
+          FormFactor.deviceKindOf(size, const [], hasHingeSensor: true),
+          DeviceKind.foldable,
+        );
+      }
+    });
+
+    group('힌지 센서 조회', () {
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(FormFactor.deviceChannel, null);
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      void mockChannel(Future<Object?> Function(MethodCall) handler) =>
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(FormFactor.deviceChannel, handler);
+
+      test('Android: 채널 응답을 그대로 쓴다', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final methods = <String>[];
+        mockChannel((call) async {
+          methods.add(call.method);
+          return true;
+        });
+        expect(await FormFactor.queryHingeSensor(), isTrue);
+        expect(methods, ['hasHingeSensor']);
+      });
+
+      test('Android: 채널 오류·미등록·null 응답이면 false', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        mockChannel((_) async => throw PlatformException(code: 'x'));
+        expect(await FormFactor.queryHingeSensor(), isFalse);
+        mockChannel((_) async => null);
+        expect(await FormFactor.queryHingeSensor(), isFalse);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(FormFactor.deviceChannel, null);
+        expect(await FormFactor.queryHingeSensor(), isFalse); // MissingPlugin
+      });
+
+      test('iOS: 채널을 부르지 않고 false', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        var called = false;
+        mockChannel((_) async {
+          called = true;
+          return true;
+        });
+        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(called, isFalse);
+      });
+    });
   });
 
   group('방향 요청', () {
@@ -105,11 +175,7 @@ void main() {
         Size(1366, 1024),
         Size(960, 600),
       ]) {
-        expect(
-          FormFactor.usesSplitLayout(size, const []),
-          isTrue,
-          reason: '$size',
-        );
+        expect(_split(size, const []), isTrue, reason: '$size');
       }
     });
 
@@ -122,27 +188,25 @@ void main() {
         Size(844, 390), // 가로 폰 — 짧은 창 대응은 #38
         Size(1280, 599), // 낮고 넓은 팝업 창
       ]) {
-        expect(
-          FormFactor.usesSplitLayout(size, const []),
-          isFalse,
-          reason: '$size',
-        );
+        expect(_split(size, const []), isFalse, reason: '$size');
       }
     });
 
+    test('폴더블 기기는 접힘 정보가 없어도 위아래 배치다 (깜빡임 방지, 분할은 #25)', () {
+      expect(
+        _split(const Size(829, 690), const [], foldableDevice: true),
+        isFalse,
+      );
+      expect(
+        _split(const Size(1280, 800), const [], foldableDevice: true),
+        isFalse,
+      );
+    });
+
     test('접히는 부분이 창을 지나면 위아래 배치다 (힌지 기준 분할은 #25)', () {
-      expect(
-        FormFactor.usesSplitLayout(const Size(1280, 800), [_fold]),
-        isFalse,
-      );
-      expect(
-        FormFactor.usesSplitLayout(const Size(1280, 800), [_hinge]),
-        isFalse,
-      );
-      expect(
-        FormFactor.usesSplitLayout(const Size(1280, 800), const [_cutout]),
-        isTrue,
-      );
+      expect(_split(const Size(1280, 800), [_fold]), isFalse);
+      expect(_split(const Size(1280, 800), [_hinge]), isFalse);
+      expect(_split(const Size(1280, 800), const [_cutout]), isTrue);
     });
   });
 }
