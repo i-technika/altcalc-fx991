@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SemanticsNode;
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart';
@@ -2177,32 +2178,13 @@ void main() {
     /// 로그를 채울 입력 수 — 900dp 패널에서도 스크롤할 거리가 생기는 줄 수 ([settingsPinned] 판정용)
     const fullLog = 50;
 
-    /// 미리보기를 띄운다. [desktop]이면 패널의 버튼 밀도를 데스크톱 기본값(터치 영역 줄임 + compact)으로 바꾼다.
-    ///
-    /// 플랫폼 변형(`TargetPlatformVariant`)으로 바꾸지 않는 이유: 앱 테마(`CalcTheme.materialTheme`)가 처음 읽힐 때의
-    /// 플랫폼으로 한 번만 만들어져, 같은 실행 안의 다음 변형은 앞 변형의 밀도를 그대로 쓴다. 기기 화면은 자기
-    /// 테마(`_ScreenTheme`)를 따로 받으므로 이 덮어쓰기는 패널에만 닿는다.
-    Future<void> pumpPanel(WidgetTester tester, {required bool desktop}) async {
-      tester.view.physicalSize = _window * tester.view.devicePixelRatio;
-      addTearDown(tester.view.resetPhysicalSize);
-      await tester.pumpWidget(
-        ProviderScope(
-          child: AltCalcApp(
-            frameBuilder: (context, screen) {
-              final preview = KeyPreviewScreen(screen: screen);
-              if (!desktop) return preview;
-              return Theme(
-                data: Theme.of(context).copyWith(
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-                child: preview,
-              );
-            },
-          ),
-        ),
-      );
-      // 전제: 고른 밀도가 패널에 닿았다 — 둘 다 닿아야 하므로 값으로 확인한다.
+    /// 미리보기를 [panelPlatforms] 중 지금 변형의 플랫폼으로 띄운다 — 앱 테마가 그 플랫폼의 버튼 밀도를 고른다
+    /// (Windows: 데스크톱 기본값 터치 영역 줄임 + compact). 실제 Windows·웹 실행처럼 앱 전체(데스크톱 스크롤바 등)가
+    /// 그 플랫폼으로 돈다. 테마가 플랫폼별로 만들어지므로(#130) 변형 순서와 관계없다.
+    Future<void> pumpPanel(WidgetTester tester) async {
+      final desktop = defaultTargetPlatform == TargetPlatform.windows;
+      await _pumpPreview(tester);
+      // 전제: 그 플랫폼의 밀도가 패널에 닿았다 — 둘 다 닿아야 하므로 값으로 확인한다.
       final theme = Theme.of(tester.element(settingsArea));
       expect(
         theme.materialTapTargetSize,
@@ -2217,6 +2199,12 @@ void main() {
       // 초기화 버튼 높이: 터치 영역 48 / 데스크톱(줄인 터치 영역 + compact) 32
       expect(tester.getSize(reset).height, desktop ? 32 : 48);
     }
+
+    /// 패널 밀도를 볼 플랫폼 — Android(터치 기기 밀도)와 Windows(데스크톱 밀도, 미리보기를 주로 띄우는 곳)
+    final panelPlatforms = TargetPlatformVariant(const {
+      TargetPlatform.android,
+      TargetPlatform.windows,
+    });
 
     ScrollPosition panelScroll(WidgetTester tester) => tester
         .state<ScrollableState>(
@@ -2281,61 +2269,58 @@ void main() {
 
     // 전환 높이는 잰 설정 영역 높이로 정하므로, 설정 항목(폴더블 선택 줄)·버튼 밀도(Android 터치 영역 40,
     // 데스크톱 32)·호스트 글자 배율이 달라도 가장 낮은 고정 높이에서 로그 자리가 정확히 [minLogLines]줄이다.
-    for (final desktop in const [false, true]) {
-      for (final (name, hostTextScale) in const [
-        ('일반 폰', 1.0),
-        ('폴더블 내부', 1.0),
-        ('일반 폰', 1.3),
-      ]) {
-        final density = desktop ? '데스크톱' : 'Android';
-        final scale = (hostTextScale * 100).round();
-        testWidgets('$density 밀도·$name·호스트 글자 $scale%: 설정을 고정하는 가장 낮은 패널에서 '
-            '로그가 정확히 $minLogLines줄 보이고, 1dp 낮으면 함께 스크롤한다', (tester) async {
-          tester.platformDispatcher.textScaleFactorTestValue = hostTextScale;
-          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-          await pumpPanel(tester, desktop: desktop);
-          final index = previewDevices.indexWhere((d) => d.name == name);
-          // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고르고 입력한 뒤 창을 줄인다.
-          if (index != 0) await _selectDevice(tester, index);
-          await fillLog(tester, fullLog);
+    for (final (name, hostTextScale) in const [
+      ('일반 폰', 1.0),
+      ('폴더블 내부', 1.0),
+      ('일반 폰', 1.3),
+    ]) {
+      final scale = (hostTextScale * 100).round();
+      testWidgets('$name·호스트 글자 $scale%: 설정을 고정하는 가장 낮은 패널에서 '
+          '로그가 정확히 $minLogLines줄 보이고, 1dp 낮으면 함께 스크롤한다', (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = hostTextScale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await pumpPanel(tester);
+        final index = previewDevices.indexWhere((d) => d.name == name);
+        // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고르고 입력한 뒤 창을 줄인다.
+        if (index != 0) await _selectDevice(tester, index);
+        await fillLog(tester, fullLog);
 
-          final height = await lowestPinnedHeight(tester);
-          final lines = logLineRects(tester);
-          final lineHeight = lines.first.height;
-          // 줄 높이는 strut으로 고정이다(대체 글꼴 글자가 든 줄도 같다).
-          for (final l in lines) {
-            expect(l.height, moreOrLessEquals(lineHeight));
-          }
-          final settingsBottom = tester.getRect(settingsArea).bottom;
-          final logBottom = tester.getRect(panel).bottom - padding;
-          // 설정 바로 아래에서 로그가 시작하고, 최근 [minLogLines]줄이 아래 여백 위에 다 들어간다.
-          expect(lines.first.top, moreOrLessEquals(settingsBottom));
-          expect(
-            lines[minLogLines - 1].bottom,
-            lessThanOrEqualTo(logBottom + 0.01),
-          );
-          // 가장 낮은 높이이므로 남는 자리는 1dp 미만이다(정수 dp 탐색) — 그다음 줄은 다 들어가지 않는다.
-          expect(
-            logBottom - lines[minLogLines - 1].bottom,
-            lessThan(1),
-            reason: '줄 높이 $lineHeight',
-          );
-          expect(lines[minLogLines].bottom, greaterThan(logBottom));
+        final height = await lowestPinnedHeight(tester);
+        final lines = logLineRects(tester);
+        final lineHeight = lines.first.height;
+        // 줄 높이는 strut으로 고정이다(대체 글꼴 글자가 든 줄도 같다).
+        for (final l in lines) {
+          expect(l.height, moreOrLessEquals(lineHeight));
+        }
+        final settingsBottom = tester.getRect(settingsArea).bottom;
+        final logBottom = tester.getRect(panel).bottom - padding;
+        // 설정 바로 아래에서 로그가 시작하고, 최근 [minLogLines]줄이 아래 여백 위에 다 들어간다.
+        expect(lines.first.top, moreOrLessEquals(settingsBottom));
+        expect(
+          lines[minLogLines - 1].bottom,
+          lessThanOrEqualTo(logBottom + 0.01),
+        );
+        // 가장 낮은 높이이므로 남는 자리는 1dp 미만이다(정수 dp 탐색) — 그다음 줄은 다 들어가지 않는다.
+        expect(
+          logBottom - lines[minLogLines - 1].bottom,
+          lessThan(1),
+          reason: '줄 높이 $lineHeight',
+        );
+        expect(lines[minLogLines].bottom, greaterThan(logBottom));
 
-          // 로그를 비우면 안내 문구가 설정 아래·패널 안에 다 보인다(설정은 계속 고정).
-          await tester.tap(reset);
-          await tester.pumpAndSettle();
-          final empty = tester.getRect(
-            find.byKey(const ValueKey('preview-log-empty')),
-          );
-          expect(empty.top, moreOrLessEquals(settingsBottom));
-          expect(empty.bottom, lessThanOrEqualTo(logBottom + 0.01));
+        // 로그를 비우면 안내 문구가 설정 아래·패널 안에 다 보인다(설정은 계속 고정).
+        await tester.tap(reset);
+        await tester.pumpAndSettle();
+        final empty = tester.getRect(
+          find.byKey(const ValueKey('preview-log-empty')),
+        );
+        expect(empty.top, moreOrLessEquals(settingsBottom));
+        expect(empty.bottom, lessThanOrEqualTo(logBottom + 0.01));
 
-          await fillLog(tester, fullLog);
-          await _setPanelHeight(tester, height - 1);
-          expect(await settingsPinned(tester), isFalse);
-        });
-      }
+        await fillLog(tester, fullLog);
+        await _setPanelHeight(tester, height - 1);
+        expect(await settingsPinned(tester), isFalse);
+      }, variant: panelPlatforms);
     }
 
     testWidgets('호스트 글자 배율이 크면 전환 높이도 올라간다', (tester) async {
