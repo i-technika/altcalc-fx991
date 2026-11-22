@@ -233,7 +233,8 @@ class LcdDisplay extends StatelessWidget {
 
   /// 꺼진 상태 표시기를 흐리게 보여줄지 여부 (실물 LCD의 꺼진 세그먼트 비침 효과).
   /// 기본값 `true` — 색은 [CalcTheme.lcdStatusInactive](활성 색의 약 4%, 사용자 결정)라
-  /// 정면에서는 거의 보이지 않는다(#44, 실물 확인). 고대비 모드(#54)에서 불투명도를 올릴 자리로 둔다.
+  /// 정면에서는 거의 보이지 않는다(#44, 실물 확인). 기기의 고대비 설정이 켜지면
+  /// [CalcTheme.lcdStatusInactiveHighContrast](약 15%)로 올린다(#54, [CalcPalette]).
   final bool showInactiveIndicators;
 
   /// 도트 매트릭스 격자 표시 여부
@@ -486,6 +487,8 @@ class LcdStatusBar extends StatelessWidget {
       slotHeight,
     );
     final slots = LcdIndicatorSlot.values;
+    // 꺼진 표시기 색은 기기의 고대비 설정을 따른다 (#54).
+    final inactiveColor = CalcPalette.of(context).lcdStatusInactive;
     // 글자마다 글리프 폭 + 자간 (자간은 글자 배율과 무관한 dp). 음수 자간이 글리프 폭보다 크면 0으로 둔다 —
     // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 슬롯이 정한다(#57).
     final charWidth = math.max(
@@ -512,6 +515,7 @@ class LcdStatusBar extends StatelessWidget {
             style: resolvedStyle,
             textScaler: textScaler,
             showInactive: showInactive,
+            inactiveColor: inactiveColor,
           ),
         ],
       ],
@@ -555,6 +559,9 @@ class _IndicatorSlot extends StatelessWidget {
   final TextScaler textScaler;
   final bool showInactive;
 
+  /// 꺼진 표시기 색 ([CalcPalette.lcdStatusInactive])
+  final Color inactiveColor;
+
   /// 아이콘 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
   final LcdStatusIconMetrics iconMetrics;
 
@@ -567,15 +574,14 @@ class _IndicatorSlot extends StatelessWidget {
     required this.style,
     required this.textScaler,
     required this.showInactive,
+    required this.inactiveColor,
     required this.iconMetrics,
   });
 
   @override
   Widget build(BuildContext context) {
     final isOn = label != null;
-    final color = isOn
-        ? CalcTheme.lcdStatusActive
-        : CalcTheme.lcdStatusInactive;
+    final color = isOn ? CalcTheme.lcdStatusActive : inactiveColor;
     final icon = slot.icon;
     if (icon != null) {
       // 글꼴 글자로는 모양이 맞지 않는 표시기는 직접 그린다 (#57).

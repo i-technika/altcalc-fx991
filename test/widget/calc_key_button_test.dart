@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,10 +16,14 @@ Widget _host(
   Widget child, {
   Size size = const Size(64, 72),
   double textScale = 1.0,
+  bool highContrast = false,
 }) {
   return MaterialApp(
     home: MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+      data: MediaQueryData(
+        textScaler: TextScaler.linear(textScale),
+        highContrast: highContrast,
+      ),
       child: Scaffold(
         backgroundColor: CalcTheme.bodyBackground,
         body: Center(
@@ -206,6 +212,150 @@ void main() {
       expect(drawn.color, def.category.background);
       expect(drawn.border, _normalBorder);
       await gesture.up();
+    });
+  });
+
+  group('고대비 모드 (#54)', () {
+    const palette = CalcPalette.highContrast;
+
+    testWidgets('모든 키: 평소 키캡·라벨·테두리·각인이 고대비 팔레트 색이다', (tester) async {
+      for (final def in allKeys) {
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: def, onPressed: (_) {}),
+            highContrast: true,
+          ),
+        );
+        final decoration = _decoration(tester, def.id);
+        expect(
+          decoration.color,
+          palette.keyBackground(def.category),
+          reason: '$def',
+        );
+        expect(
+          decoration.border,
+          Border.all(color: palette.keyBorder, width: CalcTheme.keyBorderWidth),
+          reason: '$def',
+        );
+        expect(
+          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+          palette.keyForeground(def.category),
+          reason: '$def',
+        );
+        if (def.shiftLabel case final shift?) {
+          expect(
+            tester.widget<Text>(find.text(shift)).style!.color,
+            palette.shiftLabel,
+            reason: '$def',
+          );
+        }
+        if (def.alphaLabel case final alpha?) {
+          expect(
+            tester.widget<Text>(find.text(alpha)).style!.color,
+            palette.alphaLabel,
+            reason: '$def',
+          );
+        }
+      }
+    });
+
+    testWidgets(
+      '모든 키: 누르면 즉시 눌림 색(흰 라벨 키는 반전)이 되고, 떼면 배경·라벨이 함께 애니메이션 뒤 돌아온다',
+      (tester) async {
+        for (final def in allKeys) {
+          final category = def.category;
+          await tester.pumpWidget(
+            _host(
+              CalcKeyButton(keyDef: def, onPressed: (_) {}),
+              highContrast: true,
+            ),
+          );
+          final gesture = await tester.startGesture(
+            tester.getCenter(_keycap(def.id)),
+          );
+          await tester.pump();
+          var drawn = _renderedDecoration(tester, def.id);
+          expect(
+            drawn.color,
+            palette.keyPressedBackground(category),
+            reason: '$def',
+          );
+          expect(
+            drawn.border,
+            Border.all(
+              color: palette.keyPressedBorder,
+              width: CalcTheme.keyBorderWidth,
+            ),
+            reason: '$def',
+          );
+          expect(
+            tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+            palette.keyPressedForeground(category),
+            reason: '$def',
+          );
+
+          Color? label() =>
+              tester.widget<Text>(find.text(def.mainLabel)).style!.color;
+
+          await gesture.up();
+          await tester.pump();
+          await tester.pump(CalcTheme.keyPressAnimationDuration ~/ 2);
+          // 중간 시점: 배경은 눌림 색도 평소 색도 아니다. 반전 키는 라벨도 함께 옮겨 가는 중이라,
+          // 흰 배경(눌림)에 흰 라벨(평소)인 프레임이 없다.
+          drawn = _renderedDecoration(tester, def.id);
+          expect(
+            drawn.color,
+            isNot(palette.keyPressedBackground(category)),
+            reason: '$def',
+          );
+          expect(drawn.color, isNot(palette.keyBackground(category)));
+          if (palette.invertsOnPress(category)) {
+            expect(label(), isNot(palette.keyForeground(category)));
+            expect(label(), isNot(palette.keyPressedForeground(category)));
+          } else {
+            expect(label(), palette.keyForeground(category), reason: '$def');
+          }
+
+          await tester.pump(CalcTheme.keyPressAnimationDuration);
+          drawn = _renderedDecoration(tester, def.id);
+          expect(drawn.color, palette.keyBackground(category), reason: '$def');
+          expect(label(), palette.keyForeground(category), reason: '$def');
+        }
+      },
+    );
+
+    testWidgets('비활성 키 라벨은 고대비 모드에서도 활성 라벨보다 키캡 대비가 낮다 (흐리게 보인다)', (
+      tester,
+    ) async {
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance();
+        final lb = b.computeLuminance();
+        return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+      }
+
+      for (final def in allKeys) {
+        final background = palette.keyBackground(def.category);
+        Future<double> labelContrast({required bool enabled}) async {
+          await tester.pumpWidget(
+            _host(
+              CalcKeyButton(keyDef: def, onPressed: enabled ? (_) {} : null),
+              highContrast: true,
+            ),
+          );
+          // 같은 키가 활성 ↔ 비활성으로 바뀌면 라벨 색도 뗄 때와 같은 시간 동안 옮겨 간다.
+          await tester.pump(CalcTheme.keyPressAnimationDuration);
+          final color = tester
+              .widget<Text>(find.text(def.mainLabel))
+              .style!
+              .color!;
+          return contrast(Color.alphaBlend(color, background), background);
+        }
+
+        final enabled = await labelContrast(enabled: true);
+        final disabled = await labelContrast(enabled: false);
+        expect(disabled, lessThan(enabled), reason: '$def');
+        expect(disabled, greaterThan(1.0), reason: '$def');
+      }
     });
   });
 
