@@ -43,6 +43,16 @@ jobs:
       - name: Build Linux (Release)
         run: flutter build linux --release
 
+      # pub get·test·build 뒤 작업 트리가 깨끗한지 확인한다 (#67, Sub-issue CI와 같은 검사)
+      - name: Verify clean working tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff --stat
+            echo "::error::빌드 뒤 작업 트리가 깨끗하지 않다 (#67). 생성 파일 커밋 누락 또는 줄바꿈 속성을 확인할 것."
+            exit 1
+          fi
+
   build-android:
     name: Android Build (APK)
     runs-on: ubuntu-latest
@@ -112,6 +122,20 @@ jobs:
 
       - name: Build Windows
         run: flutter build windows --release
+
+      # Windows 러너는 Git for Windows 기본값(core.autocrlf=true)으로 체크아웃하므로,
+      # 생성 플러그인 파일 줄바꿈 고정(.gitattributes, #67)이 깨지면 여기서 수정됨으로 드러난다.
+      # (macOS·iOS 잡은 빌드가 Podfile 같은 생성물을 새로 만들 수 있어 이 검사를 두지 않는다.)
+      - name: Verify clean working tree
+        shell: bash
+        run: |
+          git config --get core.autocrlf || true
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff --stat
+            echo "::error::빌드 뒤 작업 트리가 깨끗하지 않다 (#67). 생성 파일 커밋 누락 또는 줄바꿈 속성을 확인할 것."
+            exit 1
+          fi
 
   build-macos-and-ios:
     name: macOS & iOS Build
