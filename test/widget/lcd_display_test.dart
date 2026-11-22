@@ -74,11 +74,15 @@ void main() {
       for (final slot in LcdIndicatorSlot.values) {
         expect(_statusText(slot.template), findsOneWidget, reason: slot.name);
       }
-      expect(_colorOf(tester, _statusText('D')), CalcTheme.lcdStatusActive);
-      expect(_colorOf(tester, _statusText('Math')), CalcTheme.lcdStatusActive);
-      expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusInactive);
-      expect(_colorOf(tester, _statusText('STO')), CalcTheme.lcdStatusInactive);
-      expect(_colorOf(tester, _statusText('▲')), CalcTheme.lcdStatusInactive);
+      for (final slot in LcdIndicatorSlot.values) {
+        expect(
+          _colorOf(tester, _statusText(slot.template)),
+          LcdStatus.initial.indicatorFor(slot) == null
+              ? CalcTheme.lcdStatusInactive
+              : CalcTheme.lcdStatusActive,
+          reason: slot.name,
+        );
+      }
     });
 
     testWidgets('상태에 따라 표시 문자와 색이 바뀐다', (tester) async {
@@ -97,8 +101,9 @@ void main() {
       expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusActive);
       expect(_statusText('R'), findsOneWidget);
       expect(_statusText('D'), findsNothing);
-      expect(_statusText('SCI'), findsOneWidget);
-      expect(_statusText('FIX'), findsNothing);
+      expect(_colorOf(tester, _statusText('SCI')), CalcTheme.lcdStatusActive);
+      // FIX는 SCI와 다른 자리라 꺼진 색으로 남는다 (#44).
+      expect(_colorOf(tester, _statusText('FIX')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('i')), CalcTheme.lcdStatusActive);
       expect(_colorOf(tester, _statusText('▼')), CalcTheme.lcdStatusActive);
     });
@@ -108,9 +113,9 @@ void main() {
     ) async {
       await _pump(tester, const LcdDisplay(showInactiveIndicators: false));
       expect(_statusText('D'), findsOneWidget);
-      expect(_statusText('Math'), findsOneWidget);
+      expect(_statusText('√◻'), findsOneWidget);
       expect(_statusText('S'), findsNothing);
-      expect(_statusText('Disp'), findsNothing);
+      expect(_statusText('‖'), findsNothing);
     });
 
     testWidgets('표시기가 켜지고 꺼져도 슬롯 위치가 바뀌지 않는다', (tester) async {
@@ -160,6 +165,24 @@ void main() {
       });
     }
 
+    testWidgets('글리프 폭보다 큰 음수 자간을 넘겨도 예외 없이 그린다 (#44 리뷰 R2)', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Directionality(
+            textDirection: TextDirection.ltr,
+            child: SizedBox(
+              width: 300,
+              child: LcdStatusBar(
+                status: LcdStatus.initial,
+                style: CalcTheme.lcdStatusStyle.copyWith(letterSpacing: -7),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('주변이 RTL이어도 LCD는 왼쪽 → 오른쪽으로 배치된다', (tester) async {
       await _pump(
         tester,
@@ -194,7 +217,7 @@ void main() {
 
     testWidgets('statusFontSize를 주입하면 상태 표시 글자 크기에 반영된다', (tester) async {
       await _pump(tester, const LcdDisplay(statusFontSize: 14));
-      expect(tester.widget<Text>(_statusText('Math')).style?.fontSize, 14);
+      expect(tester.widget<Text>(_statusText('√◻')).style?.fontSize, 14);
     });
 
     testWidgets('LcdStatusBar에 글자 크기 없는 스타일을 넘겨도 기본 크기로 그린다', (tester) async {
@@ -208,7 +231,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        tester.widget<Text>(_statusText('Math')).style?.fontSize,
+        tester.widget<Text>(_statusText('√◻')).style?.fontSize,
         CalcTheme.lcdStatusStyle.fontSize,
       );
     });
@@ -565,7 +588,7 @@ void main() {
         textScale: 3.0,
         height: 400,
       );
-      final status = tester.widget<Text>(_statusText('Math'));
+      final status = tester.widget<Text>(_statusText('√◻'));
       expect(
         status.textScaler!.scale(10),
         closeTo(10 * CalcTheme.lcdMaxTextScaleFactor, 1e-9),
@@ -872,7 +895,7 @@ void main() {
           moreOrLessEquals(f.input, epsilon: 1e-3),
         );
         expect(
-          tester.widget<Text>(_statusText('Math')).style?.fontSize,
+          tester.widget<Text>(_statusText('√◻')).style?.fontSize,
           moreOrLessEquals(f.status, epsilon: 1e-3),
         );
         for (final (line, tag) in [(_inputLine, 'i'), (_resultLine, 'r')]) {

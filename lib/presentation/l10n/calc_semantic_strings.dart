@@ -90,7 +90,7 @@ abstract class CalcSemanticStrings {
   /// [slot] 표시기가 [status]에서 켜져 있으면 그 의미, 꺼져 있으면 `null`.
   String? indicator(LcdIndicatorSlot slot, LcdStatus status);
 
-  /// 상태 표시줄 전체 시맨틱 라벨 (켜진 표시기의 의미를 슬롯 순서로)
+  /// 상태 표시줄 전체 시맨틱 라벨 (켜진 표시기의 의미를 화면 순서 = 슬롯 순서로)
   String statusBar(LcdStatus status) =>
       [for (final slot in LcdIndicatorSlot.values) ?indicator(slot, status)]
           .join(', ');
@@ -157,11 +157,8 @@ class KoSemanticStrings extends CalcSemanticStrings {
         AngleUnit.radian => '각도 단위 라디안',
         AngleUnit.gradian => '각도 단위 그라디안',
       },
-      LcdIndicatorSlot.numberFormat => switch (status.numberFormat) {
-        NumberDisplayFormat.fix => '소수 자릿수 고정',
-        NumberDisplayFormat.sci => '유효숫자 고정',
-        NumberDisplayFormat.norm => null,
-      },
+      LcdIndicatorSlot.fixFormat => '소수 자릿수 고정',
+      LcdIndicatorSlot.sciFormat => '유효숫자 고정',
       // Engineer Symbol: 결과를 k·M·m·μ 같은 SI 접두어로 표시 (ENG 키의 "공학 표기"와 구분)
       LcdIndicatorSlot.engineering => 'SI 접두어 표시',
       LcdIndicatorSlot.math => '수학 입출력',
@@ -170,9 +167,9 @@ class KoSemanticStrings extends CalcSemanticStrings {
         ComplexResultIndicator.polar => '복소수 극형식',
         ComplexResultIndicator.none => null,
       },
-      LcdIndicatorSlot.disp => '중간 결과 표시 중',
-      LcdIndicatorSlot.historyUp => '위쪽에 내용 더 있음',
       LcdIndicatorSlot.historyDown => '아래쪽에 내용 더 있음',
+      LcdIndicatorSlot.historyUp => '위쪽에 내용 더 있음',
+      LcdIndicatorSlot.disp => '중간 결과 표시 중',
     };
   }
 
@@ -300,11 +297,8 @@ class EnSemanticStrings extends CalcSemanticStrings {
         AngleUnit.radian => 'Radians',
         AngleUnit.gradian => 'Gradians',
       },
-      LcdIndicatorSlot.numberFormat => switch (status.numberFormat) {
-        NumberDisplayFormat.fix => 'Fixed decimals',
-        NumberDisplayFormat.sci => 'Significant digits',
-        NumberDisplayFormat.norm => null,
-      },
+      LcdIndicatorSlot.fixFormat => 'Fixed decimals',
+      LcdIndicatorSlot.sciFormat => 'Significant digits',
       LcdIndicatorSlot.engineering => 'SI prefixes',
       LcdIndicatorSlot.math => 'Math input output',
       LcdIndicatorSlot.complex => switch (status.complex) {
@@ -312,9 +306,9 @@ class EnSemanticStrings extends CalcSemanticStrings {
         ComplexResultIndicator.polar => 'Complex polar form',
         ComplexResultIndicator.none => null,
       },
-      LcdIndicatorSlot.disp => 'Showing intermediate result',
-      LcdIndicatorSlot.historyUp => 'More above',
       LcdIndicatorSlot.historyDown => 'More below',
+      LcdIndicatorSlot.historyUp => 'More above',
+      LcdIndicatorSlot.disp => 'Showing intermediate result',
     };
   }
 

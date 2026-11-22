@@ -44,7 +44,9 @@ flutter run -d chrome -t preview/key_preview_main.dart
   `test/widget/key_preview_test.dart`가 `lib/`의 preview import와 pubspec 에셋의 preview 경로를 금지하고,
   Sub-issue CI와 Milestone Full CI가 미리보기를 웹으로 빌드해 깨지지 않았는지 확인한다.
 - 미리보기로 확인할 수 없는 것 — 실기기·에뮬레이터에서 확인한다:
-  터치감·햅틱, 화면 방향 고정, 시스템 제스처 영역(미리보기에서는 0으로 둔다), 기기 픽셀 밀도(DPR),
+  터치감·햅틱, 화면 방향 고정, 시스템 제스처의 실제 가로채기(미리보기는 Android 프리셋에 시스템 제스처 영역을
+  근사해 넣는다 — 위·아래는 시스템 바와 같게, 제스처 내비게이션은 좌우에 약 24dp. 가장자리 키가 손을 뗄 때
+  입력되는 것이 보이는 프리셋은 폴더블 커버다), 기기 픽셀 밀도(DPR),
   폴더블 힌지, Android 스크린리더 알림 경로(웹은 플랫폼이 다르다), Android 14 이상의 비선형 글자 배율.
 
 ## 검증

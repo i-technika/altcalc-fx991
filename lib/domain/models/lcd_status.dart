@@ -17,7 +17,8 @@ enum AngleUnit {
   const AngleUnit(this.indicator);
 }
 
-/// 수치 표시 형식 (SETUP → Number Format). Norm이면 표시기가 꺼진다.
+/// 수치 표시 형식의 **표시기 투영** (SETUP → Number Format). Norm이면 표시기가 꺼진다.
+/// 자릿수·Norm1/2를 담는 설정 모델은 M3 SETUP(#27)에서 따로 정의하고 이 값으로 매핑한다.
 enum NumberDisplayFormat {
   /// Norm 1/2 — 표시기 없음
   norm(null),
@@ -34,15 +35,19 @@ enum NumberDisplayFormat {
   const NumberDisplayFormat(this.indicator);
 }
 
-/// 복소수 결과 형식 표시기. 결과가 복소수일 때만 켜진다.
+/// 복소수 결과 형식 표시기 — SETUP → Complex Result 설정의 **표시기 투영**.
+///
+/// User's Guide 인쇄 7쪽 Note: `i`는 a+bi, `∠`는 r∠θ 설정을 나타낸다. 결과 값이 복소수인지가 아니라
+/// **설정**을 따른다. [none]은 설정 값이 아니라 "표시하지 않음"이다 — 설정 모델은 M3 SETUP(#27)에서
+/// 따로 정의하고, 어느 앱에서 표시할지(예: Complex 앱 #5)와 함께 이 값으로 매핑한다.
 enum ComplexResultIndicator {
-  /// 복소수 결과 아님 — 표시기 없음
+  /// 표시하지 않음
   none(null),
 
-  /// 직교 형식(a+bi) 결과
+  /// 직교 형식(a+bi) 설정
   rectangular('i'),
 
-  /// 극형식(r∠θ) 결과
+  /// 극형식(r∠θ) 설정
   polar('∠');
 
   /// 상태 표시줄 표시 문자 (`null`이면 표시하지 않음)
@@ -51,10 +56,25 @@ enum ComplexResultIndicator {
   const ComplexResultIndicator(this.indicator);
 }
 
-/// LCD 상태 표시줄의 고정 슬롯. 선언 순서가 화면의 왼쪽 → 오른쪽 배치 순서다.
+/// LCD 상태 표시줄의 고정 슬롯. 선언 순서가 화면의 왼쪽 → 오른쪽 배치 순서다 (#44).
 ///
 /// 실물 LCD처럼 슬롯 위치는 고정이며, 표시기가 꺼져도 자리를 비워 두어 다른 표시기가 밀리지 않는다.
-/// (사용자 가이드 "Reading the Display" 기준. 슬롯 구성·아이콘·배치 순서는 잠정이다 — TODO(#44).)
+///
+/// 출처:
+/// - 표시기 종류·모양: fx-570EX/fx-991EX User's Guide (RJA532432-001V01) 인쇄 4쪽 표시기 표,
+///   3쪽 "Reading the Display"(▲), 7쪽 Note(E, i/∠). STO 대기는 `→x`, MathI는 `√▭✎`, 다중 문장 중간
+///   결과는 `‖` 아이콘이다. 표에 RCL 표시기는 없다.
+/// - 좌→우 순서: 사용자 제공 fx-991EX(ClassWiz) 실물 정보 — S, A, M, →x, D/R/G, FIX, SCI, √▭✎, ▼/▲,
+///   Disp ‖, ☀. 가이드에는 순서가 없다. 결정 기록은 #44 결정 요약 코멘트(2026-11-22)이며, 이슈 본문의
+///   S A M STO RCL … Math … Disp 순서는 구형 fx-991ES PLUS의 표시줄로 정정되었다.
+///   - E와 i/∠는 이 순서에 없어 위치가 **잠정**이다: E는 수치 형식(FIX/SCI) 뒤, i/∠는 입출력 형식 뒤(#58).
+///   - "▼/▲"는 동시에 켜질 수 있어(위·아래 모두 내용이 있을 때) 슬롯 두 개로 두고 표기 순서대로 ▼를 왼쪽에
+///     둔다(D/R/G는 셋 중 하나만 켜지므로 슬롯 하나). 실물이 한 자리에 위아래로 겹친 모양인지는 미확인이고
+///     (#58), 가이드에서 확인된 것은 ▲뿐이다(인쇄 3쪽 그림).
+///   - 사용자 정보의 "Disp"와 "‖"는 가이드 표의 "‖ = 다중 문장 중간 결과" 하나로 보고 슬롯 하나([disp])로 둔다.
+///   - 태양전지 `☀`는 앱에 해당 상태가 없어 넣지 않는다(#44 결정).
+/// - 글자: `√▭✎`의 `▭`는 두 칸 폭이라 입력 칸과 같은 `◻`로 쓰고, `✎`(U+270E)는 번들 글꼴에 없어 뺐다
+///   (`assets/fonts/README.md` "글리프 선택 규칙"). 아이콘을 직접 그려 실물 모양에 맞추는 일은 #57.
 enum LcdIndicatorSlot {
   /// S — SHIFT 1회성 대기
   shift('S'),
@@ -65,37 +85,44 @@ enum LcdIndicatorSlot {
   /// M — 독립 메모리에 값이 있음
   memory('M'),
 
-  /// STO — 변수 지정 대기 (STO 키를 누른 뒤. 실물 표시는 `→x` 아이콘 — #44)
-  store('STO'),
+  /// →x — 변수 지정 대기 (STO 키를 누른 뒤)
+  store('→x'),
 
-  /// D/R/G — 각도 단위 (항상 켜짐)
+  /// D/R/G — 각도 단위 (항상 켜짐, 한 자리에서 셋 중 하나)
   angleUnit('D'),
 
-  /// FIX/SCI — 수치 표시 형식 (Norm이면 꺼짐)
-  numberFormat('FIX'),
+  /// FIX — 소수점 이하 자릿수 고정 (SCI와 다른 자리 — Norm이면 둘 다 꺼짐)
+  fixFormat('FIX'),
 
-  /// E — 공학 기호(Engineer Symbol) On
+  /// SCI — 유효숫자 자릿수 고정
+  sciFormat('SCI'),
+
+  /// E — 공학 기호(Engineer Symbol) On (위치 잠정 — [provisional])
   engineering('E'),
 
-  /// Math — MathI 입출력
-  math('Math'),
+  /// √◻ — MathI 입출력 (실물 `√▭✎`)
+  math('√◻'),
 
-  /// i / ∠ — 복소수 결과 형식
+  /// i / ∠ — 복소수 결과 형식 설정 (위치 잠정 — [provisional])
   complex('∠'),
 
-  /// Disp — 멀티 스테이트먼트 중간 결과 표시 중
-  disp('Disp'),
+  /// ▼ — 아래쪽에 이력·데이터가 더 있음
+  historyDown('▼'),
 
   /// ▲ — 위쪽에 이력·데이터가 더 있음 (계산 이력 재생 가능 등)
   historyUp('▲'),
 
-  /// ▼ — 아래쪽에 이력·데이터가 더 있음
-  historyDown('▼');
+  /// ‖ — 멀티 스테이트먼트 중간 결과 표시 중
+  disp('‖');
 
-  /// 꺼진 상태에서 흐리게 보여줄 대표 문자이자, 슬롯 너비 산정 기준 문자열
+  /// 꺼진 상태에서 흐리게 보여줄 대표 문자이자, 슬롯 너비 산정 기준 문자열 (칸 수 = 코드포인트 수)
   final String template;
 
   const LcdIndicatorSlot(this.template);
+
+  /// 실물 순서 자료에 없어 위치가 잠정인 슬롯 (가이드에는 있는 표시기). 문서·테스트용 — 테스트가
+  /// 나머지 슬롯이 실물 순서와 같은지, 잠정 슬롯이 문서에 적은 자리(E는 SCI 뒤, i/∠는 √◻ 뒤)에 있는지 검사한다.
+  static const Set<LcdIndicatorSlot> provisional = {engineering, complex};
 }
 
 /// LCD 상태 표시줄에 표시할 상태의 불변 스냅샷.
@@ -112,25 +139,25 @@ class LcdStatus {
   /// 독립 메모리에 0이 아닌 값이 있음 (M)
   final bool memory;
 
-  /// 변수 지정 대기 (STO)
+  /// 변수 지정 대기 (→x)
   final bool store;
 
   /// 각도 단위 (D/R/G)
   final AngleUnit angleUnit;
 
-  /// 수치 표시 형식 (FIX/SCI)
+  /// 수치 표시 형식 (FIX 또는 SCI 자리, Norm이면 둘 다 꺼짐)
   final NumberDisplayFormat numberFormat;
 
   /// 공학 기호 On (E)
   final bool engineering;
 
-  /// MathI 입출력 (Math)
+  /// MathI 입출력 (√◻)
   final bool mathIO;
 
-  /// 복소수 결과 형식 (i/∠)
+  /// 복소수 결과 형식 설정 (i/∠)
   final ComplexResultIndicator complex;
 
-  /// 멀티 스테이트먼트 중간 결과 표시 중 (Disp)
+  /// 멀티 스테이트먼트 중간 결과 표시 중 (‖)
   final bool disp;
 
   /// 위쪽에 이력·데이터가 더 있음 (▲)
@@ -162,15 +189,18 @@ class LcdStatus {
     LcdIndicatorSlot.shift => shift ? 'S' : null,
     LcdIndicatorSlot.alpha => alpha ? 'A' : null,
     LcdIndicatorSlot.memory => memory ? 'M' : null,
-    LcdIndicatorSlot.store => store ? 'STO' : null,
+    LcdIndicatorSlot.store => store ? '→x' : null,
     LcdIndicatorSlot.angleUnit => angleUnit.indicator,
-    LcdIndicatorSlot.numberFormat => numberFormat.indicator,
+    LcdIndicatorSlot.fixFormat =>
+      numberFormat == NumberDisplayFormat.fix ? numberFormat.indicator : null,
+    LcdIndicatorSlot.sciFormat =>
+      numberFormat == NumberDisplayFormat.sci ? numberFormat.indicator : null,
     LcdIndicatorSlot.engineering => engineering ? 'E' : null,
-    LcdIndicatorSlot.math => mathIO ? 'Math' : null,
+    LcdIndicatorSlot.math => mathIO ? '√◻' : null,
     LcdIndicatorSlot.complex => complex.indicator,
-    LcdIndicatorSlot.disp => disp ? 'Disp' : null,
-    LcdIndicatorSlot.historyUp => historyUp ? '▲' : null,
     LcdIndicatorSlot.historyDown => historyDown ? '▼' : null,
+    LcdIndicatorSlot.historyUp => historyUp ? '▲' : null,
+    LcdIndicatorSlot.disp => disp ? '‖' : null,
   };
 
   /// 켜져 있는 표시 문자 목록 (슬롯 순서)

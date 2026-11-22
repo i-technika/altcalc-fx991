@@ -136,7 +136,16 @@ void main() {
         expect(d.padding.isNonNegative, isTrue, reason: d.name);
         expect(d.padding.vertical, lessThan(d.size.height), reason: d.name);
         expect(d.padding.horizontal, lessThan(d.size.width), reason: d.name);
+        final gesture = d.systemGestureInsets;
+        expect(gesture.isNonNegative, isTrue, reason: d.name);
+        expect(gesture.vertical, lessThan(d.size.height), reason: d.name);
+        expect(gesture.horizontal, lessThan(d.size.width), reason: d.name);
       }
+      // 가장자리 키의 보류 입력을 미리보기로 확인할 수 있도록 제스처 영역이 있는 프리셋이 하나 이상 있다.
+      expect(
+        previewDevices.where((d) => d.systemGestureInsets != EdgeInsets.zero),
+        isNotEmpty,
+      );
     });
 
     test('글자 배율: 기본값을 포함하고 중복 없이 Android 범위(85~200%) 안', () {
@@ -299,7 +308,11 @@ void main() {
           expect(mq.padding, device.padding, reason: reason);
           expect(mq.viewPadding, device.padding, reason: reason);
           expect(mq.viewInsets, EdgeInsets.zero, reason: reason);
-          expect(mq.systemGestureInsets, EdgeInsets.zero, reason: reason);
+          expect(
+            mq.systemGestureInsets,
+            device.systemGestureInsets,
+            reason: reason,
+          );
           expect(
             mq.textScaler.scale(10),
             closeTo(10 * scale, 1e-9),
@@ -345,6 +358,61 @@ void main() {
           );
         }
       }
+    });
+
+    testWidgets('제스처 영역이 있는 프리셋: 화면 가장자리 키는 손을 뗄 때, 안쪽 키는 누르는 순간 입력된다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      // 키패드 좌우 끝 열이 뒤로가기 영역에 걸리는 프리셋 (폴더블 내부는 화면이 넓어 걸리지 않는다)
+      final index = previewDevices.indexWhere((d) => d.name == '폴더블 커버');
+      expect(index, isNonNegative);
+      final device = previewDevices[index];
+      expect(device.systemGestureInsets.left, greaterThan(0));
+      expect(device.systemGestureInsets.right, greaterThan(0));
+      await _selectDevice(tester, index);
+
+      // 기기 화면이 패널 오른쪽으로 밀리고 축소되어 있어야 이 검사가 의미 있다.
+      final screen = tester.getRect(_deviceScreen);
+      final scale = screen.width / device.size.width;
+      expect(screen.left, greaterThan(KeyPreviewScreen.panelWidth));
+      expect(scale, lessThan(1));
+      double toScreenX(double globalX) => (globalX - screen.left) / scale;
+
+      /// 전역 좌표 [at]을 누르고, (누른 순간의 로그, 손을 뗀 뒤의 로그)를 ` | `로 이어 돌려준다.
+      /// (레코드 안의 List는 `==`로 비교되지 않으므로 문자열로 잇는다.)
+      Future<(String, String)> pressAt(Offset at) async {
+        final g = await tester.startGesture(at);
+        await tester.pump();
+        final down = _logLines(tester).join(' | ');
+        await g.up();
+        await tester.pump();
+        return (down, _logLines(tester).join(' | '));
+      }
+
+      // 왼쪽 끝 열(7)의 왼쪽 가장자리 — 화면 기준으로 뒤로가기 영역 안
+      final left = tester.getRect(_keycap(CalcKeyId.num7));
+      final leftX = left.left + 2 * scale;
+      expect(toScreenX(leftX), lessThan(device.systemGestureInsets.left));
+      expect(await pressAt(Offset(leftX, left.center.dy)), ('', '1. 7'));
+
+      // 오른쪽 끝 열(AC)의 오른쪽 가장자리
+      final right = tester.getRect(_keycap(CalcKeyId.ac));
+      final rightX = right.right - 2 * scale;
+      expect(
+        toScreenX(rightX),
+        greaterThan(device.size.width - device.systemGestureInsets.right),
+      );
+      expect(await pressAt(Offset(rightX, right.center.dy)), (
+        '1. 7',
+        '2. AC | 1. 7',
+      ));
+
+      // 가운데 열(8)은 누르는 순간 입력된다.
+      expect(await pressAt(tester.getCenter(_keycap(CalcKeyId.num8))), (
+        '3. 8 | 2. AC | 1. 7',
+        '3. 8 | 2. AC | 1. 7',
+      ));
     });
 
     testWidgets('축소 표시 중에도 키를 누를 수 있다', (tester) async {

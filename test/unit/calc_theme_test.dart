@@ -68,12 +68,23 @@ void main() {
       );
     });
 
-    test('비활성 상태 표시는 활성 상태보다 LCD 배경과의 대비가 낮다', () {
+    test('비활성 상태 표시는 활성 색을 3~5% 불투명도로 그린다 (#44 사용자 결정 4%)', () {
+      const inactive = CalcTheme.lcdStatusInactive;
+      const active = CalcTheme.lcdStatusActive;
       expect(
-        contrastRatio(CalcTheme.lcdStatusInactive, CalcTheme.lcdBackground),
-        lessThan(
-          contrastRatio(CalcTheme.lcdStatusActive, CalcTheme.lcdBackground),
-        ),
+        (inactive.r, inactive.g, inactive.b),
+        (active.r, active.g, active.b),
+      );
+      expect(inactive.a, inInclusiveRange(0.03, 0.05));
+      // 픽셀 색 기준: LCD 배경 위에 합성한 색이 도트 격자선 색보다 옅다 (면적·커버리지는 따지지 않는다).
+      final drawn = Color.alphaBlend(inactive, CalcTheme.lcdBackground);
+      final grid = Color.alphaBlend(
+        CalcTheme.lcdDotGrid,
+        CalcTheme.lcdBackground,
+      );
+      expect(
+        contrastRatio(drawn, CalcTheme.lcdBackground),
+        lessThan(contrastRatio(grid, CalcTheme.lcdBackground)),
       );
     });
   });
@@ -300,6 +311,38 @@ void main() {
       expect(CalcTheme.keypadUniformFontMinRatio, inInclusiveRange(0.5, 1.0));
       expect(CalcTheme.cursorPadDividerWidth, greaterThan(0));
       expect(CalcTheme.keyLegendPriorityMaxRunes, inInclusiveRange(1, 3));
+    });
+
+    test('커서 패드 모양 상수: 가로로 긴 둥근 마름모·▲▼ 쪽으로 기운 홈·작은 허브 (#43)', () {
+      // 가로로 긴 패드: 비율 하한이 1보다 크고 하한 < 상한
+      expect(CalcTheme.cursorPadMinAspectRatio, greaterThan(1.0));
+      expect(
+        CalcTheme.cursorPadMinAspectRatio,
+        lessThan(CalcTheme.cursorPadMaxAspectRatio),
+      );
+      // 2이면 타원, 무한대면 뾰족한 마름모 — 2보다 크고 너무 크지 않아야 꼭짓점이 둥근 마름모다.
+      expect(CalcTheme.cursorPadOutlineExponent, inExclusiveRange(2.0, 6.0));
+      // 1보다 커야 홈이 ◀·▶ 쪽을 좁힌다. 너무 크면 ◀·▶가 누르기 어렵게 좁아진다.
+      expect(CalcTheme.cursorPadGrooveSlope, inExclusiveRange(1.0, 2.0));
+      // 허브는 반높이(짧은 쪽)의 절반 미만이고, 데드존은 허브보다 작은 양수다.
+      // 실제 터치 깊이·라벨 위치는 위젯·화면 테스트가 화면 크기별로 확인한다.
+      expect(CalcTheme.cursorPadHubRadiusRatio, inExclusiveRange(0.0, 0.5));
+      expect(CalcTheme.cursorPadDeadZoneRadiusRatio, greaterThan(0));
+      expect(
+        CalcTheme.cursorPadDeadZoneRadiusRatio,
+        lessThan(CalcTheme.cursorPadHubRadiusRatio),
+      );
+    });
+
+    test('커서 패드 허브는 방향 키캡보다 어둡고, 둘레선은 허브 대비 3:1 이상이다', () {
+      expect(
+        lightness(CalcTheme.cursorPadHub),
+        lessThan(lightness(CalcTheme.keyCursor)),
+      );
+      expect(
+        contrastRatio(CalcTheme.keyBorder, CalcTheme.cursorPadHub),
+        greaterThanOrEqualTo(3.0),
+      );
     });
 
     test('키 라벨 스타일은 자간을 명시해 테마 자간을 물려받지 않는다', () {
