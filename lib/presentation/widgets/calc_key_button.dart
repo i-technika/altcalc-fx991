@@ -98,7 +98,8 @@ class CalcKeyButton extends StatefulWidget {
   final Path Function(Size size)? hitShape;
 
   /// 터치 영역만 넓힌 여백 — 버튼 상자에서 이만큼 안쪽 상자(그림 상자)에 키를 그린다.
-  /// [hitShape]가 있을 때만 쓸 수 있다(없으면 [EdgeInsets.zero]여야 한다).
+  /// [hitShape]가 있을 때만 쓸 수 있고(없으면 [EdgeInsets.zero]여야 한다) 음수일 수 없다.
+  /// 상자보다 크면 키를 그리지 않고 터치 영역만 남는다.
   final EdgeInsets hitOutset;
 
   const CalcKeyButton({
@@ -316,6 +317,11 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       widget.hitShape != null || widget.hitOutset == EdgeInsets.zero,
       'hitOutset은 hitShape와 함께 써야 한다 (터치 영역을 정할 경로가 없다)',
     );
+    assert(widget.hitOutset.isNonNegative, 'hitOutset은 음수일 수 없다');
+    assert(
+      widget.hitShape == null || !widget.extendHitAreaToLegend,
+      'hitShape가 있으면 터치 영역은 그 경로가 정한다 — extendHitAreaToLegend와 함께 쓰지 않는다',
+    );
     final outer = constraints.constrain(
       Size(
         constraints.hasBoundedWidth
@@ -329,7 +335,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final hitPath = _hitPath.resolve(widget.hitShape, outer);
     final hitMode = hitPath != null;
     final outset = hitMode ? widget.hitOutset : EdgeInsets.zero;
-    // 그림 상자 = 버튼 상자에서 터치 여백을 뺀 안쪽 (여백이 상자보다 크면 0)
+    // 그림 상자 = 버튼 상자에서 터치 여백을 뺀 안쪽 (여백이 상자보다 크면 0 — 아래에서 그리지 않는다)
     final width = math.max(0.0, outer.width - outset.horizontal);
     final height = math.max(0.0, outer.height - outset.vertical);
 
@@ -399,6 +405,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         ? body
         : ClipPath(clipper: _ShapeClipper(shapePath), child: body);
     if (!hitMode) return clipped;
+    // 그림 상자가 비면 키를 그리지 않는다(0 크기 글자는 레이아웃 assert를 낸다). 터치 영역은 남는다.
+    final drawn = width > 0 && height > 0 ? clipped : const SizedBox.shrink();
     // 터치 모양이 따로 있으면: 버튼 상자 전체를 받는 Listener를 터치 경로로 거르고,
     // 그림은 터치 여백 안쪽에 그린다(그림 클립은 Listener 안이라 터치 영역을 줄이지 않는다).
     return _HitTestPath(
@@ -406,7 +414,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       child: _wrapHitArea(
         SizedBox.fromSize(
           size: outer,
-          child: Padding(padding: outset, child: clipped),
+          child: Padding(padding: outset, child: drawn),
         ),
       ),
     );
