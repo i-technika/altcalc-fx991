@@ -1,199 +1,157 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 /// `analysis_options.yaml`의 `analyzer.exclude` 불변식 (#66).
 ///
 /// VS Code Dart 확장(Dart-Code 3.146 `getAnalysisOptionsExcludedFolders`)은 이 목록으로 작업 영역 안의
-/// 하위 프로젝트를 걸러 낸다. 걸러진 워크트리는 시작 시 pub get 알림·`Get Packages for All Projects`·
-/// 프로젝트 선택 목록에서 빠진다 (README "작업 영역 안의 git 워크트리").
+/// 하위 프로젝트를 걸러 낸다. 걸러진 워크트리는 확장의 프로젝트 목록(시작 pub get 알림 등)에서 빠진다
+/// (README "작업 영역 안의 git 워크트리").
 /// 확장은 `/**`로 끝나고 그 밖에 `*`가 없는 항목만 폴더 제외로 쓰므로, analyzer는 받아들여도
 /// 확장이 무시하는 표기(`.claude/worktrees/*` 등)로 바뀌면 이 테스트가 잡는다.
+/// 지키는 것은 저장소 쪽 표기다. 확장 쪽 규칙이 바뀌는 것은 잡지 못한다(규칙은 3.146 소스를 옮긴 것이다).
 /// 경로는 `flutter test`의 작업 디렉터리인 패키지 루트 기준이다.
 
 /// Claude Code가 워크트리를 만드는 작업 영역 안 폴더
 const _worktreesDir = '.claude/worktrees';
 
-/// 들여쓰기 칸 수
-int _indent(String line) => line.length - line.trimLeft().length;
+/// 판정에 쓰는 가상의 프로젝트 루트 — 확장은 상대 항목을 프로젝트 폴더에 `path.join`한다
+final _root = p.posix.join('/', 'ws', 'app');
 
-/// 줄 끝 주석(` #`)과 바깥 따옴표를 뗀 YAML 스칼라
-String _scalar(String raw) {
-  var v = raw;
-  final comment = v.indexOf(' #');
-  if (comment >= 0) v = v.substring(0, comment);
-  v = v.trim();
-  if (v.length >= 2 &&
-      (v.startsWith('"') && v.endsWith('"') ||
-          v.startsWith("'") && v.endsWith("'"))) {
-    v = v.substring(1, v.length - 1);
-  }
-  return v;
-}
-
-/// 최상위 `analyzer:` 아래 `exclude:` 블록 목록의 항목.
-/// YAML 패키지에 의존하지 않으려고 이 파일이 쓰는 블록 형식(`- 항목` 줄)만 들여쓰기로 읽는다.
-/// 흐름 형식(`exclude: [a, b]`)처럼 읽지 못하는 형태는 빈 목록 대신 오류로 알린다.
+/// `analyzer.exclude` 목록. Dart-Code처럼 YAML 파서로 읽는다(중복 키는 파서가 예외로 알린다).
+/// 확장은 문자열이 아닌 항목(따옴표 없는 `123`·`true`·`~`)에서 예외가 나 그 파일의 제외를 전부 잃으므로 실패로 본다.
 List<String> analyzerExcludes(String source) {
-  final lines = source.replaceAll('\r\n', '\n').split('\n');
-  bool skip(String l) => l.trim().isEmpty || l.trimLeft().startsWith('#');
-
-  final analyzer = lines.indexWhere(
-    (l) => RegExp(r'^analyzer:\s*$').hasMatch(l),
-  );
-  if (analyzer < 0) throw const FormatException('최상위 analyzer: 블록이 없다');
-
-  int? excludeAt;
-  for (var i = analyzer + 1; i < lines.length; i++) {
-    if (skip(lines[i])) continue;
-    if (_indent(lines[i]) == 0) break; // analyzer 블록 끝
-    if (RegExp(r'^\s+exclude:').hasMatch(lines[i])) {
-      if (!RegExp(r'^\s+exclude:\s*(#.*)?$').hasMatch(lines[i])) {
-        throw FormatException('블록 목록이 아닌 exclude 형식', lines[i]);
-      }
-      excludeAt = i;
-      break;
-    }
+  final doc = loadYaml(source);
+  final exclude = doc is YamlMap && doc['analyzer'] is YamlMap
+      ? (doc['analyzer'] as YamlMap)['exclude']
+      : null;
+  if (exclude is! YamlList) {
+    throw const FormatException('analyzer.exclude 목록이 없다');
   }
-  if (excludeAt == null) throw const FormatException('analyzer.exclude가 없다');
-
-  final keyIndent = _indent(lines[excludeAt]);
-  final items = <String>[];
-  for (var i = excludeAt + 1; i < lines.length; i++) {
-    final l = lines[i];
-    if (skip(l)) continue;
-    // YAML은 목록 항목을 키와 같은 들여쓰기에 둘 수도 있다
-    if (_indent(l) < keyIndent ||
-        _indent(l) == keyIndent && !l.trimLeft().startsWith('- ')) {
-      break;
-    }
-    final m = RegExp(r'^\s*-\s+(.*)$').firstMatch(l);
-    if (m == null) throw FormatException('exclude 목록 항목이 아니다', l);
-    items.add(_scalar(m[1]!));
-  }
-  return items;
+  return [
+    for (final e in exclude)
+      if (e is String)
+        e
+      else
+        throw FormatException('문자열이 아닌 exclude 항목 — 확장이 제외 목록 전체를 버린다', '$e'),
+  ];
 }
 
-/// Dart-Code와 같은 규칙으로 항목을 폴더 제외로 바꾼다. 폴더 제외로 쓰이지 않는 항목이면 `null`.
-/// 확장은 끝의 `/**`를 떼고 `*`가 남지 않은 것만 쓰며, 상대경로는 프로젝트 폴더 기준으로 붙인다.
+/// Dart-Code와 같은 규칙으로 항목을 [_root] 기준 절대 폴더로 바꾼다. 폴더 제외로 쓰이지 않으면 `null`.
+/// 확장 순서: 끝 `/**`를 뗀다 → `/`로 시작하지 않으면 프로젝트 폴더에 `join`(정규화 포함) → `*`가 남으면 버린다.
 String? dartCodeExcludedFolder(String entry) {
   var e = entry;
   if (e.endsWith('/**')) e = e.substring(0, e.length - 3);
+  if (!e.startsWith('/')) e = p.posix.join(_root, e);
+  e = p.posix.normalize(e);
   return e.contains('*') ? null : e;
 }
 
-/// 패키지 루트 기준 상대경로 [path]가 폴더 [folder]와 같거나 그 안에 있는가.
-/// 확장(`isWithinPathOrEqual`)처럼 대소문자를 무시한다. `./`·`\`를 정규화한다.
+/// 루트 기준 상대경로 [path]가 폴더 [folder]와 같거나 그 안에 있는가. 확장처럼 대소문자를 무시한다.
 bool isWithinOrEqual(String path, String folder) {
-  String norm(String p) {
-    var s = p.replaceAll(r'\', '/').toLowerCase();
-    while (s.startsWith('./')) {
-      s = s.substring(2);
-    }
-    if (s == '.') s = '';
-    while (s.endsWith('/')) {
-      s = s.substring(0, s.length - 1);
-    }
-    return s;
-  }
-
-  final p = norm(path);
-  final f = norm(folder);
-  return f.isEmpty || p == f || p.startsWith('$f/');
+  final full = p.posix.normalize(p.posix.join(_root, path)).toLowerCase();
+  final f = folder.toLowerCase();
+  return full == f || p.posix.isWithin(f, full);
 }
+
+/// [excludes] 중 [path]를 빼는 폴더 제외
+List<String> excludersOf(List<String> excludes, String path) => [
+  for (final e in excludes)
+    if (dartCodeExcludedFolder(e) case final f? when isWithinOrEqual(path, f))
+      e,
+];
 
 void main() {
   group('analyzerExcludes', () {
-    test('블록 목록 항목을 주석·따옴표를 떼고 읽고, 다음 키에서 멈춘다', () {
+    test('주석·따옴표를 처리하고 analyzer 아래의 exclude만 읽는다', () {
       const src = '''
 include: package:x/y.yaml
 
-analyzer:
-  errors:
-    a: ignore
+analyzer: # 줄 끝 주석
+  plugins:
+    x:
+      exclude:
+        - nested/**
   exclude:
     # 주석 줄
     - build/**
-    - "web/**"   # 줄 끝 주석
-
-    - '.claude/worktrees/**'
-  language:
-    strict-casts: true
+    - "web/ #/**"
+    - '.claude/worktrees/**'	# 탭 뒤 주석
 linter:
   rules:
     - exclude_me
 ''';
       expect(analyzerExcludes(src), [
         'build/**',
-        'web/**',
+        'web/ #/**',
         '.claude/worktrees/**',
       ]);
     });
 
-    test('키와 같은 들여쓰기의 목록 항목도 읽는다', () {
-      const src = 'analyzer:\n  exclude:\n  - a/**\n  - b/**\n  plugins: []\n';
-      expect(analyzerExcludes(src), ['a/**', 'b/**']);
-    });
-
-    test('analyzer·exclude가 없거나 흐름 형식이면 오류로 알린다', () {
-      expect(() => analyzerExcludes('linter:\n'), throwsFormatException);
+    test('목록이 없거나, 문자열이 아닌 항목·중복 키가 있으면 오류로 알린다', () {
+      expect(() => analyzerExcludes('linter: {}\n'), throwsFormatException);
       expect(
         () => analyzerExcludes('analyzer:\n  errors: {}\n'),
         throwsFormatException,
       );
       expect(
-        () => analyzerExcludes('analyzer:\n  exclude: [a/**]\n'),
+        () =>
+            analyzerExcludes('analyzer:\n  exclude:\n    - a/**\n    - 123\n'),
         throwsFormatException,
+      );
+      expect(
+        () => analyzerExcludes(
+          'analyzer:\n  exclude:\n    - a/**\nanalyzer:\n  exclude: []\n',
+        ),
+        throwsA(isA<YamlException>()),
       );
     });
   });
 
-  test('Dart-Code 폴더 제외 규칙: /**로 끝나고 다른 *가 없어야 폴더 제외다', () {
-    expect(dartCodeExcludedFolder('.claude/worktrees/**'), '.claude/worktrees');
-    expect(dartCodeExcludedFolder('build/**'), 'build');
-    expect(dartCodeExcludedFolder('.claude/worktrees'), '.claude/worktrees');
+  test('Dart-Code 폴더 제외 규칙: /**로 끝나고 다른 *가 없어야 하며 상대경로는 정규화된다', () {
+    expect(
+      dartCodeExcludedFolder('.claude/worktrees/**'),
+      '$_root/.claude/worktrees',
+    );
+    expect(
+      dartCodeExcludedFolder('./.claude/worktrees'),
+      '$_root/.claude/worktrees',
+    );
+    expect(dartCodeExcludedFolder('lib/..'), _root);
+    expect(dartCodeExcludedFolder('/abs/x/**'), '/abs/x');
     expect(dartCodeExcludedFolder('.claude/worktrees/*'), isNull);
     expect(dartCodeExcludedFolder('**/*.g.dart'), isNull);
     expect(dartCodeExcludedFolder('.claude/*/**'), isNull);
   });
 
-  test('isWithinOrEqual', () {
-    expect(
-      isWithinOrEqual('.claude/worktrees/issue-1', '.claude/worktrees'),
-      isTrue,
-    );
-    expect(
-      isWithinOrEqual(r'.Claude\Worktrees\x', '.claude/worktrees/'),
-      isTrue,
-    );
-    expect(isWithinOrEqual('.claude/worktrees', '.claude/worktrees'), isTrue);
-    expect(
-      isWithinOrEqual('.claude/worktrees-old', '.claude/worktrees'),
-      isFalse,
-    );
-    expect(isWithinOrEqual('lib', '.'), isTrue);
-    expect(isWithinOrEqual('lib', './'), isTrue);
+  test('isWithinOrEqual은 대소문자를 무시하고 이름이 겹치는 형제 폴더는 넘긴다', () {
+    final wt = '$_root/.claude/worktrees';
+    expect(isWithinOrEqual('.claude/worktrees/issue-1', wt), isTrue);
+    expect(isWithinOrEqual('.Claude/Worktrees/x', wt), isTrue);
+    expect(isWithinOrEqual('.claude/worktrees', wt), isTrue);
+    expect(isWithinOrEqual('.claude/worktrees-old', wt), isFalse);
+    expect(isWithinOrEqual('lib', _root), isTrue);
   });
 
   group('analysis_options.yaml', () {
     late List<String> excludes;
-    late List<String> folders;
     setUpAll(() {
       excludes = analyzerExcludes(
         File('analysis_options.yaml').readAsStringSync(),
       );
-      folders = excludes.map(dartCodeExcludedFolder).nonNulls.toList();
     });
 
     test('Dart 확장이 작업 영역 안 워크트리를 프로젝트 목록에서 뺀다', () {
-      expect(excludes, contains('$_worktreesDir/**'));
+      // 확장의 탐색 깊이(dart.projectSearchDepth 기본 5, 루트가 1단계) 안의 워크트리와 그 하위 패키지
       for (final worktree in [
         '$_worktreesDir/issue-66',
-        '$_worktreesDir/issue-66/packages/x',
+        '$_worktreesDir/issue-66/sub',
       ]) {
         expect(
-          folders.any((f) => isWithinOrEqual(worktree, f)),
-          isTrue,
+          excludersOf(excludes, worktree),
+          isNotEmpty,
           reason: '$worktree를 빼는 폴더 제외가 없다: $excludes',
         );
       }
@@ -208,17 +166,11 @@ linter:
         );
       }
       // 루트가 빠지면 확장이 이 앱 자체를 프로젝트로 보지 않는다
-      for (final kept in [
-        'pubspec.yaml',
-        'lib',
-        'test',
-        'preview',
-        '.claude/scripts',
-      ]) {
+      for (final kept in ['.', 'lib', 'test', 'preview', '.claude/scripts']) {
         expect(
-          folders.where((f) => isWithinOrEqual(kept, f)),
+          excludersOf(excludes, kept),
           isEmpty,
-          reason: '$kept가 폴더 제외에 걸린다: $folders',
+          reason: '$kept가 폴더 제외에 걸린다',
         );
       }
     });

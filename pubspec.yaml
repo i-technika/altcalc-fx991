@@ -54,6 +54,11 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # analysis_options.yaml을 Dart-Code처럼 파싱·경로 판정하는 테스트용 (#66). 이미 lock에 있는 전이 의존성이라
+  # 버전을 따로 정하지 않는다(flutter_test가 고정한 버전을 그대로 쓴다).
+  path: any
+  yaml: any
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
