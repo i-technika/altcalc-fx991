@@ -40,7 +40,7 @@ gh pr list --head milestone/m<번호> --json number,url,isDraft
 gh pr ready <PR번호>
 gh pr checks <PR번호> --watch --fail-fast
 ```
-- 대상 Job: `Code Quality & Linux Build`, `Android Build (APK)`, `Web Build`, `Windows Build`, `macOS & iOS Build`
+- 대상 Job: `Code Quality & Linux Build`, `Android Build (APK)`, `Android Unit Tests (JVM)`, `Web Build`, `Windows Build`, `macOS & iOS Build`
 - 실패 시: 로그(`gh run view <run-id> --log-failed`)를 분석해 원인을 보고한다. 수정이 필요하면
   사용자 승인 후 서브이슈를 만들어(`/fix-issue` 9단계 A·B 블록) `/fix-issue`로 처리하거나, 사소한 빌드 설정은 마일스톤 브랜치에 직접 커밋한다.
 

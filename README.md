@@ -236,3 +236,27 @@ flutter analyze   # preview/ 포함, 이슈 0건이어야 한다
 flutter test      # 미리보기 실행·입력 기록 테스트 포함
 flutter build web -t preview/key_preview_main.dart --no-wasm-dry-run   # 미리보기 웹 빌드 (CI와 같음)
 ```
+
+### Android 단위 테스트 (Kotlin)
+
+`android/app/src/main/kotlin`의 플랫폼 코드(플랫폼 채널, 고대비 텍스트 수신)는 JVM 단위 테스트로 검사한다 (#108).
+테스트는 `android/app/src/test/kotlin`에 있고, Robolectric이 API 수준별 Android 프레임워크를 JVM에서 돌리므로
+기기·에뮬레이터가 필요 없다. Kotlin 코드나 `android/` Gradle 설정을 바꿨으면 커밋 전에 돌린다.
+
+```bash
+flutter build apk --debug --config-only   # gradlew·android/local.properties가 없을 때 한 번 (저장소에 없고 Flutter가 만든다)
+cd android
+./gradlew :app:testDebugUnitTest          # PowerShell: .\gradlew.bat :app:testDebugUnitTest
+```
+
+- **Java 21 이상**이 필요하다. Gradle은 `JAVA_HOME`(없으면 PATH의 `java`)을 쓴다 — Android Studio의 JBR
+  (`<Android Studio>/jbr`)이면 된다. 낮은 버전이면 테스트를 시작하기 전에 안내 문구와 함께 멈춘다
+  (`android/app/build.gradle.kts`의 `minTestJavaVersion` — Robolectric이 API 36 프레임워크에 Java 21을 요구한다).
+- 처음 실행할 때 Robolectric이 테스트 대상 API 수준(24·29·30·35·36)의 프레임워크 jar를 Maven Central에서
+  `~/.m2/repository/org/robolectric`으로 받는다(합쳐 약 700MB). 그 뒤로는 받지 않는다.
+- 결과 보고서: `build/app/reports/tests/testDebugUnitTest/index.html`. 실패한 테스트의 단언 문구와 스택은 콘솔에도 나온다.
+- 테스트 대상 API 수준은 `TestSupport.kt`의 상수(`MIN_SDK` 등)가 정하고, `AndroidTestSetupTest`가 앱 minSdk·targetSdk와 대조한다.
+  Flutter를 올려 minSdk가 바뀌면 그 테스트가 실패하므로 상수를 함께 고친다.
+- CI: Sub-issue CI와 Milestone CI의 `Android Unit Tests (JVM)` 잡 (두 잡의 일치는 `test/unit/ci_android_unit_test_test.dart`가 지킨다).
+- 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
+  릴리스 빌드(R8)의 API 36 참조 격리(#109), Flutter 엔진을 띄워야 하는 `MainActivity` 생명주기(`onCreate`·`onResume`).

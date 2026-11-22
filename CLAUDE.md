@@ -40,6 +40,8 @@
 - `presentation/screens/`: `calculator_screen.dart`
 - `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖), `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일), `banner_ad_slot.dart`, `focus_ring.dart` (고대비 키보드 포커스 테두리 — 대화상자 선택지·버튼·설정 버튼), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_button.dart`·`handedness_dialog.dart` (설정 진입·키패드 위치 선택), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
 - 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정, CI 워크플로 파일 목록·YAML 로더)
+- Android 단위 테스트: `android/app/src/test/kotlin/` (Kotlin 플랫폼 코드의 JVM 테스트 — Robolectric으로 API 수준별 분기를 기기 없이 검사한다.
+  `TestSupport.kt`에 테스트 대상 API 수준 상수·가짜 메신저·시스템 설정 흉내 도구. `flutter test`와 따로 Gradle로 돌린다 — README "Android 단위 테스트")
 - 개발 도구: `preview/key_preview_main.dart` (실제 `CalculatorScreen`을 기기 크기 프리셋·글자 배율·입력 로그와 함께 띄우는 미리보기 — 실행 방법은 README. `lib/`에서 import 금지, 앱 빌드 제외, CI가 웹 빌드로 확인)
 - VS Code: `.vscode/` (실행 구성 `launch.json`·추천 확장 `extensions.json` — 준비 단계·SDK 탐지는 README "VS Code에서 실행". 기기마다 다른 절대경로는 넣지 않으며, 구성과 README 표의 일치와 함께 `test/unit/vscode_config_test.dart`가 검사한다)
 - 줄바꿈: `.gitattributes` (Flutter가 다시 쓰는 생성 플러그인 파일을 LF로 고정 — `test/unit/gitattributes_test.dart`가 대상 누락을, CI가 빌드 뒤 작업 트리가 깨끗한지 검사한다. 아래 "로컬 개발 환경 메모" 참조)
@@ -52,6 +54,9 @@
 - 기본 연산 시 부동소수점 오차(`0.1 + 0.2`) 방지를 위해 일반 `double` 대신 `Decimal`을 사용한다.
 - 키 명세·테마 등 상수 데이터에는 반드시 불변식 테스트(키 개수, ID 중복 금지 등)를 함께 둔다.
 - 커밋 전 항상 `flutter analyze`(이슈 0건)와 `flutter test`(전부 통과)를 확인한다.
+  - Android 플랫폼 코드(`android/`의 Kotlin·Gradle 설정)를 바꿨으면 Android 단위 테스트도 돌린다:
+    `cd android && ./gradlew :app:testDebugUnitTest` (Java 21 이상, `gradlew`가 없으면 먼저 `flutter build apk --debug --config-only` —
+    README "Android 단위 테스트"). Kotlin 로직을 추가·변경하면 `android/app/src/test/kotlin`에 테스트를 함께 둔다 (#108).
 
 ## 4. 로컬 개발 환경 메모
 - Flutter SDK가 시스템 PATH에 없을 수 있다. `flutter`를 찾지 못하면 Bash에서
