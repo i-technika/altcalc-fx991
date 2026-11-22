@@ -262,11 +262,57 @@ void main() {
       expect(normalShape.borderRadius, border.borderRadius);
     });
 
+    // 키보드 포커스 테두리가 겹쳐 그려지는 면 (Material 기본 포커스 겹침 포함) — 닫기 버튼(primary 10%)·설정 버튼
+    // (아이콘색 10%)은 M3 버튼 기본 포커스 겹침이다.
+    Map<String, Color> focusSurfaces(CalcPalette palette) {
+      final theme = palette.materialTheme;
+      final surface = theme.colorScheme.surfaceContainerHigh;
+      return {
+        '대화상자 면': surface,
+        '선택지 포커스 겹침': Color.alphaBlend(theme.focusColor, surface),
+        '닫기 버튼 포커스 겹침': Color.alphaBlend(
+          theme.colorScheme.primary.withValues(alpha: 0.1),
+          surface,
+        ),
+        '본체': CalcTheme.bodyBackground,
+        '설정 버튼 포커스 겹침': Color.alphaBlend(
+          palette.settingsIcon.withValues(alpha: 0.1),
+          CalcTheme.bodyBackground,
+        ),
+      };
+    }
+
+    test(
+      '키보드 포커스 테두리는 두 모드 모두 대화상자 면·본체·포커스 겹침 위 3:1 이상이고, 고대비가 더 높다 (#106)',
+      () {
+        expect(
+          CalcPalette.highContrast.materialFocusRing,
+          CalcTheme.materialFocusRingHighContrast,
+        );
+        expect(
+          CalcPalette.standard.materialFocusRing,
+          CalcTheme.materialFocusRingStandard,
+        );
+        expect(CalcTheme.materialFocusRingWidth, greaterThanOrEqualTo(2.0));
+        const std = CalcPalette.standard;
+        const hc = CalcPalette.highContrast;
+        final stdSurfaces = focusSurfaces(std);
+        final hcSurfaces = focusSurfaces(hc);
+        for (final MapEntry(key: name, value: bg) in stdSurfaces.entries) {
+          final stdRatio = contrastRatio(std.materialFocusRing, bg);
+          expect(stdRatio, greaterThanOrEqualTo(nonText), reason: '일반 $name');
+          final hcRatio = contrastRatio(
+            hc.materialFocusRing,
+            hcSurfaces[name]!,
+          );
+          expect(hcRatio, greaterThanOrEqualTo(nonText), reason: '고대비 $name');
+          expect(hcRatio, greaterThanOrEqualTo(stdRatio), reason: name);
+        }
+      },
+    );
+
     test('고대비 키보드 포커스 테두리는 대화상자 면·포커스 겹침 위 모두 3:1 이상이다', () {
       const ring = CalcTheme.materialFocusRingHighContrast;
-      expect(CalcPalette.highContrast.materialFocusRing, ring);
-      expect(CalcPalette.standard.materialFocusRing, isNull);
-      expect(CalcTheme.materialFocusRingWidth, greaterThanOrEqualTo(2.0));
       final surface = high.colorScheme.surfaceContainerHigh;
       final focusFill = Color.alphaBlend(high.focusColor, surface);
       expect(contrastRatio(ring, surface), greaterThanOrEqualTo(nonText));

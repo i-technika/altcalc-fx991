@@ -272,8 +272,9 @@ abstract final class CalcTheme {
   // 글자는 이미 7:1 이상이지만 다음이 모자랐다.
   // - 대화상자 면과 그 뒤(어둡게 덮인 본체)의 대비가 1.3:1이다. 어두운 화면에서는 M3 그림자도 보이지 않아
   //   대화상자 가장자리가 거의 구분되지 않는다.
-  // - 키보드 포커스 표시가 거의 보이지 않는다: 선택지 타일(흰색 12% 겹침)은 대화상자 면과 1.5:1, 닫기 버튼(primary 10%
-  //   겹침)은 1.3:1, 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이다.
+  // - Material 기본 키보드 포커스 표시가 거의 보이지 않는다: 선택지 타일(흰색 12% 겹침)은 대화상자 면과 1.5:1, 닫기 버튼(primary
+  //   10% 겹침)은 1.3:1, 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이다. 키보드 사용자는 고대비를 켜지 않아도 포커스 위치를
+  //   찾아야 하므로, 아래 고대비 테마의 포커스 테두리를 일반 모드에도 그린다(#106, 색 [materialFocusRingStandard]).
   // - SnackBar 동작 버튼 글자가 5.0:1이다 (지금 앱은 SnackBar를 쓰지 않지만 쓰게 되면 바로 7:1 이상이 되게 맞춘다).
   // 툴팁은 M3 기본값이 색 구성과 관계없이 밝기만 보고(어두운 테마: 흰색 90% 바탕·검은 글자) 17.5:1이라 바꾸지 않는다.
   //
@@ -300,7 +301,15 @@ abstract final class CalcTheme {
   static const Color materialFocusRingHighContrast =
       keyPressedBorderHighContrast;
 
-  /// 고대비 키보드 포커스 테두리 굵기
+  /// 일반 모드 키보드 포커스 테두리 색 (#106) — 일반 눌린 키캡 테두리([keyPressedBorder])와 같은 색.
+  /// 고대비와 같은 방식(눌림 단서와 같은 밝은 테두리)이라 모드를 바꿔도 포커스 모양이 같다. 대비(최소 3:1, WCAG 2.4.13):
+  /// 대화상자 면 12.6:1, 선택지 포커스 겹침 위 8.6:1, 닫기 버튼 포커스 겹침 위 10.1:1, 본체 12.1:1,
+  /// 설정 버튼 포커스 겹침 위 10.0:1. 고대비 색(흰색)은 모든 면에서 이보다 높다.
+  /// 일반 테마의 primary(연보라)는 대화상자 안에서는 어울리지만 본체 위 설정 버튼에서는 계산기 색과 맞지 않고,
+  /// 선택지 겹침 위 대비도 5.7:1로 낮아 쓰지 않았다.
+  static const Color materialFocusRingStandard = keyPressedBorder;
+
+  /// 키보드 포커스 테두리 굵기 (두 모드 공통)
   static const double materialFocusRingWidth = 2.0;
 
   /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
@@ -880,6 +889,9 @@ final class CalcPalette {
   /// 설정 버튼 아이콘 색
   final Color settingsIcon;
 
+  /// `FocusRing`이 그리는 키보드 포커스 테두리 색 (#97, 일반 모드는 #106)
+  final Color materialFocusRing;
+
   const CalcPalette._({
     required this.isHighContrast,
     required this.keyBorder,
@@ -888,6 +900,7 @@ final class CalcPalette {
     required this.alphaLabel,
     required this.lcdStatusInactive,
     required this.settingsIcon,
+    required this.materialFocusRing,
   });
 
   /// 일반 팔레트
@@ -899,6 +912,7 @@ final class CalcPalette {
     alphaLabel: CalcTheme.alphaLabel,
     lcdStatusInactive: CalcTheme.lcdStatusInactive,
     settingsIcon: CalcTheme.settingsIcon,
+    materialFocusRing: CalcTheme.materialFocusRingStandard,
   );
 
   /// 고대비 팔레트
@@ -910,6 +924,7 @@ final class CalcPalette {
     alphaLabel: CalcTheme.alphaLabelHighContrast,
     lcdStatusInactive: CalcTheme.lcdStatusInactiveHighContrast,
     settingsIcon: CalcTheme.settingsIconHighContrast,
+    materialFocusRing: CalcTheme.materialFocusRingHighContrast,
   );
 
   /// 기기의 고대비 설정에 맞는 팔레트. [MediaQuery.highContrastOf]나 Android "고대비 텍스트"([HighTextContrastScope])
@@ -924,10 +939,6 @@ final class CalcPalette {
   ThemeData get materialTheme => isHighContrast
       ? CalcTheme.materialHighContrastTheme
       : CalcTheme.materialTheme;
-
-  /// `FocusRing`이 그리는 키보드 포커스 테두리 색. 일반 팔레트는 `null` (Material 기본 포커스 겹침만 쓴다, #97).
-  Color? get materialFocusRing =>
-      isHighContrast ? CalcTheme.materialFocusRingHighContrast : null;
 
   /// [category] 키캡 배경색
   Color keyBackground(KeyCategory category) {

@@ -14,7 +14,7 @@ import 'focus_ring.dart';
 /// 포커스를 옮기면 선택도 함께 바뀌므로, 고를 때 닫으면 화살표 한 번에 설정이 바뀌고 대화상자가 닫힌다.
 /// 스크린리더에는 단일 선택 그룹·선택 상태로 알려진다.
 ///
-/// 기기 고대비 설정에서는 키보드 포커스가 있는 선택지·닫기 버튼에 [FocusRing] 테두리를 그린다 (#97).
+/// 키보드 포커스가 있는 선택지·닫기 버튼에는 [FocusRing] 테두리를 그린다 (고대비 #97, 일반 모드 #106).
 class HandednessDialog extends ConsumerWidget {
   const HandednessDialog({super.key});
 

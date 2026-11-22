@@ -2,13 +2,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/calc_theme.dart';
 
-/// 기기 고대비 설정에서 [child]에 키보드 포커스가 있으면 테두리를 겹쳐 그린다 (#97).
+/// [child]에 키보드 포커스가 있으면 테두리를 겹쳐 그린다 (고대비 #97, 일반 모드 #106).
 ///
-/// Material 기본 포커스 표시(겹침색)는 고대비에서도 주변과 1.3~1.5:1뿐이라 키보드 사용자가 포커스 위치를 찾기 어렵다.
+/// Material 기본 포커스 표시(겹침색)는 일반·고대비 모두 주변과 1.3~1.5:1뿐이라 키보드 사용자가 포커스 위치를 찾기 어렵다.
 /// 테마로는 고칠 수 없다 — ListTile은 상태별 모양을 받지 않고, 버튼의 `WidgetState.focused`는 포커스 표시 방식과
 /// 관계없이 포커스를 **가지면** 켜져 터치 조작 중에도 테두리가 남는다. 그래서 이 위젯이 직접 그린다.
-/// - 색·굵기: [CalcPalette.materialFocusRing]·[CalcTheme.materialFocusRingWidth]. 일반 모드(색 `null`)에서는
-///   그리지 않는다(Material 기본 포커스 표시 그대로).
+/// - 색·굵기: [CalcPalette.materialFocusRing]·[CalcTheme.materialFocusRingWidth]. Material 기본 포커스 겹침은
+///   그대로 두고 그 위에 그린다.
 /// - Material 포커스 겹침과 같이 키보드 조작 중(`FocusHighlightMode.traditional`)에만 보인다.
 /// - [child] 안의 포커스 노드(버튼·타일의 InkWell)가 포커스를 가지면 켜진다. 이 위젯은 포커스를 받지 않고,
 ///   포커스 이동 순서·스크린리더 시맨틱에 끼어들지 않는다.
@@ -71,7 +71,7 @@ class _FocusRingState extends State<FocusRing> {
   @override
   Widget build(BuildContext context) {
     final color = CalcPalette.of(context).materialFocusRing;
-    final visible = color != null && _focused && _traditional;
+    final visible = _focused && _traditional;
     // 켜고 끌 때 트리 구조가 바뀌지 않게 장식만 바꾼다. [child]가 받는 제약은 그대로 넘긴다(passthrough).
     return Focus(
       canRequestFocus: false,
