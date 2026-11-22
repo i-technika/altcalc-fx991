@@ -36,6 +36,8 @@ import '../widgets/top_strip.dart';
 ///   키패드가 쓰지 못하는 높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 [top]에 더한다
 ///   (그래서 남는 높이가 최소 띠 이상인 화면의 배치는 최소 띠가 없을 때와 같다).
 /// - 본체가 아주 낮으면 키패드 높이가 0이 될 때까지만 LCD를 최소 높이로 지킨다 (TODO(#38)).
+///   짧은 창에서도 상단 띠 최소 높이를 먼저 떼므로 우선순위는 띠 > LCD 최소 높이 > 키패드다 — 짧은 창의 비용은
+///   [CalcTheme] "상단 띠" 절, 바꿀지는 #38에서 정한다.
 ///   본체가 최소 띠 + 간격보다 낮으면 띠, 간격 순으로 본체 높이까지만 받아, 어떤 경우에도 합계가 본체 높이를
 ///   넘지 않는다.
 @immutable
@@ -95,7 +97,9 @@ class CalcScreenLayout {
     );
     final keypad = math.min(available - lcd, keypadMax);
     return CalcScreenLayout._(
-      top: strip + available - lcd - keypad,
+      // 남는 높이를 먼저 구한 뒤 띠에 더한다 — `strip + available - lcd - keypad` 순서로 계산하면 남는 높이가
+      // 0이어도 부동소수점 오차로 띠가 최소 높이보다 작아진다(본체 376×718 등, #41 R1).
+      top: strip + ((available - lcd) - keypad),
       lcdLeft: (width - lcdWidth) / 2,
       lcdWidth: lcdWidth,
       lcdHeight: lcd,
@@ -409,6 +413,10 @@ class CalcTopStripLayout {
     required this.solarPanel,
   });
 
+  /// 높이 문턱 비교의 허용 오차 (dp) — 최소 띠의 줄 높이가 워드마크 문턱과 같으므로, 부동소수점 오차로
+  /// 문턱 바로 아래가 되어도 숨기지 않는다.
+  static const double _epsilon = 1e-6;
+
   /// [body](본체 크기) 안의 [lcd](본체 좌표) 위 띠 배치.
   /// [settingsButton]은 띠 밖 다른 곳에 놓인 설정 버튼 영역이다 — `null`이면 띠 안(줄 오른쪽 끝)에 둔다.
   factory CalcTopStripLayout.of(Size body, Rect lcd, {Rect? settingsButton}) {
@@ -454,13 +462,14 @@ class CalcTopStripLayout {
       width * CalcTheme.topStripWordmarkMaxWidthRatio,
       contentRight - contentLeft,
     );
-    if (rowHeight >= CalcTheme.topStripWordmarkMinHeight &&
+    if (rowHeight >= CalcTheme.topStripWordmarkMinHeight - _epsilon &&
         wordmarkWidth >= CalcTheme.topStripWordmarkMinWidth) {
       wordmark = Rect.fromLTWH(contentLeft, row.top, wordmarkWidth, rowHeight);
     }
 
     Rect? solar;
-    if (wordmark != null && rowHeight >= CalcTheme.topStripSolarMinHeight) {
+    if (wordmark != null &&
+        rowHeight >= CalcTheme.topStripSolarMinHeight - _epsilon) {
       final solarHeight = rowHeight * CalcTheme.topStripSolarHeightRatio;
       final solarWidth = solarHeight * CalcTheme.topStripSolarAspectRatio;
       final solarLeft = contentRight - solarWidth;
@@ -820,6 +829,9 @@ class _Body extends ConsumerWidget {
     final Rect keypad;
     // 띠 밖에 놓는 설정 버튼 (좌우 분할·접힘선 기준 배치). 위아래 배치는 상단 띠 안에 둔다.
     Rect? settings;
+    // 실제로 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래 배치로 그리면 [ScreenArrangement.stacked]다.
+    // 설정 대화상자가 접힘선으로 나뉠지·손잡이 설정이 이 배치에 적용되는지 고를 때 쓴다 (#41 R1).
+    final ScreenArrangement drawn;
     final hinge = this.hinge;
     final handedness = ref.watch(handednessProvider);
     // 접힘선 기준 배치 후보. 키가 터치 하한보다 낮아지면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
@@ -857,15 +869,18 @@ class _Body extends ConsumerWidget {
         lcd = layout.lcd;
         keypad = layout.keypad;
         settings = layout.settingsButton;
+        drawn = arrangement;
       case ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked
           when hingeLayout != null:
         lcd = hingeLayout.lcd;
         keypad = hingeLayout.keypad;
         settings = hingeLayout.settings;
+        drawn = arrangement;
       // 접힘선 기준 배치를 쓸 수 없으면(키가 터치 하한보다 낮음, 호출 측 불일치) 위아래 배치로 그린다.
       case ScreenArrangement.stacked ||
           ScreenArrangement.hingeSplit ||
           ScreenArrangement.hingeStacked:
+        drawn = ScreenArrangement.stacked;
         final layout = CalcScreenLayout.of(body);
         final width = body.width.isFinite ? math.max(0.0, body.width) : 0.0;
         final height = body.height.isFinite ? math.max(0.0, body.height) : 0.0;
@@ -906,8 +921,9 @@ class _Body extends ConsumerWidget {
         Positioned.fromRect(
           rect: (settings ?? stripButton!).shift(origin),
           child: stripButton == null
-              ? const SettingsButton()
+              ? SettingsButton(arrangement: drawn)
               : SettingsButton(
+                  arrangement: drawn,
                   visualHeight: strip.settingsVisualHeight,
                   iconSize: strip.settingsIconSize,
                 ),

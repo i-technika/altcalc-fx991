@@ -235,7 +235,7 @@ void main() {
       // 오른손잡이: 접힘선(x = 640) 왼쪽 LCD, 오른쪽 키패드
       expect(tester.getRect(_lcd).right, lessThanOrEqualTo(640));
       expect(tester.getRect(_keypad).left, greaterThanOrEqualTo(640));
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
     });
   });
 
@@ -384,7 +384,7 @@ void main() {
           ],
         );
         expect(tester.takeException(), isNull);
-        expect(isStackedArrangement(tester), isFalse);
+        expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
         final lcd = tester.getRect(_lcd);
         final keypad = tester.getRect(_keypad);
         expect(keypad.width, lessThan(300));
@@ -430,8 +430,8 @@ void main() {
     }
   });
 
-  group('태블릿 가로: LCD 폭 상한과 위쪽 빈 띠 (#71)', () {
-    // (창, 인셋, LCD 쪽 패널 바깥 여백, 위쪽 빈 띠) — 키패드는 모두 최대 폭 480dp.
+  group('태블릿 가로: LCD 폭 상한과 위쪽 띠 (#71)', () {
+    // (창, 인셋, LCD 쪽 패널 바깥 여백, 위쪽 띠) — 키패드는 모두 최대 폭 480dp.
     // 접힘선이 없는 좌우 분할에서는 LCD 폭 = 키패드 폭이라, 패널의 나머지가 바깥 여백이 된다.
     const windows = [
       // 12.9인치 iPad: 본체 1350×902 (1024 − 24 − 8 − 광고 슬롯 60·안전 여백 10·아래 인셋 20)
@@ -487,7 +487,7 @@ void main() {
           expect(_settings.hitTestable(), findsOneWidget);
 
           // 위아래: 위아래 배치(#41)와 같이 키패드를 광고 슬롯 바로 위에 붙이고(가운데 정렬하지 않음),
-          // LCD 윗변은 키패드 윗변에 맞춘다. 본체가 키패드 최대 높이보다 높은 만큼 위쪽이 빈 띠로 남는다.
+          // LCD 윗변은 키패드 윗변에 맞춘다. 본체가 키패드 최대 높이보다 높은 만큼 위쪽이 띠로 남는다(장식은 top_strip_test).
           expect(
             ad.top - keypad.bottom,
             lessThanOrEqualTo(CalcTheme.adSlotMaxSafetyMargin + 0.01),
@@ -747,7 +747,7 @@ void main() {
 
     // 다시 가로로
     await _pump(tester, size: const Size(1280, 800), container: container);
-    expect(isStackedArrangement(tester), isFalse);
+    expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
       isTrue,
@@ -1334,7 +1334,7 @@ void _hingeLayoutTests() {
       tester.getRect(_lcd).bottom,
       lessThanOrEqualTo(tester.getRect(_keypad).top),
     );
-    expect(isStackedArrangement(tester), isFalse);
+    expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
     expect(container.read(calcProvider).modifier, KeyModifier.shift);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
@@ -1419,7 +1419,7 @@ void _hingeLayoutTests() {
         padding: const EdgeInsets.only(top: 24, bottom: 48),
         displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
       );
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
       expect(tester.getRect(_keypad).top, greaterThanOrEqualTo(336.5));
       _expectTouchTargets(tester, floor: CalcTheme.tabletopKeyTouchHeightFloor);
     });

@@ -840,6 +840,27 @@ void main() {
         );
       });
 
+      test('낮은 띠에서 LCD 위로 넓힌 설정 터치 영역은 LCD 안에서 끝난다 (키패드까지 내려가지 않는다)', () {
+        // 최소 띠에서 터치 영역이 LCD 위에 겹치는 높이 = 버튼 − 줄 높이
+        expect(
+          CalcTheme.screenLcdMinHeight,
+          greaterThan(CalcTheme.settingsButtonSize - minRow),
+        );
+      });
+
+      test('간격·여백·반경은 양수다', () {
+        for (final v in [
+          CalcTheme.topStripInset,
+          CalcTheme.topStripGap,
+          CalcTheme.topStripIconMargin,
+          CalcTheme.topStripSolarBorderRadius,
+          CalcTheme.topStripSolarCellGapRatio,
+          CalcTheme.topStripWordmarkMinWidth,
+        ]) {
+          expect(v, greaterThan(0));
+        }
+      });
+
       test('숨기는 순서: 워드마크는 최소 띠부터, 태양전지는 그보다 높은 줄부터 그린다', () {
         expect(CalcTheme.topStripWordmarkMinHeight, minRow);
         expect(

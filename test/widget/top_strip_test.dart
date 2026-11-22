@@ -1,9 +1,11 @@
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
@@ -82,6 +84,37 @@ Size _bodyOf(Size size, {double top = 0, double bottom = 0}) => Size(
       CalcTheme.adSlotHeight -
       CalcTheme.adSlotSafetyMargin,
 );
+
+/// 시맨틱 트리의 모든 노드 (뿌리 제외)
+List<SemanticsNode> _semanticsNodes(WidgetTester tester) {
+  final nodes = <SemanticsNode>[];
+  bool visit(SemanticsNode node) {
+    nodes.add(node);
+    node.visitChildren(visit);
+    return true;
+  }
+
+  tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!
+      .visitChildren(visit);
+  return nodes;
+}
+
+/// 시맨틱 노드 영역을 화면 논리 좌표로 바꾼다 — 조상의 변환을 모두 적용하면 기기 픽셀 좌표가 되므로
+/// 기기 픽셀 배율로 나눈다.
+Rect _globalRect(WidgetTester tester, SemanticsNode node) {
+  var rect = node.rect;
+  for (SemanticsNode? n = node; n != null && n.parent != null; n = n.parent) {
+    final transform = n.transform;
+    if (transform != null) rect = MatrixUtils.transformRect(transform, rect);
+  }
+  final ratio = tester.view.devicePixelRatio;
+  return Rect.fromLTRB(
+    rect.left / ratio,
+    rect.top / ratio,
+    rect.right / ratio,
+    rect.bottom / ratio,
+  );
+}
 
 void main() {
   group('띠 배치 계산 (CalcTopStripLayout)', () {
@@ -240,6 +273,32 @@ void main() {
       expect(clear.solarPanel, isNotNull);
     });
 
+    test('불변식: 폰·태블릿 폭의 본체는 1dp 간격 어디서나 띠가 최소 높이 이상이고 워드마크가 있다 (#41 R1)', () {
+      // 부동소수점 오차로 띠가 11.99…dp가 되어 워드마크가 사라지던 크기(본체 376×718~726)를 포함한다.
+      final failures = <String>[];
+      void check(Size body) {
+        final lcd = _stackedLcd(body);
+        final s = CalcTopStripLayout.of(body, lcd);
+        if (lcd.top < CalcTheme.screenTopStripMinHeight ||
+            s.row.height < CalcTheme.topStripWordmarkMinHeight ||
+            s.wordmark == null) {
+          failures.add('$body top=${lcd.top}');
+        }
+      }
+
+      for (var width = 120.0; width <= 1100; width += 1) {
+        for (var height = 300.0; height <= 1300; height += 7) {
+          check(Size(width, height));
+        }
+      }
+      for (var width = 300.0; width <= 440; width += 1) {
+        for (var height = 450.0; height <= 900; height += 1) {
+          check(Size(width, height));
+        }
+      }
+      expect(failures, isEmpty, reason: failures.take(5).join('\n'));
+    });
+
     test('불변식: 어떤 본체 크기에서도 띠 안의 것들이 줄 안에 있고 서로 겹치지 않는다', () {
       for (var width = 0.0; width <= 1100; width += 37) {
         for (var height = 0.0; height <= 1400; height += 41) {
@@ -269,6 +328,14 @@ void main() {
           expect(b.right, row.right, reason: reason);
           expect(b.left, greaterThanOrEqualTo(row.left), reason: reason);
           expect(b.height, lessThanOrEqualTo(button + 1e-9), reason: reason);
+          // 터치 영역은 줄 아래로 넓어져도 LCD 아래(키패드)까지 내려가지 않는다 — LCD 최소 높이가 겹치는 높이보다
+          // 크다(calc_theme_test 불변식). 본체가 LCD 최소 높이보다 낮은 비정상 크기는 제외한다.
+          if (height >=
+              CalcTheme.screenTopStripMinHeight +
+                  CalcTheme.screenLcdMinHeight +
+                  CalcTheme.screenLcdKeypadGap) {
+            expect(b.bottom, lessThanOrEqualTo(lcd.bottom), reason: reason);
+          }
           // 터치 영역은 줄 아래로 넓어져도 본체 아래(광고 슬롯 쪽)로는 나가지 않는다.
           expect(
             b.bottom,
@@ -590,15 +657,30 @@ void main() {
       expect(_dialog, findsOneWidget);
     });
 
-    testWidgets('대화상자는 이 설정이 적용되는 화면을 안내한다 (폰 화면에서는 달라지지 않는다)', (tester) async {
+    testWidgets('위아래 배치: 대화상자는 지금 화면에서 키패드 위치가 바뀌지 않는다고 안내한다', (tester) async {
       await _pump(tester, size: iphone, padding: iphoneInsets);
       await tester.tap(_button);
       await tester.pumpAndSettle();
       // 테스트 기본 로캘(en_US)
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        'Applies to tablets in landscape and unfolded foldables. '
-        'Nothing changes on a phone screen.',
+        'The keypad position does not change on this screen. '
+        'It applies when the LCD and keypad are side by side or split by a fold.',
+      );
+      // 안내 글은 선택지 아래에 있고, 라디오 그룹 밖에 있다.
+      final note = tester.getRect(find.byKey(HandednessDialog.noteKey));
+      for (final h in Handedness.values) {
+        expect(
+          tester.getRect(find.byKey(HandednessDialog.optionKeyOf(h))).bottom,
+          lessThanOrEqualTo(note.top),
+        );
+      }
+      expect(
+        find.ancestor(
+          of: find.byKey(HandednessDialog.noteKey),
+          matching: find.byType(RadioGroup<Handedness>),
+        ),
+        findsNothing,
       );
       // 폰의 위아래 배치에서는 손잡이를 바꿔도 배치가 그대로다.
       final lcd = tester.getRect(_lcd);
@@ -619,9 +701,154 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        '태블릿 가로 화면과 펼친 폴더블에 적용됩니다. 폰 화면에서는 달라지지 않습니다.',
+        '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
+        'LCD와 키패드가 좌우로 나뉘거나 접힘선으로 나뉜 화면에서 적용됩니다.',
       );
     });
+
+    for (final (name, size, padding, features) in [
+      (
+        '좌우 분할 1280×800',
+        const Size(1280, 800),
+        const EdgeInsets.only(top: 24, bottom: 48),
+        const <DisplayFeature>[],
+      ),
+      (
+        '테이블톱 Flip 411×1005',
+        const Size(411, 1005),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 502.5, 411, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+        ],
+      ),
+      (
+        '세로 접힘선 841×701',
+        const Size(841, 701),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(420, 0, 0, 701),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+      ),
+    ]) {
+      testWidgets('$name: 손잡이가 적용되는 배치라 안내 글이 없다', (tester) async {
+        await _pump(
+          tester,
+          size: size,
+          padding: padding,
+          displayFeatures: features,
+        );
+        expect(
+          drawnArrangementOf(tester),
+          isNot(anyOf(DrawnArrangement.stacked, DrawnArrangement.unknown)),
+        );
+        await tester.tap(_button);
+        await tester.pumpAndSettle();
+        expect(_dialog, findsOneWidget);
+        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+      });
+    }
+
+    testWidgets('대화상자가 열린 채 배치가 바뀌면 안내 글이 따라 나타나고 사라진다', (tester) async {
+      const padding = EdgeInsets.only(top: 24, bottom: 48);
+      final container = await _pump(
+        tester,
+        size: const Size(1280, 800),
+        padding: padding,
+      );
+      await tester.tap(_button);
+      await tester.pumpAndSettle();
+      expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+
+      // 세로로 돌림 → 위아래 배치 (한 프레임 늦게 반영된다)
+      await _pump(
+        tester,
+        size: const Size(800, 1280),
+        padding: padding,
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(_dialog, findsOneWidget);
+      expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await _pump(
+        tester,
+        size: const Size(1280, 800),
+        padding: padding,
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(_dialog, findsOneWidget);
+      expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+    });
+
+    testWidgets(
+      '키가 작아 접힘선 기준 배치 대신 위아래 배치로 그리면 대화상자를 접힘선 한쪽에 가두지 않는다 (#41 R1)',
+      (tester) async {
+        // 세로 접힘선 오른쪽 281dp + 오른쪽 인셋 48 → 키가 터치 하한보다 낮아 위아래 배치로 그린다
+        // (split_layout_test의 #25 R2 경우). 설정 버튼은 접힘선 오른쪽(LCD 오른쪽 끝)에 있다.
+        const fold = DisplayFeature(
+          bounds: Rect.fromLTWH(560, 0, 0, 701),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        tester.view.padding = const FakeViewPadding(
+          top: 24 * 3,
+          right: 48 * 3,
+          bottom: 24 * 3,
+        );
+        addTearDown(tester.view.resetPadding);
+        await _pump(
+          tester,
+          size: const Size(841, 701),
+          padding: const EdgeInsets.only(top: 24, right: 48, bottom: 24),
+          displayFeatures: const [fold],
+        );
+        expect(isStackedArrangement(tester), isTrue);
+        expect(tester.getRect(_button).left, greaterThan(560));
+        await tester.tap(_button);
+        await tester.pumpAndSettle();
+        final surface = tester.getRect(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(surface.width, greaterThanOrEqualTo(280));
+        expect(surface.left, lessThan(560)); // 접힘선 오른쪽 절반에 갇히지 않았다
+        expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+      },
+    );
+
+    for (final size in const [Size(360, 300), Size(568, 320), Size(640, 360)]) {
+      testWidgets(
+        '작은 창 ${size.width}×${size.height}: 안내 글이 있어도 첫 선택지가 스크롤 없이 눌린다',
+        (tester) async {
+          final container = await _pump(tester, size: size);
+          expect(isStackedArrangement(tester), isTrue);
+          // 첫 선택지(오른손잡이)를 눌러 바뀌는지 보려고 왼손잡이로 시작한다.
+          container.read(handednessProvider.notifier).set(Handedness.left);
+          await tester.pump();
+          await tester.tap(_button);
+          await tester.pumpAndSettle();
+          expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+          final first = Handedness.values.first;
+          await tester.tap(find.byKey(HandednessDialog.optionKeyOf(first)));
+          await tester.pumpAndSettle();
+          expect(container.read(handednessProvider), first);
+        },
+      );
+    }
 
     testWidgets('스크린리더: 설정 버튼은 하나이고 보이는 부분이 영역이며, 장식·넓힌 터치 영역은 읽히지 않는다', (
       tester,
@@ -640,10 +867,18 @@ void main() {
         node.rect,
       );
       expect(nodeRect.height, lessThanOrEqualTo(lcd.top - 47 + _tolerance));
-      // 넓힌 터치 영역은 시맨틱 동작을 만들지 않는다.
+      // 넓힌 터치 영역은 시맨틱 동작을 만들지 않는다: 터치 영역(48×48)과 겹치는 탭 동작 노드는 버튼 하나뿐이다.
+      final touch = tester.getRect(_touch).deflate(1);
+      final tappable = [
+        for (final n in _semanticsNodes(tester))
+          if (n.getSemanticsData().hasAction(SemanticsAction.tap) &&
+              _globalRect(tester, n).overlaps(touch))
+            n,
+      ];
+      expect(tappable, hasLength(1));
       expect(
-        find.descendant(of: _touch, matching: find.byType(Semantics)),
-        findsNothing,
+        _globalRect(tester, tappable.single).height,
+        moreOrLessEquals(nodeRect.height, epsilon: _tolerance),
       );
       expect(
         find.bySemanticsLabel(TopStripDecoration.wordmarkText),
@@ -739,7 +974,7 @@ void main() {
         size: const Size(1280, 800),
         padding: padding,
       );
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
       final element = tester.element(_button);
 
       await _pump(
@@ -771,7 +1006,7 @@ void main() {
         padding: const EdgeInsets.only(top: 24, bottom: 20),
       );
       expect(tester.takeException(), isNull);
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
       final lcd = tester.getRect(_lcd);
       final button = tester.getRect(_button);
       expect(button.top, greaterThanOrEqualTo(lcd.bottom));
@@ -803,7 +1038,7 @@ void main() {
         size: const Size(1280, 800),
         padding: const EdgeInsets.only(top: 24, bottom: 48),
       );
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
       expect(_wordmark, findsNothing);
       expect(_solar, findsNothing);
       expect(_button.hitTestable(), findsOneWidget);

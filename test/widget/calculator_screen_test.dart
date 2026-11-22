@@ -231,7 +231,7 @@ void main() {
       expect(orientationRequests(calls), [
         ['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'],
       ]);
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
     });
 
     testWidgets('Android 고대비 텍스트가 켜져 있으면 첫 화면부터 고대비 팔레트다 (#95)', (
@@ -331,7 +331,7 @@ void main() {
         addTearDown(tester.view.resetDisplayFeatures);
         await tester.pump();
         expect(orientationRequests(calls), hasLength(1));
-        expect(isStackedArrangement(tester), isFalse);
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
         final lcd = tester.getRect(find.byType(LcdDisplay));
         final keypad = tester.getRect(
           find.byKey(const ValueKey('calc-keypad')),
@@ -365,7 +365,7 @@ void main() {
           OrientationPolicy.any,
         );
         // 접힘선이 창을 가로지르므로 접힘선 기준 좌우 배치다.
-        expect(isStackedArrangement(tester), isFalse);
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
 
         // 정책이 그대로인 화면 정보 변화(회전 등)에는 다시 요청하지 않는다.
         tester.view.physicalSize = const Size(701, 841) * 2;
@@ -393,7 +393,7 @@ void main() {
       await app.main();
       await tester.pump();
       expect(orientationRequests(calls), [anyOrientation]);
-      expect(isStackedArrangement(tester), isFalse);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
 
       // 펼친 화면에서 키를 누른다.
       await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)));
@@ -469,24 +469,35 @@ void main() {
   });
 
   group('세로 폰 화면의 키 크기 하한', () {
-    // 터치 높이(dp) 하한, 배율 반영 메인·각인 글자(dp) 하한.
-    // 각인 글자 하한은 #41에서 5.0 → 4.9로 내렸다: 상단 띠 최소 높이(12dp, 설정 아이콘 줄 — 사용자 결정)를 떼어
-    // 두면서 가장 작은 320×568의 키패드가 352 → 343.4dp로 줄어 각인이 5.03 → 4.90dp가 된다(다른 크기는 5.0 이상).
-    const minTouchHeight = CalcTheme.keyTouchHeightFloor;
+    // 배율 반영 메인 글자(dp) 하한
     const minMainFont = 7.0;
-    const minLegendFont = 4.9;
 
-    for (final size in const [
-      Size(320, 568),
-      Size(360, 640),
-      Size(390, 844),
-      Size(412, 915),
+    // (창, 인셋, 터치 높이 하한, 배율 반영 각인 글자 하한) — 기본은 터치 [CalcTheme.keyTouchHeightFloor]·각인 5.0dp.
+    // 가장 작은 320×568만 하한을 낮춘다(#41 — 상단 띠 최소 높이 12dp를 떼어 두기로 한 사용자 결정의 비용,
+    // [CalcTheme] "상단 띠" 절):
+    // - 인셋 0: 각인 5.03 → 4.90dp
+    // - 상태바 20dp(iPhone SE 1세대): 키 터치 28.70 → 27.96dp로 기본 하한 28dp **미만**, 커서 패드 ▲·▼ 내접원
+    //   27.65dp, 각인 4.82 → 4.70dp(각인은 이 변경 전에도 5.0dp 미만이었다 — 이 크기는 #41 전까지 인셋 0으로만
+    //   검사했다)
+    const floor = CalcTheme.keyTouchHeightFloor;
+    for (final (size, padding, minTouchHeight, minLegendFont) in const [
+      (Size(320, 568), EdgeInsets.zero, floor, 4.9),
+      (Size(320, 568), EdgeInsets.only(top: 20), 27.6, 4.65),
+      (Size(360, 640), EdgeInsets.zero, floor, 5.0),
+      (Size(360, 640), EdgeInsets.only(top: 24, bottom: 48), floor, 5.0),
+      (Size(390, 844), EdgeInsets.zero, floor, 5.0),
+      (Size(390, 844), EdgeInsets.only(top: 47, bottom: 34), floor, 5.0),
+      (Size(412, 915), EdgeInsets.zero, floor, 5.0),
     ]) {
       for (final scale in [1.0, 1.3]) {
-        testWidgets('${size.width}×${size.height}, 글자 배율 $scale', (
-          tester,
-        ) async {
-          await _pumpScreen(tester, size: size, textScale: scale);
+        testWidgets('${size.width}×${size.height}·인셋 ${padding.top}/'
+            '${padding.bottom}, 글자 배율 $scale', (tester) async {
+          await _pumpScreen(
+            tester,
+            size: size,
+            padding: padding,
+            textScale: scale,
+          );
           final buttons = tester
               .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
               .toList();
@@ -865,15 +876,14 @@ void main() {
             moreOrLessEquals(CalcTheme.screenLcdKeypadGap, epsilon: 0.01),
           );
 
-          // 배율 반영 줄 글자는 가장 작은 폰(16:9)에서도 17.7dp 이상이다.
-          // #41에서 18 → 17.7로 내렸다: 상단 띠 최소 높이(12dp)를 떼어 두면서 320×568의 LCD가 140 → 136.6dp로
-          // 줄어 줄 글자가 배율 1.0에서 18.8 → 18.2dp, 배율 1.3에서 18.3 → 17.7dp가 된다(다른 크기는 21dp 이상).
+          // 배율 반영 줄 글자는 18dp 이상이다. 가장 작은 320×568만 17.7dp로 낮춘다(#41): 상단 띠 최소 높이(12dp)를
+          // 떼어 두면서 LCD가 140 → 136.6dp로 줄어 배율 1.3의 줄 글자가 18.3 → 17.7dp가 된다(다른 크기는 21dp 이상).
           final text = tester.element(
             find.byKey(const ValueKey('lcd-input-text')),
           );
           final line = MediaQuery.textScalerOf(text)
               .scale(DefaultTextStyle.of(text).style.fontSize!);
-          expect(line, greaterThanOrEqualTo(17.7));
+          expect(line, greaterThanOrEqualTo(size.width == 320 ? 17.7 : 18));
 
           // 입력·결과 줄은 각각 분수(2행 + 막대)를 담는다.
           final fractionHeight =
