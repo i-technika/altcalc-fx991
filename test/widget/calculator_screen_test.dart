@@ -474,29 +474,34 @@ void main() {
             }
           }
 
-          // 커서 패드 (#43): 가운데 데드존·홈이 구역을 깎아도 방향 키마다 손가락이 들어갈 치수가 남는다.
-          // - 내접원 지름(구역 안에 들어가는 가장 큰 원): ▲·▼는 터치 하한 이상, 실물처럼 좁게 만든
-          //   ◀·▶도 터치 하한의 90% 이상이다(◀·▶는 대신 가로로 길다).
-          // - 넓이: 함수 키 셀(각인 띠 포함) 대비 ▲·▼는 80%, ◀·▶는 50% 이상이다.
+          // 커서 패드 (#43·#64): 가운데 데드존·홈이 깎아도 방향 키마다 손가락이 들어갈 터치 영역이 남는다.
+          // 터치 영역은 외곽 밖·셀 여백까지 넓힌 것이다(#64, 그림 구역보다 넓다 — CursorPad 문서).
+          // - 내접원 지름(터치 영역에 들어가는 가장 큰 원): ▲·▼는 터치 하한 이상, 실물처럼 좁게 만든
+          //   ◀·▶도 터치 하한의 95% 이상이다(#64 전 90%, 320×568에서 약 27.9dp).
+          //   ◀·▶ 내접원은 #64로 거의 늘지 않았다(약 +1dp) — 홈 사이 쐐기(그린 구역)가 정하기 때문이다.
+          // - 넓이: 함수 키 셀(각인 띠 포함) 대비 ▲·▼는 135%, ◀·▶는 78% 이상이다
+          //   (#64 전 그림 구역 기준 ◀·▶ 0.54~0.58배 → 터치 영역 0.81~0.84배).
           //   (함수 키 셀의 터치 높이와 직접 비교하지 않는다 — 그 높이는 각인 띠까지 넓힌 값이고,
           //   방향 키 구역은 함수 키보다 2~3배 넓다.)
-          final pad = tester.getSize(find.byKey(const ValueKey('cursor-pad')));
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
           final sin = buttons.firstWhere((b) => b.keyDef.id == CalcKeyId.sin);
           final sinCell = tester.getSize(find.byWidget(sin));
           final cellArea = sinCell.width * sinCell.height;
-          final g = CursorPadGeometry(pad);
+          final g = CursorPadGeometry(pad.size);
+          final bounds = cell.shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final wide =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
             expect(
-              inscribedDiameter(g, sector),
-              greaterThanOrEqualTo(minTouchHeight * (wide ? 1.0 : 0.9)),
-              reason: '${sector.name} 내접원 $pad',
+              hitInscribedDiameter(g, sector, bounds),
+              greaterThanOrEqualTo(minTouchHeight * (wide ? 1.0 : 0.95)),
+              reason: '${sector.name} 내접원 ${pad.size}',
             );
             expect(
-              g.sectorArea(sector),
-              greaterThanOrEqualTo(cellArea * (wide ? 0.8 : 0.5)),
-              reason: '${sector.name} 넓이 $pad',
+              g.hitArea(sector, bounds),
+              greaterThanOrEqualTo(cellArea * (wide ? 1.35 : 0.78)),
+              reason: '${sector.name} 넓이 ${pad.size}',
             );
           }
         });
