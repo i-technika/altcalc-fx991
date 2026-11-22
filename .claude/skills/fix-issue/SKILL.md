@@ -113,26 +113,45 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 ### 9. 후속 이슈 등록 (사용자에게 묻지 않고 직접 판단)
 - 구현·리뷰 중 이번 범위 밖으로 미룬 개선점/리팩토링/검증 과제를 정리하고, **등록할 항목을 Claude가 직접 고른다**
   (CLAUDE.md "질의 규칙" — 여러 개를 고르는 체크박스 질의는 하지 않는다).
-  - 등록: 실제 결함·누락된 검증·실기기/실물 확인처럼 나중에 누군가 해야 하는 일
-  - 등록하지 않음: 이번 PR에서 이미 고친 것, 근거가 약한 취향 수준 지적, 기존 이슈와 겹치는 것(기존 이슈에 코멘트로 보탬)
+  - 먼저 경계: **이번 이슈 범위 안의 결함은 미루지 않고 이번 PR에서 고친다.** 후속 이슈는 범위 밖의 일만 대상이다.
+  - 등록: 범위 밖의 실제 결함, 누락된 검증, 실기기·실물 확인처럼 나중에 누군가 해야 하는 일.
+    리팩토링·개선은 **구체적인 재현 근거나 측정 근거**(깨지는 입력, 수치, 중복 코드 위치 등)가 있을 때만 등록한다.
+  - 등록하지 않음: 이번 PR에서 이미 고친 것, 근거가 약한 취향 수준 지적, 기존 이슈와 겹치는 것(기존 이슈에 코멘트로 보탬).
+    겹침 확인은 검색이 아니라 그 마일스톤의 열린 이슈 목록으로 한다(한국어 제목은 검색 색인으로 잘 찾아지지 않는다):
+    `gh issue list --milestone "<마일스톤 이름>" --state open -L 200 --json number,title`
   - 12단계 보고에 등록한 것·등록하지 않은 것과 각각의 이유를 적는다.
 - 제목에는 순번 접두사(`[M<N>-<순번>]`)를 붙이지 않는다 — 이슈 번호·마일스톤·상위 에픽으로 식별한다.
 - **마일스톤 기준**: `<마일스톤 이름>`·`<에픽번호>`는 지금 작업 중인 마일스톤이 아니라 **그 후속 이슈가 속할 마일스톤** 기준이다
   (실물 대조 등 다른 마일스톤 과제는 그 마일스톤과 에픽으로 만든다 — 예: M3 과제면 M3 마일스톤, 에픽 #3).
 - 셸 변수는 Bash 도구 호출 사이에 남지 않으므로, 항목마다 아래를 **한 번의 Bash 호출**로 실행한다:
   ```bash
-  URL=$(gh issue create --title "<제목>" --body-file <파일> \
-    --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991") || {
-    # gh는 이슈를 만든 뒤 프로젝트 추가 등에서 실패할 수 있다 → 다시 만들기 전에 이미 생겼는지 확인한다(중복 방지)
-    echo "생성 실패 — gh issue list --search '<제목> in:title'로 생성 여부를 확인하고, 있으면 그 번호로 아래를 이어서 한다"; exit 1; }
-  NUM=${URL##*/}; echo "생성: #$NUM $URL"
-  # 상위 에픽에 서브이슈로 연결
+  set -e   # 아래 어느 단계든 실패하면 멈춘다 (에픽 연결 실패를 타입 지정 성공이 가리지 않게)
+  TITLE='<제목>'   # 제목에 작은따옴표가 있으면 '\'' 로 바꿔 쓴다
+  # 정확한 제목으로 최근 이슈 번호를 찾는다 — 검색(--search)은 한국어·특수문자 제목과 색인 지연 때문에 못 찾는다
+  find_issue() { gh issue list --state all -L 30 --json number,title --jq '.[] | "\(.number)\t\(.title)"' \
+    | T="$TITLE" awk -F'\t' 'substr($0, length($1) + 2) == ENVIRON["T"] { print $1; exit }'; }
+  if ! URL=$(gh issue create --title "$TITLE" --body-file <파일> \
+      --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"); then
+    # gh는 이슈를 만든 뒤 프로젝트 추가 단계에서 실패할 수 있다 → 다시 만들기 전에 생겼는지 확인한다(중복 방지)
+    NUM=""; for i in 1 2 3; do NUM=$(find_issue); [ -n "$NUM" ] && break; sleep 3; done
+    [ -n "$NUM" ] || { echo "이슈가 만들어지지 않았다 — 원인을 고친 뒤 이 블록을 다시 실행해도 된다"; exit 1; }
+    echo "생성은 됐고 뒤 단계가 실패함 → #$NUM 으로 이어서 처리"
+    gh issue edit "$NUM" --add-project "AltCalc FX-991"
+    URL="https://github.com/i-technika/altcalc-fx991/issues/$NUM"
+  fi
+  NUM=${URL##*/}
+  [[ $NUM =~ ^[0-9]+$ ]] || { echo "이슈 번호를 읽지 못했다: $URL — 다시 만들지 말고 find_issue로 확인"; exit 1; }
+  echo "생성: #$NUM $URL"
+  # 상위 에픽에 서브이슈로 연결 (ID를 변수로 먼저 받는다 — 인자 안의 $(...) 실패는 set -e가 잡지 못한다)
+  EPIC_ID=$(gh issue view <에픽번호> --json id --jq .id)
+  ISSUE_ID=$(gh issue view "$NUM" --json id --jq .id)
   gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
-    -f p="$(gh issue view <에픽번호> --json id --jq .id)" -f c="$(gh issue view "$NUM" --json id --jq .id)"
+    -f p="$EPIC_ID" -f c="$ISSUE_ID"
   # 이슈 타입(Task/Bug/Feature) 지정
   gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
-    -f i="$(gh issue view "$NUM" --json id --jq .id)" -f t="<타입 id>"
+    -f i="$ISSUE_ID" -f t="<타입 id>"
   ```
+  - 블록이 에픽 연결이나 타입 지정에서 멈추면 이슈는 이미 있으므로 **다시 만들지 말고** 그 번호로 남은 단계만 실행한다.
   타입 ID: Task `IT_kwDOBMwL0c4PCk6t`, Feature `IT_kwDOBMwL0c4PCk6v` (Bug는 `gh api graphql`로 `repository.issueTypes` 조회)
 - 후속 이슈는 아직 착수 전이므로 담당자를 지정하지 않는다 (착수할 때 1단계에서 지정).
 
