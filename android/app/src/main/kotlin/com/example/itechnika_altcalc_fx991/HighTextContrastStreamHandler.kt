@@ -8,13 +8,14 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
+import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
 import io.flutter.plugin.common.EventChannel
 
 /**
- * 시스템 접근성 "고대비 텍스트"(Android 15 이상 이름은 "텍스트 대비 최대화") 켜짐 여부를 Dart에 알린다 (#95).
+ * 시스템 접근성 "고대비 텍스트"(설정 키 `high_text_contrast_enabled`) 켜짐 여부를 Dart에 알린다 (#95).
  *
- * 이 설정은 시스템이 그리는 글자에 외곽선을 넣는 기능이라, 글자를 직접 그리는 Flutter 화면에는 효과가 없다.
+ * 이 설정은 시스템이 그리는 글자에 외곽선 등을 넣는 기능이라, 글자를 직접 그리는 Flutter 화면에는 효과가 없다.
  * Flutter 엔진은 이 설정을 `MediaQuery.highContrast`에 넣지 않으므로, 앱이 직접 읽어 고대비 팔레트를 쓴다.
  *
  * - API 36 이상: 공개 API `AccessibilityManager.isHighContrastTextEnabled`와 변경 리스너.
@@ -22,6 +23,10 @@ import io.flutter.plugin.common.EventChannel
  *   읽기가 막히면(SecurityException 등) 꺼진 것으로 본다.
  *
  * 구독을 시작하면 지금 값을 바로 한 번 보내고, 그 뒤에는 값이 바뀔 때만 보낸다. 모든 콜백은 메인 스레드에서 온다.
+ *
+ * API 36 전용 타입(`HighContrastTextStateChangeListener`)은 [Api36] 안에서만 참조한다. 이 클래스에 직접 쓰면
+ * 릴리스 빌드(R8)가 늘 실행되는 메서드에 그 타입을 인라인해 API 35 이하에서 클래스 검증이 실패할 수 있다
+ * (Flutter 엔진 `AccessibilityBridge`의 `Api34Impl`과 같은 이유). 여기서는 리스너를 [Any]로만 들고 있는다.
  */
 class HighTextContrastStreamHandler(private val context: Context) : EventChannel.StreamHandler {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -33,7 +38,7 @@ class HighTextContrastStreamHandler(private val context: Context) : EventChannel
     /** API 35 이하 변경 감지 */
     private var observer: ContentObserver? = null
 
-    /** API 36 이상 변경 감지 (`AccessibilityManager.HighContrastTextStateChangeListener`) */
+    /** API 36 이상 변경 감지 ([Api36.addListener]가 돌려준 리스너) */
     private var listener: Any? = null
 
     private val accessibilityManager: AccessibilityManager?
@@ -69,7 +74,7 @@ class HighTextContrastStreamHandler(private val context: Context) : EventChannel
 
     private fun isEnabled(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-            accessibilityManager?.isHighContrastTextEnabled ?: false
+            accessibilityManager?.let(Api36::isEnabled) ?: false
         } else {
             readLegacySetting()
         }
@@ -85,7 +90,8 @@ class HighTextContrastStreamHandler(private val context: Context) : EventChannel
 
     private fun register() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-            registerListener()
+            // 리스너가 넘기는 값 대신 다시 읽어, 보내는 값이 늘 isEnabled()와 같게 한다.
+            listener = accessibilityManager?.let { Api36.addListener(it, context, ::refresh) }
         } else {
             val uri = Settings.Secure.getUriFor(LEGACY_SETTING_KEY)
             val contentObserver = object : ContentObserver(mainHandler) {
@@ -101,29 +107,36 @@ class HighTextContrastStreamHandler(private val context: Context) : EventChannel
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
-    private fun registerListener() {
-        val manager = accessibilityManager ?: return
-        val stateListener = AccessibilityManager.HighContrastTextStateChangeListener { _ ->
-            // 리스너가 넘기는 값 대신 다시 읽어, 보내는 값이 늘 isEnabled()와 같게 한다.
-            refresh()
-        }
-        manager.addHighContrastTextStateChangeListener(context.mainExecutor, stateListener)
-        listener = stateListener
-    }
-
     private fun unregister() {
         observer?.let { context.contentResolver.unregisterContentObserver(it) }
         observer = null
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) unregisterListener()
+        val registered = listener
         listener = null
+        if (registered != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            accessibilityManager?.let { Api36.removeListener(it, registered) }
+        }
     }
 
+    /** API 36 전용 참조를 가둔다 — 클래스 설명 참조. 인라인되지 않게 각 메서드에 [DoNotInline]을 단다. */
     @RequiresApi(Build.VERSION_CODES.BAKLAVA)
-    private fun unregisterListener() {
-        val stateListener =
-            listener as? AccessibilityManager.HighContrastTextStateChangeListener ?: return
-        accessibilityManager?.removeHighContrastTextStateChangeListener(stateListener)
+    private object Api36 {
+        @DoNotInline
+        fun isEnabled(manager: AccessibilityManager): Boolean = manager.isHighContrastTextEnabled
+
+        /** [onChange]를 부르는 리스너를 등록하고 돌려준다 (해제용) */
+        @DoNotInline
+        fun addListener(manager: AccessibilityManager, context: Context, onChange: () -> Unit): Any {
+            val stateListener = AccessibilityManager.HighContrastTextStateChangeListener { _ -> onChange() }
+            manager.addHighContrastTextStateChangeListener(context.mainExecutor, stateListener)
+            return stateListener
+        }
+
+        @DoNotInline
+        fun removeListener(manager: AccessibilityManager, listener: Any) {
+            if (listener is AccessibilityManager.HighContrastTextStateChangeListener) {
+                manager.removeHighContrastTextStateChangeListener(listener)
+            }
+        }
     }
 
     companion object {

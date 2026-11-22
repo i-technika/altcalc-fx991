@@ -92,6 +92,23 @@ void main() {
       expect(receiver.isListening, isTrue);
     });
 
+    testWidgets('첫 호출이 끝나기 전에 다시 불러도 같은 첫 값을 기다린다', (tester) async {
+      final channel = _FakeChannel(tester, initial: null);
+      final receiver = _receiver();
+      var firstDone = false;
+      var secondDone = false;
+      final first = receiver.start().then((_) => firstDone = true);
+      final second = receiver.start().then((_) => secondDone = true);
+      await tester.pump();
+      expect(channel.listenCount, 1);
+      expect([firstDone, secondDone], [false, false]);
+
+      channel.sink!.success(true);
+      await Future.wait([first, second]);
+      expect([firstDone, secondDone], [true, true]);
+      expect(receiver.value, isTrue);
+    });
+
     for (final platform in [
       TargetPlatform.iOS,
       TargetPlatform.macOS,

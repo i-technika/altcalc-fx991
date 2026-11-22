@@ -238,9 +238,28 @@ void main() {
     ) async {
       SharedPreferences.setMockInitialValues({});
       setDevice(tester, const Size(390, 844));
-      mockHighTextContrast(tester, enabled: true);
+      // 첫 값을 다른 시작 작업이 모두 끝난 뒤에 보내, main()이 그 값을 기다린 뒤에야 화면을 띄우는지 본다.
+      MockStreamHandlerEventSink? sink;
+      tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+        SystemHighTextContrast.channel,
+        MockStreamHandler.inline(
+          onListen: (arguments, events) {
+            sink = events;
+          },
+        ),
+      );
       recordPlatformCalls(tester);
-      await app.main();
+      var started = false;
+      final running = app.main().then((_) => started = true);
+      await tester.pump();
+      await tester.pump();
+      expect(sink, isNotNull);
+      expect(started, isFalse);
+      expect(find.byType(CalculatorScreen), findsNothing);
+
+      sink!.success(true);
+      await running;
+      // runApp 뒤 첫 프레임
       await tester.pump();
       final keycap =
           tester

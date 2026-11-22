@@ -187,7 +187,7 @@ abstract final class CalcTheme {
   //   · iOS: 손쉬운 사용 › 디스플레이 및 텍스트 크기 › "대비 증가" (`UIAccessibility.isDarkerSystemColorsEnabled`)
   //   · Android 14(API 34) 이상: 접근성 › 색상 및 동작 › "색상 대비"가 '표준'보다 높을 때('중간'·'높음',
   //     `UiModeManager.getContrast() > 0`). Android 13 이하에서는 켜지지 않는다.
-  // - Android 모든 버전: 접근성 "고대비 텍스트"(Android 15 이상 "텍스트 대비 최대화") — 엔진이 읽지 않아 앱이 직접
+  // - Android 모든 버전: 접근성 "고대비 텍스트"(설정 키 `high_text_contrast_enabled`) — 엔진이 읽지 않아 앱이 직접
   //   읽는다([SystemHighTextContrast], #95). 시스템이 넣는 글자 외곽선은 Flutter 화면에 효과가 없으므로 대신 이 팔레트를 준다.
   //
   // 기준(`test/unit/calc_theme_test.dart`가 검증):
