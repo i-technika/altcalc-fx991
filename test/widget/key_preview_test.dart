@@ -286,7 +286,7 @@ void main() {
     });
 
     test('제스처 영역 근사 규칙: 위·아래는 시스템 바와 같고, 좌우는 없거나 양쪽 모두 뒤로가기 폭이다', () {
-      // PreviewDevice.systemGestureInsets 문서의 근사 규칙. 제스처 영역이 없는 프리셋은 iOS 기기다.
+      // PreviewDevice.systemGestureInsets 문서의 근사 규칙. 제스처 영역이 없는 프리셋(iOS 가정)은 검사하지 않는다.
       for (final d in previewDevices) {
         final g = d.systemGestureInsets;
         if (g == EdgeInsets.zero) continue;
@@ -298,6 +298,11 @@ void main() {
           contains(g.left),
           reason: d.name,
         );
+        // 좌우 뒤로가기 영역(제스처 내비게이션)이 있으면 아래는 3버튼 내비게이션 바·작업 표시줄(48)이 아니라
+        // 제스처 핸들 높이다.
+        if (g.left > 0) {
+          expect(d.padding.bottom, lessThan(48), reason: d.name);
+        }
       }
     });
 
@@ -992,13 +997,15 @@ void main() {
       expect(screen.left, greaterThan(KeyPreviewScreen.panelWidth));
       expect(scale, lessThan(1));
       double toScreenX(double globalX) => (globalX - screen.left) / scale;
-      Future<(String, String)> pressAt(Offset at) => _pressAt(tester, at);
 
       // 왼쪽 끝 열(7)의 왼쪽 가장자리 — 화면 기준으로 뒤로가기 영역 안
       final left = tester.getRect(_keycap(CalcKeyId.num7));
       final leftX = left.left + 2 * scale;
       expect(toScreenX(leftX), lessThan(device.systemGestureInsets.left));
-      expect(await pressAt(Offset(leftX, left.center.dy)), ('', '1. 7'));
+      expect(await _pressAt(tester, Offset(leftX, left.center.dy)), (
+        '',
+        '1. 7',
+      ));
 
       // 오른쪽 끝 열(AC)의 오른쪽 가장자리
       final right = tester.getRect(_keycap(CalcKeyId.ac));
@@ -1007,83 +1014,91 @@ void main() {
         toScreenX(rightX),
         greaterThan(device.size.width - device.systemGestureInsets.right),
       );
-      expect(await pressAt(Offset(rightX, right.center.dy)), (
+      expect(await _pressAt(tester, Offset(rightX, right.center.dy)), (
         '1. 7',
         '2. AC | 1. 7',
       ));
 
       // 가운데 열(8)은 누르는 순간 입력된다.
-      expect(await pressAt(tester.getCenter(_keycap(CalcKeyId.num8))), (
-        '3. 8 | 2. AC | 1. 7',
-        '3. 8 | 2. AC | 1. 7',
-      ));
+      expect(
+        await _pressAt(tester, tester.getCenter(_keycap(CalcKeyId.num8))),
+        ('3. 8 | 2. AC | 1. 7', '3. 8 | 2. AC | 1. 7'),
+      );
     });
 
     // 좌우 분할 배치(#24)에서 키패드는 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62). 제스처 내비게이션이면 그 바깥쪽
-    // 끝 열이 뒤로가기 영역에 걸려 손을 뗄 때 입력되고, LCD 쪽을 향한 안쪽 끝 열은 누르는 순간 입력된다.
+    // 끝 열 키의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가
+    // 아니라 터치 위치 기준이라 같은 키의 가운데와 LCD 쪽을 향한 안쪽 끝 열은 누르는 순간 입력된다.
     // 같은 화면의 3버튼 프리셋(태블릿 가로)은 좌우 제스처 영역이 없어 바깥쪽 열도 누르는 순간 입력된다 — 대조군.
     for (final (name, gestureNav) in const [
       ('태블릿 가로 (제스처)', true),
       ('태블릿 가로', false),
     ]) {
       for (final handedness in Handedness.values) {
-        testWidgets('$name·${handedness.name}: 키패드 바깥쪽 끝 열은 '
-            '${gestureNav ? '손을 뗄 때' : '누르는 순간'}, 안쪽 끝 열은 누르는 순간 입력된다', (
-          tester,
-        ) async {
-          await _pumpPreview(tester);
-          final index = previewDevices.indexWhere((d) => d.name == name);
-          expect(index, isNonNegative);
-          final device = previewDevices[index];
-          await _selectDevice(tester, index);
-          await _setHandedness(tester, handedness);
-          expect(tester.takeException(), isNull);
+        testWidgets(
+          '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽은 '
+          '${gestureNav ? '손을 뗄 때' : '누르는 순간'}, 그 키 가운데와 안쪽 끝 열은 누르는 순간 입력된다',
+          (tester) async {
+            await _pumpPreview(tester);
+            final index = previewDevices.indexWhere((d) => d.name == name);
+            expect(index, isNonNegative);
+            final device = previewDevices[index];
+            await _selectDevice(tester, index);
+            await _setHandedness(tester, handedness);
+            expect(tester.takeException(), isNull);
 
-          // 축소 표시 중이어야 화면 좌표 변환 경로까지 확인된다.
-          final screen = tester.getRect(_deviceScreen);
-          final scale = screen.width / device.size.width;
-          expect(scale, lessThan(1));
-          double toScreenX(double globalX) => (globalX - screen.left) / scale;
-          final gesture = device.systemGestureInsets;
-          bool inBackZone(double x) =>
-              x < gesture.left || x > device.size.width - gesture.right;
+            // 축소 표시 중이어야 화면 좌표 변환 경로까지 확인된다.
+            final screen = tester.getRect(_deviceScreen);
+            final scale = screen.width / device.size.width;
+            expect(scale, lessThan(1));
+            double toScreenX(double globalX) => (globalX - screen.left) / scale;
+            final gesture = device.systemGestureInsets;
+            bool inBackZone(double x) =>
+                x < gesture.left || x > device.size.width - gesture.right;
 
-          // 좌우 분할 배치: 키패드가 주로 쓰는 손 쪽에 있다.
-          final keypad = tester.getRect(
-            find.byKey(const ValueKey('calc-keypad')),
-          );
-          final lcd = tester.getRect(find.byType(LcdDisplay));
-          expect(keypad.center.dx > lcd.center.dx, handedness.keypadOnRight);
+            // 좌우 분할 배치: 키패드가 주로 쓰는 손 쪽에 있다.
+            final keypad = tester.getRect(
+              find.byKey(const ValueKey('calc-keypad')),
+            );
+            final lcd = tester.getRect(find.byType(LcdDisplay));
+            expect(keypad.center.dx > lcd.center.dx, handedness.keypadOnRight);
 
-          // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
-          final num7 = tester.getRect(_keycap(CalcKeyId.num7));
-          final ac = tester.getRect(_keycap(CalcKeyId.ac));
-          final num7At = Offset(num7.left + 2 * scale, num7.center.dy);
-          final acAt = Offset(ac.right - 2 * scale, ac.center.dy);
-          final (
-            outerAt,
-            outerLabel,
-            innerAt,
-            innerLabel,
-          ) = handedness.keypadOnRight
-              ? (acAt, 'AC', num7At, '7')
-              : (num7At, '7', acAt, 'AC');
+            // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
+            final num7 = tester.getRect(_keycap(CalcKeyId.num7));
+            final ac = tester.getRect(_keycap(CalcKeyId.ac));
+            final num7At = Offset(num7.left + 2 * scale, num7.center.dy);
+            final acAt = Offset(ac.right - 2 * scale, ac.center.dy);
+            final (
+              outerAt,
+              outerCenter,
+              outerLabel,
+              innerAt,
+              innerLabel,
+            ) = handedness.keypadOnRight
+                ? (acAt, ac.center, 'AC', num7At, '7')
+                : (num7At, num7.center, '7', acAt, 'AC');
 
-          // 바깥쪽 열은 제스처 내비게이션에서만 뒤로가기 영역 안이고, 안쪽 열은 어느 쪽이든 밖이다.
-          expect(inBackZone(toScreenX(outerAt.dx)), gestureNav);
-          expect(inBackZone(toScreenX(innerAt.dx)), isFalse);
+            // 바깥쪽 열의 가장자리는 제스처 내비게이션에서만 뒤로가기 영역 안이고, 그 키 가운데와 안쪽 열은 어느 쪽이든 밖이다.
+            expect(inBackZone(toScreenX(outerAt.dx)), gestureNav);
+            expect(inBackZone(toScreenX(outerCenter.dx)), isFalse);
+            expect(inBackZone(toScreenX(innerAt.dx)), isFalse);
 
-          expect(
-            await _pressAt(tester, outerAt),
-            gestureNav
-                ? ('', '1. $outerLabel')
-                : ('1. $outerLabel', '1. $outerLabel'),
-          );
-          expect(await _pressAt(tester, innerAt), (
-            '2. $innerLabel | 1. $outerLabel',
-            '2. $innerLabel | 1. $outerLabel',
-          ));
-        });
+            expect(
+              await _pressAt(tester, outerAt),
+              gestureNav
+                  ? ('', '1. $outerLabel')
+                  : ('1. $outerLabel', '1. $outerLabel'),
+            );
+            expect(await _pressAt(tester, outerCenter), (
+              '2. $outerLabel | 1. $outerLabel',
+              '2. $outerLabel | 1. $outerLabel',
+            ));
+            expect(await _pressAt(tester, innerAt), (
+              '3. $innerLabel | 2. $outerLabel | 1. $outerLabel',
+              '3. $innerLabel | 2. $outerLabel | 1. $outerLabel',
+            ));
+          },
+        );
       }
     }
 
