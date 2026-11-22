@@ -1,5 +1,0 @@
-{
-  // 작업 영역 공용 설정 (#52). 기기마다 다른 값(예: dart.flutterSdkPath)은 넣지 않는다 — README "VS Code에서 실행" 참조.
-  // 작업 영역 안의 git 워크트리는 별도 체크아웃이므로 Dart 확장이 프로젝트로 잡아 중복 분석·자동 pub get을 하지 않게 한다.
-  "dart.analysisExcludedFolders": [".claude/worktrees"]
-}

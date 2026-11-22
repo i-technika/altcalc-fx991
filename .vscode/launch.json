@@ -1,8 +1,7 @@
 {
   // VS Code Dart/Flutter 확장 실행 구성 (#21, 실제 동작 확인 #52).
-  // 확장은 Flutter SDK를 dart.flutterSdkPath 설정 → VS Code 프로세스의 PATH → .dart_tool/package_config.json의
-  // flutterRoot → FLUTTER_ROOT·고정 위치 순으로 찾는다. 터미널에서 flutter pub get을 한 번 돌리면 PATH에 없어도 찾고,
-  // 못 찾으면 사용자 설정에 지정한다. 작업 영역을 신뢰해야 확장이 켜진다 — README "VS Code에서 실행" 참조.
+  // 준비 단계(pub get → 작업 영역 신뢰 → 확장 설치)와 SDK 탐지 순서는 README "VS Code에서 실행"에 있다.
+  // 구성 이름·진입점·기기는 README 표와 test/unit/vscode_config_test.dart가 함께 지킨다.
   "version": "0.2.0",
   "configurations": [
     {

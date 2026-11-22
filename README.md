@@ -45,60 +45,66 @@ flutter run -d chrome -t preview/key_preview_main.dart
 ## VS Code에서 실행
 
 [.vscode/launch.json](.vscode/launch.json)에 실행 구성 세 개가 있다.
+아래 단축키는 Windows·Linux 기준이며, macOS는 Ctrl 대신 Cmd를 쓴다.
 
 | 구성 | 진입점 | 기기 | 비고 |
 | --- | --- | --- | --- |
-| `AltCalc (앱)` | `lib/main.dart` | 상태 표시줄에서 고른 기기 | 기기를 지정하지 않으므로 VS Code 하단 상태 표시줄의 기기 선택을 따른다 |
-| `Key Preview (Chrome)` | `preview/key_preview_main.dart` | Chrome | 개발자 모드 불필요 |
+| `AltCalc (앱)` | `lib/main.dart` | 상태 표시줄에서 고른 기기 | 기기를 지정하지 않아 VS Code 하단 상태 표시줄의 기기 선택을 따른다 (Windows 데스크톱을 고르면 개발자 모드 필요) |
+| `Key Preview (Chrome)` | `preview/key_preview_main.dart` | Chrome | Windows 개발자 모드 불필요 |
 | `Key Preview (Windows)` | `preview/key_preview_main.dart` | Windows 데스크톱 | Windows 개발자 모드 필요 |
 
 ### 처음 한 번 준비
 
-1. **작업 영역 신뢰** — 저장소 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
-   Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않아, 신뢰하지 않으면 확장이 아예 켜지지 않고
-   `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트(Ctrl+Shift+P)의 `Workspaces: Manage Workspace Trust`.
-2. **추천 확장 설치** — 확장 보기(Ctrl+Shift+X)의 "권장" 목록([.vscode/extensions.json](.vscode/extensions.json))에서
-   Dart·Flutter를 설치하거나, 터미널에서 다음을 실행한다.
+1. **터미널에서 `flutter pub get`** — SDK를 PATH에 넣은 셸에서, VS Code로 폴더를 열기 **전에** 실행한다.
+   이때 생기는 `.dart_tool/package_config.json`의 `flutterRoot`로 확장이 SDK를 찾으므로,
+   Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
+   확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
+   명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다.
+2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
+   Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
+   `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트의 `Workspaces: Manage Workspace Trust`를 쓴다.
+3. **추천 확장 설치** — 확장 보기(Ctrl+Shift+X)의 "권장" 목록([.vscode/extensions.json](.vscode/extensions.json))에서
+   Dart·Flutter를 설치하거나, 터미널에서 다음을 실행한다. macOS에서 `code` 명령을 쓰려면 먼저 명령 팔레트의
+   `Shell Command: Install 'code' command in PATH`를 실행해야 한다.
 
    ```bash
    code --install-extension dart-code.dart-code --install-extension dart-code.flutter
    ```
 
-3. **터미널에서 `flutter pub get` 한 번** — SDK를 PATH에 넣은 셸에서 실행한다.
-   이때 생기는 `.dart_tool/package_config.json`의 `flutterRoot`로 확장이 SDK를 찾으므로,
-   **Flutter가 시스템 PATH에 없는 PC도 이 단계만으로 SDK가 탐지된다**.
-4. 실행 및 디버그(Ctrl+Shift+D)에서 구성을 고르고 F5.
+4. 실행 및 디버그(Ctrl+Shift+D)에서 구성을 고르고 F5를 누른다.
 
 ### Flutter SDK를 찾는 순서
 
-확장(Dart-Code 3.146 기준)은 위에서부터 처음 찾은 SDK를 쓴다.
+확장(Dart-Code 3.146 소스 기준)은 위에서부터 처음 찾은 SDK를 쓴다.
 
 1. 설정 `dart.flutterSdkPath`, 그다음 `dart.getFlutterSdkCommand`(SDK 경로를 출력하는 명령)
-2. 프로젝트 안의 `.flutter`, `vendor/flutter` 폴더
-3. VS Code 프로세스의 PATH — VS Code를 켤 때의 사용자·시스템 PATH다. 터미널 세션에서만 추가한 PATH
-   (예: Git Bash의 `export PATH=...`)는 보지 않고, 시스템 PATH를 바꾼 뒤에는 VS Code를 완전히 껐다 켜야 반영된다.
-4. `.dart_tool/package_config.json`의 `flutterRoot` (위 준비 3단계)
-5. 환경 변수 `FLUTTER_ROOT`, 고정 위치 `~/flutter-sdk`, `/opt/flutter`, `/google/flutter`(Linux는 `~/snap/flutter/common/flutter`도)
+2. 프로젝트 안에 둔 SDK (`.flutter`, `vendor/flutter` 폴더 등)
+3. 환경 변수 `DART_PATH_OVERRIDE`, 그다음 확장이 물려받은 `PATH` — VS Code가 시작될 때의 환경이다.
+   - Windows: 시작 메뉴로 켜면 사용자·시스템 PATH를 쓴다. 터미널에서 `code .`로 켜면 그 터미널의 PATH를 쓴다.
+     이미 VS Code 창이 열려 있으면 새 창도 처음 켰을 때의 환경을 따른다.
+   - macOS·Linux: 로그인 셸의 환경(예: `~/.zshrc`에서 설정한 PATH)을 가져온다.
+4. `.dart_tool/package_config.json`의 `flutterRoot` (위 준비 1단계)
+5. 환경 변수 `FLUTTER_ROOT`
+6. 고정 위치 (Linux의 `~/snap/flutter/common/flutter`, `~/flutter-sdk`, `/google/flutter`, `/opt/flutter` 순서)
 
-`~/develop/flutter`처럼 고정 위치 목록에 없는 곳에 SDK를 두고 PATH에도 없다면, `flutter pub get` 전의 새 클론이나
-`.dart_tool`을 지운 뒤에는 SDK를 찾지 못한다는 알림이 뜬다. 그러면 알림의 `Locate SDK`로 SDK 폴더를 고르거나,
-**사용자** 설정(Ctrl+Shift+P → `Preferences: Open User Settings (JSON)`)에 한 번 지정한다.
+`~/develop/flutter`처럼 고정 위치 목록에 없는 곳에 SDK가 있고 PATH에도 없으면, `flutter pub get` 전의 새 클론이나
+`.dart_tool`을 지운 뒤에는 확장이 SDK를 찾지 못한다(확장 소스 기준이다. 이 알림은 실제로 띄워 보지 않았다).
+그때는 알림의 `Locate SDK`로 SDK 폴더를 고르거나, **사용자** 설정에 한 번 지정한다.
+사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다.
 
 ```jsonc
-{ "dart.flutterSdkPath": "C:\\Users\\<사용자>\\develop\\flutter" }
+{ "dart.flutterSdkPath": "~/develop/flutter" }
 ```
 
-SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`.vscode/settings.json`)에는 넣지 않는다.
+SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`.vscode/`)에는 넣지 않는다.
 
 ### 알아 둘 점
 
-- **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 의존성 해석을 마친 뒤
-  `Building with plugins requires symlink support` 오류로 종료 코드 1을 낸다. VS Code가 pubspec을 보고 자동으로 돌리는
-  pub get도 같은 오류 알림을 띄우지만, `package_config.json`은 이미 기록되어 SDK 탐지와 `Key Preview (Chrome)` 실행에는
-  지장이 없다. 실패하는 것은 Windows 데스크톱 실행뿐이다.
-- 확장은 작업 영역 아래의 Flutter 프로젝트를 모두 찾아 분석하고 pub get을 돌린다. 작업 영역 안에 만든 git 워크트리
-  (`.claude/worktrees/`)가 중복 분석되지 않도록 [.vscode/settings.json](.vscode/settings.json)의
-  `dart.analysisExcludedFolders`에서 제외한다.
+- **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
+  - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
+  - 확장이 자동으로 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (...)` 채널에 기록된다.
+  - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
+  - 실패하는 것은 Windows 데스크톱 실행뿐이다.
 
 ## 검증
 

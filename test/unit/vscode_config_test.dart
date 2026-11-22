@@ -4,30 +4,137 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 /// VS Code 실행 구성(`.vscode/`)의 불변식 (#21, #52).
-/// 진입점 파일 이름을 바꾸거나 기기마다 다른 SDK 경로를 저장소 설정에 넣는 실수를 막는다.
+/// 진입점 파일 이름 변경, README 표와의 불일치, 기기마다 다른 절대경로를 저장소 설정에 넣는 실수를 막는다.
+/// 경로는 `flutter test`의 작업 디렉터리인 패키지 루트 기준이다.
 
-/// VS Code의 JSONC 파일을 읽는다. 이 저장소는 줄 전체 주석(`//`)만 쓰므로 그 줄만 지우고 해석한다.
-Map<String, Object?> _readJsonc(String path) {
-  final lines = File(path)
-      .readAsLinesSync()
-      .where((line) => !line.trimLeft().startsWith('//'));
-  return jsonDecode(lines.join('\n')) as Map<String, Object?>;
+/// `s[start]`의 `"`에서 시작한 문자열 리터럴이 끝난 바로 다음 위치. 이스케이프(`\"`)를 따른다.
+int _stringEnd(String s, int start) {
+  var i = start + 1;
+  while (i < s.length && s[i] != '"') {
+    i += s[i] == r'\' ? 2 : 1;
+  }
+  return i + 1;
+}
+
+/// 문자열 리터럴 밖의 글자만 [handle]에 넘기며 [source]를 다시 쓴다.
+/// [handle]은 그 위치에서 처리한 뒤의 다음 위치를 돌려준다.
+String _rewriteOutsideStrings(
+  String source,
+  int Function(String s, int i, StringBuffer out) handle,
+) {
+  final out = StringBuffer();
+  var i = 0;
+  while (i < source.length) {
+    if (source[i] == '"') {
+      final end = _stringEnd(source, i);
+      out.write(source.substring(i, end.clamp(0, source.length)));
+      i = end;
+    } else {
+      i = handle(source, i, out);
+    }
+  }
+  return out.toString();
+}
+
+/// VS Code가 허용하는 JSONC(주석 `//`·`/* */`, 끝 쉼표)를 일반 JSON으로 바꾼다.
+/// 문자열 안의 `//`·`/*`·쉼표는 건드리지 않는다.
+String stripJsonc(String source) {
+  // 1단계: 주석을 지운다.
+  final noComments = _rewriteOutsideStrings(source, (s, i, out) {
+    if (s.startsWith('//', i)) {
+      final end = s.indexOf('\n', i);
+      return end < 0 ? s.length : end;
+    }
+    if (s.startsWith('/*', i)) {
+      final end = s.indexOf('*/', i + 2);
+      return end < 0 ? s.length : end + 2;
+    }
+    out.write(s[i]);
+    return i + 1;
+  });
+  // 2단계: 주석이 빠져 `}`·`]` 바로 앞에 남은 끝 쉼표를 지운다.
+  final closing = RegExp(r'\s*[}\]]');
+  return _rewriteOutsideStrings(noComments, (s, i, out) {
+    if (s[i] != ',' || closing.matchAsPrefix(s, i + 1) == null) out.write(s[i]);
+    return i + 1;
+  });
+}
+
+Map<String, Object?> _readJsonc(String path) =>
+    jsonDecode(stripJsonc(File(path).readAsStringSync()))
+        as Map<String, Object?>;
+
+/// 값 트리에 있는 모든 (키 경로, 문자열 값) 쌍과 키 이름을 모은다.
+void _walk(
+  Object? node,
+  String path,
+  void Function(String path, String value) onString,
+  void Function(String key) onKey,
+) {
+  if (node is Map) {
+    for (final e in node.entries) {
+      onKey(e.key as String);
+      _walk(e.value, '$path.${e.key}', onString, onKey);
+    }
+  } else if (node is List) {
+    for (var i = 0; i < node.length; i++) {
+      _walk(node[i], '$path[$i]', onString, onKey);
+    }
+  } else if (node is String) {
+    onString(path, node);
+  }
+}
+
+/// README "VS Code에서 실행" 절 표의 (구성 이름, 진입점) 행.
+List<(String, String)> _readmeLaunchTable() {
+  final readme = File('README.md').readAsStringSync();
+  final start = readme.indexOf('## VS Code에서 실행');
+  expect(start, isNot(-1), reason: 'README에 "VS Code에서 실행" 절이 없다');
+  final next = readme.indexOf('\n## ', start + 1);
+  final section = readme.substring(start, next < 0 ? readme.length : next);
+  final row = RegExp(r'^\| `([^`]+)` \| `([^`]+)` \|', multiLine: true);
+  return [for (final m in row.allMatches(section)) (m[1]!, m[2]!)];
 }
 
 void main() {
-  group('.vscode/launch.json', () {
-    final configs =
-        (_readJsonc('.vscode/launch.json')['configurations']! as List)
-            .cast<Map<String, Object?>>();
+  group('stripJsonc', () {
+    test('줄·인라인·블록 주석과 끝 쉼표를 지우고 문자열 안은 남긴다', () {
+      const src = '''
+{
+  // 줄 주석
+  "url": "http://a//b", // 인라인 주석
+  /* 블록
+     주석 */ "list": ["x, }", "y",],
+  "esc": "따옴표 \\" // 문자열 안",
+}
+''';
+      expect(jsonDecode(stripJsonc(src)), {
+        'url': 'http://a//b',
+        'list': ['x, }', 'y'],
+        'esc': '따옴표 " // 문자열 안',
+      });
+    });
+  });
 
-    test('README에 적은 세 구성이 있고 이름이 겹치지 않는다', () {
-      final names = configs.map((c) => c['name']).toList();
-      expect(names, [
+  group('.vscode/launch.json', () {
+    late List<Map<String, Object?>> configs;
+    setUpAll(() {
+      configs = (_readJsonc('.vscode/launch.json')['configurations']! as List)
+          .cast<Map<String, Object?>>();
+    });
+
+    test('구성 이름·진입점이 README 표와 같은 순서로 일치하고 이름이 겹치지 않는다', () {
+      final actual = [
+        for (final c in configs)
+          (c['name']! as String, c['program']! as String),
+      ];
+      expect(actual, _readmeLaunchTable());
+      expect(actual.map((e) => e.$1).toSet().length, actual.length);
+      expect(actual.map((e) => e.$1), [
         'AltCalc (앱)',
         'Key Preview (Chrome)',
         'Key Preview (Windows)',
       ]);
-      expect(names.toSet().length, names.length);
     });
 
     test('모든 구성이 Dart 확장으로 실행되고 진입점 파일이 존재한다', () {
@@ -56,25 +163,41 @@ void main() {
     expect(recs, containsAll(['dart-code.dart-code', 'dart-code.flutter']));
   });
 
-  group('.vscode/settings.json', () {
-    final settings = _readJsonc('.vscode/settings.json');
-
-    test('기기마다 다른 SDK 경로 설정을 저장소에 넣지 않는다', () {
-      for (final key in [
-        'dart.flutterSdkPath',
-        'dart.sdkPath',
-        'dart.flutterSdkPaths',
-        'dart.sdkPaths',
-      ]) {
-        expect(settings.containsKey(key), isFalse, reason: key);
-      }
-    });
-
-    test('작업 영역 안의 git 워크트리를 Dart 분석에서 제외한다', () {
-      expect(
-        settings['dart.analysisExcludedFolders'],
-        contains('.claude/worktrees'),
+  test('저장소의 VS Code 설정에 기기마다 다른 절대경로·SDK 설정이 없다', () {
+    final files = [
+      ...Directory('.vscode')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json')),
+      ...Directory('.')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.code-workspace')),
+    ];
+    expect(files, isNotEmpty);
+    // Windows 드라이브(C:\, C:/), UNC(\\server), POSIX 절대경로, 홈(~/)
+    final absolute = RegExp(r'^([A-Za-z]:[\\/]|\\\\|/|~[\\/])');
+    // SDK 위치를 정하는 설정 — 사용자 설정에만 둔다 (README "Flutter SDK를 찾는 순서")
+    const sdkKeys = {
+      'dart.flutterSdkPath',
+      'dart.flutterSdkPaths',
+      'dart.sdkPath',
+      'dart.sdkPaths',
+      'dart.getFlutterSdkCommand',
+      'dart.getDartSdkCommand',
+    };
+    for (final f in files) {
+      _walk(
+        jsonDecode(stripJsonc(f.readAsStringSync())),
+        f.path,
+        (path, value) => expect(
+          absolute.hasMatch(value),
+          isFalse,
+          reason: '$path = "$value"는 기기마다 다른 절대경로다',
+        ),
+        (key) =>
+            expect(sdkKeys.contains(key), isFalse, reason: '${f.path}: $key'),
       );
-    });
+    }
   });
 }
