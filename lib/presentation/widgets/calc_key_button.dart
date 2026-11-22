@@ -52,6 +52,8 @@ import 'screen_coordinate_root.dart';
 ///   [keyDef]가 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
 ///
 /// SHIFT/ALPHA 래치 상태는 실물처럼 LCD 상태 표시줄(S/A)로 보여주며, 키 자체에는 표시하지 않는다.
+///
+/// 색은 기기의 고대비 설정에 맞는 [CalcPalette]에서 가져온다(#54).
 class CalcKeyButton extends StatefulWidget {
   /// 표시할 키 명세
   final CalcKeyDef keyDef;
@@ -522,6 +524,7 @@ class _LegendRow extends StatelessWidget {
     final shift = shiftLabel;
     final alpha = alphaLabel;
     if (shift == null && alpha == null) return const SizedBox.shrink();
+    final palette = CalcPalette.of(context);
 
     final gap = shift != null && alpha != null
         ? math.min(fontSize * CalcTheme.keyLegendGapRatio, maxGap)
@@ -578,7 +581,7 @@ class _LegendRow extends StatelessWidget {
         if (shift != null)
           legend(
             shift,
-            CalcTheme.keyShiftLabelStyle,
+            CalcTheme.keyShiftLabelStyle.copyWith(color: palette.shiftLabel),
             Alignment.bottomLeft,
             short: shiftIsShort,
             priorityLayout: priority,
@@ -587,7 +590,7 @@ class _LegendRow extends StatelessWidget {
         if (alpha != null)
           legend(
             alpha,
-            CalcTheme.keyAlphaLabelStyle,
+            CalcTheme.keyAlphaLabelStyle.copyWith(color: palette.alphaLabel),
             Alignment.bottomRight,
             short: alphaIsShort,
             priorityLayout: priority,
@@ -618,27 +621,35 @@ class _Keycap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category = keyDef.category;
+    final palette = CalcPalette.of(context);
     final background = pressed
-        ? category.pressedBackground
-        : category.background;
+        ? palette.keyPressedBackground(category)
+        : palette.keyBackground(category);
+    final foreground = pressed
+        ? palette.keyPressedForeground(category)
+        : palette.keyForeground(category);
     final labelColor = enabled
-        ? category.foreground
-        : category.foreground.withValues(
-            alpha: CalcTheme.keyDisabledLabelOpacity,
-          );
+        ? foreground
+        : foreground.withValues(alpha: CalcTheme.keyDisabledLabelOpacity);
+    // 고대비 반전 키는 뗄 때도 애니메이션하지 않는다 — 배경만 서서히 돌아오는 동안 라벨은 이미 흰색이라
+    // 흰 배경에 흰 라벨이 몇 프레임 보이게 된다.
+    final animateRelease = !palette.invertsOnPress(category);
 
     // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 내며, 배경 명도와 테두리가 바뀐다(#22).
     // 누를 때는 즉시 바꾸고 뗄 때만 애니메이션한다 — 짧은 탭에서도 눌림 색이 끝까지 보이게 한다.
+    // 고대비 모드에서는 흰 라벨 키의 배경·라벨이 반전된다(#54, [CalcPalette.invertsOnPress]).
     return Transform.translate(
       offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
       child: AnimatedContainer(
         key: CalcKeyButton.keycapKeyOf(keyDef.id),
-        duration: pressed ? Duration.zero : CalcTheme.keyPressAnimationDuration,
+        duration: pressed || !animateRelease
+            ? Duration.zero
+            : CalcTheme.keyPressAnimationDuration,
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(CalcTheme.keyBorderRadius),
           border: Border.all(
-            color: pressed ? CalcTheme.keyPressedBorder : CalcTheme.keyBorder,
+            color: pressed ? palette.keyPressedBorder : palette.keyBorder,
             width: CalcTheme.keyBorderWidth,
           ),
           boxShadow: pressed

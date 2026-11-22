@@ -15,6 +15,7 @@ Future<void> _pump(
   double? height = 160,
   double textScale = 1.0,
   TextDirection textDirection = TextDirection.ltr,
+  bool highContrast = false,
 }) async {
   Widget child = lcd;
   if (width == null || height == null) {
@@ -30,6 +31,7 @@ Future<void> _pump(
       data: MediaQueryData(
         size: const Size(1200, 800),
         textScaler: TextScaler.linear(textScale),
+        highContrast: highContrast,
       ),
       child: Directionality(
         textDirection: textDirection,
@@ -126,6 +128,21 @@ void main() {
       expect(_colorOf(tester, _statusText('FIX')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('i')), CalcTheme.lcdStatusActive);
       expect(_colorOf(tester, _statusText('▼')), CalcTheme.lcdStatusActive);
+    });
+
+    testWidgets('고대비 모드에서는 꺼진 표시기(글자·아이콘)를 고대비 색으로, 켜진 표시기는 그대로 그린다 (#54)', (
+      tester,
+    ) async {
+      await _pump(tester, const LcdDisplay(), highContrast: true);
+      for (final slot in LcdIndicatorSlot.values) {
+        expect(
+          _slotColor(tester, slot),
+          LcdStatus.initial.indicatorFor(slot) == null
+              ? CalcTheme.lcdStatusInactiveHighContrast
+              : CalcTheme.lcdStatusActive,
+          reason: slot.name,
+        );
+      }
     });
 
     testWidgets('showInactiveIndicators가 false면 꺼진 표시기를 그리지 않는다', (

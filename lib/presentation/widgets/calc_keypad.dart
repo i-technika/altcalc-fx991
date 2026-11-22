@@ -1078,11 +1078,13 @@ class CursorPad extends StatelessWidget {
                   children: [
                     // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
                     // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
-                    const Positioned.fill(
+                    Positioned.fill(
                       child: IgnorePointer(
                         child: RepaintBoundary(
                           child: CustomPaint(
-                            painter: _CursorPadDecorationPainter(),
+                            painter: _CursorPadDecorationPainter(
+                              CalcPalette.of(context).keyBorder,
+                            ),
                           ),
                         ),
                       ),
@@ -1122,13 +1124,16 @@ class CursorPad extends StatelessWidget {
 
 /// 커서 패드 X자 홈·외곽선과 가운데 허브
 class _CursorPadDecorationPainter extends CustomPainter {
-  const _CursorPadDecorationPainter();
+  /// 홈·외곽선·허브 둘레 색 (키캡 테두리와 같다 — 고대비 모드에서 바뀐다, #54)
+  final Color lineColor;
+
+  const _CursorPadDecorationPainter(this.lineColor);
 
   @override
   void paint(Canvas canvas, Size size) {
     final geometry = CursorPadGeometry(size);
     final line = Paint()
-      ..color = CalcTheme.keyBorder
+      ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = CalcTheme.cursorPadDividerWidth;
     for (final (from, to) in geometry.grooves()) {
@@ -1145,5 +1150,6 @@ class _CursorPadDecorationPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CursorPadDecorationPainter oldDelegate) => false;
+  bool shouldRepaint(_CursorPadDecorationPainter oldDelegate) =>
+      oldDelegate.lineColor != lineColor;
 }

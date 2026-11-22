@@ -222,6 +222,7 @@ class KeyPreviewScreen extends ConsumerStatefulWidget {
 class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   PreviewDevice _device = previewDevices.first;
   double _textScale = previewDefaultTextScale;
+  bool _highContrast = false;
   final List<PreviewLogEntry> _log = [];
   int _inputTotal = 0;
   bool _trimmed = false;
@@ -286,11 +287,13 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
       child: _ControlPanel(
         device: _device,
         textScale: _textScale,
+        highContrast: _highContrast,
         log: _log,
         inputTotal: _inputTotal,
         trimmed: _trimmed,
         onDeviceChanged: (d) => setState(() => _device = d),
         onTextScaleChanged: (s) => setState(() => _textScale = s),
+        onHighContrastChanged: (v) => setState(() => _highContrast = v),
         onReset: _reset,
       ),
     );
@@ -298,6 +301,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
     final frame = _DeviceFrame(
       device: _device,
       textScale: _textScale,
+      highContrast: _highContrast,
       screen: widget.screen,
     );
 
@@ -348,12 +352,16 @@ class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
 
+  /// 기기의 고대비 설정 (`MediaQuery.highContrast`, #54)
+  final bool highContrast;
+
   /// 앱의 루트 Navigator ([KeyPreviewScreen.screen])
   final Widget screen;
 
   const _DeviceFrame({
     required this.device,
     required this.textScale,
+    required this.highContrast,
     required this.screen,
   });
 
@@ -371,6 +379,7 @@ class _DeviceFrame extends StatelessWidget {
         // 호스트의 힌지 정보가 축소된 화면 좌표에 새지 않게 비운다(주입은 #51).
         displayFeatures: const [],
         textScaler: TextScaler.linear(textScale),
+        highContrast: highContrast,
       ),
       child: screen,
     ),
@@ -495,33 +504,38 @@ class _PanelNavigator extends StatelessWidget {
   }
 }
 
-/// 기기·글자 배율 선택, 초기화 버튼, 입력 로그.
+/// 기기·글자 배율·고대비 선택, 초기화 버튼, 입력 로그.
 ///
 /// 설정 영역을 작게 두고 입력 로그가 남은 높이를 모두 쓴다 — 키를 누르는 동안 로그가 보여야 하기 때문이다.
 /// 패널이 [_scrollAllBelowHeight]보다 낮을 때만 설정과 로그를 한꺼번에 스크롤한다(오버플로 방지).
 class _ControlPanel extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;
+  final bool highContrast;
   final List<PreviewLogEntry> log;
   final int inputTotal;
   final bool trimmed;
   final ValueChanged<PreviewDevice> onDeviceChanged;
   final ValueChanged<double> onTextScaleChanged;
+  final ValueChanged<bool> onHighContrastChanged;
   final VoidCallback onReset;
 
   const _ControlPanel({
     required this.device,
     required this.textScale,
+    required this.highContrast,
     required this.log,
     required this.inputTotal,
     required this.trimmed,
     required this.onDeviceChanged,
     required this.onTextScaleChanged,
+    required this.onHighContrastChanged,
     required this.onReset,
   });
 
-  /// 이보다 낮은 패널은 전체를 스크롤한다 (dp)
-  static const double _scrollAllBelowHeight = 240;
+  /// 이보다 낮은 패널은 전체를 스크롤한다 (dp). 설정 영역 아래에 로그 몇 줄이 남는 높이다
+  /// (고대비 스위치 행을 넣으며 240 → 290, #54).
+  static const double _scrollAllBelowHeight = 290;
 
   /// 패널 안쪽 여백 (dp)
   static const double _padding = 12;
@@ -597,7 +611,17 @@ class _ControlPanel extends StatelessWidget {
         selected: {textScale},
         onSelectionChanged: (v) => onTextScaleChanged(v.first),
       ),
-      const SizedBox(height: 4),
+      // 기기의 고대비 설정 흉내 (#54) — iOS "대비 증가", Android "고대비 텍스트"
+      Row(
+        children: [
+          const Expanded(child: Text('고대비 (대비 증가)', style: _label)),
+          Switch(
+            key: const ValueKey('preview-high-contrast'),
+            value: highContrast,
+            onChanged: onHighContrastChanged,
+          ),
+        ],
+      ),
       Row(
         children: [
           Expanded(

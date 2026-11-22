@@ -160,6 +160,192 @@ void main() {
     });
   });
 
+  group('고대비 팔레트 (#54)', () {
+    const normal = CalcPalette.standard;
+    const high = CalcPalette.highContrast;
+    const aaa = CalcTheme.highContrastMinTextContrast;
+    const bodies = [
+      CalcTheme.bodyBackground,
+      CalcTheme.bodyFrame,
+      CalcTheme.bodyBottomGradient,
+    ];
+
+    double pressDelta(CalcPalette p, KeyCategory c) =>
+        (lightness(p.keyBackground(c)) - lightness(p.keyPressedBackground(c)))
+            .abs();
+    double pressedLabel(CalcPalette p, KeyCategory c) =>
+        contrastRatio(p.keyPressedForeground(c), p.keyPressedBackground(c));
+    double pressedBodyDelta(CalcPalette p, KeyCategory c) =>
+        (lightness(p.keyPressedBackground(c)) -
+                lightness(CalcTheme.bodyBackground))
+            .abs();
+
+    test('일반 팔레트는 테마 상수·카테고리 색 그대로다 (일반 모드 화면이 바뀌지 않는다)', () {
+      expect(normal.isHighContrast, isFalse);
+      expect(high.isHighContrast, isTrue);
+      expect(normal.keyBorder, CalcTheme.keyBorder);
+      expect(normal.keyPressedBorder, CalcTheme.keyPressedBorder);
+      expect(normal.shiftLabel, CalcTheme.shiftLabel);
+      expect(normal.alphaLabel, CalcTheme.alphaLabel);
+      expect(normal.lcdStatusInactive, CalcTheme.lcdStatusInactive);
+      for (final c in KeyCategory.values) {
+        expect(normal.keyBackground(c), c.background, reason: c.name);
+        expect(normal.keyForeground(c), c.foreground, reason: c.name);
+        expect(normal.keyPressedBackground(c), c.pressedBackground);
+        expect(normal.keyPressedForeground(c), c.foreground, reason: c.name);
+        expect(normal.invertsOnPress(c), isFalse, reason: c.name);
+      }
+    });
+
+    test('모든 카테고리: 메인 라벨이 7:1 이상이고 일반 팔레트 이상이다', () {
+      for (final c in KeyCategory.values) {
+        final hc = contrastRatio(high.keyForeground(c), high.keyBackground(c));
+        expect(hc, greaterThanOrEqualTo(aaa), reason: c.name);
+        expect(
+          hc,
+          greaterThanOrEqualTo(
+            contrastRatio(normal.keyForeground(c), normal.keyBackground(c)),
+          ),
+          reason: c.name,
+        );
+      }
+    });
+
+    test('키캡 색은 바꾸더라도 일반 색보다 어둡게만 하고, 연산자는 함수 키보다 밝게 남긴다', () {
+      for (final c in KeyCategory.values) {
+        expect(
+          lightness(high.keyBackground(c)),
+          lessThanOrEqualTo(lightness(normal.keyBackground(c))),
+          reason: c.name,
+        );
+      }
+      // 회색 두 카테고리(연산자·함수)가 같은 색이 되지 않게 한다.
+      expect(
+        lightness(high.keyBackground(KeyCategory.operator)),
+        greaterThan(lightness(high.keyBackground(KeyCategory.function)) + 3),
+      );
+    });
+
+    test('반전은 흰 라벨(배경보다 밝은 라벨) 카테고리에만 적용한다', () {
+      for (final c in KeyCategory.values) {
+        expect(
+          high.invertsOnPress(c),
+          lightness(c.foreground) > lightness(high.keyBackground(c)),
+          reason: c.name,
+        );
+      }
+      // 반전한 라벨은 반전 배경 위에서 어둡다.
+      expect(
+        lightness(CalcTheme.keyPressedInvertedText),
+        lessThan(lightness(CalcTheme.keyPressedInvertedBackground)),
+      );
+    });
+
+    test('모든 카테고리: 눌림 단서(명도 차·눌린 라벨·본체와의 차)가 하한 이상이고 일반 팔레트 이상이다', () {
+      for (final c in KeyCategory.values) {
+        final delta = pressDelta(high, c);
+        expect(
+          delta,
+          greaterThanOrEqualTo(CalcTheme.keyPressedMinLightnessDelta),
+          reason: '${c.name}: ΔL*=${delta.toStringAsFixed(1)}',
+        );
+        expect(
+          delta,
+          greaterThanOrEqualTo(pressDelta(normal, c)),
+          reason: c.name,
+        );
+
+        final label = pressedLabel(high, c);
+        expect(label, greaterThanOrEqualTo(minTextContrast), reason: c.name);
+        expect(
+          label,
+          greaterThanOrEqualTo(pressedLabel(normal, c)),
+          reason: c.name,
+        );
+
+        final body = pressedBodyDelta(high, c);
+        expect(
+          body,
+          greaterThanOrEqualTo(CalcTheme.keyPressedMinBodyLightnessDelta),
+          reason: c.name,
+        );
+        expect(
+          body,
+          greaterThanOrEqualTo(pressedBodyDelta(normal, c)),
+          reason: c.name,
+        );
+        expect(high.keyPressedBackground(c).a, 1.0, reason: c.name);
+      }
+    });
+
+    test('테두리: 본체·커서 패드 허브 대비가 일반 팔레트 이상이고, 눌림 테두리는 L* 30 이상 밝다', () {
+      // (고대비 색, 일반 색, 맞닿는 색) — 테두리는 본체, 커서 패드 홈·허브 둘레는 허브·방향 키캡과 맞닿는다.
+      for (final (hc, std, against) in [
+        (high.keyBorder, normal.keyBorder, CalcTheme.bodyBackground),
+        (high.keyBorder, normal.keyBorder, CalcTheme.cursorPadHub),
+        (high.keyBorder, normal.keyBorder, CalcTheme.keyCursor),
+        (
+          high.keyPressedBorder,
+          normal.keyPressedBorder,
+          CalcTheme.bodyBackground,
+        ),
+      ]) {
+        expect(
+          contrastRatio(hc, against),
+          greaterThanOrEqualTo(contrastRatio(std, against)),
+          reason: 'border=$hc against=$against',
+        );
+      }
+      expect(
+        contrastRatio(high.keyBorder, CalcTheme.bodyBackground),
+        greaterThanOrEqualTo(minTextContrast),
+      );
+      expect(
+        lightness(high.keyPressedBorder) - lightness(high.keyBorder),
+        greaterThanOrEqualTo(30),
+      );
+      expect(high.keyBorder.a, 1.0);
+      expect(high.keyPressedBorder.a, 1.0);
+    });
+
+    test('SHIFT/ALPHA 각인은 모든 본체 색 대비 7:1 이상이고 일반 팔레트 이상이다', () {
+      for (final body in bodies) {
+        for (final (hc, std) in [
+          (high.shiftLabel, normal.shiftLabel),
+          (high.alphaLabel, normal.alphaLabel),
+        ]) {
+          expect(
+            contrastRatio(hc, body),
+            greaterThanOrEqualTo(aaa),
+            reason: 'legend=$hc body=$body',
+          );
+          expect(
+            contrastRatio(hc, body),
+            greaterThanOrEqualTo(contrastRatio(std, body)),
+            reason: 'legend=$hc body=$body',
+          );
+        }
+      }
+    });
+
+    test('LCD 비활성 표시기: 일반보다 진하되 켜진 표시기와 7:1 이상 구분된다', () {
+      final hc = high.lcdStatusInactive;
+      const active = CalcTheme.lcdStatusActive;
+      expect((hc.r, hc.g, hc.b), (active.r, active.g, active.b));
+      expect(hc.a, greaterThan(normal.lcdStatusInactive.a));
+      final drawn = Color.alphaBlend(hc, CalcTheme.lcdBackground);
+      final normalDrawn = Color.alphaBlend(
+        normal.lcdStatusInactive,
+        CalcTheme.lcdBackground,
+      );
+      expect(
+        contrastRatio(drawn, CalcTheme.lcdBackground),
+        greaterThan(contrastRatio(normalDrawn, CalcTheme.lcdBackground)),
+      );
+      expect(contrastRatio(active, drawn), greaterThanOrEqualTo(aaa));
+    });
+  });
+
   group('텍스트 스타일', () {
     test('모든 스타일은 고정폭 폰트와 대체 폰트를 지정한다', () {
       for (final style in [

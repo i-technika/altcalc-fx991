@@ -14,10 +14,14 @@ Widget _host(
   Widget child, {
   Size size = const Size(64, 72),
   double textScale = 1.0,
+  bool highContrast = false,
 }) {
   return MaterialApp(
     home: MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+      data: MediaQueryData(
+        textScaler: TextScaler.linear(textScale),
+        highContrast: highContrast,
+      ),
       child: Scaffold(
         backgroundColor: CalcTheme.bodyBackground,
         body: Center(
@@ -206,6 +210,118 @@ void main() {
       expect(drawn.color, def.category.background);
       expect(drawn.border, _normalBorder);
       await gesture.up();
+    });
+  });
+
+  group('고대비 모드 (#54)', () {
+    const palette = CalcPalette.highContrast;
+
+    testWidgets('모든 키: 평소 키캡·라벨·테두리·각인이 고대비 팔레트 색이다', (tester) async {
+      for (final def in allKeys) {
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: def, onPressed: (_) {}),
+            highContrast: true,
+          ),
+        );
+        final decoration = _decoration(tester, def.id);
+        expect(
+          decoration.color,
+          palette.keyBackground(def.category),
+          reason: '$def',
+        );
+        expect(
+          decoration.border,
+          Border.all(color: palette.keyBorder, width: CalcTheme.keyBorderWidth),
+          reason: '$def',
+        );
+        expect(
+          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+          palette.keyForeground(def.category),
+          reason: '$def',
+        );
+        if (def.shiftLabel case final shift?) {
+          expect(
+            tester.widget<Text>(find.text(shift)).style!.color,
+            palette.shiftLabel,
+            reason: '$def',
+          );
+        }
+        if (def.alphaLabel case final alpha?) {
+          expect(
+            tester.widget<Text>(find.text(alpha)).style!.color,
+            palette.alphaLabel,
+            reason: '$def',
+          );
+        }
+      }
+    });
+
+    testWidgets('모든 키: 누르면 즉시 눌림 색(흰 라벨 키는 반전)이 되고, 반전 키는 떼는 즉시 돌아온다', (
+      tester,
+    ) async {
+      for (final def in allKeys) {
+        final category = def.category;
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: def, onPressed: (_) {}),
+            highContrast: true,
+          ),
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(_keycap(def.id)),
+        );
+        await tester.pump();
+        var drawn = _renderedDecoration(tester, def.id);
+        expect(
+          drawn.color,
+          palette.keyPressedBackground(category),
+          reason: '$def',
+        );
+        expect(
+          drawn.border,
+          Border.all(
+            color: palette.keyPressedBorder,
+            width: CalcTheme.keyBorderWidth,
+          ),
+          reason: '$def',
+        );
+        expect(
+          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+          palette.keyPressedForeground(category),
+          reason: '$def',
+        );
+
+        await gesture.up();
+        await tester.pump();
+        drawn = _renderedDecoration(tester, def.id);
+        if (palette.invertsOnPress(category)) {
+          // 라벨과 배경이 함께 돌아온다 — 흰 배경에 흰 라벨인 중간 프레임이 없다.
+          expect(drawn.color, palette.keyBackground(category), reason: '$def');
+        } else {
+          await tester.pump(CalcTheme.keyPressAnimationDuration);
+          drawn = _renderedDecoration(tester, def.id);
+          expect(drawn.color, palette.keyBackground(category), reason: '$def');
+        }
+        expect(
+          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+          palette.keyForeground(category),
+          reason: '$def',
+        );
+      }
+    });
+
+    testWidgets('비활성 키 라벨은 고대비 모드에서도 흐리게 그린다', (tester) async {
+      final def = keyDefOf(CalcKeyId.add);
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: def), highContrast: true),
+      );
+      expect(
+        tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+        palette
+            .keyForeground(def.category)
+            .withValues(alpha: CalcTheme.keyDisabledLabelOpacity),
+      );
     });
   });
 
