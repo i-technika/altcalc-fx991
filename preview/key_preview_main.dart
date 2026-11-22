@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart' show AltCalcApp;
@@ -93,9 +94,11 @@ const EdgeInsets _gestureNavInsets = EdgeInsets.fromLTRB(
 
 /// Galaxy Z Fold5 내부 화면(690×829, 세로)을 펼쳤을 때의 접힘선 근사값.
 ///
-/// 실기기는 가운데(물리 픽셀 폭 1812의 906)에 폭 0인 세로 접힘선을 `FOLD`·`FLAT`으로 보고한다.
+/// 실기기는 물리 화면(1812×2176 px) 가운데(x=906 px)에 폭 0인 세로 접힘선을 `FOLD`·`FLAT`으로 보고한다.
+/// 밀도 2.625(420dpi, 기본 화면 크기 설정) 가정으로 dp로 바꾸면 화면 690.29×828.95, 접힘선 x=345.14이며,
+/// 프리셋 크기에 맞춰 정수로 반올림했다. 밀도는 기기 화면 크기(확대/축소) 설정에 따라 달라진다 — 실기기 미확인.
 /// 위에서 아래까지 화면 높이 전체를 가로지른다.
-const DisplayFeature previewFoldInnerHinge = DisplayFeature(
+const DisplayFeature previewFoldInnerFold = DisplayFeature(
   bounds: Rect.fromLTWH(345, 0, 0, 829),
   type: DisplayFeatureType.fold,
   state: DisplayFeatureState.postureFlat,
@@ -136,7 +139,7 @@ const List<PreviewDevice> previewDevices = [
     Size(690, 829),
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
-    displayFeatures: [previewFoldInnerHinge],
+    displayFeatures: [previewFoldInnerFold],
   ),
   // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
   PreviewDevice(
@@ -359,7 +362,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 /// 화면 크기·인셋·시스템 제스처 영역·화면 특징(접힘선)·글자 배율은 [ScreenCoordinateRoot]로 `MediaQuery`를 덮어써 전달해
 /// 화면이 실제 기기에서처럼 배치를 산출하게 한다. 화면은 패널 폭만큼 밀리고 축소되므로, 같은 위젯이
 /// 이 화면을 좌표 원점으로 표시해 키 버튼이 제스처 영역을 화면 기준 좌표로 판정하게 한다(#50).
-/// 접힘선 영역도 화면 크기·제스처 영역처럼 화면 좌표이며, 기기 화면 위에 점선([_DisplayFeaturePainter])으로
+/// 접힘선 영역도 화면 크기·제스처 영역처럼 화면 좌표이며, 기기 화면 위에 점선([PreviewDisplayFeaturePainter])으로
 /// 표시한다(#51). 호스트(브라우저)의 화면 특징은 넘기지 않는다 — 축소된 화면 좌표와 맞지 않는다.
 /// 실제 기기와 다르게 남는 값:
 /// - `devicePixelRatio`·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다.
@@ -392,7 +395,7 @@ class _DeviceFrame extends StatelessWidget {
       key: const ValueKey('preview-display-features'),
       foregroundPainter: device.displayFeatures.isEmpty
           ? null
-          : _DisplayFeaturePainter(device.displayFeatures),
+          : PreviewDisplayFeaturePainter(device.displayFeatures),
       child: ScreenCoordinateRoot(
         data: MediaQuery.of(context).copyWith(
           size: device.size,
@@ -465,9 +468,11 @@ class _DeviceFrame extends StatelessWidget {
               SizedBox(
                 height: previewFrameCaptionHeight,
                 child: Text(
-                  '${device.label} · 글자 ${(textScale * 100).round()}% · '
-                  '표시 배율 ${(scale * 100).round()}%'
-                  '${previewDisplayFeatureCaption(device.displayFeatures)}',
+                  // 접힘선 정보는 창이 좁을 때 말줄임으로 먼저 잘리지 않게 기기 이름 바로 뒤에 둔다.
+                  '${device.label}'
+                  '${previewDisplayFeatureCaption(device.size, device.displayFeatures)}'
+                  ' · 글자 ${(textScale * 100).round()}% · '
+                  '표시 배율 ${(scale * 100).round()}%',
                   key: const ValueKey('preview-frame-caption'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -502,22 +507,34 @@ class _DeviceFrame extends StatelessWidget {
   }
 }
 
-/// 캡션에 덧붙일 접힘선 설명 (예: ` · 접힘선(점선) 세로 x=345`). 접힘선·힌지가 없으면 빈 문자열.
-/// 세로 접힘선은 가운데 x, 가로 접힘선은 가운데 y를 화면 좌표(dp)로 적는다. 폭이 있는 힌지는 폭도 적는다.
-String previewDisplayFeatureCaption(List<DisplayFeature> features) {
+/// 그릴 접힘선·힌지: 종류가 fold·hinge이고 영역이 유한한 것 (화면 구멍 등은 뺀다)
+Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
+    features.where((f) => FormFactor.hasFoldOrHinge([f]) && f.bounds.isFinite);
+
+/// 앱이 [screen] 크기 화면을 가로지르는 접힘선으로 인식하는지 ([FormFactor.hingeOf]).
+/// 인식하지 않는 접힘선(화면을 끝까지 가로지르지 않음 등)은 배치에 쓰이지 않는다.
+bool _recognized(Size screen, DisplayFeature f) =>
+    FormFactor.hingeOf(screen, [f]) != null;
+
+/// 캡션에 덧붙일 접힘선 설명 (예: ` · 접힘선(점선) 세로 x=345`). 그릴 접힘선이 없으면 빈 문자열.
+///
+/// 세로 접힘선은 가운데 x, 가로 접힘선은 가운데 y를 화면 좌표(dp)로 적는다. 폭이 있는 힌지는 폭도 적고,
+/// 앱이 [screen] 크기 화면에서 인식하지 않는 접힘선은 `(앱 미인식)`을 붙인다 — 점선은 있는데 배치가
+/// 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
+String previewDisplayFeatureCaption(
+  Size screen,
+  List<DisplayFeature> features,
+) {
   final parts = <String>[];
-  for (final f in features) {
-    if (f.type != DisplayFeatureType.fold &&
-        f.type != DisplayFeatureType.hinge) {
-      continue;
-    }
+  for (final f in _drawableFolds(features)) {
     final b = f.bounds;
-    final vertical = b.height >= b.width;
+    final vertical = FormFactor.isVerticalHinge(b);
     final position = vertical
         ? '세로 x=${_dp(b.center.dx)}'
         : '가로 y=${_dp(b.center.dy)}';
     final extent = vertical ? b.width : b.height;
-    parts.add(extent > 0 ? '$position 폭 ${_dp(extent)}' : position);
+    final unrecognized = _recognized(screen, f) ? '' : ' (앱 미인식)';
+    parts.add('$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$unrecognized');
   }
   return parts.isEmpty ? '' : ' · 접힘선(점선) ${parts.join(', ')}';
 }
@@ -528,15 +545,20 @@ String _dp(double v) =>
 
 /// 기기 화면 위에 접힘선·힌지 위치를 점선으로 표시한다 (#51). 폭이 있는 힌지는 영역을 반투명하게 칠한다.
 ///
+/// 그리는 영역의 크기가 곧 기기 화면 크기다(화면 좌표). 앱이 인식하는 접힘선은 [recognizedColor](주황),
+/// 인식하지 않는 접힘선은 [unrecognizedColor](회색)로 그린다. 화면 구멍(cutout) 등 접힘선이 아닌 특징과
+/// 영역이 유한하지 않은 특징은 그리지 않는다.
 /// 앱 화면 위에 그리지만 히트 테스트에 참여하지 않으므로([CustomPainter.hitTest] 기본값) 터치를 가로채지 않는다.
-/// 화면 구멍(cutout) 등 접힘선이 아닌 특징은 그리지 않는다.
-class _DisplayFeaturePainter extends CustomPainter {
+class PreviewDisplayFeaturePainter extends CustomPainter {
   final List<DisplayFeature> features;
 
-  const _DisplayFeaturePainter(this.features);
+  const PreviewDisplayFeaturePainter(this.features);
 
-  /// 표시 색 (미리보기 전용 — 앱 화면 색과 겹치지 않는 주황)
-  static const Color _color = Color(0xCCFF9800);
+  /// 앱이 인식하는 접힘선 색 (미리보기 전용 — 앱 화면 색과 겹치지 않는 주황)
+  static const Color recognizedColor = Color(0xCCFF9800);
+
+  /// 앱이 인식하지 않는 접힘선 색
+  static const Color unrecognizedColor = Color(0xCC9E9E9E);
 
   /// 점선 한 칸 길이·간격 (dp, 기기 화면 좌표)
   static const double _dash = 8;
@@ -544,19 +566,16 @@ class _DisplayFeaturePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = _color
-      ..strokeWidth = 2;
-    final fill = Paint()..color = _color.withValues(alpha: 0.25);
-    for (final f in features) {
-      if (f.type != DisplayFeatureType.fold &&
-          f.type != DisplayFeatureType.hinge) {
-        continue;
-      }
+    for (final f in _drawableFolds(features)) {
+      final color = _recognized(size, f) ? recognizedColor : unrecognizedColor;
+      final line = Paint()
+        ..color = color
+        ..strokeWidth = 2;
       final b = f.bounds;
-      if (!b.isFinite) continue;
-      if (b.width > 0 && b.height > 0) canvas.drawRect(b, fill);
-      final vertical = b.height >= b.width;
+      if (b.width > 0 && b.height > 0) {
+        canvas.drawRect(b, Paint()..color = color.withValues(alpha: 0.25));
+      }
+      final vertical = FormFactor.isVerticalHinge(b);
       final from = vertical ? b.topCenter : b.centerLeft;
       final to = vertical ? b.bottomCenter : b.centerRight;
       final length = (to - from).distance;
@@ -573,7 +592,7 @@ class _DisplayFeaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DisplayFeaturePainter oldDelegate) =>
+  bool shouldRepaint(PreviewDisplayFeaturePainter oldDelegate) =>
       !listEquals(oldDelegate.features, features);
 }
 
