@@ -17,6 +17,14 @@ class DeviceLocaleScope extends StatefulWidget {
       .dependOnInheritedWidgetOfExactType<_DeviceLocaleInherited>()
       ?.locale;
 
+  /// 기기 로캘. 범위 안이면 기기 언어가 바뀔 때 다시 빌드되고, 범위 밖(위젯 단독 테스트 등)이면
+  /// 플랫폼 로캘을 직접 읽는다.
+  static Locale of(BuildContext context) =>
+      maybeOf(context) ??
+      (View.maybeOf(context)?.platformDispatcher ??
+              WidgetsBinding.instance.platformDispatcher)
+          .locale;
+
   @override
   State<DeviceLocaleScope> createState() => _DeviceLocaleScopeState();
 }

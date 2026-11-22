@@ -73,8 +73,8 @@ const List<PreviewDevice> previewDevices = [
     Size(344, 882),
     padding: EdgeInsets.only(top: 24, bottom: 24),
   ),
-  // 대화면 좌우 분할은 #24·#25, 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
-  // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다)
+  // 폴더블 힌지 기준 분할은 #25, 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
+  // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다 — #51)
   PreviewDevice(
     '폴더블 내부',
     Size(690, 829),
@@ -86,7 +86,7 @@ const List<PreviewDevice> previewDevices = [
     Size(800, 1280),
     padding: EdgeInsets.only(top: 24, bottom: 48),
   ),
-  // Android 16 대화면은 방향 고정을 무시하므로 가로 화면도 확인 대상이다 (lib/main.dart 참조)
+  // 태블릿 가로: LCD/키패드 좌우 분할 배치 (#24). 손잡이는 화면의 설정 버튼으로 바꾼다.
   PreviewDevice(
     '태블릿 가로',
     Size(1280, 800),

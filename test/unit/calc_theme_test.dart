@@ -330,4 +330,33 @@ void main() {
       );
     });
   });
+
+  group('대화면·좌우 분할 배치 (#24)', () {
+    test('키패드 최대 폭은 가장 넓은 폰(430dp)의 키패드 폭보다 넓다 — 폰에는 걸리지 않는다', () {
+      const widestPhoneKeypad = 430 - 2 * CalcTheme.screenPadding;
+      expect(CalcTheme.keypadMaxWidth, greaterThan(widestPhoneKeypad));
+      // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
+      expect(CalcTheme.keypadMaxWidth, lessThanOrEqualTo(77 / 25.4 * 160));
+    });
+
+    test('분할 배치 상수: 간격은 양수, 키패드 몫은 0~0.5 (LCD 쪽이 키패드보다 좁아지지 않는다)', () {
+      expect(CalcTheme.screenSplitGap, greaterThan(0));
+      expect(
+        CalcTheme.screenSplitKeypadMaxWidthRatio,
+        inInclusiveRange(0.3, 0.5),
+      );
+      expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
+    });
+
+    test('설정 버튼은 접근성 권장 터치 대상(48dp) 이상이고 아이콘은 본체 배경 대비 4.5:1 이상이다', () {
+      expect(
+        CalcTheme.settingsButtonSize,
+        greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+      );
+      expect(
+        contrastRatio(CalcTheme.settingsIcon, CalcTheme.bodyBackground),
+        greaterThanOrEqualTo(minTextContrast),
+      );
+    });
+  });
 }
