@@ -1548,6 +1548,135 @@ void _hingeLayoutTests() {
     });
   });
 
+  group('대화상자를 연 채 손잡이를 바꾸면 대화상자는 연 자리에 남는다 (#94)', () {
+    // 세로 접힘선 종류별: 앱만 나누는 펼친 폭 0 접힘선(대화상자 안쪽 `DisplayFeatureSubScreen`이 나눈다),
+    // Flutter도 나누는 반 접힘·물리 힌지(`showDialog` 경로가 나눈다). 결정 근거는 [SettingsButton] 문서.
+    final cases = <_Foldable>[
+      (
+        '펼친 폭 0 접힘선',
+        const Size(673, 841),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        _foldAt(const Rect.fromLTWH(336.5, 0, 0, 841)),
+      ),
+      (
+        '반 접은 접힘선',
+        const Size(673, 841),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        _halfOpenedAt(const Rect.fromLTWH(336.5, 0, 0, 841)),
+      ),
+      (
+        '물리 힌지',
+        const Size(1114, 720),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        _foldAt(
+          const Rect.fromLTWH(540, 0, 34, 720),
+          type: DisplayFeatureType.hinge,
+        ),
+      ),
+    ];
+
+    for (final (name, size, padding, fold) in cases) {
+      for (final start in Handedness.values) {
+        testWidgets('$name·${start.name}로 열기', (tester) async {
+          final hinge = fold.bounds;
+          final other = Handedness.values.firstWhere((h) => h != start);
+          // 손잡이 쪽(키패드 쪽)의 반대 절반에 LCD·설정 버튼이 있다.
+          bool onLeftHalf(Rect r) => r.right <= hinge.left + 0.01;
+          bool onRightHalf(Rect r) => r.left >= hinge.right - 0.01;
+          bool onButtonSideOf(Handedness h, Rect r) =>
+              h.keypadOnRight ? onLeftHalf(r) : onRightHalf(r);
+
+          final (container, _) = await _pump(
+            tester,
+            size: size,
+            padding: padding,
+            handedness: start,
+            displayFeatures: [fold],
+          );
+          expect(onButtonSideOf(start, tester.getRect(_settings)), isTrue);
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          final opened = tester.getRect(_dialogSurface);
+          expect(onButtonSideOf(start, opened), isTrue, reason: '$opened');
+
+          // 반대 손잡이를 고른다: 키패드·설정 버튼은 반대쪽으로 옮겨 가고, 대화상자는 그 자리에 남는다
+          // (대화상자가 접힘선을 넘지 않는다 — 연 자리가 한쪽 절반 안이다).
+          await tester.tap(_option(other));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(container.read(handednessProvider), other);
+          expect(onButtonSideOf(other, tester.getRect(_settings)), isTrue);
+          expect(
+            tester.getRect(_keypad).overlaps(opened),
+            isTrue,
+            reason: '옮겨 간 키패드는 대화상자 쪽 절반에 있다',
+          );
+          expect(tester.getRect(_dialogSurface), opened);
+
+          // 키보드 화살표로 선택을 옮겨도(포커스 이동 = 선택) 대화상자는 건너뛰지 않는다.
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pumpAndSettle();
+          final focused = FocusManager.instance.primaryFocus!.context!;
+          expect(
+            find.ancestor(
+              of: find.byElementPredicate((e) => identical(e, focused)),
+              matching: find.byType(HandednessDialog),
+            ),
+            findsOneWidget,
+          );
+          for (final key in [
+            LogicalKeyboardKey.arrowDown,
+            LogicalKeyboardKey.arrowUp,
+          ]) {
+            final before = container.read(handednessProvider);
+            await tester.sendKeyEvent(key);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expect(container.read(handednessProvider), isNot(before));
+            expect(tester.getRect(_dialogSurface), opened, reason: '$key');
+          }
+
+          // 처음 손잡이로 되돌려도 그대로다. 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다.
+          final now = container.read(handednessProvider);
+          final back = now == start ? other : start;
+          await tester.tap(_option(back));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(_dialogSurface), opened);
+          await tester.tap(find.byKey(HandednessDialog.closeKey));
+          await tester.pumpAndSettle();
+          expect(find.byType(HandednessDialog), findsNothing);
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          final reopened = tester.getRect(_dialogSurface);
+          expect(onButtonSideOf(back, reopened), isTrue, reason: '$reopened');
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+
+    testWidgets('좌우 분할 배치(접힘선 없음): 대화상자는 손잡이와 무관하게 화면 가운데 같은 자리다', (
+      tester,
+    ) async {
+      const size = Size(1280, 800);
+      final (container, _) = await _pump(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24, bottom: 48),
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final opened = tester.getRect(_dialogSurface);
+      expect(opened.center.dx, moreOrLessEquals(size.width / 2));
+
+      final keypadBefore = tester.getRect(_keypad);
+      await tester.tap(_option(Handedness.left));
+      await tester.pumpAndSettle();
+      expect(container.read(handednessProvider), Handedness.left);
+      expect(tester.getRect(_keypad), isNot(keypadBefore));
+      expect(tester.getRect(_dialogSurface), opened);
+    });
+  });
+
   group('CalcSplitLayout (접힘선) · CalcTabletopLayout', () {
     void expectSane(Size body, List<Rect> rects, String reason) {
       final bounds = (Offset.zero & body).inflate(0.01);
