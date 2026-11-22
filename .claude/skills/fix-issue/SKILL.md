@@ -117,41 +117,70 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   - 등록: 범위 밖의 실제 결함, 누락된 검증, 실기기·실물 확인처럼 나중에 누군가 해야 하는 일.
     리팩토링·개선은 **구체적인 재현 근거나 측정 근거**(깨지는 입력, 수치, 중복 코드 위치 등)가 있을 때만 등록한다.
   - 등록하지 않음: 이번 PR에서 이미 고친 것, 근거가 약한 취향 수준 지적, 기존 이슈와 겹치는 것(기존 이슈에 코멘트로 보탬).
-    겹침 확인은 검색이 아니라 그 마일스톤의 열린 이슈 목록으로 한다(한국어 제목은 검색 색인으로 잘 찾아지지 않는다):
-    `gh issue list --milestone "<마일스톤 이름>" --state open -L 200 --json number,title`
+    겹침 확인은 검색이 아니라 열린 서브이슈 전체 목록으로 한다(다른 마일스톤 포함 — 한국어 제목은 검색 색인으로 잘 찾아지지 않는다):
+    `gh issue list --label sub-issue --state open -L 300 --json number,title,milestone`
   - 12단계 보고에 등록한 것·등록하지 않은 것과 각각의 이유를 적는다.
 - 제목에는 순번 접두사(`[M<N>-<순번>]`)를 붙이지 않는다 — 이슈 번호·마일스톤·상위 에픽으로 식별한다.
 - **마일스톤 기준**: `<마일스톤 이름>`·`<에픽번호>`는 지금 작업 중인 마일스톤이 아니라 **그 후속 이슈가 속할 마일스톤** 기준이다
   (실물 대조 등 다른 마일스톤 과제는 그 마일스톤과 에픽으로 만든다 — 예: M3 과제면 M3 마일스톤, 에픽 #3).
-- 셸 변수는 Bash 도구 호출 사이에 남지 않으므로, 항목마다 아래를 **한 번의 Bash 호출**로 실행한다:
+- 항목마다 **A 블록(생성) → B 블록(연결)** 을 각각 한 번의 Bash 호출로 실행한다 (셸 변수는 호출 사이에 남지 않으므로
+  A가 출력한 번호를 B의 `NUM=`에 적는다).
+  - **A는 같은 항목에 대해 "만들어지지 않았다"고 출력했을 때만 다시 실행한다.** 그 밖의 중단(생성 여부 불명 등)에서는 다시 만들지 않는다.
+  - **B는 몇 번을 다시 실행해도 안전하다**(이미 된 단계는 건너뛴다). 어디서 멈췄든 B만 다시 실행해 마무리한다.
+
+  **A 블록 — 생성**
   ```bash
-  set -e   # 아래 어느 단계든 실패하면 멈춘다 (에픽 연결 실패를 타입 지정 성공이 가리지 않게)
+  set -e
   TITLE='<제목>'   # 제목에 작은따옴표가 있으면 '\'' 로 바꿔 쓴다
-  # 정확한 제목으로 최근 이슈 번호를 찾는다 — 검색(--search)은 한국어·특수문자 제목과 색인 지연 때문에 못 찾는다
-  find_issue() { gh issue list --state all -L 30 --json number,title --jq '.[] | "\(.number)\t\(.title)"' \
-    | T="$TITLE" awk -F'\t' 'substr($0, length($1) + 2) == ENVIRON["T"] { print $1; exit }'; }
-  if ! URL=$(gh issue create --title "$TITLE" --body-file <파일> \
+  TITLE=$(printf '%s' "$TITLE" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')   # GitHub이 앞뒤 공백을 다듬어 저장하므로 미리 맞춘다
+  # 이슈 목록("번호<TAB>제목"). 검색(--search)은 한국어·특수문자 제목과 색인 지연 때문에 못 찾으므로 목록에서 정확히 비교한다.
+  # 조회 실패와 "목록에 없음"을 구별해야 하므로 파이프로 바로 잇지 않고 변수로 받아 상태를 확인한다(파이프는 gh 실패를 삼킨다).
+  rows() { gh issue list --state all -L "$1" --json number,title --jq '.[] | "\(.number)\t\(.title)"'; }
+  match() { printf '%s\n' "$1" | T="$TITLE" awk -F'\t' 'substr($0, length($1) + 2) == ENVIRON["T"] { print $1; exit }'; }
+  # 1) 같은 제목이 이미 있으면 만들지 않는다 — 그래야 실패 뒤 "같은 제목 = 이번에 만든 이슈"로 판정할 수 있다
+  ALL=$(rows 1000) || { echo "목록 조회 실패 — 아무것도 만들지 않았다. 다시 실행해도 된다"; exit 1; }
+  DUP=$(match "$ALL")
+  [ -z "$DUP" ] || { echo "같은 제목의 이슈 #$DUP 이 이미 있다 — 만들지 않음(그 이슈와 겹치는지 판단해 제목을 바꾸거나 그 이슈에 코멘트)"; exit 1; }
+  # 2) 생성. gh는 이슈를 만든 뒤 프로젝트 추가 단계에서 실패할 수 있다 → 실패해도 다시 만들지 않고 생겼는지 확인한다
+  if URL=$(gh issue create --title "$TITLE" --body-file <파일> \
       --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"); then
-    # gh는 이슈를 만든 뒤 프로젝트 추가 단계에서 실패할 수 있다 → 다시 만들기 전에 생겼는지 확인한다(중복 방지)
-    NUM=""; for i in 1 2 3; do NUM=$(find_issue); [ -n "$NUM" ] && break; sleep 3; done
-    [ -n "$NUM" ] || { echo "이슈가 만들어지지 않았다 — 원인을 고친 뒤 이 블록을 다시 실행해도 된다"; exit 1; }
-    echo "생성은 됐고 뒤 단계가 실패함 → #$NUM 으로 이어서 처리"
-    gh issue edit "$NUM" --add-project "AltCalc FX-991"
-    URL="https://github.com/i-technika/altcalc-fx991/issues/$NUM"
+    NUM=${URL##*/}
+  else
+    NUM=""
+    for i in 1 2 3; do
+      sleep 3
+      RECENT=$(rows 30) || { echo "생성 여부 불명(목록 조회도 실패) — 다시 만들지 말 것. 나중에 gh issue list로 이 제목을 확인한 뒤 B 블록"; exit 1; }
+      NUM=$(match "$RECENT")
+      [ -z "$NUM" ] || break
+    done
+    [ -n "$NUM" ] || { echo "목록에 없음 — 이슈가 만들어지지 않았다. 원인을 고친 뒤 A 블록을 다시 실행해도 된다"; exit 1; }
+    echo "생성은 됐고 뒤 단계(프로젝트 추가 등)가 실패함 — B 블록이 마무리한다"
   fi
-  NUM=${URL##*/}
-  [[ $NUM =~ ^[0-9]+$ ]] || { echo "이슈 번호를 읽지 못했다: $URL — 다시 만들지 말고 find_issue로 확인"; exit 1; }
-  echo "생성: #$NUM $URL"
-  # 상위 에픽에 서브이슈로 연결 (ID를 변수로 먼저 받는다 — 인자 안의 $(...) 실패는 set -e가 잡지 못한다)
-  EPIC_ID=$(gh issue view <에픽번호> --json id --jq .id)
-  ISSUE_ID=$(gh issue view "$NUM" --json id --jq .id)
-  gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
-    -f p="$EPIC_ID" -f c="$ISSUE_ID"
-  # 이슈 타입(Task/Bug/Feature) 지정
-  gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
-    -f i="$ISSUE_ID" -f t="<타입 id>"
+  [[ $NUM =~ ^[0-9]+$ ]] || { echo "이슈 번호를 읽지 못했다: $URL — 다시 만들지 말고 gh issue list로 확인"; exit 1; }
+  echo "생성: #$NUM → B 블록에 NUM=$NUM"
   ```
-  - 블록이 에픽 연결이나 타입 지정에서 멈추면 이슈는 이미 있으므로 **다시 만들지 말고** 그 번호로 남은 단계만 실행한다.
+
+  **B 블록 — 프로젝트·에픽·타입 (다시 실행해도 안전)**
+  ```bash
+  set -e
+  NUM=<A가 출력한 번호>; EPIC=<에픽번호>; TYPE=<타입 id>
+  # 프로젝트 추가 — 이미 들어 있으면 그대로다(A의 실패 원인일 수 있어 항상 한 번 더 한다)
+  gh issue edit "$NUM" --add-project "AltCalc FX-991" >/dev/null
+  # 상위 에픽 연결 — 이미 연결돼 있으면 건너뛴다(addSubIssue는 중복 연결 시 오류)
+  PARENT=$(gh issue view "$NUM" --json parent --jq '.parent.number // empty')
+  ISSUE_ID=$(gh issue view "$NUM" --json id --jq .id)   # ID는 변수로 먼저 받는다 — 인자 안의 $(...) 실패는 set -e가 잡지 못한다
+  if [ -z "$PARENT" ]; then
+    EPIC_ID=$(gh issue view "$EPIC" --json id --jq .id)
+    gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
+      -f p="$EPIC_ID" -f c="$ISSUE_ID" >/dev/null
+  elif [ "$PARENT" != "$EPIC" ]; then
+    echo "#$NUM 은 이미 다른 에픽 #$PARENT 에 연결돼 있다 — 확인 필요"; exit 1
+  fi
+  # 이슈 타입(Task/Bug/Feature) 지정 — 같은 값으로 다시 지정해도 무방
+  gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
+    -f i="$ISSUE_ID" -f t="$TYPE" >/dev/null
+  echo "완료: #$NUM (프로젝트·에픽 #$EPIC·타입)"
+  ```
   타입 ID: Task `IT_kwDOBMwL0c4PCk6t`, Feature `IT_kwDOBMwL0c4PCk6v` (Bug는 `gh api graphql`로 `repository.issueTypes` 조회)
 - 후속 이슈는 아직 착수 전이므로 담당자를 지정하지 않는다 (착수할 때 1단계에서 지정).
 
