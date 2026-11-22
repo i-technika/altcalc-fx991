@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
@@ -12,6 +14,7 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -157,6 +160,61 @@ void main() {
       );
     });
 
+    test('화면 특징: 영역은 유한하고 화면 안이며, 접힘선은 화면을 끝까지 가로질러 앱이 접힘선으로 인식한다', () {
+      for (final d in previewDevices) {
+        final screen = Offset.zero & d.size;
+        for (final f in d.displayFeatures) {
+          final b = f.bounds;
+          final reason = '${d.name} $b';
+          expect(
+            [b.left, b.top, b.right, b.bottom].every((v) => v.isFinite),
+            isTrue,
+            reason: reason,
+          );
+          expect(b.width, greaterThanOrEqualTo(0), reason: reason);
+          expect(b.height, greaterThanOrEqualTo(0), reason: reason);
+          expect(screen.contains(b.topLeft), isTrue, reason: reason);
+          // Rect.contains는 오른쪽·아래 변을 빼므로 변 위의 점은 직접 비교한다.
+          expect(b.right, lessThanOrEqualTo(d.size.width), reason: reason);
+          expect(b.bottom, lessThanOrEqualTo(d.size.height), reason: reason);
+          if (f.type == DisplayFeatureType.fold ||
+              f.type == DisplayFeatureType.hinge) {
+            expect(
+              FormFactor.hingeOf(d.size, [f]),
+              same(f),
+              reason: '$reason: 앱이 창을 가로지르는 접힘선으로 보지 않는다',
+            );
+          }
+        }
+      }
+      // 접힘선 기준 배치(#25)를 미리보기로 확인할 수 있도록 접힘선이 있는 프리셋이 하나 이상 있다.
+      expect(
+        previewDevices.where(
+          (d) => FormFactor.hasFoldOrHinge(d.displayFeatures),
+        ),
+        isNotEmpty,
+      );
+    });
+
+    test(
+      '폴더블 내부: Galaxy Z Fold 내부 화면을 펼친 상태처럼 가운데에 폭 0 세로 접힘선이 있고 좌우 분할이 된다',
+      () {
+        final d = previewDevices.singleWhere((d) => d.name == '폴더블 내부');
+        expect(d.displayFeatures, [previewFoldInnerFold]);
+        final b = previewFoldInnerFold.bounds;
+        expect(previewFoldInnerFold.type, DisplayFeatureType.fold);
+        expect(previewFoldInnerFold.state, DisplayFeatureState.postureFlat);
+        expect(b.width, 0);
+        expect(b.center.dx, d.size.width / 2);
+        expect(b.top, 0);
+        expect(b.height, d.size.height);
+        expect(
+          FormFactor.arrangementOf(d.size, d.displayFeatures),
+          ScreenArrangement.hingeSplit,
+        );
+      },
+    );
+
     test('글자 배율: 기본값을 포함하고 중복 없이 Android 범위(85~200%) 안', () {
       expect(previewTextScales, contains(previewDefaultTextScale));
       expect(previewTextScales.toSet(), hasLength(previewTextScales.length));
@@ -185,6 +243,72 @@ void main() {
           KeyInput(CalcKeyId.cursorLeft, KeyLayer.main, isRepeat: true),
         ),
         '◄ (반복)',
+      );
+    });
+
+    test('접힘선 캡션: 세로·가로, 폭 있는 힌지, 배치에 안 쓰는 접힘선 표기, 접힘선 아닌 특징·무한 영역은 생략', () {
+      const screen = Size(701, 841);
+      expect(previewDisplayFeatureCaption(screen, const []), '');
+      expect(
+        previewDisplayFeatureCaption(const Size(690, 829), const [
+          previewFoldInnerFold,
+        ]),
+        ' · 접힘선(점선) 세로 x=345',
+      );
+      expect(
+        previewDisplayFeatureCaption(screen, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 420.5, 701, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTWH(400, 0, 20, 841),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+          // 위 힌지도 화면을 가로지르지만 앱은 첫 번째 접힘선(위 가로 접힘선)만 쓴다.
+          // 화면을 끝까지 가로지르지 않는 접힘선 — 앱이 배치에 쓰지 않는다.
+          DisplayFeature(
+            bounds: Rect.fromLTWH(200, 100, 0, 300),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTWH(10, 0, 40, 20),
+            type: DisplayFeatureType.cutout,
+            state: DisplayFeatureState.unknown,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTRB(double.nan, 0, 0, 841),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]),
+        ' · 접힘선(점선) 가로 y=420.5, 세로 x=410 폭 20 (배치에 안 씀), '
+        '세로 x=200 (배치에 안 씀)',
+      );
+      // 화면을 가로지르지만 나누지 않는 접힘선: 펼친 가로 접힘선(Fold 내부를 가로로 돌림),
+      // 한쪽 패널이 너무 좁은 세로 접힘선
+      expect(
+        previewDisplayFeatureCaption(const Size(829, 690), const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 345, 829, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]),
+        ' · 접힘선(점선) 가로 y=345 (배치에 안 씀)',
+      );
+      expect(
+        previewDisplayFeatureCaption(const Size(690, 829), const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(200, 0, 0, 829),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]),
+        ' · 접힘선(점선) 세로 x=200 (배치에 안 씀)',
       );
     });
 
@@ -361,6 +485,7 @@ void main() {
             device.systemGestureInsets,
             reason: reason,
           );
+          expect(mq.displayFeatures, device.displayFeatures, reason: reason);
           expect(
             mq.textScaler.scale(10),
             closeTo(10 * scale, 1e-9),
@@ -412,7 +537,7 @@ void main() {
       tester,
     ) async {
       await _pumpPreview(tester);
-      // 키패드 좌우 끝 열이 뒤로가기 영역에 걸리는 프리셋 (폴더블 내부는 화면이 넓어 걸리지 않는다)
+      // 키패드 좌우 끝 열이 모두 뒤로가기 영역에 걸리는 프리셋 (폴더블 내부는 접힘선 기준 분할이라 바깥쪽 열만 걸린다)
       final index = previewDevices.indexWhere((d) => d.name == '폴더블 커버');
       expect(index, isNonNegative);
       final device = previewDevices[index];
@@ -766,6 +891,423 @@ void main() {
       );
       expect(inside(screen, drawn), isTrue);
       await tester.pumpAndSettle(const Duration(seconds: 3));
+    });
+  });
+
+  group('폴더블 접힘선 주입 (#51)', () {
+    int foldInner() {
+      final i = previewDevices.indexWhere((d) => d.name == '폴더블 내부');
+      expect(i, isNonNegative);
+      return i;
+    }
+
+    /// 기기 화면의 표시 배율 (기기 틀 축소)
+    double scaleOf(WidgetTester tester, PreviewDevice device) =>
+        tester.getRect(_deviceScreen).width / device.size.width;
+
+    /// 전역 좌표 [global]을 기기 화면 좌표(dp)로 바꾼다 (기기 틀의 이동·축소를 되돌린다).
+    Rect toScreen(WidgetTester tester, PreviewDevice device, Rect global) {
+      final screen = tester.getRect(_deviceScreen);
+      final scale = scaleOf(tester, device);
+      return Rect.fromLTRB(
+        (global.left - screen.left) / scale,
+        (global.top - screen.top) / scale,
+        (global.right - screen.left) / scale,
+        (global.bottom - screen.top) / scale,
+      );
+    }
+
+    /// 기기 화면 좌표(dp) [local]을 전역 좌표로 바꾼다.
+    Offset toGlobal(WidgetTester tester, PreviewDevice device, Offset local) =>
+        tester.getRect(_deviceScreen).topLeft + local * scaleOf(tester, device);
+
+    CustomPaint overlay(WidgetTester tester) => tester.widget<CustomPaint>(
+      find.byKey(const ValueKey('preview-display-features')),
+    );
+
+    Rect cardRect(WidgetTester tester, PreviewDevice device) => toScreen(
+      tester,
+      device,
+      tester.getRect(
+        find
+            .descendant(
+              of: find.byType(Dialog),
+              matching: find.byType(Material),
+            )
+            .first,
+      ),
+    );
+
+    /// 설정 대화상자로 손잡이를 [handedness]로 바꾸고 닫는다.
+    Future<void> setHandedness(
+      WidgetTester tester,
+      Handedness handedness,
+    ) async {
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(CalculatorScreen)),
+      );
+      if (container.read(handednessProvider) == handedness) return;
+      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(HandednessDialog.optionKeyOf(handedness)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(HandednessDialog.closeKey));
+      await tester.pumpAndSettle();
+      expect(container.read(handednessProvider), handedness);
+    }
+
+    // 1280×900은 축소 없이(100%), 1000×700은 축소해서(약 78%) 그린다 — 축소 좌표 경로까지 확인한다.
+    const windows = [_window, Size(1000, 700)];
+
+    for (final window in windows) {
+      for (final handedness in Handedness.values) {
+        final label =
+            '${window.width.toInt()}×${window.height.toInt()}·${handedness.name}';
+
+        testWidgets('$label: 접힘선 양쪽으로 LCD·키패드가 나뉘고, 설정 대화상자도 접힘선을 넘지 않는다', (
+          tester,
+        ) async {
+          await _pumpPreview(tester, window: window);
+          final index = foldInner();
+          final device = previewDevices[index];
+          await _selectDevice(tester, index);
+          if (window == _window) {
+            expect(scaleOf(tester, device), 1);
+          } else {
+            expect(scaleOf(tester, device), lessThan(1));
+          }
+          await setHandedness(tester, handedness);
+          expect(tester.takeException(), isNull);
+
+          final hingeX = previewFoldInnerFold.bounds.left;
+          final lcd = toScreen(
+            tester,
+            device,
+            tester.getRect(find.byType(LcdDisplay)),
+          );
+          final keypad = toScreen(
+            tester,
+            device,
+            tester.getRect(find.byKey(const ValueKey('calc-keypad'))),
+          );
+          Rect keyOf(CalcKeyId id) =>
+              toScreen(tester, device, tester.getRect(_keycap(id)));
+          const e = 0.01;
+          if (handedness == Handedness.right) {
+            // 키패드 오른쪽 절반, LCD 왼쪽 절반. 바깥쪽 끝 열은 뒤로가기 영역에 걸린다.
+            expect(lcd.left, greaterThanOrEqualTo(-e));
+            expect(lcd.right, lessThanOrEqualTo(hingeX + e));
+            expect(keypad.left, greaterThanOrEqualTo(hingeX - e));
+            expect(keypad.right, lessThanOrEqualTo(device.size.width + e));
+            expect(
+              keyOf(CalcKeyId.ac).right,
+              greaterThan(device.size.width - device.systemGestureInsets.right),
+            );
+          } else {
+            expect(keypad.left, greaterThanOrEqualTo(-e));
+            expect(keypad.right, lessThanOrEqualTo(hingeX + e));
+            expect(lcd.left, greaterThanOrEqualTo(hingeX - e));
+            expect(lcd.right, lessThanOrEqualTo(device.size.width + e));
+            expect(
+              keyOf(CalcKeyId.num7).left,
+              lessThan(device.systemGestureInsets.left),
+            );
+          }
+
+          // 설정 버튼은 LCD 쪽 절반에 있고, 대화상자는 그 절반에 뜨며 접힘선을 넘지 않는다.
+          final button = toScreen(
+            tester,
+            device,
+            tester.getRect(find.byKey(SettingsButton.buttonKey)),
+          );
+          final buttonOnLeft = handedness == Handedness.right;
+          expect(button.center.dx < hingeX, buttonOnLeft);
+          await tester.tap(find.byKey(SettingsButton.buttonKey));
+          await tester.pumpAndSettle();
+          final card = cardRect(tester, device);
+          if (buttonOnLeft) {
+            expect(card.left, greaterThanOrEqualTo(-e));
+            expect(card.right, lessThanOrEqualTo(hingeX + e));
+          } else {
+            expect(card.left, greaterThanOrEqualTo(hingeX - e));
+            expect(card.right, lessThanOrEqualTo(device.size.width + e));
+          }
+          expect(tester.takeException(), isNull);
+        });
+      }
+
+      testWidgets('${window.width.toInt()}×${window.height.toInt()}: '
+          '접힘선 표시는 터치를 가로채지 않는다 — 접힘선 위 점은 계산기 화면이 받고, 키도 눌린다', (tester) async {
+        await _pumpPreview(tester, window: window);
+        final index = foldInner();
+        final device = previewDevices[index];
+        await _selectDevice(tester, index);
+        // 양성 대조: 접힘선 표시가 기기 화면 크기 그대로(축소 전 좌표) 그려지고 있다.
+        expect(
+          overlay(tester).foregroundPainter,
+          isA<PreviewDisplayFeaturePainter>(),
+        );
+        expect(
+          tester.getSize(
+            find.byKey(const ValueKey('preview-display-features')),
+          ),
+          device.size,
+        );
+
+        // 접힘선 위 점의 히트 테스트 최하위 대상이 계산기 화면 안에 있어야 한다
+        // (표시를 위젯으로 바꿔 터치를 받게 되면 그 위젯이 대상이 된다).
+        final screenRoot = tester.renderObject(find.byType(CalculatorScreen));
+        bool insideScreen(RenderObject target) {
+          for (RenderObject? o = target; o != null; o = o.parent) {
+            if (identical(o, screenRoot)) return true;
+          }
+          return false;
+        }
+
+        final hingeX = previewFoldInnerFold.bounds.left;
+        for (final y in [0.25, 0.5, 0.75]) {
+          final at = toGlobal(
+            tester,
+            device,
+            Offset(hingeX, device.size.height * y),
+          );
+          final result = tester.hitTestOnBinding(at);
+          final target = result.path.first.target;
+          expect(target, isA<RenderObject>(), reason: '$y');
+          expect(insideScreen(target as RenderObject), isTrue, reason: '$y');
+        }
+        // 음성 대조: 기기 틀 밖(패널)의 점은 계산기 화면 밖으로 판정된다.
+        final panel = tester.getRect(
+          find.byKey(const ValueKey('preview-panel')),
+        );
+        final outside = tester.hitTestOnBinding(panel.center).path.first.target;
+        expect(insideScreen(outside as RenderObject), isFalse);
+
+        // 키패드 가운데 열 키도 눌린다 (표시가 화면 전체를 덮고 있다).
+        await tester.tap(_keycap(CalcKeyId.num8));
+        await tester.pump();
+        expect(_logLines(tester), ['1. 8']);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('폴더블 내부: 접힘선 표시가 그려지고 캡션에 표시 배율 다음으로 위치가 나온다', (tester) async {
+      await _pumpPreview(tester);
+      final index = foldInner();
+      final device = previewDevices[index];
+      await _selectDevice(tester, index);
+      // 접힘선 기준 배치에서만 보이는 설정 버튼이 있다.
+      expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+      expect(
+        overlay(tester).foregroundPainter,
+        isA<PreviewDisplayFeaturePainter>(),
+      );
+      final caption = tester
+          .widget<Text>(find.byKey(const ValueKey('preview-frame-caption')))
+          .data!;
+      expect(
+        caption,
+        '${device.label} · 표시 배율 100% · 접힘선(점선) 세로 x=345 · 글자 100%',
+      );
+    });
+
+    group('접힘선 표시 그리기', () {
+      const screen = Size(690, 829);
+
+      final painted = find.byKey(const ValueKey('painter'));
+
+      /// 기기 화면 크기([screen]) 그대로 그린다 — painter는 그리는 영역 크기를 화면 크기로 본다.
+      Future<void> pumpPainter(
+        WidgetTester tester,
+        List<DisplayFeature> features,
+      ) async {
+        tester.view.physicalSize = screen * tester.view.devicePixelRatio;
+        addTearDown(tester.view.resetPhysicalSize);
+        await tester.pumpWidget(
+          CustomPaint(
+            key: const ValueKey('painter'),
+            painter: PreviewDisplayFeaturePainter(features),
+            child: const SizedBox.expand(),
+          ),
+        );
+        expect(tester.getSize(painted), screen);
+      }
+
+      testWidgets('앱이 인식하는 폭 0 세로 접힘선: x=345에 위에서부터 주황 점선', (tester) async {
+        await pumpPainter(tester, const [previewFoldInnerFold]);
+        expect(
+          painted,
+          paints
+            ..line(
+              p1: const Offset(345, 0),
+              p2: const Offset(345, 8),
+              color: PreviewDisplayFeaturePainter.splittingColor,
+              strokeWidth: 2,
+            )
+            ..line(p1: const Offset(345, 14), p2: const Offset(345, 22)),
+        );
+        expect(painted, isNot(paints..rect()));
+      });
+
+      testWidgets('폭 있는 힌지: 영역을 칠하고 가운데에 점선', (tester) async {
+        await pumpPainter(tester, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(335, 0, 20, 829),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]);
+        expect(
+          painted,
+          paints
+            ..rect(
+              rect: const Rect.fromLTWH(335, 0, 20, 829),
+              color: PreviewDisplayFeaturePainter.splittingColor.withValues(
+                alpha: 0.25,
+              ),
+            )
+            ..line(p1: const Offset(345, 0), p2: const Offset(345, 8)),
+        );
+      });
+
+      testWidgets('화면을 끝까지 가로지르지 않는 접힘선은 회색 점선', (tester) async {
+        await pumpPainter(tester, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 300, 400, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+        ]);
+        expect(
+          painted,
+          paints..line(
+            p1: const Offset(0, 300),
+            p2: const Offset(8, 300),
+            color: PreviewDisplayFeaturePainter.otherColor,
+          ),
+        );
+      });
+
+      testWidgets('화면을 가로지르는 접힘선이 둘이면 앱이 쓰는 첫 번째만 주황, 두 번째는 회색', (
+        tester,
+      ) async {
+        await pumpPainter(tester, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(300, 0, 0, 829),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTWH(400, 0, 0, 829),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]);
+        expect(
+          painted,
+          paints
+            ..line(
+              p1: const Offset(300, 0),
+              p2: const Offset(300, 8),
+              color: PreviewDisplayFeaturePainter.splittingColor,
+            )
+            // 첫 접힘선의 나머지 점선 조각을 건너뛰고 두 번째 접힘선의 첫 조각을 찾는다.
+            ..something(
+              (method, args) =>
+                  method == #drawLine &&
+                  args[0] == const Offset(400, 0) &&
+                  args[1] == const Offset(400, 8) &&
+                  (args[2] as Paint).color.toARGB32() ==
+                      PreviewDisplayFeaturePainter.otherColor.toARGB32(),
+            ),
+        );
+      });
+
+      testWidgets('화면을 가로지르지만 배치를 나누지 않는 접힘선(펼친 가로 접힘선)은 회색 점선', (
+        tester,
+      ) async {
+        await pumpPainter(tester, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 414.5, 690, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]);
+        expect(
+          painted,
+          paints..line(
+            p1: const Offset(0, 414.5),
+            p2: const Offset(8, 414.5),
+            color: PreviewDisplayFeaturePainter.otherColor,
+          ),
+        );
+      });
+
+      testWidgets('화면 구멍(cutout)·무한 영역만 있으면 아무것도 그리지 않는다', (tester) async {
+        await pumpPainter(tester, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(300, 0, 90, 30),
+            type: DisplayFeatureType.cutout,
+            state: DisplayFeatureState.unknown,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTRB(345, 0, 345, double.infinity),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]);
+        expect(painted, paintsNothing);
+      });
+
+      test('같은 특징 목록이면 다시 그리지 않는다', () {
+        const a = PreviewDisplayFeaturePainter([previewFoldInnerFold]);
+        expect(
+          a.shouldRepaint(
+            const PreviewDisplayFeaturePainter([previewFoldInnerFold]),
+          ),
+          isFalse,
+        );
+        expect(a.shouldRepaint(const PreviewDisplayFeaturePainter([])), isTrue);
+      });
+    });
+
+    testWidgets('접힘선이 없는 프리셋은 화면 특징이 비고 표시·캡션도 없다', (tester) async {
+      await _pumpPreview(tester);
+      for (final (i, device) in previewDevices.indexed) {
+        if (device.displayFeatures.isNotEmpty) continue;
+        await _selectDevice(tester, i);
+        expect(
+          MediaQuery.displayFeaturesOf(
+            tester.element(find.byType(CalculatorScreen)),
+          ),
+          isEmpty,
+          reason: device.name,
+        );
+        expect(overlay(tester).foregroundPainter, isNull, reason: device.name);
+        expect(find.textContaining('접힘선'), findsNothing, reason: device.name);
+      }
+    });
+
+    testWidgets('호스트(창)의 화면 특징은 기기 화면에 새지 않는다', (tester) async {
+      tester.view.displayFeatures = const [
+        DisplayFeature(
+          bounds: Rect.fromLTWH(640, 0, 0, 900),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        ),
+      ];
+      addTearDown(tester.view.resetDisplayFeatures);
+      await _pumpPreview(tester);
+      for (final (i, device) in previewDevices.indexed) {
+        await _selectDevice(tester, i);
+        expect(
+          MediaQuery.displayFeaturesOf(
+            tester.element(find.byType(CalculatorScreen)),
+          ),
+          device.displayFeatures,
+          reason: device.name,
+        );
+      }
     });
   });
 }
