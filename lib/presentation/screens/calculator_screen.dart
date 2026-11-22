@@ -836,33 +836,28 @@ class _Body extends ConsumerWidget {
     final handedness = ref.watch(handednessProvider);
     // 접힘선 기준 배치 후보. 키가 터치 하한보다 낮아지면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
     // 인셋·광고 슬롯·접힘선 간격이 빠진 실제 키패드 크기를 본다).
-    ({Rect lcd, Rect keypad, Rect settings})? hingeLayout;
-    if (hinge != null) {
+    ({Rect lcd, Rect keypad, Rect settings})? hingeLayoutFor(Handedness h) {
+      if (hinge == null) return null;
       switch (arrangement) {
         case ScreenArrangement.hingeSplit:
-          final l = CalcSplitLayout.of(body, handedness, hinge: hinge);
+          final l = CalcSplitLayout.of(body, h, hinge: hinge);
           if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
               CalcTheme.keyTouchHeightFloor) {
-            hingeLayout = (
-              lcd: l.lcd,
-              keypad: l.keypad,
-              settings: l.settingsButton,
-            );
+            return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
           }
         case ScreenArrangement.hingeStacked:
-          final l = CalcTabletopLayout.of(body, hinge, handedness);
+          final l = CalcTabletopLayout.of(body, hinge, h);
           if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
               CalcTheme.tabletopKeyTouchHeightFloor) {
-            hingeLayout = (
-              lcd: l.lcd,
-              keypad: l.keypad,
-              settings: l.settingsButton,
-            );
+            return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
           }
         case ScreenArrangement.stacked || ScreenArrangement.split:
           break;
       }
+      return null;
     }
+
+    final hingeLayout = hingeLayoutFor(handedness);
     switch (arrangement) {
       case ScreenArrangement.split:
         final layout = CalcSplitLayout.of(body, handedness);
@@ -899,6 +894,13 @@ class _Body extends ConsumerWidget {
           height,
         );
     }
+    // 손잡이를 바꾸면 배치가 달라지는지 (#41 R2): 위아래 배치로 그렸어도, 반대 손잡이로는 접힘선 기준 배치가
+    // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
+    final handednessApplies =
+        drawn != ScreenArrangement.stacked ||
+        Handedness.values.any(
+          (h) => h != handedness && hingeLayoutFor(h) != null,
+        );
     // 상단 띠 (#41): LCD 위에 장식 줄을 두고, 위아래 배치는 설정 버튼도 그 줄에 둔다.
     final strip = CalcTopStripLayout.of(body, lcd, settingsButton: settings);
     final stripButton = strip.settingsButton;
@@ -921,9 +923,13 @@ class _Body extends ConsumerWidget {
         Positioned.fromRect(
           rect: (settings ?? stripButton!).shift(origin),
           child: stripButton == null
-              ? SettingsButton(arrangement: drawn)
+              ? SettingsButton(
+                  arrangement: drawn,
+                  handednessApplies: handednessApplies,
+                )
               : SettingsButton(
                   arrangement: drawn,
+                  handednessApplies: handednessApplies,
                   visualHeight: strip.settingsVisualHeight,
                   iconSize: strip.settingsIconSize,
                 ),

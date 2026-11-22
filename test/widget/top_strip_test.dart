@@ -1,6 +1,7 @@
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
@@ -706,24 +707,37 @@ void main() {
       );
     });
 
-    for (final (name, size, padding, features) in [
+    const flipHalfOpened = [
+      DisplayFeature(
+        bounds: Rect.fromLTWH(0, 502.5, 411, 0),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureHalfOpened,
+      ),
+    ];
+    for (final (name, size, padding, features, handedness, expected) in [
       (
         '좌우 분할 1280×800',
         const Size(1280, 800),
         const EdgeInsets.only(top: 24, bottom: 48),
         const <DisplayFeature>[],
+        Handedness.right,
+        DrawnArrangement.sideBySide,
       ),
       (
-        '테이블톱 Flip 411×1005',
+        '테이블톱 Flip 411×1005·오른손',
         const Size(411, 1005),
         const EdgeInsets.only(top: 24, bottom: 24),
-        const [
-          DisplayFeature(
-            bounds: Rect.fromLTWH(0, 502.5, 411, 0),
-            type: DisplayFeatureType.fold,
-            state: DisplayFeatureState.postureHalfOpened,
-          ),
-        ],
+        flipHalfOpened,
+        Handedness.right,
+        DrawnArrangement.tabletop,
+      ),
+      (
+        '테이블톱 Flip 411×1005·왼손',
+        const Size(411, 1005),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        flipHalfOpened,
+        Handedness.left,
+        DrawnArrangement.tabletop,
       ),
       (
         '세로 접힘선 841×701',
@@ -736,19 +750,20 @@ void main() {
             state: DisplayFeatureState.postureFlat,
           ),
         ],
+        Handedness.right,
+        DrawnArrangement.sideBySide,
       ),
     ]) {
       testWidgets('$name: 손잡이가 적용되는 배치라 안내 글이 없다', (tester) async {
-        await _pump(
+        final container = await _pump(
           tester,
           size: size,
           padding: padding,
           displayFeatures: features,
         );
-        expect(
-          drawnArrangementOf(tester),
-          isNot(anyOf(DrawnArrangement.stacked, DrawnArrangement.unknown)),
-        );
+        container.read(handednessProvider.notifier).set(handedness);
+        await tester.pump();
+        expect(drawnArrangementOf(tester), expected);
         await tester.tap(_button);
         await tester.pumpAndSettle();
         expect(_dialog, findsOneWidget);
@@ -791,10 +806,13 @@ void main() {
     });
 
     testWidgets(
-      '키가 작아 접힘선 기준 배치 대신 위아래 배치로 그리면 대화상자를 접힘선 한쪽에 가두지 않는다 (#41 R1)',
+      '세로 접힘선 배치를 한쪽 손잡이로만 쓸 수 있는 화면: 안내 글을 보이지 않고, 대화상자를 좁은 절반에 가두지 않는다 (#41 R1·R2)',
       (tester) async {
-        // 세로 접힘선 오른쪽 281dp + 오른쪽 인셋 48 → 키가 터치 하한보다 낮아 위아래 배치로 그린다
-        // (split_layout_test의 #25 R2 경우). 설정 버튼은 접힘선 오른쪽(LCD 오른쪽 끝)에 있다.
+        // 세로 접힘선 x=560, 오른쪽 인셋 48 → 오른쪽 절반은 233dp뿐이다.
+        // - 오른손잡이: 키패드가 오른쪽 절반에 들어가 키가 터치 하한보다 낮다 → 위아래 배치로 대체한다
+        //   (split_layout_test의 #25 R2 경우). 설정 버튼은 접힘선 오른쪽(LCD 오른쪽 끝)에 있다.
+        // - 왼손잡이: 키패드가 넓은 왼쪽 절반에 들어가 접힘선 기준 배치가 된다 — 그래서 손잡이 설정이 이 화면에
+        //   적용된다(안내 글을 보이면 안 된다).
         const fold = DisplayFeature(
           bounds: Rect.fromLTWH(560, 0, 0, 701),
           type: DisplayFeatureType.fold,
@@ -806,7 +824,7 @@ void main() {
           bottom: 24 * 3,
         );
         addTearDown(tester.view.resetPadding);
-        await _pump(
+        final container = await _pump(
           tester,
           size: const Size(841, 701),
           padding: const EdgeInsets.only(top: 24, right: 48, bottom: 24),
@@ -816,7 +834,7 @@ void main() {
         expect(tester.getRect(_button).left, greaterThan(560));
         await tester.tap(_button);
         await tester.pumpAndSettle();
-        final surface = tester.getRect(
+        Rect surface() => tester.getRect(
           find
               .descendant(
                 of: find.byType(AlertDialog),
@@ -824,9 +842,139 @@ void main() {
               )
               .first,
         );
-        expect(surface.width, greaterThanOrEqualTo(280));
-        expect(surface.left, lessThan(560)); // 접힘선 오른쪽 절반에 갇히지 않았다
-        expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+        expect(surface().width, greaterThanOrEqualTo(280));
+        expect(surface().left, lessThan(560)); // 접힘선 오른쪽 절반에 갇히지 않았다
+        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+
+        // 왼손잡이를 고르면 접힘선 기준 배치가 된다. 버튼은 LCD 쪽인 오른쪽 좁은 절반(233dp)에 있으므로,
+        // 대화상자는 그 절반에 가두지 않고 화면 전체에 그대로 둔다.
+        await tester.tap(
+          find.byKey(HandednessDialog.optionKeyOf(Handedness.left)),
+        );
+        await tester.pumpAndSettle();
+        expect(container.read(handednessProvider), Handedness.left);
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(tester.getRect(_button).left, greaterThan(560));
+        expect(_dialog, findsOneWidget);
+        expect(surface().width, greaterThanOrEqualTo(280));
+        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('대화상자가 열린 채 접힘선 기준 배치로 바뀌면 지금 버튼이 있는 절반으로 옮겨 간다 (#41 R2)', (
+      tester,
+    ) async {
+      // Fold 내부 화면 가로(펼친 가로 접힘선): 위아래 배치, 설정 버튼은 오른쪽 위
+      final container = await _pump(
+        tester,
+        size: const Size(841, 701),
+        displayFeatures: const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 350, 841, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+      );
+      expect(isStackedArrangement(tester), isTrue);
+      expect(tester.getRect(_button).center.dx, greaterThan(420));
+      await tester.tap(_button);
+      await tester.pumpAndSettle();
+
+      // 세로로 돌림 → 세로 접힘선 기준 배치, 설정 버튼은 LCD 쪽(왼쪽) 절반
+      await _pump(
+        tester,
+        size: const Size(701, 841),
+        displayFeatures: const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(350, 0, 0, 841),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(tester.getRect(_button).right, lessThanOrEqualTo(350));
+      final surface = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(surface.right, lessThanOrEqualTo(350));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      '대화상자가 열린 채 접힘선 나뉨이 바뀌어도 대화상자 element와 키보드 포커스가 유지된다 (#41 R2)',
+      (tester) async {
+        // 세로 접힘선 기준 배치(대화상자를 절반에 둔다) → 접힘선이 없어짐(좌우 분할, 나누지 않음)
+        const fold = DisplayFeature(
+          bounds: Rect.fromLTWH(420, 0, 0, 701),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        final container = await _pump(
+          tester,
+          size: const Size(841, 701),
+          displayFeatures: const [fold],
+        );
+        await tester.tap(_button);
+        await tester.pumpAndSettle();
+        final option = find.byKey(
+          HandednessDialog.optionKeyOf(Handedness.values.first),
+        );
+        // 키보드로 첫 선택지에 포커스를 준다.
+        for (var i = 0; i < 5; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          final focus = FocusManager.instance.primaryFocus?.context;
+          if (focus != null &&
+              find
+                  .descendant(
+                    of: option,
+                    matching: find.byElementPredicate(
+                      (e) => identical(e, focus),
+                    ),
+                  )
+                  .evaluate()
+                  .isNotEmpty) {
+            break;
+          }
+        }
+        final focused = FocusManager.instance.primaryFocus;
+        expect(focused, isNotNull);
+        expect(
+          find.descendant(
+            of: option,
+            matching: find.byElementPredicate(
+              (e) => identical(e, focused!.context),
+            ),
+          ),
+          findsOneWidget,
+        );
+        final optionElement = tester.element(option);
+
+        for (final features in const [
+          <DisplayFeature>[],
+          [fold],
+        ]) {
+          await _pump(
+            tester,
+            size: const Size(841, 701),
+            displayFeatures: features,
+            container: container,
+          );
+          await tester.pumpAndSettle();
+          expect(_dialog, findsOneWidget);
+          expect(identical(tester.element(option), optionElement), isTrue);
+          expect(FocusManager.instance.primaryFocus, same(focused));
+        }
       },
     );
 

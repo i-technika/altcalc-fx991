@@ -30,16 +30,30 @@ import 'handedness_dialog.dart';
 /// 대화상자는 이 버튼이 있는 쪽 절반에 뜬다(`showDialog`의 `anchorPoint` → `DisplayFeatureSubScreen`).
 /// Flutter는 반 접힘·물리 힌지만 화면을 나누는 것으로 보지만, 앱은 펼친 폭 0 세로 접힘선에서도 화면을 나눈다
 /// (`FormFactor.arrangementOf`). 그 경우 대화상자가 주름을 가로지르지 않도록 같은 기준으로 한 번 더 나눈다.
-/// 다만 실제로 그린 배치([arrangement])가 세로 접힘선 기준 배치일 때만이다 — 키가 터치 하한보다 낮아 위아래
-/// 배치로 그렸다면 앱도 화면을 나누지 않았으므로, 한쪽 절반(좁으면 150dp 안팎)에 대화상자를 가두지 않는다 (#41 R1).
+/// 다만 다음 두 조건을 모두 만족할 때만이다 (#41 R1·R2).
+/// - 실제로 그린 배치([arrangement])가 세로 접힘선 기준 배치다. 키가 터치 하한보다 낮아 위아래 배치로 그렸다면
+///   앱도 화면을 나누지 않았으므로 대화상자를 한쪽 절반에 가두지 않는다.
+/// - 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상이다. 그보다 좁으면 대화상자
+///   카드가 150dp 안팎으로 줄어 읽기 어려우므로, 주름을 가로지르더라도 화면 전체에 띄운다.
 ///
 /// ## 대화상자가 열린 동안 배치가 바뀌면
-/// 회전·접기·창 크기 변경으로 [arrangement]가 바뀌면 다음 프레임에 열린 대화상자에도 반영된다(나뉨 여부와
-/// 적용 안내 글). 대화상자는 다른 경로라 이 위젯이 다시 빌드되는 중에는 바꿀 수 없어 한 프레임 늦다.
+/// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]가 바뀌면 다음 프레임에 열린 대화상자에도
+/// 반영된다(나뉨 여부와 그 기준 위치, 적용 안내 글). 대화상자는 다른 경로라 이 위젯이 다시 빌드되는 중에는 바꿀 수
+/// 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은 [GlobalKey]로 옮겨
+/// 가므로 키보드 포커스·스크롤 위치가 유지된다.
+/// 배치는 그대로이고 손잡이만 바꿔 버튼이 반대쪽 절반으로 옮겨 가면 대화상자는 그 자리에 남는다(#25 동작 —
+/// 고를 때마다 대화상자가 건너뛰지 않게).
 class SettingsButton extends StatefulWidget {
   /// 이 버튼이 놓인 화면의 실제 배치 (`CalculatorScreen`이 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래
   /// 배치로 그렸으면 [ScreenArrangement.stacked])
   final ScreenArrangement arrangement;
+
+  /// 손잡이 설정을 바꾸면 이 화면의 배치가 달라지는지. 아니면 대화상자에 그 안내 글을 보인다.
+  ///
+  /// 그린 배치만으로는 정할 수 없다 — 세로 접힘선 기준 배치는 키패드가 들어갈 절반의 폭이 손잡이마다 달라,
+  /// 지금 손잡이로는 위아래 배치로 대체했어도 반대 손잡이로는 접힘선 기준 배치가 될 수 있다(#41 R2).
+  /// `CalculatorScreen`이 두 손잡이로 모두 판정해 넘긴다.
+  final bool handednessApplies;
 
   /// 자리 위쪽에서 버튼을 그리는 구간 높이 (dp). `null`이거나 자리 높이 이상이면 자리 전체에 그린다.
   final double? visualHeight;
@@ -50,6 +64,7 @@ class SettingsButton extends StatefulWidget {
   const SettingsButton({
     super.key,
     required this.arrangement,
+    required this.handednessApplies,
     this.visualHeight,
     this.iconSize,
   }) : assert(visualHeight == null || visualHeight >= 0),
@@ -61,34 +76,49 @@ class SettingsButton extends StatefulWidget {
   /// 낮은 상단 띠에서 보이는 버튼 아래로 넓힌 터치 영역의 위젯 키
   static const Key touchExtensionKey = ValueKey('settings-button-touch');
 
-  /// [arrangement]에서 손잡이 설정이 배치에 영향을 주는지 — 위아래 배치에서는 주지 않는다.
-  static bool handednessApplies(ScreenArrangement arrangement) =>
-      arrangement != ScreenArrangement.stacked;
-
   @override
   State<SettingsButton> createState() => _SettingsButtonState();
 }
 
+/// 열린 대화상자가 보는 화면 상태 — 배치, 손잡이 적용 여부, 버튼 중심(Navigator 좌표, 나눌 절반을 고르는 기준)
+typedef _DialogLayout = ({
+  ScreenArrangement arrangement,
+  bool handednessApplies,
+  Offset? anchor,
+});
+
 class _SettingsButtonState extends State<SettingsButton> {
-  /// 열린 대화상자가 보는 배치 ([SettingsButton.arrangement]를 한 프레임 늦게 따른다)
-  late final ValueNotifier<ScreenArrangement> _arrangement = ValueNotifier(
-    widget.arrangement,
-  );
+  /// 열린 대화상자가 보는 화면 상태 ([SettingsButton]의 값을 한 프레임 늦게 따른다)
+  late final ValueNotifier<_DialogLayout> _layout = ValueNotifier((
+    arrangement: widget.arrangement,
+    handednessApplies: widget.handednessApplies,
+    anchor: null,
+  ));
 
   @override
   void didUpdateWidget(SettingsButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.arrangement != oldWidget.arrangement) {
-      // 대화상자 경로는 이 위젯의 자손이 아니라 빌드 중에 다시 빌드하라고 표시할 수 없다 — 프레임이 끝난 뒤 알린다.
+    if (widget.arrangement != oldWidget.arrangement ||
+        widget.handednessApplies != oldWidget.handednessApplies) {
+      // 대화상자 경로는 이 위젯의 자손이 아니라 빌드 중에 다시 빌드하라고 표시할 수 없다 — 프레임이 끝난 뒤
+      // (버튼이 새 자리에 놓인 뒤) 알린다. 버튼 중심도 그때 다시 잰다.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _arrangement.value = widget.arrangement;
+        if (!mounted) return;
+        final navigator = Navigator.maybeOf(context, rootNavigator: true);
+        _layout.value = (
+          arrangement: widget.arrangement,
+          handednessApplies: widget.handednessApplies,
+          anchor: navigator == null
+              ? _layout.value.anchor
+              : _anchorIn(context, navigator),
+        );
       });
     }
   }
 
   @override
   void dispose() {
-    _arrangement.dispose();
+    _layout.dispose();
     super.dispose();
   }
 
@@ -110,17 +140,31 @@ class _SettingsButtonState extends State<SettingsButton> {
 
   /// 앱이 화면을 나누는데 Flutter는 나누지 않는 접힘선(펼친 폭 0 세로 접힘선)을, 대화상자 배치에서는
   /// 나누는 접힘선(반 접힘)으로 바꾼다. 바꿀 것이 없으면 `null`.
-  /// 앱이 실제로 세로 접힘선 기준 배치로 그렸을 때([arrangement])만 바꾼다.
+  /// 앱이 실제로 세로 접힘선 기준 배치로 그렸고([arrangement]), [anchor] 쪽 절반이 충분히 넓을 때만 바꾼다
+  /// ([SettingsButton] "접힘선이 있을 때 대화상자 위치").
+  ///
+  /// [screenPadding]은 화면의 시스템 인셋이다. 대화상자 내용은 `showDialog`의 SafeArea 안이라 [media]의 인셋이
+  /// 이미 0이므로 Navigator의 MediaQuery 값을 따로 받는다.
   static List<DisplayFeature>? _splitLikeApp(
     MediaQueryData media,
     ScreenArrangement arrangement,
+    Offset? anchor,
+    EdgeInsets screenPadding,
   ) {
     if (arrangement != ScreenArrangement.hingeSplit) return null;
     bool splitByAppOnly(DisplayFeature f) =>
         !FormFactor.separates(f) &&
         FormFactor.hingeOf(media.size, [f]) != null &&
         FormFactor.isVerticalHinge(f.bounds);
-    if (!media.displayFeatures.any(splitByAppOnly)) return null;
+    final hinge = media.displayFeatures.where(splitByAppOnly).firstOrNull;
+    if (hinge == null) return null;
+    // 버튼 쪽 절반의 폭 (그쪽 시스템 인셋 제외) — 버튼 위치를 모르면 좁은 쪽으로 본다.
+    final left = hinge.bounds.left - screenPadding.left;
+    final right = media.size.width - hinge.bounds.right - screenPadding.right;
+    final half = anchor == null
+        ? math.min(left, right)
+        : (anchor.dx < hinge.bounds.center.dx ? left : right);
+    if (half < FormFactor.hingeMinPanelExtent) return null;
     return [
       for (final f in media.displayFeatures)
         splitByAppOnly(f)
@@ -136,23 +180,39 @@ class _SettingsButtonState extends State<SettingsButton> {
   void _open(BuildContext context) {
     final navigator = Navigator.of(context, rootNavigator: true);
     final anchor = _anchorIn(context, navigator);
+    _layout.value = (
+      arrangement: widget.arrangement,
+      handednessApplies: widget.handednessApplies,
+      anchor: anchor,
+    );
+    // 나뉨 여부가 바뀌어 감싸는 위젯이 달라져도 대화상자 element(포커스·스크롤)를 옮겨 유지한다.
+    final dialogKey = GlobalKey(debugLabel: 'handedness-dialog');
     showDialog<void>(
       context: context,
       anchorPoint: anchor,
-      builder: (dialogContext) => ValueListenableBuilder<ScreenArrangement>(
-        valueListenable: _arrangement,
-        builder: (dialogContext, arrangement, _) {
+      builder: (dialogContext) => ValueListenableBuilder<_DialogLayout>(
+        valueListenable: _layout,
+        builder: (dialogContext, layout, _) {
           final dialog = HandednessDialog(
-            showLayoutNote: !SettingsButton.handednessApplies(arrangement),
+            key: dialogKey,
+            showLayoutNote: !layout.handednessApplies,
           );
           final media = MediaQuery.of(dialogContext);
-          final features = _splitLikeApp(media, arrangement);
+          final features = _splitLikeApp(
+            media,
+            layout.arrangement,
+            layout.anchor,
+            MediaQuery.paddingOf(navigator.context),
+          );
           if (features == null) return dialog;
           // 바깥 `DisplayFeatureSubScreen`이 나누지 않아 화면 전체(경로 좌표 = 이 좌표)를 받았으므로,
-          // 같은 anchor로 앱 기준 절반을 고른다.
+          // 지금 버튼 중심으로 앱 기준 절반을 고른다.
           return MediaQuery(
             data: media.copyWith(displayFeatures: features),
-            child: DisplayFeatureSubScreen(anchorPoint: anchor, child: dialog),
+            child: DisplayFeatureSubScreen(
+              anchorPoint: layout.anchor,
+              child: dialog,
+            ),
           );
         },
       ),
@@ -177,7 +237,8 @@ class _SettingsButtonState extends State<SettingsButton> {
       ),
     );
     // 구조를 [SettingsButton.visualHeight] 유무·값과 무관하게 같게 둔다 — 배치나 띠 높이가 바뀌어도(회전·창 크기
-    // 변경) 버튼 element와 키보드 포커스가 유지된다. 그리는 구간이 자리 전체이면 넓힌 터치 영역의 크기가 0이다.
+    // 변경) 버튼 element와 키보드 포커스가 유지된다. 넓힌 터치 영역은 늘 자리 전체를 차지하고, 그리는 구간이 자리
+    // 전체이면 그 위의 IconButton이 모두 덮어 넓힌 영역에는 터치가 닿지 않는다.
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = constraints.hasBoundedHeight

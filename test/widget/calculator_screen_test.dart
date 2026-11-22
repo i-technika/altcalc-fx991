@@ -822,22 +822,30 @@ void main() {
       }
     }
 
-    // 소형(4", 16:9) ~ 대형(6.7", 19.5:9)·초장형(21:9) 세로 폰
-    for (final size in const [
-      Size(320, 568),
-      Size(360, 640),
-      Size(360, 800),
-      Size(390, 844),
-      Size(412, 915),
-      Size(430, 932),
-      Size(440, 956),
-      Size(411, 960),
+    // 소형(4", 16:9) ~ 대형(6.7", 19.5:9)·초장형(21:9) 세로 폰 — (창, 인셋, 배율 반영 줄 글자 하한)
+    // 줄 글자 하한은 18dp다. 본체가 높이 500dp인 두 경우(320×568 인셋 0, 360×640 인셋 24/48)만 17.7dp로 낮춘다(#41):
+    // 상단 띠 최소 높이(12dp)를 떼어 두면서 LCD가 140 → 136.6dp로 줄어 배율 1.3의 줄 글자가 18.3 → 17.7dp가 된다.
+    for (final (size, padding, minLine) in const [
+      (Size(320, 568), EdgeInsets.zero, 17.7),
+      (Size(360, 640), EdgeInsets.zero, 18.0),
+      (Size(360, 640), EdgeInsets.only(top: 24, bottom: 48), 17.7),
+      (Size(360, 800), EdgeInsets.zero, 18.0),
+      (Size(390, 844), EdgeInsets.zero, 18.0),
+      (Size(390, 844), EdgeInsets.only(top: 47, bottom: 34), 18.0),
+      (Size(412, 915), EdgeInsets.zero, 18.0),
+      (Size(430, 932), EdgeInsets.zero, 18.0),
+      (Size(440, 956), EdgeInsets.zero, 18.0),
+      (Size(411, 960), EdgeInsets.zero, 18.0),
     ]) {
       for (final scale in [1.0, 1.3]) {
-        testWidgets('${size.width}×${size.height}, 글자 배율 $scale', (
-          tester,
-        ) async {
-          await _pumpScreen(tester, size: size, textScale: scale);
+        testWidgets('${size.width}×${size.height}·인셋 ${padding.top}/'
+            '${padding.bottom}, 글자 배율 $scale', (tester) async {
+          await _pumpScreen(
+            tester,
+            size: size,
+            padding: padding,
+            textScale: scale,
+          );
           expect(tester.takeException(), isNull);
           final lcdRect = tester.getRect(find.byType(LcdDisplay));
           final keypad = tester.getRect(keypadFinder);
@@ -848,6 +856,7 @@ void main() {
           final body =
               ad.top -
               CalcTheme.adSlotSafetyMargin -
+              padding.top -
               CalcTheme.screenPadding -
               CalcTheme.screenTopStripMinHeight;
           // LCD는 본체의 목표 비율 이상(키패드 잉여분을 받으면 그보다 크다)이되 LCD 최대 이하
@@ -876,14 +885,13 @@ void main() {
             moreOrLessEquals(CalcTheme.screenLcdKeypadGap, epsilon: 0.01),
           );
 
-          // 배율 반영 줄 글자는 18dp 이상이다. 가장 작은 320×568만 17.7dp로 낮춘다(#41): 상단 띠 최소 높이(12dp)를
-          // 떼어 두면서 LCD가 140 → 136.6dp로 줄어 배율 1.3의 줄 글자가 18.3 → 17.7dp가 된다(다른 크기는 21dp 이상).
+          // 배율 반영 줄 글자 하한 (위 표)
           final text = tester.element(
             find.byKey(const ValueKey('lcd-input-text')),
           );
           final line = MediaQuery.textScalerOf(text)
               .scale(DefaultTextStyle.of(text).style.fontSize!);
-          expect(line, greaterThanOrEqualTo(size.width == 320 ? 17.7 : 18));
+          expect(line, greaterThanOrEqualTo(minLine));
 
           // 입력·결과 줄은 각각 분수(2행 + 막대)를 담는다.
           final fractionHeight =
