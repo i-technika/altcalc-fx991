@@ -35,17 +35,21 @@ import 'handedness_dialog.dart';
 ///   앱도 화면을 나누지 않았으므로 대화상자를 한쪽 절반에 가두지 않는다.
 /// - 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상이다. 그보다 좁으면 대화상자
 ///   카드가 150dp 안팎으로 줄어 읽기 어려우므로, 주름을 가로지르더라도 화면 전체에 띄운다.
+///   이 하한은 앱 배치 판정과 같은 값이라, 절반이 280~360dp이면 카드가 Material 최소 폭(280dp)보다 좁은
+///   200~280dp로 나뉘어 뜬다(대칭인 Pixel Fold 세로 화면은 절반 336dp, 카드 256dp — 주름을 피하는 쪽을 택했다, #25).
 ///
-/// ### 좁은 절반 (#125)
-/// Flutter가 나누는 세로 접힘선(반 접힘·물리 힌지)에서는 `showDialog` 경로가 앱의 배치와 무관하게 늘 화면을 나누고
-/// `anchorPoint` 쪽 절반에 대화상자를 가둔다. 접힘선이 한쪽에 치우친 창에서는 버튼이 좁은 절반에 있을 수 있다
-/// — 위아래 배치의 상단 띠 오른쪽 끝이나, 세로 접힘선 기준 배치의 LCD 쪽(키패드가 들어가지 못한 절반).
-/// 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 대화상자 카드의 최소 폭(Material 280dp)과 바깥 좌우 여백이 들어가지
-/// 않을 만큼 좁고 반대쪽 절반이 더 넓으면, 반대쪽 절반에 띄운다. 화면 전체에 띄우지 않는 이유: `showDialog`의
-/// 나눔은 경로가 정해 끌 수 없고, 물리 힌지는 가로지르면 내용이 힌지 틈에 가려진다. 버튼과 다른 절반이지만
-/// 모달이라 대화상자만 다루면 된다. 그 결과 이런 화면에서는 손잡이와 무관하게 대화상자가 늘 넓은 절반에 뜬다.
-/// 펼친 폭 0 접힘선은 위 규칙(앱이 나눌 때만 나누고, 좁으면 화면 전체)을 그대로 쓴다 — Flutter가 나누지 않아
-/// 화면 전체라는 더 나은 선택지가 있다. 가로 접힘선(테이블톱)은 대화상자 내용이 세로로 스크롤되어 다루지 않는다.
+/// ### 좁은 하위 화면 (#125)
+/// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 `showDialog`
+/// 경로가 앱의 배치와 무관하게 늘 화면을 나누고, `anchorPoint`에 가장 가까운 하위 화면(나뉜 절반)에 대화상자를
+/// 가둔다. 접힘선이 한쪽에 치우친 창에서는 버튼이 좁은 절반에 있을 수 있다 — 위아래 배치의 상단 띠(세로 접힘선이면
+/// 오른쪽 좁은 절반, 가로 접힘선이면 위쪽 낮은 절반)나, 세로 접힘선 기준 배치의 LCD 쪽 절반.
+/// 버튼 쪽 하위 화면이 그 인셋을 빼고 대화상자 최소 크기([dialogMinRegionOf] — 카드 최소 폭·높이와 바깥 여백)에
+/// 못 미치면, 최소 크기를 넘는 하위 화면 중 버튼에 가장 가까운 곳에 띄운다([dialogAnchorPointOf]). 넘는 곳이 없으면
+/// 버튼 쪽 그대로다(조금 더 넓을 뿐인 곳으로 버튼과 멀어지지 않는다).
+/// 화면 전체에 띄우지 않는 이유: `showDialog`를 쓰는 한 경로의 나눔을 끌 수 없고(끄려면 `RawDialogRoute`를 직접
+/// 만들어야 한다), 물리 힌지는 가로지르면 내용이 힌지 틈에 가려진다. 버튼과 다른 절반이지만 모달이라 대화상자만
+/// 다루면 된다. 그 결과 이런 화면에서는 손잡이와 무관하게 대화상자가 넓은 절반에 뜬다.
+/// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아 바로 위 규칙(앱이 나눌 때만 나누고, 좁으면 화면 전체)만 쓴다.
 ///
 /// ## 대화상자가 열린 동안 배치가 바뀌면
 /// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]가 바뀌면 다음 프레임에 열린 대화상자에도
@@ -68,9 +72,8 @@ import 'handedness_dialog.dart';
 ///
 /// 다른 화면에서도 대화상자는 연 자리에 남는다.
 /// - 손잡이를 바꾸면 배치까지 바뀌는 비대칭 세로 접힘선(키패드가 들어갈 절반 폭이 손잡이마다 다르다): 반 접힘·물리
-///   힌지는 연 시점의 `anchorPoint`가 고정이라, 버튼이 반대쪽 절반으로 가도 옮겨 가지 않는다(어느 손잡이로 열어도
-///   넓은 절반이다 — 위 "좁은 절반"). 펼친 폭 0 접힘선은
-///   위 절대로 버튼 중심을 다시 재지만, 접힘선 기준 배치일 때 버튼이 있는 LCD 쪽은 키패드가 들어가지 못한 좁은
+///   힌지는 연 시점의 `anchorPoint`가 고정이라, 버튼이 반대쪽 절반으로 가도 옮겨 가지 않는다(넓은 절반이 대화상자
+///   최소 크기를 넘으면 어느 손잡이로 열어도 넓은 절반이다 — 위 "좁은 하위 화면"). 펼친 폭 0 접힘선은 위 절대로 버튼 중심을 다시 재지만, 접힘선 기준 배치일 때 버튼이 있는 LCD 쪽은 키패드가 들어가지 못한 좁은
 ///   절반이라 하한([FormFactor.hingeMinPanelExtent])보다 늘 좁아, 대화상자는 화면 전체에 그대로 뜬다
 ///   (하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `split_layout_test`가 검사한다).
 /// - 가로 접힘선 기준 배치(테이블톱): 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고
@@ -108,6 +111,78 @@ class SettingsButton extends StatefulWidget {
 
   /// 낮은 상단 띠에서 보이는 버튼 아래로 넓힌 터치 영역의 위젯 키
   static const Key touchExtensionKey = ValueKey('settings-button-touch');
+
+  /// 대화상자 카드 최소 높이를 테마가 정하지 않을 때 쓰는 값 (dp). Material은 최소 높이를 두지 않는다.
+  /// 최소 폭과 같은 값으로, 스크롤 밖에 고정된 제목·닫기 버튼과 선택지 일부가 큰 글자 배율(2.0)에서도 넘치지 않는
+  /// 높이다 (#125 테스트가 확인).
+  static const double dialogFallbackMinCardHeight = 280;
+
+  /// 대화상자 카드가 최소 크기를 지키려면 대화상자가 뜨는 하위 화면이 시스템 인셋을 빼고 가져야 하는 크기 (dp).
+  /// 카드 최소 크기에 대화상자 바깥 여백을 더한 값이다. 폭·여백은 Material `Dialog`처럼 테마 값이 있으면 그 값,
+  /// 없으면 `Dialog` 기본값(최소 폭 280dp, 여백 좌우 40·위아래 24dp — 기본값 상수는 공개돼 있지 않다)이다.
+  /// 높이는 테마 최소 높이와 [dialogFallbackMinCardHeight] 중 큰 값이다.
+  @visibleForTesting
+  static Size dialogMinRegionOf(DialogThemeData theme) {
+    final constraints = theme.constraints;
+    final inset =
+        theme.insetPadding ??
+        const EdgeInsets.symmetric(horizontal: 40, vertical: 24);
+    return Size(
+      (constraints?.minWidth ?? 280) + inset.horizontal,
+      math.max(constraints?.minHeight ?? 0, dialogFallbackMinCardHeight) +
+          inset.vertical,
+    );
+  }
+
+  /// `showDialog`에 줄 `anchorPoint` ([SettingsButton] "좁은 하위 화면", #125).
+  ///
+  /// [screen]은 대화상자 경로가 그려지는 Navigator의 MediaQuery다 — 경로 좌표, 접힘 정보, 시스템 인셋이 모두 그
+  /// 기준이다. [anchor]는 버튼 중심(경로 좌표)이다. Flutter와 같은 방법(`DisplayFeatureSubScreen`의 공개 함수)으로
+  /// 하위 화면을 나누고, 버튼에 가장 가까운 하위 화면이 인셋을 빼고 [minRegion] 이상이면 [anchor]를 그대로,
+  /// 아니면 [minRegion] 이상인 하위 화면 중 버튼에 가장 가까운 곳의 가운데를 돌려준다. 그런 곳이 없거나 화면이
+  /// 나뉘지 않으면 [anchor] 그대로다.
+  @visibleForTesting
+  static Offset? dialogAnchorPointOf(
+    MediaQueryData? screen,
+    Offset? anchor,
+    Size minRegion,
+  ) {
+    if (screen == null || anchor == null) return anchor;
+    final whole = Offset.zero & screen.size;
+    final subScreens = DisplayFeatureSubScreen.subScreensInBounds(
+      whole,
+      DisplayFeatureSubScreen.avoidBounds(screen),
+    ).toList();
+    if (subScreens.length < 2) return anchor;
+    // 인셋은 `MediaQueryData.removeDisplayFeatures`처럼 화면 가장자리에 닿은 쪽에만 남는다 = 안전 영역과의 교집합.
+    final safe = screen.padding.deflateRect(whole);
+    bool fits(Rect sub) {
+      final usable = sub.intersect(safe);
+      return usable.width >= minRegion.width &&
+          usable.height >= minRegion.height;
+    }
+
+    // Flutter `DisplayFeatureSubScreen`처럼 기준점과의 거리가 가장 짧은 곳 (같으면 앞의 것)
+    Rect? closest(Iterable<Rect> rects) {
+      Rect? best;
+      var bestDistance = double.infinity;
+      for (final r in rects) {
+        final nearest = Offset(
+          anchor.dx.clamp(r.left, r.right),
+          anchor.dy.clamp(r.top, r.bottom),
+        );
+        final d = (anchor - nearest).distance;
+        if (d < bestDistance) {
+          best = r;
+          bestDistance = d;
+        }
+      }
+      return best;
+    }
+
+    if (fits(closest(subScreens)!)) return anchor;
+    return closest(subScreens.where(fits))?.center ?? anchor;
+  }
 
   @override
   State<SettingsButton> createState() => _SettingsButtonState();
@@ -210,46 +285,6 @@ class _SettingsButtonState extends State<SettingsButton> {
     ];
   }
 
-  /// 대화상자 카드가 최소 폭을 지키려면 절반이 가져야 하는 폭 (dp, 시스템 인셋 제외).
-  /// 카드 최소 폭에 대화상자 바깥 좌우 여백을 더한 값이다. 테마가 정하지 않으면 Material `Dialog` 기본값
-  /// (최소 폭 280dp, 좌우 여백 40dp씩)을 쓴다 — `Dialog`의 기본값 상수는 공개돼 있지 않다.
-  static double _dialogMinHalfWidth(DialogThemeData theme) =>
-      (theme.constraints?.minWidth ?? 280) +
-      (theme.insetPadding?.horizontal ?? 2 * 40);
-
-  /// Flutter가 화면을 나누는 세로 접힘선(반 접힘·물리 힌지)에서 `showDialog`에 줄 `anchorPoint`.
-  /// 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [minHalfWidth]보다 좁고 반대쪽 절반이 더 넓으면 반대쪽 절반의
-  /// 한 점을, 아니면 [anchor](버튼 중심)를 그대로 돌려준다 ([SettingsButton] "좁은 절반", #125).
-  ///
-  /// [screen]은 Navigator의 MediaQuery다 — 경로 좌표, 접힘 정보, 시스템 인셋이 모두 그 기준이다.
-  static Offset? _flutterSplitAnchor(
-    MediaQueryData screen,
-    Offset? anchor,
-    double minHalfWidth,
-  ) {
-    if (anchor == null) return null;
-    final hinge = screen.displayFeatures
-        .where(
-          (f) =>
-              FormFactor.separates(f) &&
-              FormFactor.hingeOf(screen.size, [f]) != null &&
-              FormFactor.isVerticalHinge(f.bounds),
-        )
-        .firstOrNull;
-    if (hinge == null) return anchor;
-    final b = hinge.bounds;
-    final left = b.left - screen.padding.left;
-    final right = screen.size.width - b.right - screen.padding.right;
-    final onLeft = anchor.dx < b.center.dx;
-    final (here, there) = onLeft ? (left, right) : (right, left);
-    if (here >= minHalfWidth || there <= here) return anchor;
-    // 반대쪽 절반의 가로 가운데 (`DisplayFeatureSubScreen`은 기준점에 가장 가까운 절반을 고른다)
-    return Offset(
-      onLeft ? (b.right + screen.size.width) / 2 : b.left / 2,
-      anchor.dy,
-    );
-  }
-
   void _open(BuildContext context) {
     final navigator = Navigator.of(context, rootNavigator: true);
     final anchor = _anchorIn(context, navigator);
@@ -263,11 +298,13 @@ class _SettingsButtonState extends State<SettingsButton> {
     showDialog<void>(
       context: context,
       // 버튼 중심([_layout]의 anchor)은 앱만 나누는 펼친 폭 0 접힘선용으로 그대로 두고, Flutter가 나누는
-      // 접힘선의 절반 선택에만 좁은 절반을 피한 기준점을 쓴다.
-      anchorPoint: _flutterSplitAnchor(
-        MediaQuery.of(navigator.context),
+      // 접힘선의 하위 화면 선택에만 좁은 하위 화면을 피한 기준점을 쓴다.
+      anchorPoint: SettingsButton.dialogAnchorPointOf(
+        // 의존을 등록하지 않고 읽는다 — `MediaQuery.of`로 읽으면 Navigator가 MediaQuery의 모든 속성에 영구히
+        // 의존해, 한 번 연 뒤로 어떤 변경에도 모든 경로를 다시 빌드한다.
+        navigator.context.getInheritedWidgetOfExactType<MediaQuery>()?.data,
         anchor,
-        _dialogMinHalfWidth(DialogTheme.of(context)),
+        SettingsButton.dialogMinRegionOf(DialogTheme.of(context)),
       ),
       builder: (dialogContext) => ValueListenableBuilder<_DialogLayout>(
         valueListenable: _layout,
