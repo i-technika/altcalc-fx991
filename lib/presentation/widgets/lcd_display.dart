@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/lcd_status.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'lcd_status_icon.dart';
 import 'text_fit.dart';
 
 /// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◄/►) 여부.
@@ -470,19 +471,29 @@ class LcdStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedStyle = style.fontSize != null
+    final sized = style.fontSize != null
         ? style
         : style.copyWith(fontSize: CalcTheme.lcdStatusStyle.fontSize);
+    // 슬롯 글자(Text)와 같은 규칙으로 주변 기본 글자 스타일을 합친다 — 자간·줄 높이가 상속될 수 있고,
+    // 슬롯 폭과 아이콘 치수가 실제 글자와 같은 값을 써야 한다(#57 리뷰 R2).
+    final resolvedStyle = DefaultTextStyle.of(context).style.merge(sized);
     final fontSize = textScaler.scale(resolvedStyle.fontSize!);
+    final slotHeight = fontSize * CalcTheme.lcdStatusBarHeightRatio;
+    // 직접 그리는 아이콘(#57)의 치수 — 세 아이콘이 같은 값을 쓰므로 한 번만 계산한다.
+    final iconMetrics = LcdStatusIconMetrics.of(
+      resolvedStyle,
+      textScaler,
+      slotHeight,
+    );
     final slots = LcdIndicatorSlot.values;
     // 글자마다 글리프 폭 + 자간 (자간은 글자 배율과 무관한 dp). 음수 자간이 글리프 폭보다 크면 0으로 둔다 —
-    // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 코드포인트(runes)로 센다.
+    // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 슬롯이 정한다(#57).
     final charWidth = math.max(
       0.0,
       fontSize * CalcTheme.lcdStatusCharWidthRatio +
           (resolvedStyle.letterSpacing ?? 0),
     );
-    double slotWidth(LcdIndicatorSlot s) => charWidth * s.template.runes.length;
+    double slotWidth(LcdIndicatorSlot s) => charWidth * s.columns;
     final slotsWidth = slots.map(slotWidth).fold(0.0, (a, b) => a + b);
     final minGap = fontSize * CalcTheme.lcdStatusSlotGapRatio;
 
@@ -496,7 +507,8 @@ class LcdStatusBar extends StatelessWidget {
             slot: slot,
             label: status.indicatorFor(slot),
             width: slotWidth(slot),
-            height: fontSize * CalcTheme.lcdStatusBarHeightRatio,
+            height: slotHeight,
+            iconMetrics: iconMetrics,
             style: resolvedStyle,
             textScaler: textScaler,
             showInactive: showInactive,
@@ -543,6 +555,9 @@ class _IndicatorSlot extends StatelessWidget {
   final TextScaler textScaler;
   final bool showInactive;
 
+  /// 아이콘 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
+  final LcdStatusIconMetrics iconMetrics;
+
   const _IndicatorSlot({
     super.key,
     required this.slot,
@@ -552,11 +567,31 @@ class _IndicatorSlot extends StatelessWidget {
     required this.style,
     required this.textScaler,
     required this.showInactive,
+    required this.iconMetrics,
   });
 
   @override
   Widget build(BuildContext context) {
     final isOn = label != null;
+    final color = isOn
+        ? CalcTheme.lcdStatusActive
+        : CalcTheme.lcdStatusInactive;
+    final icon = slot.icon;
+    if (icon != null) {
+      // 글꼴 글자로는 모양이 맞지 않는 표시기는 직접 그린다 (#57).
+      return SizedBox(
+        width: width,
+        height: height,
+        child: isOn || showInactive
+            ? LcdStatusIcon(
+                key: ValueKey(icon),
+                icon: icon,
+                color: color,
+                metrics: iconMetrics,
+              )
+            : null,
+      );
+    }
     final text = label ?? (showInactive ? slot.template : null);
 
     return SizedBox(
@@ -569,11 +604,7 @@ class _IndicatorSlot extends StatelessWidget {
               fit: BoxFit.scaleDown,
               child: Text(
                 text,
-                style: style.copyWith(
-                  color: isOn
-                      ? CalcTheme.lcdStatusActive
-                      : CalcTheme.lcdStatusInactive,
-                ),
+                style: style.copyWith(color: color),
                 textScaler: textScaler,
                 maxLines: 1,
                 softWrap: false,

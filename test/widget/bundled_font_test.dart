@@ -67,7 +67,9 @@ void main() {
 
     test('상태 표시줄 글자는 모두 한 칸(0.6em)이다 — 슬롯 폭은 글자 수 × 고정 비율로 잡는다 (#44)', () {
       final glyphs = {
-        for (final slot in LcdIndicatorSlot.values) ...slot.template.split(''),
+        // 아이콘 슬롯(#57)은 글자로 그리지 않는다.
+        for (final slot in LcdIndicatorSlot.values)
+          if (slot.icon == null) ...slot.template.split(''),
         for (final c in ComplexResultIndicator.values)
           ...(c.indicator ?? '').split(''),
         for (final unit in AngleUnit.values) ...unit.indicator.split(''),
@@ -118,6 +120,7 @@ void main() {
               ),
             );
             for (final slot in LcdIndicatorSlot.values) {
+              if (slot.icon != null) continue; // 아이콘은 슬롯 크기에 맞춰 그린다
               final slotBox = find.byKey(ValueKey(slot));
               final text = find.descendant(
                 of: slotBox,

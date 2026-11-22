@@ -135,7 +135,9 @@ void main() {
     test('LCD 줄·상태 표시줄 글자는 모두 고정폭 기본 글꼴에 있다', () {
       final glyphs = {
         ...lcdLineGlyphs.runes,
-        for (final slot in LcdIndicatorSlot.values) ...slot.template.runes,
+        // 아이콘 슬롯(#57)은 글자로 그리지 않는다.
+        for (final slot in LcdIndicatorSlot.values)
+          if (slot.icon == null) ...slot.template.runes,
         for (final c in ComplexResultIndicator.values)
           ...(c.indicator ?? '').runes,
         for (final unit in AngleUnit.values) ...unit.indicator.runes,
