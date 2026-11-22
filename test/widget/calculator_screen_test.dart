@@ -219,14 +219,22 @@ void main() {
             }
           }
 
-          // 커서 패드: 방향 하나의 터치 영역(타원의 1/4)은 함수 키 셀(각인 띠 포함)의 80% 이상이다.
+          // 커서 패드 (#43): 실물처럼 ▲·▼는 넓고 ◀·▶는 좁다. 방향 키의 실제 터치 영역(구역 넓이)이
+          // 함수 키 셀(각인 띠 포함) 대비 ▲·▼는 80%, 가장 좁은 ◀·▶도 50% 이상이다.
           final pad = tester.getSize(find.byKey(const ValueKey('cursor-pad')));
           final sin = buttons.firstWhere((b) => b.keyDef.id == CalcKeyId.sin);
           final sinCell = tester.getSize(find.byWidget(sin));
-          expect(
-            math.pi * pad.width * pad.height / 16, // 타원 넓이의 1/4
-            greaterThanOrEqualTo(0.8 * sinCell.width * sinCell.height),
-          );
+          final cellArea = sinCell.width * sinCell.height;
+          final geometry = CursorPadGeometry(pad);
+          for (final sector in CursorPadSector.values) {
+            final wide =
+                sector == CursorPadSector.up || sector == CursorPadSector.down;
+            expect(
+              geometry.sectorArea(sector),
+              greaterThanOrEqualTo((wide ? 0.8 : 0.5) * cellArea),
+              reason: sector.name,
+            );
+          }
         });
       }
     }

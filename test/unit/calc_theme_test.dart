@@ -302,6 +302,26 @@ void main() {
       expect(CalcTheme.keyLegendPriorityMaxRunes, inInclusiveRange(1, 3));
     });
 
+    test('커서 패드 모양 상수: 둥근 마름모·▲▼가 넓은 홈·라벨을 가리지 않는 허브 (#43)', () {
+      // 1이면 뾰족한 마름모, 2이면 타원 — 그 사이여야 둥근 마름모다.
+      expect(CalcTheme.cursorPadOutlineExponent, inExclusiveRange(1.0, 2.0));
+      // 1보다 커야 ▲·▼가 ◀·▶보다 넓다. 너무 크면 ◀·▶가 누르기 어렵게 좁아진다.
+      expect(CalcTheme.cursorPadGrooveSlope, inExclusiveRange(1.0, 2.0));
+      // 라벨은 키캡 상자(패드 반쪽) 중심, 즉 정규화 반지름 0.5에 그려지므로 허브가 그보다 충분히 작아야 한다.
+      expect(CalcTheme.cursorPadHubRadiusRatio, inExclusiveRange(0.0, 1 / 3));
+    });
+
+    test('커서 패드 허브는 방향 키캡보다 어둡고, 둘레선은 허브 대비 3:1 이상이다', () {
+      expect(
+        lightness(CalcTheme.cursorPadHub),
+        lessThan(lightness(CalcTheme.keyCursor)),
+      );
+      expect(
+        contrastRatio(CalcTheme.keyBorder, CalcTheme.cursorPadHub),
+        greaterThanOrEqualTo(3.0),
+      );
+    });
+
     test('키 라벨 스타일은 자간을 명시해 테마 자간을 물려받지 않는다', () {
       for (final style in [
         CalcTheme.keyMainLabelStyle,

@@ -113,7 +113,7 @@ class KeypadMetrics {
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
   ///
-  /// 커서 패드 키(화살표 한 글자)는 부채꼴 키캡이 함수부 키캡보다 크므로 폭 계산에서 뺀다.
+  /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(Size available, TextScaler textScaler) {
     final size = fitSize(available);
     final horizontalGap = size.width * CalcTheme.keyHorizontalGapRatio;
@@ -476,16 +476,180 @@ class _KeypadBody extends StatelessWidget {
 /// 커서 패드 방향
 enum CursorPadSector { up, down, left, right }
 
-/// 실물 리플레이 패드처럼 타원을 대각선으로 4등분한 부채꼴 방향 키 묶음 (각인 띠 없음).
+/// 커서 패드 모양 계산기 — 패드 상자([size]) 로컬 좌표의 외곽·X자 홈·허브와 방향 판정.
+///
+/// 패드 중심을 원점으로, 반폭 [radiusX]·반높이 [radiusY]로 정규화한 좌표 (u, v)를 쓴다.
+/// - **외곽**: 초타원 |u|ⁿ + |v|ⁿ = 1 (n = [CalcTheme.cursorPadOutlineExponent]) — 가로로 긴 둥근 마름모.
+///   외곽선이 상자 밖으로 나가지 않도록 반지름은 선 두께 절반만큼 줄인다.
+/// - **X자 홈**: |u| = k·|v| (k = [CalcTheme.cursorPadGrooveSlope]). |u| ≤ k·|v|이면 ▲·▼, 아니면 ◀·▶.
+/// - **허브**: 중심에서 화면 거리 [hubRadius] 이내의 원. 어느 방향에도 속하지 않는 데드존이다.
+///
+/// [sectorAt]이 판정 기준이고, [sectorPath]는 그 판정을 다각형으로 근사한 그림·누름 판정용 경로다
+/// (곡선 구간은 [_arcSegments]개 선분으로 나눠, 경계에서 1dp 미만 차이만 난다).
+@immutable
+class CursorPadGeometry {
+  /// 패드 상자 크기
+  final Size size;
+
+  /// 외곽 반폭 (dp)
+  final double radiusX;
+
+  /// 외곽 반높이 (dp)
+  final double radiusY;
+
+  /// 허브 반지름 (dp)
+  final double hubRadius;
+
+  factory CursorPadGeometry(Size size) {
+    const inset = CalcTheme.cursorPadDividerWidth / 2;
+    final rx = math.max(0.0, size.width / 2 - inset);
+    final ry = math.max(0.0, size.height / 2 - inset);
+    return CursorPadGeometry._(
+      size,
+      rx,
+      ry,
+      CalcTheme.cursorPadHubRadiusRatio * math.min(rx, ry),
+    );
+  }
+
+  const CursorPadGeometry._(
+    this.size,
+    this.radiusX,
+    this.radiusY,
+    this.hubRadius,
+  );
+
+  static const double _n = CalcTheme.cursorPadOutlineExponent;
+  static const double _k = CalcTheme.cursorPadGrooveSlope;
+
+  /// 곡선 구간(외곽 호·허브 호) 하나를 나누는 선분 수
+  static const int _arcSegments = 32;
+
+  /// 패드 중심
+  Offset get center => size.center(Offset.zero);
+
+  bool get _isEmpty => radiusX <= 0 || radiusY <= 0;
+
+  /// [localPosition](패드 로컬 좌표)이 속한 방향. 허브·외곽 밖이면 `null`이다.
+  CursorPadSector? sectorAt(Offset localPosition) {
+    if (_isEmpty) return null;
+    final d = localPosition - center;
+    if (d.distance <= hubRadius) return null;
+    final u = d.dx / radiusX;
+    final v = d.dy / radiusY;
+    if (math.pow(u.abs(), _n) + math.pow(v.abs(), _n) > 1) return null;
+    if (u.abs() <= _k * v.abs()) {
+      return v < 0 ? CursorPadSector.up : CursorPadSector.down;
+    }
+    return u < 0 ? CursorPadSector.left : CursorPadSector.right;
+  }
+
+  /// 정규화 좌표에서 홈이 가로축과 이루는 각 (k > 1이면 45°보다 작다)
+  static final double _grooveAngle = math.atan2(1, _k);
+
+  /// [sector]가 차지하는 정규화 각도 범위 (y 아래 방향, 시계 방향으로 증가)
+  static (double, double) _angles(CursorPadSector sector) {
+    final t = _grooveAngle;
+    return switch (sector) {
+      CursorPadSector.right => (-t, t),
+      CursorPadSector.down => (t, math.pi - t),
+      CursorPadSector.left => (math.pi - t, math.pi + t),
+      CursorPadSector.up => (math.pi + t, 2 * math.pi - t),
+    };
+  }
+
+  /// 정규화 각도 [phi] 방향의 외곽 위 점
+  Offset _outlinePoint(double phi) {
+    final c = math.cos(phi);
+    final s = math.sin(phi);
+    final rho = math.pow(
+      math.pow(c.abs(), _n) + math.pow(s.abs(), _n),
+      -1 / _n,
+    );
+    return center + Offset(rho * c * radiusX, rho * s * radiusY);
+  }
+
+  /// 정규화 각도 [phi] 방향 직선과 허브 원의 교점
+  Offset _hubPoint(double phi) {
+    final psi = math.atan2(math.sin(phi) * radiusY, math.cos(phi) * radiusX);
+    return center + Offset.fromDirection(psi, hubRadius);
+  }
+
+  /// [sector] 구역 다각형 꼭짓점 (패드 로컬 좌표): 외곽 호를 시계 방향으로 따라간 뒤,
+  /// 허브 호를 반시계 방향으로 되돌아온다 (두 호를 잇는 변이 X자 홈이다).
+  List<Offset> _sectorPoints(CursorPadSector sector) {
+    final (from, to) = _angles(sector);
+    // 허브 호는 화면 각도로 고르게 나눈다 (끝 각도는 시작보다 작아지게 2π 단위로 맞춘다).
+    final a0 = (_hubPoint(to) - center).direction;
+    var a1 = (_hubPoint(from) - center).direction;
+    while (a1 > a0) {
+      a1 -= 2 * math.pi;
+    }
+    return [
+      for (var i = 0; i <= _arcSegments; i++)
+        _outlinePoint(from + (to - from) * i / _arcSegments),
+      for (var i = 0; i <= _arcSegments; i++)
+        center +
+            Offset.fromDirection(a0 + (a1 - a0) * i / _arcSegments, hubRadius),
+    ];
+  }
+
+  /// [sector] 구역 경로 (패드 로컬 좌표)
+  Path sectorPath(CursorPadSector sector) {
+    if (_isEmpty) return Path();
+    return Path()..addPolygon(_sectorPoints(sector), true);
+  }
+
+  /// 외곽선 경로 (패드 로컬 좌표)
+  Path outlinePath() {
+    if (_isEmpty) return Path();
+    const segments = _arcSegments * 4;
+    return Path()..addPolygon([
+      for (var i = 0; i < segments; i++)
+        _outlinePoint(2 * math.pi * i / segments),
+    ], true);
+  }
+
+  /// X자 홈 네 줄 — 각각 (허브 위 끝, 외곽 위 끝)
+  List<(Offset, Offset)> grooves() {
+    if (_isEmpty) return const [];
+    final t = _grooveAngle;
+    return [
+      for (final phi in [t, math.pi - t, math.pi + t, -t])
+        (_hubPoint(phi), _outlinePoint(phi)),
+    ];
+  }
+
+  /// [sector] 구역 넓이 (dp², [sectorPath] 다각형의 신발끈 공식)
+  double sectorArea(CursorPadSector sector) {
+    if (_isEmpty) return 0;
+    final points = _sectorPoints(sector);
+    var twice = 0.0;
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
+      final q = points[(i + 1) % points.length];
+      twice += p.dx * q.dy - q.dx * p.dy;
+    }
+    return twice.abs() / 2;
+  }
+}
+
+/// 실물 fx-991EX 리플레이 패드처럼 가로로 긴 둥근 마름모를 X자 홈으로 4분할한 방향 키 묶음
+/// (각인 띠 없음, 모양은 [CursorPadGeometry]).
 ///
 /// ```
-///   ┌───────────┐
-///   │ ╲   ▲   ╱ │   각 방향 키는 자기 부채꼴 전체가 터치 영역이다
-///   │ ◄  ╲ ╱  ► │   (가운데·대각선 근처까지 데드존 없음, 타원 밖은 무시).
-///   │    ╱ ╲    │   키캡은 [sectorBox] 상자에 그리고, [CalcKeyButton.shape]로 부채꼴 경로를
-///   │ ╱   ▼   ╲ │   넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 부채꼴로 제한한다.
-///   └───────────┘
+///   ◀  ╲    ▲    ╱  ▶     ▲·▼: 넓은 사다리꼴, ◀·▶: 좁은 삼각형에 가깝다
+///         ╲ ● ╱           ●: 누를 수 없는 검은 허브 (데드존)
+///         ╱   ╲           외곽: 가로로 긴 둥근 마름모 (밖은 무시)
+///      ╱    ▼    ╲
 /// ```
+/// 각 방향 키캡은 [sectorBox](패드를 반으로 나눈 사각형)에 그리고, [CalcKeyButton.shape]로 구역 경로를
+/// 넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 구역 안으로 제한한다.
+///
+/// ## 허브는 데드존이다 (#43)
+/// 가운데는 네 방향이 만나 손가락이 어느 쪽을 노렸는지 가장 모호한 곳이다. 가까운 방향으로 보내면
+/// 의도와 다른 방향으로 커서가 움직이는 오입력이 생기고(되돌리기 어렵다), 무시하면 다시 누르기만 하면 된다.
+/// 그래서 실물처럼 허브는 누를 수 없게 두고, 누른 채 허브로 미끄러지면 반복 입력도 멈춘다.
 ///
 /// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
 /// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
@@ -508,7 +672,7 @@ class CursorPad extends StatelessWidget {
     this.enableHaptics = true,
   });
 
-  /// [sector] 부채꼴 경로 생성기 (정적 함수라 매 빌드 같은 인스턴스 — 불필요한 재클립 방지)
+  /// [sector] 구역 경로 생성기 (정적 함수라 매 빌드 같은 인스턴스 — 불필요한 재클립 방지)
   static Path Function(Size size) shapeOf(CursorPadSector sector) =>
       switch (sector) {
         CursorPadSector.up => _upPath,
@@ -542,7 +706,7 @@ class CursorPad extends StatelessWidget {
     CursorPadSector.right => cursorPad.right,
   };
 
-  /// [size] 패드 안에서 [sector] 키캡을 그리는 상자 (부채꼴을 감싸는 반쪽 사각형)
+  /// [size] 패드 안에서 [sector] 키캡을 그리는 상자 (구역을 감싸는 반쪽 사각형)
   static Rect sectorBox(CursorPadSector sector, Size size) {
     final w = size.width;
     final h = size.height;
@@ -554,17 +718,20 @@ class CursorPad extends StatelessWidget {
     };
   }
 
-  /// [sectorBox] 로컬 좌표의 부채꼴(삼각형) 경로 — 패드 중심과 두 모서리를 잇는다.
+  /// [sectorBox] 크기([boxSize])로부터 패드 크기를 되돌린다.
+  static Size padSizeOf(CursorPadSector sector, Size boxSize) =>
+      switch (sector) {
+        CursorPadSector.up ||
+        CursorPadSector.down => Size(boxSize.width, boxSize.height * 2),
+        CursorPadSector.left ||
+        CursorPadSector.right => Size(boxSize.width * 2, boxSize.height),
+      };
+
+  /// [sectorBox] 로컬 좌표의 [sector] 구역 경로 — 상자 크기만으로 패드 크기를 되돌려 계산한다.
   static Path sectorPath(CursorPadSector sector, Size boxSize) {
-    final w = boxSize.width;
-    final h = boxSize.height;
-    final points = switch (sector) {
-      CursorPadSector.up => [Offset.zero, Offset(w, 0), Offset(w / 2, h)],
-      CursorPadSector.down => [Offset(0, h), Offset(w, h), Offset(w / 2, 0)],
-      CursorPadSector.left => [Offset.zero, Offset(w, h / 2), Offset(0, h)],
-      CursorPadSector.right => [Offset(w, 0), Offset(0, h / 2), Offset(w, h)],
-    };
-    return Path()..addPolygon(points, true);
+    final padSize = padSizeOf(sector, boxSize);
+    final origin = sectorBox(sector, padSize).topLeft;
+    return CursorPadGeometry(padSize).sectorPath(sector).shift(-origin);
   }
 
   @override
@@ -575,68 +742,71 @@ class CursorPad extends StatelessWidget {
         if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
         final press = onKeyPressed;
         final strings = CalcSemanticStrings.of(context);
-        return ClipOval(
+        return Stack(
           key: const ValueKey('cursor-pad'),
-          child: Stack(
-            children: [
-              for (final sector in CursorPadSector.values)
-                Positioned.fromRect(
-                  rect: sectorBox(sector, size),
-                  child: ExcludeSemantics(
-                    child: buttonBuilder(defOf(sector), shapeOf(sector)),
-                  ),
-                ),
-              // 부채꼴 경계선과 테두리 (터치는 통과시킨다)
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(painter: _CursorPadDividerPainter()),
+          children: [
+            for (final sector in CursorPadSector.values)
+              Positioned.fromRect(
+                rect: sectorBox(sector, size),
+                child: ExcludeSemantics(
+                  child: buttonBuilder(defOf(sector), shapeOf(sector)),
                 ),
               ),
-              // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
-              for (final sector in CursorPadSector.values)
-                Positioned.fromRect(
-                  rect: semanticRect(sector, size),
-                  child: Semantics(
-                    container: true,
-                    button: true,
-                    enabled: press != null,
-                    label: strings.keyButton(defOf(sector).id),
-                    onTap: press == null
-                        ? null
-                        : () {
-                            if (enableHaptics) HapticFeedback.lightImpact();
-                            press(defOf(sector).id);
-                          },
-                    child: const SizedBox.expand(),
-                  ),
+            // X자 홈·외곽선·허브 (터치는 통과시킨다 — 허브 아래에는 키가 없어 데드존이 된다)
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: _CursorPadDecorationPainter()),
+              ),
+            ),
+            // 겹치지 않는 시맨틱 영역 (자식이 없어 터치는 받지 않는다)
+            for (final sector in CursorPadSector.values)
+              Positioned.fromRect(
+                rect: semanticRect(sector, size),
+                child: Semantics(
+                  container: true,
+                  button: true,
+                  enabled: press != null,
+                  label: strings.keyButton(defOf(sector).id),
+                  onTap: press == null
+                      ? null
+                      : () {
+                          if (enableHaptics) HapticFeedback.lightImpact();
+                          press(defOf(sector).id);
+                        },
+                  child: const SizedBox.expand(),
                 ),
-            ],
-          ),
+              ),
+          ],
         );
       },
     );
   }
 }
 
-/// 커서 패드 대각선 경계와 타원 테두리
-class _CursorPadDividerPainter extends CustomPainter {
-  const _CursorPadDividerPainter();
+/// 커서 패드 X자 홈·외곽선과 가운데 허브
+class _CursorPadDecorationPainter extends CustomPainter {
+  const _CursorPadDecorationPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    final geometry = CursorPadGeometry(size);
+    final line = Paint()
       ..color = CalcTheme.keyBorder
       ..style = PaintingStyle.stroke
       ..strokeWidth = CalcTheme.cursorPadDividerWidth;
+    for (final (from, to) in geometry.grooves()) {
+      canvas.drawLine(from, to, line);
+    }
     canvas
-      ..drawLine(Offset.zero, Offset(size.width, size.height), paint)
-      ..drawLine(Offset(size.width, 0), Offset(0, size.height), paint)
-      ..drawOval(
-        (Offset.zero & size).deflate(CalcTheme.cursorPadDividerWidth / 2),
-        paint,
-      );
+      ..drawPath(geometry.outlinePath(), line)
+      ..drawCircle(
+        geometry.center,
+        geometry.hubRadius,
+        Paint()..color = CalcTheme.cursorPadHub,
+      )
+      ..drawCircle(geometry.center, geometry.hubRadius, line);
   }
 
   @override
-  bool shouldRepaint(_CursorPadDividerPainter oldDelegate) => false;
+  bool shouldRepaint(_CursorPadDecorationPainter oldDelegate) => false;
 }

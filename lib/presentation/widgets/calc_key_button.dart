@@ -80,7 +80,7 @@ class CalcKeyButton extends StatefulWidget {
   /// 키 모양 — 버튼 상자 크기를 받아 버튼 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
   ///
   /// 지정하면 그리기, 누름 판정(히트 테스트), 누른 채 이동할 때의 이탈 판정(반복 중단)을
-  /// 모두 이 경로 안으로 제한한다(커서 패드 부채꼴 등).
+  /// 모두 이 경로 안으로 제한한다(커서 패드 방향 구역 등).
   final Path Function(Size size)? shape;
 
   const CalcKeyButton({
