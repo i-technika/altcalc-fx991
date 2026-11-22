@@ -103,7 +103,7 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
   ),
-  // 폴더블 힌지 기준 분할은 #25, 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
+  // 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
   // Galaxy Z Fold5 내부 (힌지 displayFeatures는 흉내 내지 않는다 — #51)
   PreviewDevice(
     '폴더블 내부',

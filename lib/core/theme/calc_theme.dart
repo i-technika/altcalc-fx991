@@ -522,7 +522,7 @@ abstract final class CalcTheme {
   //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
   //   (실물의 로고·태양전지 자리, 활용은 TODO(#41)). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
   // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38).
-  // 대화면 가로 창의 좌우 분할은 아래 "좌우 분할 배치"(#24), 폴더블 힌지 기준 분할은 TODO(#25).
+  // 대화면 가로 창의 좌우 분할은 아래 "좌우 분할 배치"(#24), 폴더블 접힘선 기준 배치는 "접힘선 기준 배치"(#25).
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
@@ -567,6 +567,16 @@ abstract final class CalcTheme {
 
   /// 설정 버튼 아이콘 색 — 본체 배경([bodyBackground]) 대비 4.5:1 이상, 키 각인보다 눈에 덜 띄게 회색
   static const Color settingsIcon = Color(0xFFB0B0B0);
+
+  // ── 접힘선 기준 배치 (#25) ──
+  // 폴더블 내부 화면처럼 접힘선(fold·hinge)이 창을 가로지르면 접힘선을 경계로 나눈다(`FormFactor.arrangementOf`).
+  // - 세로 접힘선(책 자세): 주로 쓰는 손 쪽 절반에 키패드, 다른 절반에 LCD·설정 버튼 — 좌우 분할과 같은 규칙.
+  // - 가로 접힘선(테이블톱 자세): 위 절반에 LCD, 아래 절반에 키패드(주로 쓰는 손 쪽)·설정 버튼.
+  // - 광고 슬롯: 다른 배치와 같이 본체 아래 전체 폭 (세로 접힘선이면 접힘선을 가로지른다 — 광고 위치는 #18).
+
+  /// 접힘선(주름)과 내용 사이 간격 (dp, 접힘선 한쪽마다). 폭이 0인 접힘선이면 양쪽 내용 사이가
+  /// [screenSplitGap]과 같아진다.
+  static const double screenHingeMargin = 8.0;
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

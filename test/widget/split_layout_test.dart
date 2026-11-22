@@ -81,6 +81,7 @@ Future<(ProviderContainer, SharedPreferences)> _pump(
 }
 
 void main() {
+  _hingeLayoutTests();
   group('좌우 분할 배치: 화면 크기 × 손잡이', () {
     // 대화면 가로 창 (Android 태블릿: 상태 표시줄 24·작업 표시줄 48, iPad: 상태 표시줄 24·홈 표시줄 20)
     const windows = [
@@ -204,17 +205,16 @@ void main() {
       );
     }
 
-    testWidgets('접힘선이 지나는 대화면 가로 창은 위아래 배치다 (힌지 기준 분할은 #25)', (tester) async {
+    testWidgets('접힘선이 창을 가로지르면 창 크기와 무관하게 접힘선 기준으로 나눈다 (#25)', (tester) async {
       await _pump(
         tester,
         size: const Size(1280, 800),
         displayFeatures: const [_verticalFold],
       );
-      expect(
-        tester.getRect(_lcd).bottom,
-        lessThanOrEqualTo(tester.getRect(_keypad).top),
-      );
-      expect(_settings, findsNothing);
+      // 오른손잡이: 접힘선(x = 640) 왼쪽 LCD, 오른쪽 키패드
+      expect(tester.getRect(_lcd).right, lessThanOrEqualTo(640));
+      expect(tester.getRect(_keypad).left, greaterThanOrEqualTo(640));
+      expect(_settings, findsOneWidget);
     });
   });
 
@@ -520,6 +520,384 @@ void main() {
           );
         }
       }
+    });
+  });
+}
+
+/// 폴더블 화면: 창 크기, 시스템 인셋, 접힘 정보 (화면 좌표)
+typedef _Foldable = (String, Size, EdgeInsets, DisplayFeature);
+
+DisplayFeature _foldAt(Rect bounds, {DisplayFeatureType? type}) =>
+    DisplayFeature(
+      bounds: bounds,
+      type: type ?? DisplayFeatureType.fold,
+      state: DisplayFeatureState.postureFlat,
+    );
+
+/// [rect]가 접힘선 [hinge]와 그 양쪽 간격([CalcTheme.screenHingeMargin]) 띠에 걸치지 않는지 (화면 좌표)
+bool _clearOfHinge(Rect rect, Rect hinge, {required bool vertical}) {
+  const m = CalcTheme.screenHingeMargin;
+  const eps = 0.01;
+  return vertical
+      ? rect.right <= hinge.left - m + eps || rect.left >= hinge.right + m - eps
+      : rect.bottom <= hinge.top - m + eps ||
+            rect.top >= hinge.bottom + m - eps;
+}
+
+/// 폴더블 내부 화면의 접힘선 기준 배치 (#25)
+void _hingeLayoutTests() {
+  group('접힘선 기준 좌우 배치 (세로 접힘선, 책 자세)', () {
+    final devices = <_Foldable>[
+      // Galaxy Z Fold 내부 화면 (세로가 기본 방향)
+      (
+        'Fold 내부',
+        const Size(673, 841),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        _foldAt(const Rect.fromLTWH(336.5, 0, 0, 841)),
+      ),
+      // Pixel Fold 내부 화면 (가로가 기본 방향)
+      (
+        'Pixel Fold 내부',
+        const Size(841, 701),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        _foldAt(const Rect.fromLTWH(420.5, 0, 0, 701)),
+      ),
+      // 정사각형에 가까운 내부 화면 + 가로 화면 왼쪽 카메라 인셋
+      (
+        '정사각형 내부·왼쪽 인셋',
+        const Size(778, 749),
+        const EdgeInsets.only(left: 32, top: 24, bottom: 24),
+        _foldAt(const Rect.fromLTWH(389, 0, 0, 749)),
+      ),
+      // 폭이 있는 물리 힌지 (두 화면 기기)
+      (
+        '물리 힌지',
+        const Size(1114, 720),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        _foldAt(
+          const Rect.fromLTWH(540, 0, 34, 720),
+          type: DisplayFeatureType.hinge,
+        ),
+      ),
+    ];
+
+    for (final (name, size, padding, fold) in devices) {
+      for (final handedness in Handedness.values) {
+        for (final scale in [1.0, 2.0]) {
+          testWidgets(
+            '$name ${size.width}×${size.height}·${handedness.name}·배율 $scale',
+            (tester) async {
+              await _pump(
+                tester,
+                size: size,
+                padding: padding,
+                textScale: scale,
+                handedness: handedness,
+                displayFeatures: [fold],
+              );
+              expect(tester.takeException(), isNull);
+              expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
+
+              final hinge = fold.bounds;
+              final lcd = tester.getRect(_lcd);
+              final keypad = tester.getRect(_keypad);
+              final settings = tester.getRect(_settings);
+              final ad = tester.getRect(_ad);
+
+              // 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않는다.
+              for (final r in [lcd, keypad, settings]) {
+                expect(
+                  _clearOfHinge(r, hinge, vertical: true),
+                  isTrue,
+                  reason: '$r',
+                );
+              }
+              // 키패드는 주로 쓰는 손 쪽 절반의 바깥 가장자리, LCD·설정 버튼은 반대쪽 절반
+              final right =
+                  size.width - padding.right - CalcTheme.screenPadding;
+              final left = padding.left + CalcTheme.screenPadding;
+              if (handedness.keypadOnRight) {
+                expect(keypad.left, greaterThanOrEqualTo(hinge.right));
+                expect(keypad.right, moreOrLessEquals(right));
+                expect(lcd.right, lessThanOrEqualTo(hinge.left));
+                expect(lcd.left, moreOrLessEquals(left));
+                expect(settings.right, lessThanOrEqualTo(hinge.left));
+              } else {
+                expect(keypad.right, lessThanOrEqualTo(hinge.left));
+                expect(keypad.left, moreOrLessEquals(left));
+                expect(lcd.left, greaterThanOrEqualTo(hinge.right));
+                expect(lcd.right, moreOrLessEquals(right));
+                expect(settings.left, greaterThanOrEqualTo(hinge.right));
+              }
+              // LCD 쪽은 접힘선까지 절반 전체를 쓴다 (간격만 남긴다).
+              expect(
+                handedness.keypadOnRight
+                    ? hinge.left - lcd.right
+                    : lcd.left - hinge.right,
+                moreOrLessEquals(CalcTheme.screenHingeMargin),
+              );
+              // 윗변 정렬, 설정 버튼은 LCD 아래·겹침 없음·48dp·눌림
+              expect(lcd.top, moreOrLessEquals(keypad.top));
+              expect(settings.top, greaterThanOrEqualTo(lcd.bottom));
+              expect(settings.overlaps(keypad), isFalse);
+              expect(
+                settings.width,
+                moreOrLessEquals(CalcTheme.settingsButtonSize),
+              );
+              expect(_settings.hitTestable(), findsOneWidget);
+              // 광고 슬롯 안전 여백, 키 크기 상한
+              expect(
+                ad.top - keypad.bottom,
+                greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
+              );
+              expect(
+                keypad.width,
+                lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 0.01),
+              );
+            },
+          );
+        }
+      }
+    }
+
+    testWidgets('키는 접힘선 기준 배치에서도 눌린다 (시스템 제스처 영역 계약 유지)', (tester) async {
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(673, 841),
+        displayFeatures: [_foldAt(const Rect.fromLTWH(336.5, 0, 0, 841))],
+      );
+      await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(container.read(calcProvider).lastInput?.id, CalcKeyId.sin);
+    });
+  });
+
+  group('접힘선 기준 위아래 배치 (가로 접힘선, 테이블톱 자세)', () {
+    final devices = <_Foldable>[
+      // Galaxy Z Fold 내부 화면을 가로로 돌림
+      (
+        'Fold 내부 가로',
+        const Size(841, 673),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        _foldAt(const Rect.fromLTWH(0, 336.5, 841, 0)),
+      ),
+      // Pixel Fold 내부 화면을 세로로 돌림
+      (
+        'Pixel Fold 내부 세로',
+        const Size(701, 841),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        _foldAt(const Rect.fromLTWH(0, 420.5, 701, 0)),
+      ),
+    ];
+
+    for (final (name, size, padding, fold) in devices) {
+      for (final handedness in Handedness.values) {
+        for (final scale in [1.0, 2.0]) {
+          testWidgets(
+            '$name ${size.width}×${size.height}·${handedness.name}·배율 $scale',
+            (tester) async {
+              await _pump(
+                tester,
+                size: size,
+                padding: padding,
+                textScale: scale,
+                handedness: handedness,
+                displayFeatures: [fold],
+              );
+              expect(tester.takeException(), isNull);
+              expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
+
+              final hinge = fold.bounds;
+              final lcd = tester.getRect(_lcd);
+              final keypad = tester.getRect(_keypad);
+              final settings = tester.getRect(_settings);
+              final ad = tester.getRect(_ad);
+
+              for (final r in [lcd, keypad, settings]) {
+                expect(
+                  _clearOfHinge(r, hinge, vertical: false),
+                  isTrue,
+                  reason: '$r',
+                );
+              }
+              // LCD는 위 절반(접힘선 쪽에 붙음), 키패드는 아래 절반
+              expect(
+                lcd.bottom,
+                moreOrLessEquals(hinge.top - CalcTheme.screenHingeMargin),
+              );
+              expect(keypad.top, greaterThanOrEqualTo(hinge.bottom));
+              // 키패드는 주로 쓰는 손 쪽 가장자리, 설정 버튼은 반대쪽
+              final right =
+                  size.width - padding.right - CalcTheme.screenPadding;
+              final left = padding.left + CalcTheme.screenPadding;
+              if (handedness.keypadOnRight) {
+                expect(keypad.right, moreOrLessEquals(right));
+                expect(settings.left, moreOrLessEquals(left));
+              } else {
+                expect(keypad.left, moreOrLessEquals(left));
+                expect(settings.right, moreOrLessEquals(right));
+              }
+              expect(settings.overlaps(keypad), isFalse);
+              expect(settings.overlaps(lcd), isFalse);
+              expect(_settings.hitTestable(), findsOneWidget);
+              expect(
+                ad.top - keypad.bottom,
+                greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
+              );
+            },
+          );
+        }
+      }
+    }
+  });
+
+  testWidgets('내부 화면을 돌려 접힘선 방향이 바뀌어도 상태와 LCD·키패드 element가 유지된다', (
+    tester,
+  ) async {
+    final (container, _) = await _pump(
+      tester,
+      size: const Size(673, 841),
+      displayFeatures: [_foldAt(const Rect.fromLTWH(336.5, 0, 0, 841))],
+    );
+    await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.shift)));
+    await tester.pump();
+    final keypadElement = tester.element(find.byType(CalcKeypad));
+    final lcdElement = tester.element(_lcd);
+
+    // 가로로 돌림 → 가로 접힘선 (테이블톱)
+    await _pump(
+      tester,
+      size: const Size(841, 673),
+      displayFeatures: [_foldAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
+      container: container,
+    );
+    expect(
+      tester.getRect(_lcd).bottom,
+      lessThanOrEqualTo(tester.getRect(_keypad).top),
+    );
+    expect(_settings, findsOneWidget);
+    expect(container.read(calcProvider).modifier, KeyModifier.shift);
+    expect(
+      identical(tester.element(find.byType(CalcKeypad)), keypadElement),
+      isTrue,
+    );
+    expect(identical(tester.element(_lcd), lcdElement), isTrue);
+
+    // 접음 → 커버 화면 (접힘 정보 없음) → 위아래 배치, 설정 버튼 없음
+    await _pump(tester, size: const Size(344, 882), container: container);
+    expect(_settings, findsNothing);
+    expect(container.read(calcProvider).modifier, KeyModifier.shift);
+    expect(
+      identical(tester.element(find.byType(CalcKeypad)), keypadElement),
+      isTrue,
+    );
+  });
+
+  group('CalcSplitLayout (접힘선) · CalcTabletopLayout', () {
+    void expectSane(Size body, List<Rect> rects, String reason) {
+      final bounds = (Offset.zero & body).inflate(0.01);
+      for (final r in rects) {
+        expect(
+          [r.left, r.top, r.width, r.height].every((v) => v.isFinite && v >= 0),
+          isTrue,
+          reason: '$reason $r',
+        );
+        expect(
+          bounds.contains(r.topLeft) && bounds.contains(r.bottomRight),
+          isTrue,
+          reason: '$reason $r',
+        );
+      }
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          expect(rects[i].overlaps(rects[j]), isFalse, reason: '$reason $i×$j');
+        }
+      }
+    }
+
+    test('세로 접힘선: 본체 안, 겹침 없음, 접힘선 띠에 걸치지 않음 (극단 크기 포함)', () {
+      for (final (body, hinge) in [
+        (const Size(641, 761), const Rect.fromLTWH(320.5, 0, 0, 761)),
+        (const Size(825, 637), const Rect.fromLTWH(412.5, 0, 0, 637)),
+        (const Size(1098, 650), const Rect.fromLTWH(532, 0, 34, 650)),
+        // 접힘선이 한쪽 끝에 치우친 창
+        (const Size(800, 600), const Rect.fromLTWH(60, 0, 0, 600)),
+        (const Size(800, 600), const Rect.fromLTWH(790, 0, 0, 600)),
+        // 본체 밖 접힘선, 아주 작은 본체
+        (const Size(800, 600), const Rect.fromLTWH(-20, 0, 0, 600)),
+        (const Size(40, 40), const Rect.fromLTWH(20, 0, 0, 40)),
+        (Size.zero, Rect.zero),
+      ]) {
+        for (final h in Handedness.values) {
+          final l = CalcSplitLayout.of(body, h, hinge: hinge);
+          final reason = '$body $hinge $h $l';
+          expectSane(body, [l.lcd, l.keypad, l.settingsButton], reason);
+          final hingeInBody = hinge.left >= 0 && hinge.right <= body.width;
+          if (hingeInBody) {
+            for (final r in [l.lcd, l.keypad, l.settingsButton]) {
+              if (r.isEmpty) continue;
+              expect(
+                _clearOfHinge(r, hinge, vertical: true),
+                isTrue,
+                reason: reason,
+              );
+            }
+          }
+        }
+      }
+    });
+
+    test('세로 접힘선: 왼손잡이 배치는 가운데 접힘선 기준 오른손잡이 배치의 좌우 대칭이다', () {
+      const body = Size(825, 637);
+      const hinge = Rect.fromLTWH(412.5, 0, 0, 637);
+      final r = CalcSplitLayout.of(body, Handedness.right, hinge: hinge);
+      final l = CalcSplitLayout.of(body, Handedness.left, hinge: hinge);
+      Rect mirror(Rect x) => Rect.fromLTRB(
+        body.width - x.right,
+        x.top,
+        body.width - x.left,
+        x.bottom,
+      );
+      expect(l.lcd, mirror(r.lcd));
+      expect(l.keypad, mirror(r.keypad));
+      expect(l.settingsButton, mirror(r.settingsButton));
+    });
+
+    test('가로 접힘선: 본체 안, 겹침 없음, 접힘선 띠에 걸치지 않음 (설정 버튼 대체 자리 포함)', () {
+      for (final (body, hinge) in [
+        (const Size(825, 593), const Rect.fromLTWH(0, 304.5, 825, 0)),
+        (const Size(685, 777), const Rect.fromLTWH(0, 380.5, 685, 0)),
+        // 아래 절반 폭을 키패드가 다 써서 설정 버튼이 위 절반으로 가는 창
+        (const Size(360, 700), const Rect.fromLTWH(0, 300, 360, 0)),
+        (const Size(800, 600), const Rect.fromLTWH(0, 40, 800, 0)),
+        (const Size(800, 600), const Rect.fromLTWH(0, 590, 800, 0)),
+        (const Size(40, 40), const Rect.fromLTWH(0, 20, 40, 0)),
+        (Size.zero, Rect.zero),
+      ]) {
+        for (final h in Handedness.values) {
+          final l = CalcTabletopLayout.of(body, hinge, h);
+          final reason = '$body $hinge $h $l';
+          expectSane(body, [l.lcd, l.keypad, l.settingsButton], reason);
+          for (final r in [l.lcd, l.keypad, l.settingsButton]) {
+            if (r.isEmpty) continue;
+            expect(
+              _clearOfHinge(r, hinge, vertical: false),
+              isTrue,
+              reason: reason,
+            );
+          }
+        }
+      }
+    });
+
+    test('가로 접힘선: 설정 버튼 자리가 없으면 위 절반 모서리로 가고 LCD는 그 아래로 줄어든다', () {
+      const body = Size(360, 700);
+      const hinge = Rect.fromLTWH(0, 300, 360, 0);
+      final l = CalcTabletopLayout.of(body, hinge, Handedness.right);
+      expect(l.settingsButton.bottom, lessThanOrEqualTo(l.lcd.top));
+      expect(l.settingsButton.left, 0);
+      expect(l.settingsButton.height, CalcTheme.settingsButtonSize);
     });
   });
 }
