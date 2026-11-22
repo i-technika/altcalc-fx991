@@ -7,10 +7,26 @@
 
 ## 개발 환경
 
-- Flutter 3.50 이상 (Dart 3.14 이상)
+- Flutter 3.50.0 (Dart 3.14.0) — `pubspec.yaml`의 `environment.flutter`로 고정한다. CI도 같은 값을 읽고(#78),
+  다른 버전의 SDK로는 `flutter pub get`이 `requires Flutter SDK version 3.50.0`으로 실패한다.
 - 의존성 설치: `flutter pub get`
 - 생성 플러그인 파일(`linux/flutter/generated_plugin*` 등)은 `.gitattributes`로 LF 고정이다. 이 설정 이전에 받은 Windows 작업 트리에서
   이 파일들이 내용 차이 없이 수정됨으로 보이면 Git Bash에서 `bash .claude/scripts/normalize-generated-eol.sh`를 한 번 실행한다.
+
+### Flutter SDK 버전 올리기
+
+로컬 SDK·`pubspec.yaml`·`pubspec.lock`·README를 **한 커밋**에서 함께 바꾼다. CI는 `pubspec.yaml`을 읽으므로 워크플로는 고치지 않는다.
+
+1. 올릴 stable 버전 `X.Y.Z`를 정한다 ([릴리스 목록](https://docs.flutter.dev/release/archive)).
+2. 로컬 SDK를 그 버전으로 바꾼다. 최신 stable이 `X.Y.Z`면 `flutter upgrade`, 아니면 SDK 폴더에서
+   `git fetch --tags && git checkout X.Y.Z` 뒤 `flutter --version`으로 확인한다.
+3. `pubspec.yaml`의 `environment.flutter`를 `X.Y.Z`로 바꾼다. Dart 버전이 바뀌었으면 `environment.sdk`도 검토한다.
+4. `flutter pub get` — `pubspec.lock`의 `sdks.flutter`와 SDK가 고정하는 의존성(`meta`·`characters` 등)이 바뀐다.
+5. 위 "개발 환경"의 버전 표기를 고친다.
+6. `flutter analyze`·`flutter test`를 통과시킨 뒤 위 파일을 함께 커밋한다.
+   - `pubspec.lock`을 빠뜨리면 `test/unit/flutter_sdk_pin_test.dart`와 CI의 작업 트리 검사(`.github/scripts/verify-clean-tree.sh`)가 실패한다.
+
+다른 개발 PC는 이 커밋을 받은 뒤 2번처럼 SDK를 맞춘다.
 
 ## 앱 실행
 

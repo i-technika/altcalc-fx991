@@ -8,7 +8,8 @@
 - 현재 진행 단계와 완료 기준은 항상 [milestone.md](milestone.md)와 GitHub 이슈를 기준으로 삼는다.
 
 ## 1. 핵심 아키텍처 및 기술 스택
-- **프레임워크:** Flutter (Dart 3.14+) — Android / iOS 크로스 플랫폼
+- **프레임워크:** Flutter 3.50.0 (Dart 3.14.0) — Android / iOS 크로스 플랫폼
+  - SDK 버전은 `pubspec.yaml`의 `environment.flutter` 하나로 고정하고 CI도 그 값을 읽는다 (#78). 올릴 때는 README "Flutter SDK 버전 올리기" 절차대로 로컬 SDK·`pubspec.lock`과 함께 바꾼다.
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
 - **상태 관리:** `flutter_riverpod` (현재 2.x)
