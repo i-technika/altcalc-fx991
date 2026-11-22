@@ -43,6 +43,7 @@ Future<void> main() async {
 /// 폴더블은 시작 시 힌지 센서로 판정한다([FormFactor.queryHingeSensor]). 힌지 센서를 알리지 않는 폴더블에
 /// 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는 부분 정보 도착 등) 기기 종류를 다시 판정해
 /// 바뀌었을 때만 다시 요청한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
+/// 요청은 한 번에 하나씩 차례로 보내고, 성공한 요청만 기록한다 — 겹친 요청이 실패해도 기록이 어긋나지 않는다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -51,6 +52,11 @@ class DeviceOrientationLock with WidgetsBindingObserver {
 
   DeviceKind? _applied;
   bool _hasHingeSensor = false;
+
+  /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
+  /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
+  /// 이어지게 한다(테스트의 가짜 비동기 Zone 포함).
+  Future<void>? _pending;
   bool _observing = false;
 
   /// 마지막으로 요청에 성공한 기기 종류 (아직 없으면 `null`)
@@ -74,6 +80,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _observing = false;
     _applied = null;
     _hasHingeSensor = false;
+    _pending = null;
   }
 
   /// 현재 기기 종류. 화면(view)이 없으면 폰으로 본다.
@@ -88,18 +95,29 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _apply() async {
+  /// 앞 요청이 끝난 뒤 지금 기기 종류로 요청한다. 실패해도 오류를 내보내지 않는다.
+  Future<void> _apply() {
+    final previous = _pending;
+    final next = previous == null
+        ? _applyNow()
+        : previous.then((_) => _applyNow());
+    _pending = next;
+    next.whenComplete(() {
+      if (identical(_pending, next)) _pending = null;
+    });
+    return next;
+  }
+
+  Future<void> _applyNow() async {
     final kind = currentKind();
     if (kind == _applied) return;
-    final previous = _applied;
-    _applied = kind;
     try {
       await SystemChrome.setPreferredOrientations(
         FormFactor.preferredOrientationsFor(kind),
       );
+      _applied = kind;
     } catch (error) {
-      // 실패하면 다음 화면 정보 변화 때 다시 시도한다.
-      if (_applied == kind) _applied = previous;
+      // 기록하지 않으므로 다음 화면 정보 변화 때 다시 시도한다.
       debugPrint('화면 방향 요청 실패: $error');
     }
   }

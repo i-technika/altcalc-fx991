@@ -5,10 +5,12 @@ import '../../domain/models/handedness.dart';
 import '../l10n/settings_strings.dart';
 import '../providers/settings_provider.dart';
 
-/// 키패드 위치(손잡이) 선택 대화상자 (#24). 고르면 설정을 저장하고 닫는다.
+/// 키패드 위치(손잡이) 선택 대화상자 (#24).
 ///
-/// 표준 라디오 그룹([RadioGroup] + [RadioListTile])이라 스크린리더에는 단일 선택 그룹·선택 상태로 알려지고,
-/// 키보드 화살표로 선택지를 옮길 수 있다.
+/// 고르면 설정을 바로 저장하고, 대화상자 뒤의 키패드도 바로 옮겨진다(미리 보기). 닫기는 "닫기" 버튼이나
+/// 바깥 탭·뒤로가기로 한다 — 고를 때 닫지 않는 이유: 표준 라디오 그룹([RadioGroup])은 키보드 화살표로
+/// 포커스를 옮기면 선택도 함께 바뀌므로, 고를 때 닫으면 화살표 한 번에 설정이 바뀌고 대화상자가 닫힌다.
+/// 스크린리더에는 단일 선택 그룹·선택 상태로 알려진다.
 class HandednessDialog extends ConsumerWidget {
   const HandednessDialog({super.key});
 
@@ -16,34 +18,38 @@ class HandednessDialog extends ConsumerWidget {
   static Key optionKeyOf(Handedness value) =>
       ValueKey('handedness-option-${value.storageValue}');
 
+  /// 닫기 버튼 위젯 키
+  static const Key closeKey = ValueKey('handedness-dialog-close');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = SettingsStrings.of(context);
-    return SimpleDialog(
+    return AlertDialog(
       title: Text(strings.handednessTitle),
-      children: [
-        RadioGroup<Handedness>(
-          groupValue: ref.watch(handednessProvider),
-          // 현재 선택을 다시 누르면(toggleable) null이 온다 — 설정은 그대로 두고 닫기만 한다.
-          onChanged: (value) {
-            if (value != null) {
-              ref.read(handednessProvider.notifier).set(value);
-            }
-            Navigator.of(context).pop();
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final value in Handedness.values)
-                RadioListTile<Handedness>(
-                  key: optionKeyOf(value),
-                  value: value,
-                  toggleable: true,
-                  title: Text(strings.handedness(value)),
-                  subtitle: Text(strings.handednessDetail(value)),
-                ),
-            ],
-          ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      content: RadioGroup<Handedness>(
+        groupValue: ref.watch(handednessProvider),
+        onChanged: (value) {
+          if (value != null) ref.read(handednessProvider.notifier).set(value);
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final value in Handedness.values)
+              RadioListTile<Handedness>(
+                key: optionKeyOf(value),
+                value: value,
+                title: Text(strings.handedness(value)),
+                subtitle: Text(strings.handednessDetail(value)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: closeKey,
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.close),
         ),
       ],
     );

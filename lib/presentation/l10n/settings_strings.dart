@@ -37,6 +37,9 @@ abstract class SettingsStrings {
 
   /// 손잡이 선택지 설명 (키패드가 어느 쪽에 오는지)
   String handednessDetail(Handedness value);
+
+  /// 대화상자 닫기 버튼
+  String get close;
 }
 
 /// 한국어 설정 문구
@@ -60,6 +63,9 @@ class KoSettingsStrings extends SettingsStrings {
     Handedness.right => '키패드를 오른쪽에 둡니다',
     Handedness.left => '키패드를 왼쪽에 둡니다',
   };
+
+  @override
+  String get close => '닫기';
 }
 
 /// 영어 설정 문구
@@ -83,4 +89,7 @@ class EnSettingsStrings extends SettingsStrings {
     Handedness.right => 'Keypad on the right',
     Handedness.left => 'Keypad on the left',
   };
+
+  @override
+  String get close => 'Close';
 }

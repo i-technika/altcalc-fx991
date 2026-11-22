@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -130,6 +131,34 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
         expect(await FormFactor.queryHingeSensor(), isFalse); // MissingPlugin
+      });
+
+      test('Android: 그 밖의 오류(응답 타입 등)도 false', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        mockChannel((_) async => 'not a bool');
+        expect(await FormFactor.queryHingeSensor(), isFalse);
+      });
+
+      test('Android: 제한 시간 안에 응답이 없으면 false (앱 시작이 멈추지 않는다)', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final never = Completer<ByteData?>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMessageHandler(
+              FormFactor.deviceChannel.name,
+              (_) => never.future,
+            );
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMessageHandler(FormFactor.deviceChannel.name, null),
+        );
+        final watch = Stopwatch()..start();
+        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(
+          watch.elapsed,
+          greaterThanOrEqualTo(FormFactor.hingeQueryTimeout),
+        );
       });
 
       test('iOS: 채널을 부르지 않고 false', () async {

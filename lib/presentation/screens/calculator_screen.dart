@@ -230,26 +230,10 @@ class CalculatorScreen extends ConsumerWidget {
                   0,
                 ),
                 child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (arrangement == ScreenArrangement.split) {
-                      return _SplitBody(body: constraints.biggest);
-                    }
-                    final layout = CalcScreenLayout.of(constraints.biggest);
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // TODO(#41): 상단 띠 활용 (장식·설정 진입 등)
-                        SizedBox(height: layout.top),
-                        SizedBox(
-                          height: layout.lcdHeight,
-                          child: const _LcdPanel(),
-                        ),
-                        SizedBox(height: layout.gap),
-                        // 남는 높이(반올림 오차 등)는 키패드가 받는다.
-                        const Expanded(child: _KeypadPanel()),
-                      ],
-                    );
-                  },
+                  builder: (context, constraints) => _Body(
+                    body: constraints.biggest,
+                    arrangement: arrangement,
+                  ),
                 ),
               ),
             ),
@@ -404,25 +388,52 @@ class _KeypadPanel extends ConsumerWidget {
   }
 }
 
-/// 좌우 분할 배치 본체 (#24). 손잡이 설정만 구독한다 — 설정이 바뀌면 영역 위치만 옮기고,
-/// LCD·키패드 위젯은 같은 인스턴스라 다시 빌드되지 않는다.
-class _SplitBody extends ConsumerWidget {
+/// 본체: LCD·키패드(·설정 버튼)를 [arrangement]에 맞는 영역에 놓는다.
+///
+/// 두 배치를 **같은 위젯 트리**(`Stack` + `Positioned.fromRect`)로 그린다. 그래서 회전·창 크기 변경으로
+/// 배치가 바뀌어도 LCD·키패드 element가 유지되어 키 눌림 상태와 스크린리더 포커스가 사라지지 않는다
+/// (#24 R2 — Android 16 태블릿·iPad는 방향 고정이 무시되어 회전이 잦다). 손잡이 설정이 바뀌어도
+/// 영역 위치만 옮기고, LCD·키패드 위젯은 같은 인스턴스라 다시 빌드되지 않는다.
+class _Body extends ConsumerWidget {
   /// 본체 크기 (광고 슬롯·화면 여백 제외)
   final Size body;
 
-  const _SplitBody({required this.body});
+  /// 배치 종류
+  final ScreenArrangement arrangement;
+
+  const _Body({required this.body, required this.arrangement});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final layout = CalcSplitLayout.of(body, ref.watch(handednessProvider));
+    final Rect lcd;
+    final Rect keypad;
+    Rect? settings;
+    switch (arrangement) {
+      case ScreenArrangement.split:
+        final layout = CalcSplitLayout.of(body, ref.watch(handednessProvider));
+        lcd = layout.lcd;
+        keypad = layout.keypad;
+        settings = layout.settingsButton;
+      case ScreenArrangement.stacked:
+        // TODO(#41): 상단 띠([CalcScreenLayout.top]) 활용 (장식·설정 진입 등)
+        final layout = CalcScreenLayout.of(body);
+        final width = body.width.isFinite ? math.max(0.0, body.width) : 0.0;
+        final height = body.height.isFinite ? math.max(0.0, body.height) : 0.0;
+        lcd = Rect.fromLTWH(0, layout.top, width, layout.lcdHeight);
+        // 남는 높이(반올림 오차 등)는 키패드가 받는다.
+        keypad = Rect.fromLTRB(
+          0,
+          math.min(lcd.bottom + layout.gap, height),
+          width,
+          height,
+        );
+    }
     return Stack(
       children: [
-        Positioned.fromRect(rect: layout.lcd, child: const _LcdPanel()),
-        Positioned.fromRect(rect: layout.keypad, child: const _KeypadPanel()),
-        Positioned.fromRect(
-          rect: layout.settingsButton,
-          child: const SettingsButton(),
-        ),
+        Positioned.fromRect(rect: lcd, child: const _LcdPanel()),
+        Positioned.fromRect(rect: keypad, child: const _KeypadPanel()),
+        if (settings != null)
+          Positioned.fromRect(rect: settings, child: const SettingsButton()),
       ],
     );
   }

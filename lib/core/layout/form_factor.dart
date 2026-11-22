@@ -59,20 +59,30 @@ abstract final class FormFactor {
 
   /// 기기에 힌지 각도 센서가 있는지 (Android `FEATURE_SENSOR_HINGE_ANGLE`). 폴더블 기기를 앱 시작 시점에
   /// 구분하는 데 쓴다 — 접히는 부분 정보([FlutterView.displayFeatures])는 화면이 붙은 뒤 비동기로 와서
-  /// 시작 시점에는 비어 있다. Android가 아니거나 조회에 실패하면 `false`.
+  /// 시작 시점에는 비어 있다. Android가 아니거나, 조회에 실패하거나, [hingeQueryTimeout] 안에 응답이 없으면
+  /// `false` — 앱 시작(`main()`)이 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  ///
+  /// 한계: 힌지 센서 선언은 제조사 몫이라, 선언하지 않는 폴더블은 접히는 부분 정보가 도착할 때까지 태블릿으로
+  /// 판정된다(`DeviceOrientationLock`이 정보 도착 후 바로잡는다). 실기기 확인은 후속 과제다.
   static Future<bool> queryHingeSensor() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return false;
     }
     try {
-      return await deviceChannel.invokeMethod<bool>('hasHingeSensor') ?? false;
-    } on PlatformException catch (error) {
-      debugPrint('힌지 센서 조회 실패: $error');
-      return false;
+      final result = await deviceChannel
+          .invokeMethod<bool>('hasHingeSensor')
+          .timeout(hingeQueryTimeout);
+      return result ?? false;
     } on MissingPluginException {
+      return false;
+    } catch (error) {
+      debugPrint('힌지 센서 조회 실패: $error');
       return false;
     }
   }
+
+  /// 힌지 센서 조회 응답 제한 시간
+  static const Duration hingeQueryTimeout = Duration(seconds: 1);
 
   /// 기기 종류를 정한다.
   /// - [displaySize]: 물리 화면 크기 (dp)
@@ -124,6 +134,7 @@ abstract final class FormFactor {
   /// 폴더블 기기([foldableDevice])이거나 접히는 부분이 창을 지나면 위아래 배치로 둔다 — 좌우 분할이 힌지를
   /// 가로지르지 않게 나누는 일은 TODO(#25). 폴더블 기기를 따로 받는 이유: 접히는 부분 정보가 늦게 와서
   /// 그 전 몇 프레임 동안 좌우 분할로 그렸다가 위아래 배치로 바뀌는 깜빡임을 막는다.
+  /// 제약: 폴더블 여부는 기기 단위라, 폴더블을 외부 디스플레이(DeX 등)에 연결한 넓은 창도 위아래 배치다 — #25에서 다룬다.
   static ScreenArrangement arrangementOf(
     Size windowSize,
     Iterable<DisplayFeature> features, {

@@ -1,5 +1,6 @@
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -267,9 +268,10 @@ void main() {
       expect(find.text('Right-handed'), findsOneWidget);
       expect(find.text('Left-handed'), findsOneWidget);
 
+      // 고르면 바로 저장되고 뒤의 키패드가 옮겨진다. 대화상자는 열린 채로 남는다.
       await tester.tap(_option(Handedness.left));
       await tester.pumpAndSettle();
-      expect(find.byType(HandednessDialog), findsNothing);
+      expect(find.byType(HandednessDialog), findsOneWidget);
       expect(container.read(handednessProvider), Handedness.left);
       expect(prefs.getString(HandednessNotifier.storageKey), 'left');
       expect(
@@ -280,9 +282,15 @@ void main() {
         identical(tester.element(find.byType(CalcKeypad)).widget, keypadWidget),
         isTrue,
       );
+
+      // 닫기 버튼으로 닫는다.
+      await tester.tap(find.byKey(HandednessDialog.closeKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(HandednessDialog), findsNothing);
+      expect(container.read(handednessProvider), Handedness.left);
     });
 
-    testWidgets('현재 선택을 다시 고르면 바뀌지 않고 대화상자만 닫힌다', (tester) async {
+    testWidgets('현재 선택을 다시 고르면 아무것도 바뀌지 않는다', (tester) async {
       final (container, prefs) = await _pump(
         tester,
         size: const Size(1280, 800),
@@ -292,9 +300,40 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(_option(Handedness.left));
       await tester.pumpAndSettle();
-      expect(find.byType(HandednessDialog), findsNothing);
+      expect(find.byType(HandednessDialog), findsOneWidget);
       expect(container.read(handednessProvider), Handedness.left);
       expect(prefs.getString(HandednessNotifier.storageKey), 'left');
+    });
+
+    testWidgets('키보드: 화살표로 선택을 옮겨도 대화상자는 닫히지 않고, Esc로 닫는다', (tester) async {
+      final (container, _) = await _pump(tester, size: const Size(1280, 800));
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(find.byType(HandednessDialog), findsOneWidget);
+      expect(container.read(handednessProvider), Handedness.left);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(find.byType(HandednessDialog), findsOneWidget);
+      expect(container.read(handednessProvider), Handedness.right);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(HandednessDialog), findsNothing);
+    });
+
+    testWidgets('바깥을 누르면 닫힌다', (tester) async {
+      await _pump(tester, size: const Size(1280, 800));
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(HandednessDialog), findsNothing);
     });
 
     testWidgets('스크린리더: 설정 버튼 이름, 선택지는 단일 선택 그룹과 선택 상태로 알려진다', (tester) async {
@@ -337,6 +376,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(container.read(handednessProvider), Handedness.left);
+      // 닫기 버튼도 화면 안에 있어 누를 수 있다.
+      expect(
+        find.byKey(HandednessDialog.closeKey).hitTestable(),
+        findsOneWidget,
+      );
     });
 
     testWidgets('한국어 기기에서는 설정 문구가 한국어다', (tester) async {
@@ -348,6 +392,7 @@ void main() {
       expect(find.text('키패드 위치'), findsOneWidget);
       expect(find.text('오른손잡이'), findsOneWidget);
       expect(find.text('왼손잡이'), findsOneWidget);
+      expect(find.text('닫기'), findsOneWidget);
     });
   });
 
@@ -357,10 +402,32 @@ void main() {
     await tester.pump();
     expect(container.read(calcProvider).modifier, KeyModifier.shift);
 
+    final keypadElement = tester.element(find.byType(CalcKeypad));
+    final lcdElement = tester.element(_lcd);
+
     // 세로로 회전 (방향 고정이 무시된 경우) → 위아래 배치
     await _pump(tester, size: const Size(800, 1280), container: container);
     expect(_settings, findsNothing);
+    expect(
+      tester.getRect(_lcd).bottom,
+      lessThanOrEqualTo(tester.getRect(_keypad).top),
+    );
     expect(container.read(calcProvider).modifier, KeyModifier.shift);
+    // 두 배치가 같은 위젯 트리라 LCD·키패드 element가 그대로 유지된다
+    // (키 눌림 상태·스크린리더 포커스가 회전으로 사라지지 않는다).
+    expect(
+      identical(tester.element(find.byType(CalcKeypad)), keypadElement),
+      isTrue,
+    );
+    expect(identical(tester.element(_lcd), lcdElement), isTrue);
+
+    // 다시 가로로
+    await _pump(tester, size: const Size(1280, 800), container: container);
+    expect(_settings, findsOneWidget);
+    expect(
+      identical(tester.element(find.byType(CalcKeypad)), keypadElement),
+      isTrue,
+    );
     await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)));
     await tester.pump();
     expect(container.read(calcProvider).modifier, KeyModifier.none);
