@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,35 +16,38 @@ final _generatedName = RegExp(
 const _platformDirs = ['linux/flutter/', 'windows/flutter/', 'macos/Flutter/'];
 
 /// 패키지 루트(= `flutter test`의 작업 디렉터리)에서 git을 실행한다.
-List<String> _git(List<String> args) {
-  final result = Process.runSync('git', [
-    '-C',
-    Directory.current.path,
-    ...args,
-  ]);
+/// git은 경로를 UTF-8로 내보내므로 시스템 인코딩(Windows 한국어는 cp949) 대신 UTF-8로 읽는다.
+ProcessResult _runGit(List<String> args) => Process.runSync(
+  'git',
+  ['-C', Directory.current.path, ...args],
+  stdoutEncoding: utf8,
+  stderrEncoding: utf8,
+);
+
+/// `-z` 출력(NUL 구분)을 필드 목록으로 돌려준다 — 공백·비ASCII 경로도 따옴표 처리 없이 그대로 받는다.
+List<String> _gitZ(List<String> args) {
+  final result = _runGit(args);
   expect(
     result.exitCode,
     0,
     reason: 'git ${args.join(' ')} 실패: ${result.stderr}',
   );
-  return (result.stdout as String)
-      .split('\n')
-      .map((l) => l.trimRight())
-      .where((l) => l.isNotEmpty)
-      .toList();
+  final fields = (result.stdout as String).split('\u0000');
+  if (fields.isNotEmpty && fields.last.isEmpty) fields.removeLast();
+  return fields;
 }
 
-/// `git check-attr <attrs> -- <paths>` → {경로: {속성: 값}}
+/// `git check-attr -z <attrs> -- <paths>` → {경로: {속성: 값}}
 Map<String, Map<String, String>> _attrs(
   List<String> attrs,
   List<String> paths,
 ) {
+  final fields = _gitZ(['check-attr', '-z', ...attrs, '--', ...paths]);
+  // 출력 형식: 경로·속성·값이 NUL로 구분되어 이 순서로 반복된다
+  expect(fields.length % 3, 0, reason: '$fields');
   final out = <String, Map<String, String>>{};
-  for (final line in _git(['check-attr', ...attrs, '--', ...paths])) {
-    // 출력 형식: "<경로>: <속성>: <값>" (경로에 ': '가 없다고 가정 — 이 저장소의 대상 경로는 그렇다)
-    final parts = line.split(': ');
-    expect(parts, hasLength(3), reason: line);
-    (out[parts[0]] ??= {})[parts[1]] = parts[2];
+  for (var i = 0; i < fields.length; i += 3) {
+    (out[fields[i]] ??= {})[fields[i + 1]] = fields[i + 2];
   }
   return out;
 }
@@ -54,12 +58,7 @@ void main() {
   setUpAll(() {
     // git이 없거나, 저장소가 아니거나(소스 아카이브), 패키지 루트가 저장소 루트가 아니면
     // 아래 검사가 엉뚱한 이유로 실패하므로 먼저 분명한 메시지로 멈춘다.
-    final probe = Process.runSync('git', [
-      '-C',
-      Directory.current.path,
-      'rev-parse',
-      '--show-toplevel',
-    ]);
+    final probe = _runGit(['rev-parse', '--show-toplevel']);
     if (probe.exitCode != 0) {
       fail('git 저장소에서 실행해야 하는 테스트다 (git 없음 또는 .git 없음): ${probe.stderr}');
     }
@@ -70,7 +69,7 @@ void main() {
       Directory.current.resolveSymbolicLinksSync().toLowerCase(),
       reason: '패키지 루트에서 flutter test를 실행해야 한다',
     );
-    tracked = _git(['ls-files']);
+    tracked = _gitZ(['ls-files', '-z']);
   });
 
   test('추적 중인 생성 플러그인 파일은 모두 text eol=lf 속성을 받는다', () {
@@ -89,8 +88,9 @@ void main() {
     }
   });
 
-  test('같은 폴더의 생성 파일이 아닌 형제 파일에는 줄바꿈 속성을 걸지 않는다', () {
-    // 패턴이 넓어지면 가장 먼저 걸릴 형제 파일 — 저장소 전체 규칙(* text=auto 등)이 생겨도 잡힌다
+  test('생성 파일·셸 스크립트 외에는 줄바꿈 속성을 걸지 않는다 (저장소 전체 정책 미도입)', () {
+    // 저장소 전체 규칙(* text=auto 등)은 다른 파일의 체크아웃 형태까지 바꾸므로 도입하지 않는다(.gitattributes 주석).
+    // 표본: 패턴이 넓어지면 가장 먼저 걸릴, 같은 폴더의 생성 파일이 아닌 형제 파일과 일반 소스 하나
     final siblings = [
       for (final dir in _platformDirs)
         ...tracked.where(
@@ -99,19 +99,28 @@ void main() {
               !p.substring(dir.length).contains('/') &&
               !_generatedName.hasMatch(p),
         ),
-      'lib/main.dart',
     ];
-    expect(siblings.where((p) => p.startsWith('linux/')), isNotEmpty);
-    expect(siblings.where((p) => p.startsWith('windows/')), isNotEmpty);
-    expect(siblings.where((p) => p.startsWith('macos/')), isNotEmpty);
-    expect(tracked, containsAll(siblings), reason: '표본 파일은 추적 중이어야 한다');
+    for (final dir in _platformDirs) {
+      expect(siblings.where((p) => p.startsWith(dir)), isNotEmpty, reason: dir);
+    }
+    final samples = [...siblings, 'lib/main.dart', 'README.md'];
+    expect(tracked, containsAll(samples), reason: '표본 파일은 추적 중이어야 한다');
 
-    final attrs = _attrs(['text', 'eol'], siblings);
-    for (final path in siblings) {
+    final attrs = _attrs(['text', 'eol'], samples);
+    for (final path in samples) {
       expect(attrs[path], {
         'text': 'unspecified',
         'eol': 'unspecified',
       }, reason: path);
+    }
+  });
+
+  test('셸 스크립트는 LF로 받는다 (WSL bash 등은 CRLF 스크립트를 실행하지 못한다)', () {
+    final scripts = tracked.where((p) => p.endsWith('.sh')).toList();
+    expect(scripts, isNotEmpty);
+    final attrs = _attrs(['eol'], scripts);
+    for (final path in scripts) {
+      expect(attrs[path], {'eol': 'lf'}, reason: path);
     }
   });
 }

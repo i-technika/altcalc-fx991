@@ -43,6 +43,8 @@ git checkout milestone/m<N> && git pull --ff-only origin milestone/m<N>
 git checkout -b issue/<번호>-<영문-키워드>
 ```
 - 미커밋 WIP 파일이 있으면 브랜치 전환 시 그대로 따라오는지 확인한다(추적되지 않은 파일은 따라온다).
+- 생성 플러그인 파일이 `M`이라 전환이 막히면, `git diff`가 비어 있는지(줄바꿈 차이뿐인지) 보고 CLAUDE.md "로컬 개발 환경 메모"의 절차로 정리한다 (#67).
+  `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다.
 
 ### 3. 구현 및 로컬 검증
 - CLAUDE.md 규칙 준수: 한국어 주석, `material_ui` import, `Decimal` 사용, 반응형, 광고 슬롯 여백.

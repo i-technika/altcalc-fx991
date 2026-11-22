@@ -45,13 +45,7 @@ jobs:
 
       # pub get·test·build 뒤 작업 트리가 깨끗한지 확인한다 (#67, Sub-issue CI와 같은 검사)
       - name: Verify clean working tree
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git status --porcelain
-            git diff --stat
-            echo "::error::빌드 뒤 작업 트리가 깨끗하지 않다 (#67). 생성 파일 커밋 누락 또는 줄바꿈 속성을 확인할 것."
-            exit 1
-          fi
+        run: bash .github/scripts/verify-clean-tree.sh
 
   build-android:
     name: Android Build (APK)
@@ -108,6 +102,10 @@ jobs:
     runs-on: windows-latest
     if: github.event.pull_request.draft == false
     steps:
+      # 개발 PC(Git for Windows 기본 선택지)와 같은 줄바꿈으로 체크아웃한다 — 러너 이미지 기본값이 바뀌어도 #67 검사가 유효하게
+      - name: Use core.autocrlf=true like Windows dev PCs
+        run: git config --global core.autocrlf true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -123,19 +121,13 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release
 
-      # Windows 러너는 Git for Windows 기본값(core.autocrlf=true)으로 체크아웃하므로,
-      # 생성 플러그인 파일 줄바꿈 고정(.gitattributes, #67)이 깨지면 여기서 수정됨으로 드러난다.
-      # (macOS·iOS 잡은 빌드가 Podfile 같은 생성물을 새로 만들 수 있어 이 검사를 두지 않는다.)
+      # 개발 PC와 같은 core.autocrlf=true 체크아웃에서 생성 플러그인 파일 줄바꿈 고정(.gitattributes, #67)이
+      # 깨지면 여기서 수정됨으로 드러난다. 체크아웃 전에 설정을 고정했는지도 확인한다.
       - name: Verify clean working tree
         shell: bash
         run: |
-          git config --get core.autocrlf || true
-          if [ -n "$(git status --porcelain)" ]; then
-            git status --porcelain
-            git diff --stat
-            echo "::error::빌드 뒤 작업 트리가 깨끗하지 않다 (#67). 생성 파일 커밋 누락 또는 줄바꿈 속성을 확인할 것."
-            exit 1
-          fi
+          test "$(git config --get core.autocrlf)" = true || { echo "::error::core.autocrlf=true가 아니라 #67 회귀를 검사할 수 없다"; exit 1; }
+          bash .github/scripts/verify-clean-tree.sh
 
   build-macos-and-ios:
     name: macOS & iOS Build
@@ -159,3 +151,8 @@ jobs:
 
       - name: Build iOS (Simulator/No CodeSign)
         run: flutter build ios --no-codesign
+
+      # macOS·iOS 빌드는 Xcode 프로젝트·xcconfig 같은 다른 파일을 정당하게 바꿀 수 있으므로,
+      # Flutter가 다시 쓰는 생성 플러그인 파일만 검사한다 (#67)
+      - name: Verify generated plugin files unchanged
+        run: bash .github/scripts/verify-clean-tree.sh linux/flutter windows/flutter macos/Flutter/GeneratedPluginRegistrant.swift
