@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
@@ -1654,35 +1655,38 @@ void _hingeLayoutTests() {
       }
     }
 
-    // 손잡이에 따라 배치가 갈리는 비대칭 세로 접힘선 (x=560, 오른쪽 인셋 48 → 오른쪽 절반 233dp).
-    // 오른손잡이는 위아래 배치, 왼손잡이는 접힘선 기준 배치이고 버튼은 늘 오른쪽 좁은 절반 쪽에 있다.
+    // 손잡이에 따라 배치가 갈리는 비대칭 세로 접힘선. 키패드가 좁은 절반에 들어가지 못하는 손잡이는 위아래 배치,
+    // 반대 손잡이는 접힘선 기준 배치(버튼은 LCD 쪽 = 좁은 절반)다.
     // `_splitLikeApp`은 Navigator의 인셋으로 절반 폭을 재므로 View에도 같은 인셋을 넣는다(넣지 않으면 실제 앱에
     // 없는 "따라가기"가 일어난다).
-    for (final (name, fold) in [
-      ('펼친 폭 0', _foldAt(const Rect.fromLTWH(560, 0, 0, 701))),
-      ('반 접힘', _halfOpenedAt(const Rect.fromLTWH(560, 0, 0, 701))),
-    ]) {
-      testWidgets('비대칭 접힘선($name): 손잡이를 바꿔 배치가 바뀌어도 대화상자는 그대로다', (
-        tester,
-      ) async {
+    void setViewPadding(WidgetTester tester, EdgeInsets padding) {
+      final ratio = tester.view.devicePixelRatio;
+      tester.view.padding = FakeViewPadding(
+        left: padding.left * ratio,
+        top: padding.top * ratio,
+        right: padding.right * ratio,
+        bottom: padding.bottom * ratio,
+      );
+      addTearDown(tester.view.resetPadding);
+    }
+
+    testWidgets(
+      '비대칭 접힘선(펼친 폭 0): LCD 쪽 절반이 하한보다 좁아 대화상자는 배치가 바뀌어도 화면 전체에 그대로 뜬다 (#41 인셋 판정)',
+      (tester) async {
+        // x=560, 오른쪽 인셋 48 → 오른쪽 절반 233dp. 오른손잡이는 위아래 배치, 왼손잡이는 접힘선 기준 배치.
         const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
-        final ratio = tester.view.devicePixelRatio;
-        tester.view.padding = FakeViewPadding(
-          top: padding.top * ratio,
-          right: padding.right * ratio,
-          bottom: padding.bottom * ratio,
-        );
-        addTearDown(tester.view.resetPadding);
+        setViewPadding(tester, padding);
         final (container, _) = await _pump(
           tester,
           size: const Size(841, 701),
           padding: padding,
-          displayFeatures: [fold],
+          displayFeatures: [_foldAt(const Rect.fromLTWH(560, 0, 0, 701))],
         );
         expect(isStackedArrangement(tester), isTrue);
         await tester.tap(_settings);
         await tester.pumpAndSettle();
         final opened = tester.getRect(_dialogSurface);
+        expect(opened.left, lessThan(560)); // 좁은 절반에 갇히지 않았다
         final buttonBefore = tester.getRect(_settings);
 
         for (final h in [Handedness.left, Handedness.right]) {
@@ -1696,36 +1700,103 @@ void _hingeLayoutTests() {
           }
           expect(tester.getRect(_dialogSurface), opened, reason: '$h');
         }
-      });
-    }
+      },
+    );
 
-    testWidgets('반 접은 테이블톱: 버튼은 아래 절반 안에서만 옮겨 가고 대화상자는 아래 절반 그 자리다', (
+    testWidgets('비대칭 접힘선(반 접힘): 배치가 바뀌어 버튼이 반대쪽 절반으로 가도 대화상자는 연 절반에 남는다', (
       tester,
     ) async {
-      const hingeY = 420.5;
+      // x=281, 왼쪽 인셋 48 → 왼쪽 절반 233dp. 왼손잡이는 위아래 배치(버튼 오른쪽 위), 오른손잡이는 접힘선
+      // 기준 배치(버튼은 왼쪽 좁은 절반). 따라가기라면 대화상자가 왼쪽으로 옮겨 가야 하는 화면이다.
+      const hingeX = 281.0;
+      const padding = EdgeInsets.only(left: 48, top: 24, bottom: 24);
+      setViewPadding(tester, padding);
       final (container, _) = await _pump(
         tester,
-        size: const Size(701, 841),
-        padding: const EdgeInsets.only(top: 32, bottom: 24),
+        size: const Size(841, 701),
+        padding: padding,
+        handedness: Handedness.left,
         displayFeatures: [
-          _halfOpenedAt(const Rect.fromLTWH(0, hingeY, 701, 0)),
+          _halfOpenedAt(const Rect.fromLTWH(hingeX, 0, 0, 701)),
         ],
       );
+      expect(isStackedArrangement(tester), isTrue);
+      expect(tester.getRect(_settings).left, greaterThanOrEqualTo(hingeX));
       await tester.tap(_settings);
       await tester.pumpAndSettle();
       final opened = tester.getRect(_dialogSurface);
-      expect(opened.top, greaterThanOrEqualTo(hingeY));
-      final buttonBefore = tester.getRect(_settings);
+      expect(opened.left, greaterThanOrEqualTo(hingeX));
+
+      await tester.tap(_option(Handedness.right));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(handednessProvider), Handedness.right);
+      expect(isStackedArrangement(tester), isFalse);
+      expect(tester.getRect(_settings).right, lessThanOrEqualTo(hingeX));
+      expect(tester.getRect(_dialogSurface), opened);
 
       await tester.tap(_option(Handedness.left));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(container.read(handednessProvider), Handedness.left);
-      final button = tester.getRect(_settings);
-      expect(button, isNot(buttonBefore));
-      expect(button.top, greaterThanOrEqualTo(hingeY));
+      expect(isStackedArrangement(tester), isTrue);
       expect(tester.getRect(_dialogSurface), opened);
     });
+
+    // 반 접은 테이블톱: 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고, 어느 쪽인지는
+    // 손잡이와 무관하다(`CalcTabletopLayout`). 손잡이를 바꾸면 같은 절반 안에서 좌우로만 옮겨 간다.
+    for (final (name, size, hingeY, buttonBelow) in [
+      ('키패드 옆 자리', const Size(701, 841), 420.5, true),
+      ('위 절반 모서리 자리', const Size(412, 915), 457.5, false),
+    ]) {
+      testWidgets('반 접은 테이블톱($name): 버튼은 같은 절반 안에서만 옮겨 가고 대화상자는 그 자리다', (
+        tester,
+      ) async {
+        bool below(Rect r) => r.top >= hingeY - 0.01;
+        bool above(Rect r) => r.bottom <= hingeY + 0.01;
+        bool sameHalf(Rect r) => buttonBelow ? below(r) : above(r);
+        final (container, _) = await _pump(
+          tester,
+          size: size,
+          padding: const EdgeInsets.only(top: 32, bottom: 24),
+          displayFeatures: [
+            _halfOpenedAt(Rect.fromLTWH(0, hingeY, size.width, 0)),
+          ],
+        );
+        final buttonBefore = tester.getRect(_settings);
+        expect(sameHalf(buttonBefore), isTrue, reason: '$buttonBefore');
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        final opened = tester.getRect(_dialogSurface);
+        expect(sameHalf(opened), isTrue, reason: '$opened');
+
+        await tester.tap(_option(Handedness.left));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(container.read(handednessProvider), Handedness.left);
+        final button = tester.getRect(_settings);
+        expect(button, isNot(buttonBefore));
+        expect(sameHalf(button), isTrue, reason: '$button');
+        expect(tester.getRect(_dialogSurface), opened);
+      });
+    }
+
+    test(
+      '하한 폭 이상인 세로 접힘선 절반에는 키패드가 폭으로 늘 들어간다 — 비대칭 배치의 LCD 쪽 절반은 하한보다 좁다',
+      () {
+        // 인셋을 뺀 절반 폭이 hingeMinPanelExtent일 때 키패드 자리 (화면 가장자리·접힘선 여백 제외).
+        // 이 값에서 키가 터치 하한 이상이면, 손잡이에 따라 배치가 갈리는(한쪽 절반에 키패드가 못 들어가는) 화면의
+        // 좁은 절반은 늘 하한보다 좁다 — `SettingsButton` "대화상자가 열린 채 손잡이를 바꾸면"의 전제.
+        const region =
+            FormFactor.hingeMinPanelExtent -
+            CalcTheme.screenPadding -
+            CalcTheme.screenHingeMargin;
+        expect(
+          KeypadMetrics.minKeyTouchHeightOf(
+            const Size(region, double.infinity),
+          ),
+          greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
+        );
+      },
+    );
 
     // 접힘선이 없으면 anchor가 위치에 영향이 없어 "따라가기"로 바꿔도 통과한다 — 여기서는 고른 뒤 닫히지 않고
     // 같은 자리에 남는지만 본다.
