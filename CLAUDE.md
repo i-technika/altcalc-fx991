@@ -58,6 +58,9 @@
   - #67 이전 브랜치에 있어서 `M` 때문에 전환·머지가 막히면(스크립트가 아직 없다): 위 생성 파일 7개에 대해
     `git diff --stat -- <7개>`가 비어 있음을 확인한 뒤 그 7개만 `git checkout -- <7개>`로 되돌린다.
   - `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다 — 진짜 변경까지 지워진다.
+- git 워크트리는 `.claude/worktrees/` 아래나 저장소 밖(`../altcalc-wt<번호>`)에만 만든다. 저장소 안의 점으로 시작하지 않는
+  폴더에 만들면 VS Code Dart 확장이 만드는 즉시 그 워크트리에 pub get을 돌린다. `.claude/worktrees/`는
+  `analysis_options.yaml`의 `analyzer.exclude`로 확장의 프로젝트 목록에서 뺀다 (#66, README "작업 영역 안의 git 워크트리").
 - GitHub CLI(`gh`)로 이슈/PR/프로젝트를 관리한다. 저장소: `i-technika/altcalc-fx991`
 - `gh`에 여러 줄 본문을 넘길 때는 셸 이스케이프 깨짐(과거 이슈 본문의 `\경로\` 깨짐 현상)을 막기 위해
   **반드시 임시 파일 + `--body-file`** 을 사용한다.

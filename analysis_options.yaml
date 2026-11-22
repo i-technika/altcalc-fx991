@@ -18,6 +18,10 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # 작업 영역 안 git 워크트리 (#66). analyzer는 원래 점 폴더를 건너뛰지만, VS Code Dart 확장은 이 항목을 보고
+    # 워크트리를 프로젝트 목록에서 빼 시작 시 pub get 알림 등에 넣지 않는다. 확장은 `/**`로 끝나고 다른 `*`가 없는
+    # 항목만 폴더 제외로 쓴다 (README "작업 영역 안의 git 워크트리", test/unit/analysis_options_test.dart).
+    - .claude/worktrees/**
 
 linter:
   # The lint rules applied to this project can be customized in the

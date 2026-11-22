@@ -113,10 +113,37 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 - **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
   - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
-  - 확장이 패키지가 없는 프로젝트에 자동으로 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의
-    `flutter (package:...)` 채널에 기록된다(작업 영역 안의 다른 체크아웃에서 실측).
+  - 확장이 돌리는 pub get(시작 알림의 `Run 'pub get'`, `pubspec.yaml` 변경 시 자동 실행)도 같은 이유로 실패하며,
+    출력 패널의 `flutter (package:...)` 채널에 기록된다(작업 영역 안의 다른 체크아웃에서 실측).
   - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
   - 실패하는 것은 Windows 데스크톱 실행뿐이다.
+
+### 작업 영역 안의 git 워크트리
+
+병렬 작업용 git 워크트리는 **`.claude/worktrees/` 아래**(Claude Code의 기본 위치) 또는 **저장소 밖**
+(예: `../altcalc-wt66`)에 만든다. 저장소 폴더 안의 점으로 시작하지 않는 폴더(예: `worktrees/`)에는 만들지 않는다.
+pub get은 워크트리의 `linux/`·`macos/`·`windows/` 생성 플러그인 파일을 다시 쓰므로, 확장이 다른 세션의 워크트리에
+pub get을 돌리면 그 세션의 작업 트리가 바뀐다. 아래는 확장(Dart-Code 3.146) 소스와, 따로 띄운 VS Code에서
+확장 로그(`dart.extensionLogFile`)로 실측한 내용이다(#66).
+
+- 확장은 연 폴더 아래 깊이 5(`dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
+  점 폴더도 들어간다(analyzer가 점 폴더를 분석하지 않는 것과 다르다).
+- **켜질 때**: 패키지가 없거나 오래된 프로젝트를 모아 "Some packages are missing or out of sync…" 알림을 띄우고,
+  `Run 'pub get'`을 누르면 알림에 든 프로젝트 **모두**에 pub get을 돌린다. 이 단계에서 묻지 않고 돌리는 경로는 없다.
+  → [analysis_options.yaml](analysis_options.yaml)의 `analyzer.exclude`에 `.claude/worktrees/**`를 두어 막는다.
+  확장이 이 목록을 읽어 워크트리를 프로젝트 목록에서 빼므로, 시작 알림·`Pub: Get Packages for All Projects`·
+  프로젝트 선택 목록에 워크트리가 나오지 않는다. 확장은 `/**`로 끝나고 다른 `*`가 없는 항목만 폴더 제외로 쓴다
+  ([test/unit/analysis_options_test.dart](test/unit/analysis_options_test.dart)가 지킨다).
+  analyzer는 원래 점 폴더를 건너뛰므로 `flutter analyze` 결과는 달라지지 않는다.
+- **켜져 있는 동안**: `pubspec.yaml`이 생기거나 바뀌면 묻지 않고 그 폴더에 pub get을 돌린다
+  (`dart.runPubGetOnPubspecChanges` 기본값 `always`). 경로에 점으로 시작하는 폴더가 있으면 건너뛰므로
+  `.claude/worktrees/`의 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다. 이 감시는 `analyzer.exclude`를 보지 않아,
+  점으로 시작하지 않는 폴더에 워크트리를 만들면 만드는 즉시 pub get이 돈다(실측).
+- 확장은 **연 폴더에 체크아웃된 브랜치**의 `analysis_options.yaml`을 읽는다. 이 설정이 없는 예전 브랜치로 바꾼 채
+  창을 다시 불러오면 워크트리가 다시 알림에 나온다. 그때는 알림을 닫으면 된다.
+
+사용자 설정(기기마다 따로 해야 한다)이나 워크스페이스 설정 `dart.analysisExcludedFolders`(#52에서 도구 종속이라 넣지 않았다)
+대신 `analysis_options.yaml`을 쓴 이유는, 저장소가 지키고 테스트할 수 있으며 Dart 도구 공통 설정이기 때문이다.
 
 ## 검증
 
