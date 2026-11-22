@@ -78,6 +78,32 @@ List<String> _logLines(WidgetTester tester) => tester
     .map((t) => t.data!)
     .toList();
 
+/// 전역 좌표 [at]을 누르고, (누른 순간의 로그, 손을 뗀 뒤의 로그)를 ` | `로 이어 돌려준다.
+/// (레코드 안의 List는 `==`로 비교되지 않으므로 문자열로 잇는다.)
+Future<(String, String)> _pressAt(WidgetTester tester, Offset at) async {
+  final g = await tester.startGesture(at);
+  await tester.pump();
+  final down = _logLines(tester).join(' | ');
+  await g.up();
+  await tester.pump();
+  return (down, _logLines(tester).join(' | '));
+}
+
+/// 설정 대화상자로 손잡이를 [handedness]로 바꾸고 닫는다.
+Future<void> _setHandedness(WidgetTester tester, Handedness handedness) async {
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(CalculatorScreen)),
+  );
+  if (container.read(handednessProvider) == handedness) return;
+  await tester.tap(find.byKey(SettingsButton.buttonKey));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(HandednessDialog.optionKeyOf(handedness)));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(HandednessDialog.closeKey));
+  await tester.pumpAndSettle();
+  expect(container.read(handednessProvider), handedness);
+}
+
 String _logHeader(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(const ValueKey('preview-log-header'))).data!;
 
@@ -257,6 +283,43 @@ void main() {
         previewDevices.where((d) => d.systemGestureInsets != EdgeInsets.zero),
         isNotEmpty,
       );
+    });
+
+    test('제스처 영역 근사 규칙: 위·아래는 시스템 바와 같고, 좌우는 없거나 양쪽 모두 뒤로가기 폭이다', () {
+      // PreviewDevice.systemGestureInsets 문서의 근사 규칙. 제스처 영역이 없는 프리셋(iOS 가정)은 검사하지 않는다.
+      for (final d in previewDevices) {
+        final g = d.systemGestureInsets;
+        if (g == EdgeInsets.zero) continue;
+        expect(g.top, d.padding.top, reason: d.name);
+        expect(g.bottom, d.padding.bottom, reason: d.name);
+        expect(g.left, g.right, reason: d.name);
+        expect(
+          [0.0, previewBackGestureWidth],
+          contains(g.left),
+          reason: d.name,
+        );
+      }
+    });
+
+    test('태블릿 가로 (제스처): 태블릿 가로와 같은 화면을 제스처 내비게이션으로 쓴 좌우 분할 배치다 (#62)', () {
+      final gesture = previewDevices.singleWhere(
+        (d) => d.name == '태블릿 가로 (제스처)',
+      );
+      final buttons = previewDevices.singleWhere((d) => d.name == '태블릿 가로');
+      expect(gesture.size, buttons.size);
+      expect(gesture.displayFeatures, isEmpty);
+      expect(gesture.foldable, isFalse);
+      expect(
+        FormFactor.arrangementOf(gesture.size, gesture.displayFeatures),
+        ScreenArrangement.split,
+      );
+      // 3버튼 작업 표시줄 쪽은 좌우 제스처 영역이 없고, 제스처 쪽은 양쪽에 뒤로가기 영역이 있다.
+      expect(buttons.systemGestureInsets.horizontal, 0);
+      expect(gesture.systemGestureInsets.left, previewBackGestureWidth);
+      expect(gesture.systemGestureInsets.right, previewBackGestureWidth);
+      // 상태 표시줄은 같고, 아래는 3버튼 작업 표시줄(48)보다 낮은 제스처 핸들 높이다.
+      expect(gesture.padding.top, buttons.padding.top);
+      expect(gesture.padding.bottom, lessThan(buttons.padding.bottom));
     });
 
     test(
@@ -930,22 +993,14 @@ void main() {
       expect(scale, lessThan(1));
       double toScreenX(double globalX) => (globalX - screen.left) / scale;
 
-      /// 전역 좌표 [at]을 누르고, (누른 순간의 로그, 손을 뗀 뒤의 로그)를 ` | `로 이어 돌려준다.
-      /// (레코드 안의 List는 `==`로 비교되지 않으므로 문자열로 잇는다.)
-      Future<(String, String)> pressAt(Offset at) async {
-        final g = await tester.startGesture(at);
-        await tester.pump();
-        final down = _logLines(tester).join(' | ');
-        await g.up();
-        await tester.pump();
-        return (down, _logLines(tester).join(' | '));
-      }
-
       // 왼쪽 끝 열(7)의 왼쪽 가장자리 — 화면 기준으로 뒤로가기 영역 안
       final left = tester.getRect(_keycap(CalcKeyId.num7));
       final leftX = left.left + 2 * scale;
       expect(toScreenX(leftX), lessThan(device.systemGestureInsets.left));
-      expect(await pressAt(Offset(leftX, left.center.dy)), ('', '1. 7'));
+      expect(await _pressAt(tester, Offset(leftX, left.center.dy)), (
+        '',
+        '1. 7',
+      ));
 
       // 오른쪽 끝 열(AC)의 오른쪽 가장자리
       final right = tester.getRect(_keycap(CalcKeyId.ac));
@@ -954,17 +1009,110 @@ void main() {
         toScreenX(rightX),
         greaterThan(device.size.width - device.systemGestureInsets.right),
       );
-      expect(await pressAt(Offset(rightX, right.center.dy)), (
+      expect(await _pressAt(tester, Offset(rightX, right.center.dy)), (
         '1. 7',
         '2. AC | 1. 7',
       ));
 
       // 가운데 열(8)은 누르는 순간 입력된다.
-      expect(await pressAt(tester.getCenter(_keycap(CalcKeyId.num8))), (
-        '3. 8 | 2. AC | 1. 7',
-        '3. 8 | 2. AC | 1. 7',
-      ));
+      expect(
+        await _pressAt(tester, tester.getCenter(_keycap(CalcKeyId.num8))),
+        ('3. 8 | 2. AC | 1. 7', '3. 8 | 2. AC | 1. 7'),
+      );
     });
+
+    // 좌우 분할 배치(#24)에서 키패드는 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62). 제스처 내비게이션이면 그 바깥쪽
+    // 끝 열 키의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가
+    // 아니라 터치 위치 기준이라 같은 키의 가운데와 LCD 쪽을 향한 안쪽 끝 열은 누르는 순간 입력된다.
+    // 같은 화면의 3버튼 프리셋(태블릿 가로)은 좌우 제스처 영역이 없어 같은 자리를 눌러도 누르는 순간 입력된다 — 대조군.
+    // 폴더블 내부 화면도 펼치면 접힘선 기준 좌우 배치라 바깥쪽 열이 뒤로가기 영역에 걸린다(README 안내) —
+    // 이 화면은 기본 창에 축소 없이 들어간다.
+    for (final (name, gestureNav, scaled) in const [
+      ('태블릿 가로 (제스처)', true, true),
+      ('태블릿 가로', false, true),
+      ('폴더블 내부', true, false),
+      ('가로형 폴더블 내부', true, false),
+    ]) {
+      for (final handedness in Handedness.values) {
+        testWidgets(
+          gestureNav
+              ? '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽은 손을 뗄 때, '
+                    '그 키 가운데와 안쪽 끝 열은 누르는 순간 입력된다'
+              : '$name·${handedness.name}: 키패드 바깥쪽 끝 열의 화면 가장자리 쪽·그 키 가운데·'
+                    '안쪽 끝 열 모두 누르는 순간 입력된다',
+          (tester) async {
+            await _pumpPreview(tester);
+            final index = previewDevices.indexWhere((d) => d.name == name);
+            expect(index, isNonNegative);
+            final device = previewDevices[index];
+            await _selectDevice(tester, index);
+            await _setHandedness(tester, handedness);
+            expect(tester.takeException(), isNull);
+
+            // 태블릿은 축소 표시 중이라 화면 좌표 변환 경로까지 확인된다.
+            final screen = tester.getRect(_deviceScreen);
+            final scale = screen.width / device.size.width;
+            if (scaled) {
+              expect(scale, lessThan(1));
+            } else {
+              expect(scale, 1);
+            }
+            double toScreenX(double globalX) => (globalX - screen.left) / scale;
+            final gesture = device.systemGestureInsets;
+            bool inBackZone(double x) =>
+                x < gesture.left || x > device.size.width - gesture.right;
+
+            // 좌우 분할 배치: 키패드가 주로 쓰는 손 쪽에 있다.
+            final keypad = tester.getRect(
+              find.byKey(const ValueKey('calc-keypad')),
+            );
+            final lcd = tester.getRect(find.byType(LcdDisplay));
+            expect(keypad.center.dx > lcd.center.dx, handedness.keypadOnRight);
+
+            // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
+            final num7 = tester.getRect(_keycap(CalcKeyId.num7));
+            final ac = tester.getRect(_keycap(CalcKeyId.ac));
+            final num7At = Offset(num7.left + 2 * scale, num7.center.dy);
+            final acAt = Offset(ac.right - 2 * scale, ac.center.dy);
+            final (
+              outerAt,
+              outerCenter,
+              outerLabel,
+              innerAt,
+              innerLabel,
+            ) = handedness.keypadOnRight
+                ? (acAt, ac.center, 'AC', num7At, '7')
+                : (num7At, num7.center, '7', acAt, 'AC');
+
+            // 누르는 바깥쪽 가장자리는 어느 프리셋이든 화면 끝에서 뒤로가기 영역 폭보다 가깝다 — 그래야 대조군이
+            // "같은 자리를 눌렀다"가 된다. 그 자리는 제스처 내비게이션에서만 영역 안이고, 그 키 가운데와 안쪽 열은 늘 밖이다.
+            final outerX = toScreenX(outerAt.dx);
+            expect(
+              handedness.keypadOnRight ? device.size.width - outerX : outerX,
+              lessThan(previewBackGestureWidth),
+            );
+            expect(inBackZone(outerX), gestureNav);
+            expect(inBackZone(toScreenX(outerCenter.dx)), isFalse);
+            expect(inBackZone(toScreenX(innerAt.dx)), isFalse);
+
+            expect(
+              await _pressAt(tester, outerAt),
+              gestureNav
+                  ? ('', '1. $outerLabel')
+                  : ('1. $outerLabel', '1. $outerLabel'),
+            );
+            expect(await _pressAt(tester, outerCenter), (
+              '2. $outerLabel | 1. $outerLabel',
+              '2. $outerLabel | 1. $outerLabel',
+            ));
+            expect(await _pressAt(tester, innerAt), (
+              '3. $innerLabel | 2. $outerLabel | 1. $outerLabel',
+              '3. $innerLabel | 2. $outerLabel | 1. $outerLabel',
+            ));
+          },
+        );
+      }
+    }
 
     testWidgets('축소 표시 중에도 키를 누를 수 있다', (tester) async {
       await _pumpPreview(tester, window: const Size(1000, 700));
@@ -1021,13 +1169,14 @@ void main() {
   });
 
   group('기기 틀 안의 대화상자 (#72)', () {
-    /// 좌우 분할 배치(설정 버튼이 있는) 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블은 뺀다)
+    /// 좌우 분할 배치(설정 버튼이 있는) 3버튼 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블, 제스처 프리셋은 뺀다)
     int tabletLandscape() {
       final i = previewDevices.indexWhere(
         (d) =>
             d.size.shortestSide >= 600 &&
             d.size.width > d.size.height &&
-            d.displayFeatures.isEmpty,
+            d.displayFeatures.isEmpty &&
+            d.systemGestureInsets.horizontal == 0,
       );
       expect(i, isNonNegative);
       return i;
@@ -1319,24 +1468,6 @@ void main() {
       ),
     );
 
-    /// 설정 대화상자로 손잡이를 [handedness]로 바꾸고 닫는다.
-    Future<void> setHandedness(
-      WidgetTester tester,
-      Handedness handedness,
-    ) async {
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(CalculatorScreen)),
-      );
-      if (container.read(handednessProvider) == handedness) return;
-      await tester.tap(find.byKey(SettingsButton.buttonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(HandednessDialog.optionKeyOf(handedness)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(HandednessDialog.closeKey));
-      await tester.pumpAndSettle();
-      expect(container.read(handednessProvider), handedness);
-    }
-
     // 1280×900은 축소 없이(100%), 1000×700은 축소해서(약 78%) 그린다 — 축소 좌표 경로까지 확인한다.
     const windows = [_window, Size(1000, 700)];
 
@@ -1357,7 +1488,7 @@ void main() {
           } else {
             expect(scaleOf(tester, device), lessThan(1));
           }
-          await setHandedness(tester, handedness);
+          await _setHandedness(tester, handedness);
           expect(tester.takeException(), isNull);
 
           final hingeX = previewFoldInnerFold.bounds.left;
