@@ -354,7 +354,8 @@ String? describePreviewModifierChange(KeyModifier before, KeyModifier after) {
 ///
 /// ## Navigator 구조 (#72)
 /// `AltCalcApp.frameBuilder`로 앱을 감싸므로 [screen]은 **앱의 루트 Navigator**(첫 화면 `CalculatorScreen`)와
-/// 그 위의 대비 테마(가장 가까운 MediaQuery의 고대비 설정으로 고르는 `AnimatedTheme`, #97)다.
+/// 그 위의 대비 테마(가장 가까운 MediaQuery의 고대비 설정으로 고르는 `AnimatedTheme`, #97 — 텍스트 선택 색·Cupertino
+/// 테마도 함께 다시 정한다, #107)다.
 /// 이것을 기기 틀 안에 그대로 넣어, 실제 앱과 같은 Navigator 구조로 띄운다. 그래서 화면이 띄우는
 /// 대화상자·툴팁·SnackBar와 프레임워크가 루트 Overlay에 그리는 것(텍스트 선택 툴바·컨텍스트 메뉴 등)이 모두
 /// 기기 틀 안에 그 기기의 MediaQuery(크기·인셋·글자 배율)로, 기기 틀의 축소와 함께 그려진다.
@@ -531,8 +532,8 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
 ///
 /// 화면 자리에 앱의 루트 Navigator([screen])를 두므로, 계산기 화면이 띄우는 대화상자·툴팁 등도
-/// 기기 틀 안에 그 기기의 MediaQuery로 뜬다(#72, [KeyPreviewScreen] 참조). 대화상자 테마도 이 틀의
-/// 고대비 설정을 따른다(#97).
+/// 기기 틀 안에 그 기기의 MediaQuery로 뜬다(#72, [KeyPreviewScreen] 참조). 대화상자 테마(#97)와 MaterialApp이
+/// 테마로 정하는 텍스트 선택·커서 색, Cupertino 테마(#107)도 호스트가 아니라 이 틀의 고대비 설정을 따른다.
 class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
   final double textScale;

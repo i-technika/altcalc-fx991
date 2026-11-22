@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoTheme;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -237,6 +238,62 @@ Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
   return node;
 }
 
+/// MaterialApp이 자기 테마로 정하는 앱 수준 요소 (#107) — 텍스트 선택·커서 기본 색과 Cupertino 테마의 주요 색
+typedef _AppLevel = ({
+  Color? selection,
+  Color? cursor,
+  Brightness? cupertinoBrightness,
+  Color cupertinoPrimary,
+  Color cupertinoPrimaryContrasting,
+  Color cupertinoScaffold,
+});
+
+/// [context]에서 보이는 앱 수준 요소
+_AppLevel _appLevelOf(BuildContext context) {
+  final selection = DefaultSelectionStyle.of(context);
+  final cupertino = CupertinoTheme.of(context);
+  return (
+    selection: selection.selectionColor,
+    cursor: selection.cursorColor,
+    cupertinoBrightness: cupertino.brightness,
+    cupertinoPrimary: cupertino.primaryColor,
+    cupertinoPrimaryContrasting: cupertino.primaryContrastingColor,
+    cupertinoScaffold: cupertino.scaffoldBackgroundColor,
+  );
+}
+
+/// 기기 고대비가 [highContrast]일 때 MaterialApp이 정한 앱 수준 요소 — 화면 위에서 다시 정하기 전의
+/// `MaterialApp.builder` 문맥에서 읽는다.
+Future<_AppLevel> _materialAppLevel(
+  WidgetTester tester,
+  bool highContrast,
+) async {
+  _setDevice(tester, highContrast: highContrast);
+  _AppLevel? level;
+  await _pumpApp(
+    tester,
+    frameBuilder: (context, screen) {
+      level = _appLevelOf(context);
+      return screen;
+    },
+  );
+  return level!;
+}
+
+/// 계산기 화면(설정 버튼)과 설정 대화상자에서 보이는 앱 수준 요소가 [expected]인지
+Future<void> _expectScreenAppLevel(
+  WidgetTester tester,
+  _AppLevel expected,
+) async {
+  expect(_appLevelOf(tester.element(_settingsButton)), expected, reason: '화면');
+  await _openDialog(tester);
+  expect(
+    _appLevelOf(tester.element(find.byType(HandednessDialog))),
+    expected,
+    reason: '대화상자',
+  );
+}
+
 /// 키보드 조작 중처럼 포커스 표시를 켜고 [target]에 포커스를 준다.
 Future<void> _focusByKeyboard(WidgetTester tester, Finder target) async {
   _setHighlightStrategy(FocusHighlightStrategy.alwaysTraditional);
@@ -313,6 +370,84 @@ void main() {
         },
       );
     }
+  });
+
+  group('MaterialApp 수준 요소: 텍스트 선택 색·Cupertino 테마 (#107)', () {
+    for (final highContrast in [false, true]) {
+      testWidgets(
+        '실제 앱(틀 없음, 고대비=$highContrast): 화면·대화상자의 값은 MaterialApp이 정한 값과 같다',
+        (tester) async {
+          final reference = await _materialAppLevel(tester, highContrast);
+          final theme = highContrast
+              ? CalcTheme.materialHighContrastTheme
+              : CalcTheme.materialTheme;
+          // 비교 기준이 MaterialApp의 계산(primary 40%·primary, Material 기반 Cupertino 테마)인지 — 전제 확인
+          expect(
+            reference.selection,
+            theme.colorScheme.primary.withValues(alpha: 0.40),
+          );
+          expect(reference.cursor, theme.colorScheme.primary);
+          expect(reference.cupertinoPrimary, theme.colorScheme.primary);
+          expect(reference.cupertinoBrightness, Brightness.dark);
+          await _expectScreenAppLevel(tester, reference);
+        },
+      );
+    }
+
+    testWidgets('두 테마의 값이 서로 달라 아래 틀 테스트가 어느 쪽을 따르는지 가려낸다', (tester) async {
+      final standard = await _materialAppLevel(tester, false);
+      final high = await _materialAppLevel(tester, true);
+      expect(high.selection, isNot(standard.selection));
+      expect(high.cursor, isNot(standard.cursor));
+      expect(high.cupertinoPrimary, isNot(standard.cupertinoPrimary));
+    });
+
+    for (final (host, frame) in [(false, true), (true, false)]) {
+      testWidgets(
+        '도구용 틀이 고대비를 바꾸면(기기 $host → 틀 $frame) 틀 안 화면·대화상자는 틀 설정의 값을 따른다 (개발용 미리보기)',
+        (tester) async {
+          final expected = await _materialAppLevel(tester, frame);
+          _setDevice(tester, highContrast: host);
+          await _pumpApp(
+            tester,
+            frameBuilder: (context, screen) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(highContrast: frame),
+              child: screen,
+            ),
+          );
+          await _expectScreenAppLevel(tester, expected);
+        },
+      );
+    }
+
+    testWidgets('틀의 고대비를 실행 중에 켜고 끄면 틀 안 값도 그 설정으로 바뀐다', (tester) async {
+      final references = {
+        for (final v in [false, true]) v: await _materialAppLevel(tester, v),
+      };
+      _setDevice(tester, highContrast: false);
+      final frame = ValueNotifier(false);
+      addTearDown(frame.dispose);
+      await _pumpApp(
+        tester,
+        frameBuilder: (context, screen) => ValueListenableBuilder<bool>(
+          valueListenable: frame,
+          builder: (context, value, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(highContrast: value),
+            child: child!,
+          ),
+          child: screen,
+        ),
+      );
+      for (final value in [true, false]) {
+        frame.value = value;
+        await tester.pumpAndSettle();
+        expect(
+          _appLevelOf(tester.element(_settingsButton)),
+          references[value],
+          reason: '틀 고대비=$value',
+        );
+      }
+    });
   });
 
   group('고대비 설정에서 설정 대화상자 대비 (#97)', () {
