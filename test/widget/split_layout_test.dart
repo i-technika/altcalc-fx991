@@ -1654,7 +1654,82 @@ void _hingeLayoutTests() {
       }
     }
 
-    testWidgets('좌우 분할 배치(접힘선 없음): 대화상자는 손잡이와 무관하게 화면 가운데 같은 자리다', (
+    // 손잡이에 따라 배치가 갈리는 비대칭 세로 접힘선 (x=560, 오른쪽 인셋 48 → 오른쪽 절반 233dp).
+    // 오른손잡이는 위아래 배치, 왼손잡이는 접힘선 기준 배치이고 버튼은 늘 오른쪽 좁은 절반 쪽에 있다.
+    // `_splitLikeApp`은 Navigator의 인셋으로 절반 폭을 재므로 View에도 같은 인셋을 넣는다(넣지 않으면 실제 앱에
+    // 없는 "따라가기"가 일어난다).
+    for (final (name, fold) in [
+      ('펼친 폭 0', _foldAt(const Rect.fromLTWH(560, 0, 0, 701))),
+      ('반 접힘', _halfOpenedAt(const Rect.fromLTWH(560, 0, 0, 701))),
+    ]) {
+      testWidgets('비대칭 접힘선($name): 손잡이를 바꿔 배치가 바뀌어도 대화상자는 그대로다', (
+        tester,
+      ) async {
+        const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
+        final ratio = tester.view.devicePixelRatio;
+        tester.view.padding = FakeViewPadding(
+          top: padding.top * ratio,
+          right: padding.right * ratio,
+          bottom: padding.bottom * ratio,
+        );
+        addTearDown(tester.view.resetPadding);
+        final (container, _) = await _pump(
+          tester,
+          size: const Size(841, 701),
+          padding: padding,
+          displayFeatures: [fold],
+        );
+        expect(isStackedArrangement(tester), isTrue);
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        final opened = tester.getRect(_dialogSurface);
+        final buttonBefore = tester.getRect(_settings);
+
+        for (final h in [Handedness.left, Handedness.right]) {
+          await tester.tap(_option(h));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(container.read(handednessProvider), h);
+          expect(isStackedArrangement(tester), h == Handedness.right);
+          if (h == Handedness.left) {
+            expect(tester.getRect(_settings), isNot(buttonBefore));
+          }
+          expect(tester.getRect(_dialogSurface), opened, reason: '$h');
+        }
+      });
+    }
+
+    testWidgets('반 접은 테이블톱: 버튼은 아래 절반 안에서만 옮겨 가고 대화상자는 아래 절반 그 자리다', (
+      tester,
+    ) async {
+      const hingeY = 420.5;
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(701, 841),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
+        displayFeatures: [
+          _halfOpenedAt(const Rect.fromLTWH(0, hingeY, 701, 0)),
+        ],
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final opened = tester.getRect(_dialogSurface);
+      expect(opened.top, greaterThanOrEqualTo(hingeY));
+      final buttonBefore = tester.getRect(_settings);
+
+      await tester.tap(_option(Handedness.left));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(handednessProvider), Handedness.left);
+      final button = tester.getRect(_settings);
+      expect(button, isNot(buttonBefore));
+      expect(button.top, greaterThanOrEqualTo(hingeY));
+      expect(tester.getRect(_dialogSurface), opened);
+    });
+
+    // 접힘선이 없으면 anchor가 위치에 영향이 없어 "따라가기"로 바꿔도 통과한다 — 여기서는 고른 뒤 닫히지 않고
+    // 같은 자리에 남는지만 본다.
+    testWidgets('좌우 분할 배치(접힘선 없음): 고른 뒤에도 닫히지 않고 화면 가운데 같은 자리다', (
       tester,
     ) async {
       const size = Size(1280, 800);
