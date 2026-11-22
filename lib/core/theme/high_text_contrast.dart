@@ -36,6 +36,11 @@ class SystemHighTextContrast implements ValueListenable<bool> {
   /// 시작 중이거나 끝난 [start]의 첫 값 대기. 다시 부른 [start]도 같은 대기를 돌려준다.
   Future<void>? _started;
 
+  /// 첫 값 대기를 끝내는 신호. 구독을 끝낼 때도 완료해 남은 대기가 시간 초과까지 남지 않게 한다.
+  Completer<void>? _firstValue;
+
+  bool _disposed = false;
+
   @override
   bool get value => _value.value;
 
@@ -51,8 +56,12 @@ class SystemHighTextContrast implements ValueListenable<bool> {
 
   /// 설정 구독을 시작하고 첫 값(또는 [firstValueTimeout])을 기다린다. 첫 화면부터 맞는 팔레트로 그리기 위해
   /// `main()`이 앱 시작 전에 기다린다. 여러 번 불러도 구독은 한 번이고, 첫 호출이 끝나기 전에 다시 불러도
-  /// 같은 첫 값을 기다린다. 실패해도 오류를 내보내지 않는다(꺼짐 유지).
+  /// 같은 첫 값을 기다린다. 실패해도 오류를 내보내지 않는다(꺼짐 유지):
+  /// - 플랫폼이 보낸 오류 이벤트: 기록하고 첫 값 대기를 끝낸다. 구독은 남아 다음 값을 받는다.
+  /// - 구독 요청(`listen`) 자체의 실패(채널 미등록·플랫폼 쪽 예외): Flutter가 `FlutterError.reportError`로만
+  ///   알리고 스트림에는 오지 않으므로, [firstValueTimeout] 뒤 꺼짐으로 시작한다.
   Future<void> start() {
+    assert(!_disposed, 'dispose()한 SystemHighTextContrast는 다시 시작할 수 없다');
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return Future.value();
     }
@@ -60,7 +69,8 @@ class SystemHighTextContrast implements ValueListenable<bool> {
   }
 
   Future<void> _listen() async {
-    final first = Completer<void>();
+    final first = _firstValue = Completer<void>();
+    var timedOut = false;
     void completeFirst() {
       if (!first.isCompleted) first.complete();
     }
@@ -78,10 +88,14 @@ class SystemHighTextContrast implements ValueListenable<bool> {
     );
     await first.future.timeout(
       firstValueTimeout,
-      onTimeout: () => debugPrint(
-        '고대비 텍스트 설정 첫 값이 ${firstValueTimeout.inMilliseconds}ms 안에 오지 않아 꺼짐으로 시작한다',
-      ),
+      onTimeout: () => timedOut = true,
     );
+    if (identical(_firstValue, first)) _firstValue = null;
+    if (timedOut) {
+      debugPrint(
+        '고대비 텍스트 설정 첫 값이 ${firstValueTimeout.inMilliseconds}ms 안에 오지 않아 꺼짐으로 시작한다',
+      );
+    }
   }
 
   /// 구독을 끝내고 값을 꺼짐으로 되돌린다 (테스트용). 플랫폼 쪽 구독 해제 응답은 기다리지 않는다.
@@ -95,6 +109,7 @@ class SystemHighTextContrast implements ValueListenable<bool> {
   @visibleForTesting
   void dispose() {
     _cancel();
+    _disposed = true;
     _value.dispose();
   }
 
@@ -102,6 +117,10 @@ class SystemHighTextContrast implements ValueListenable<bool> {
     final subscription = _subscription;
     _subscription = null;
     _started = null;
+    // 첫 값을 기다리던 start()도 바로 끝낸다 (멈춘 수신기가 시간 초과 기록을 남기지 않게)
+    final first = _firstValue;
+    _firstValue = null;
+    if (first != null && !first.isCompleted) first.complete();
     if (subscription != null) unawaited(subscription.cancel());
   }
 }
@@ -115,7 +134,8 @@ class HighTextContrastScope extends InheritedNotifier<ValueListenable<bool>> {
     required super.child,
   });
 
-  /// 가장 가까운 범위의 값. 범위 밖(위젯 단독 테스트·개발 도구 등)이면 `false`.
+  /// 가장 가까운 범위의 값. 범위 밖(위젯 단독 테스트 등)이면 `false`. 개발용 미리보기는 범위 안이지만
+  /// 수신을 시작하지 않으므로([SystemHighTextContrast.start]는 `main()`만 부른다) `false`다.
   static bool of(BuildContext context) =>
       context
           .dependOnInheritedWidgetOfExactType<HighTextContrastScope>()

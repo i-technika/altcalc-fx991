@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -143,6 +144,45 @@ void main() {
       expect(receiver.value, isTrue);
     });
 
+    testWidgets('구독 요청(listen) 자체가 실패하면 제한 시간 뒤 꺼짐으로 시작한다', (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+        SystemHighTextContrast.channel,
+        MockStreamHandler.inline(
+          onListen: (arguments, events) =>
+              throw PlatformException(code: 'listen-failed'),
+        ),
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockStreamHandler(
+          SystemHighTextContrast.channel,
+          null,
+        ),
+      );
+      final receiver = _receiver();
+      var done = false;
+      final started = receiver.start().then((_) => done = true);
+      await tester.pump();
+      // Flutter가 FlutterError로만 알리고 스트림에는 오지 않는다
+      expect(tester.takeException(), isA<PlatformException>());
+      expect(done, isFalse);
+      await tester.pump(SystemHighTextContrast.firstValueTimeout);
+      await started;
+      expect(receiver.value, isFalse);
+    });
+
+    testWidgets('첫 값을 기다리는 중에 멈추면 대기가 바로 끝난다', (tester) async {
+      _FakeChannel(tester, initial: null);
+      final receiver = _receiver();
+      var done = false;
+      final started = receiver.start().then((_) => done = true);
+      await tester.pump();
+      receiver.stop();
+      await tester.pump();
+      await started;
+      expect(done, isTrue);
+      expect(receiver.isListening, isFalse);
+    });
+
     testWidgets('bool이 아닌 값은 무시한다', (tester) async {
       final channel = _FakeChannel(tester, initial: 1);
       final receiver = _receiver();
@@ -234,9 +274,11 @@ void main() {
     ]) {
       testWidgets('MediaQuery $mediaQuery · 고대비 텍스트 $highText → '
           '${expected.isHighContrast ? '고대비' : '일반'}', (tester) async {
+        final notifier = ValueNotifier(highText);
+        addTearDown(notifier.dispose);
         final built = await pumpProbe(
           tester,
-          highText: ValueNotifier(highText),
+          highText: notifier,
           highContrast: mediaQuery,
         );
         expect(built.single, expected);

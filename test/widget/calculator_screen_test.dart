@@ -174,13 +174,14 @@ void main() {
           onListen: (arguments, events) => events.success(enabled),
         ),
       );
-      addTearDown(SystemHighTextContrast.instance.stop);
+      // 정리는 나중에 등록한 것부터 실행된다 — 구독을 먼저 끝낸 뒤 목을 푼다.
       addTearDown(
         () => tester.binding.defaultBinaryMessenger.setMockStreamHandler(
           SystemHighTextContrast.channel,
           null,
         ),
       );
+      addTearDown(SystemHighTextContrast.instance.stop);
     }
 
     /// 물리 화면과 창을 [size](dp)로 맞춘다 (화면 배율 2).
