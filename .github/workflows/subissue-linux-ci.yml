@@ -32,11 +32,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78).
+      # 액션의 flutter-version-file은 yq가 필요해(Windows 러너는 매번 Chocolatey로 설치) 스크립트로 직접 읽는다 (#90)
+      - name: Read pinned Flutter version
+        id: flutter-pin
+        shell: bash
+        run: bash .github/scripts/read-flutter-version.sh
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # SDK 버전은 pubspec.yaml의 environment.flutter 하나로 고정한다 (#78)
-          flutter-version-file: pubspec.yaml
+          flutter-version: ${{ steps.flutter-pin.outputs.version }}
           cache: true
 
       - name: Verify Flutter environment
