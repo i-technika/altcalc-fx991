@@ -35,6 +35,11 @@ gh issue view <번호> --json number,title,body,labels,milestone,parent,state,is
 - 상위 에픽(`parent.number`)으로 마일스톤 번호 N을 정하고 베이스 브랜치 `milestone/m<N>`을 확인한다.
 - 같은 마일스톤의 다른 서브이슈 본문도 훑어 **이번 이슈의 범위 경계**를 파악한다(다음 이슈의 일을 미리 하지 않는다).
 - 원격/로컬에 이미 `issue/<번호>-*` 브랜치나 미커밋 작업물(이전 에이전트의 WIP 등)이 있으면 내용을 검토해 재사용 여부를 판단한다.
+- 순번 확인: `bash .claude/scripts/subissue-seq.sh ensure <번호>` — 먼저 만든 이슈와 순번이 겹치면 이 이슈가 새 순번으로 양보한다
+  (구버전 스킬 세션·수동 생성으로 생긴 중복을 착수 전에 잡는다). 종료 코드 4(바꿨지만 검사 미완료)면 0이 될 때까지 다시 실행한다.
+  - 순번이 바뀌었을 수 있으므로 ensure 뒤 `gh issue view <번호> --json title --jq .title`로 **제목을 다시 읽어** 이후 PR 제목·보고에 쓴다.
+  - 이 이슈의 PR이 이미 열려 있으면(재사용) 그 제목도 맞춘다: `gh pr edit <PR> --title "<새 이슈 제목> (#<번호>)"`
+- 담당자 지정: `gh issue edit <번호> --add-assignee i-technika` (이미 지정돼 있으면 그대로 둔다)
 - 프로젝트 보드: `bash .claude/scripts/set-project-status.sh <번호> "In Progress"`
 
 ### 2. 브랜치 생성
@@ -82,8 +87,10 @@ Closes #<번호>
 gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   --title "<이슈 제목 그대로, 예: [M1-2] ...> (#<번호>)" \
   --body-file "<scratchpad>/pr-<번호>.md" \
-  --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+  --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991" \
+  --assignee i-technika
 ```
+- 이 브랜치의 PR이 이미 있으면(이전 작업 재사용) 새로 만들지 않고 담당자만 붙인다: `gh pr edit <PR> --add-assignee i-technika`
 
 ### 5. 적대적 코드리뷰 R1 (독립 서브에이전트)
 - 구현자의 편향을 피하기 위해 **새 컨텍스트의 `general-purpose` 서브에이전트**에게 리뷰를 맡긴다. 프롬프트에 포함할 것:
@@ -109,19 +116,36 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 
 ### 9. 후속 이슈 문의
 - 구현·리뷰 중 이번 범위 밖으로 미룬 개선점/리팩토링/검증 과제를 정리해 사용자에게 **등록 여부를 묻는다** (AskUserQuestion, multiSelect).
-- 승인된 항목만 생성한다:
+- 승인된 항목만 생성한다. **순번을 직접 정하거나 `gh issue create`를 직접 부르지 않고 `subissue-seq.sh create`로 만든다.**
+  여러 세션이 동시에 후속 이슈를 만들면 같은 순번을 집기 때문이다(과거 M1-39~47 중복). `create`는 다음 순번 발급 → 생성 →
+  충돌 검사 → (먼저 만든 이슈와 겹치면) 새 순번으로 양보를 한 번에 하고, 마지막 줄에 `<신규번호> <최종 순번>`을 출력한다.
+- **마일스톤 기준**: `M<N>`·`<마일스톤 이름>`·`<에픽번호>`는 지금 작업 중인 마일스톤이 아니라 **그 후속 이슈가 속할 마일스톤** 기준이다
+  (실물 대조 등 다른 마일스톤 과제는 그 마일스톤의 접두사·에픽으로 만든다 — 예: M3 과제면 `create M3 ...`, 에픽 #3).
+- 셸 변수는 Bash 도구 호출 사이에 남지 않으므로, 항목마다 아래를 **한 번의 Bash 호출**로 실행한다:
   ```bash
-  gh issue create --title "[M<N>-<다음순번>] <제목>" --body-file <파일> \
-    --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"
+  S=.claude/scripts/subissue-seq.sh
+  OUT=$(bash $S create M<N> "<제목 — [M..] 접두사 없이>" --body-file <파일> \
+    --label sub-issue --milestone "<마일스톤 이름>" --project "AltCalc FX-991"); RC=$?
+  if [ $RC -eq 4 ]; then
+    # 이슈는 만들어졌지만 순번 검사를 끝내지 못함 → 같은 이슈로 검사를 마저 한다 (다시 create하지 않는다)
+    NUM=${OUT%% *}; echo "#$NUM 생성됨, 검사 마무리"; OUT=$(bash $S ensure "$NUM"); RC=$?
+  fi
+  [ $RC -eq 0 ] || { echo "중단(rc=$RC, 출력='$OUT') — 보고 후 사용자와 상의"; exit 1; }
+  NUM=${OUT%% *}; SEQ=${OUT##* }; echo "생성: #$NUM [$SEQ]"
   # 상위 에픽에 서브이슈로 연결
   gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
-    -f p="$(gh issue view <에픽번호> --json id --jq .id)" -f c="$(gh issue view <신규번호> --json id --jq .id)"
+    -f p="$(gh issue view <에픽번호> --json id --jq .id)" -f c="$(gh issue view "$NUM" --json id --jq .id)"
   # 이슈 타입(Task/Bug/Feature) 지정
   gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
-    -f i="<신규 이슈 node id>" -f t="<타입 id>"
+    -f i="$(gh issue view "$NUM" --json id --jq .id)" -f t="<타입 id>"
   ```
   타입 ID: Task `IT_kwDOBMwL0c4PCk6t`, Feature `IT_kwDOBMwL0c4PCk6v` (Bug는 `gh api graphql`로 `repository.issueTypes` 조회)
-- 실물 대조 등 다른 마일스톤에 속하는 과제는 해당 마일스톤으로 지정한다.
+- 종료 코드: 0 성공 / 4 이슈는 만들어졌지만 검사 미완료(위 블록이 `ensure`로 마무리) / 1·2 만들지 않음(gh 오류·인자 오류).
+  위 블록이 중단되면 출력의 번호로 이슈가 남았는지 확인하고, 남았다면 `ensure <번호>`가 0으로 끝난 뒤 에픽 연결·타입 지정을 이어서 한다.
+  **임의로 순번을 정하거나 같은 항목을 다시 create하지 않는다**(중복 이슈가 생긴다).
+- 12단계 보고에는 `create`가 출력한 **최종 순번**을 쓴다(양보로 바뀌었을 수 있다).
+- 후속 이슈는 아직 착수 전이므로 담당자를 지정하지 않는다 (착수할 때 1단계에서 지정).
+- 스크립트 사용법·종료 코드는 `.claude/scripts/subissue-seq.sh` 머리 주석, 동작 검사는 `test/unit/subissue_seq_test.dart`.
 
 ### 10. Linux CI 확인
 ```bash
