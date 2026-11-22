@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'core/layout/form_factor.dart';
 import 'core/theme/calc_theme.dart';
 import 'core/theme/font_licenses.dart';
+import 'core/theme/high_text_contrast.dart';
 import 'presentation/l10n/device_locale_scope.dart';
 import 'presentation/providers/device_provider.dart';
 import 'presentation/providers/settings_provider.dart';
@@ -16,12 +18,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
   // 방향 요청과 설정 저장소 열기를 함께 진행한다. 손잡이 설정이 첫 화면부터 반영되도록 둘 다 기다린다 (#24).
-  final (foldable, settings) = await (
+  // Android "고대비 텍스트" 첫 값도 함께 기다려 첫 화면부터 맞는 팔레트로 그린다 (#95).
+  final (foldable, settings, _) = await (
     FormFactor.queryHingeSensor().then((hinge) async {
       await DeviceOrientationLock.instance.start(hasHingeSensor: hinge);
       return hinge;
     }),
     openSettingsStorage(),
+    SystemHighTextContrast.instance.start(),
   ).wait;
   runApp(
     ProviderScope(
@@ -139,6 +143,10 @@ class AltCalcApp extends StatelessWidget {
   /// 첫 화면 (기본: [CalculatorScreen])
   final Widget home;
 
+  /// Android "고대비 텍스트" 켜짐 여부 (#95, [HighTextContrastScope]로 화면에 알린다).
+  /// `null`이면 [SystemHighTextContrast.instance] — 테스트가 값을 바꿔 끼울 때만 넘긴다.
+  final ValueListenable<bool>? highTextContrast;
+
   /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
@@ -147,6 +155,7 @@ class AltCalcApp extends StatelessWidget {
     super.key,
     this.home = const CalculatorScreen(),
     this.frameBuilder,
+    this.highTextContrast,
   });
 
   @override
@@ -158,11 +167,15 @@ class AltCalcApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: CalcTheme.bodyBackground,
       ),
-      // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
+      // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20).
+      // 고대비 팔레트가 Android "고대비 텍스트"도 따르도록 그 값을 알린다 (#95).
       builder: (context, child) {
         final screen = child ?? const SizedBox.shrink();
         return DeviceLocaleScope(
-          child: frameBuilder?.call(context, screen) ?? screen,
+          child: HighTextContrastScope(
+            notifier: highTextContrast ?? SystemHighTextContrast.instance,
+            child: frameBuilder?.call(context, screen) ?? screen,
+          ),
         );
       },
       home: home,

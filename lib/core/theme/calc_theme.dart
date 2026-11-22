@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../constants/key_definitions.dart';
+import 'high_text_contrast.dart';
 
 /// 카시오 fx-991EX ClassWiz 계산기의 테마 정의.
 ///
@@ -180,11 +181,14 @@ abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 고대비 모드 (High Contrast) — #54
   // ───────────────────────────────────────────
-  // `MediaQuery.highContrastOf`가 켜지면 [CalcPalette.highContrast]가 아래 색을 쓴다. 여기 없는 색은 일반 모드와 같다.
-  // 플랫폼마다 켜지는 설정이 다르다(Flutter 엔진 기준):
-  // - iOS: 손쉬운 사용 › 디스플레이 및 텍스트 크기 › "대비 증가" (`UIAccessibility.isDarkerSystemColorsEnabled`)
-  // - Android 14(API 34) 이상: 접근성 › 색상 및 동작 › "색상 대비"가 '표준'보다 높을 때('중간'·'높음',
-  //   `UiModeManager.getContrast() > 0`). Android 13 이하에서는 켜지지 않고, "고대비 텍스트" 설정은 읽지 않는다.
+  // 기기의 고대비 설정이 켜지면([CalcPalette.of]) [CalcPalette.highContrast]가 아래 색을 쓴다. 여기 없는 색은 일반 모드와 같다.
+  // 켜지는 설정은 플랫폼마다 다르다. 하나라도 켜져 있으면 고대비다:
+  // - `MediaQuery.highContrastOf` (Flutter 엔진이 채운다)
+  //   · iOS: 손쉬운 사용 › 디스플레이 및 텍스트 크기 › "대비 증가" (`UIAccessibility.isDarkerSystemColorsEnabled`)
+  //   · Android 14(API 34) 이상: 접근성 › 색상 및 동작 › "색상 대비"가 '표준'보다 높을 때('중간'·'높음',
+  //     `UiModeManager.getContrast() > 0`). Android 13 이하에서는 켜지지 않는다.
+  // - Android 모든 버전: 접근성 "고대비 텍스트"(Android 15 이상 "텍스트 대비 최대화") — 엔진이 읽지 않아 앱이 직접
+  //   읽는다([SystemHighTextContrast], #95). 시스템이 넣는 글자 외곽선은 Flutter 화면에 효과가 없으므로 대신 이 팔레트를 준다.
   //
   // 기준(`test/unit/calc_theme_test.dart`가 검증):
   // - 키 메인 라벨과 SHIFT/ALPHA 각인(평소 상태)은 [highContrastMinTextContrast](WCAG AAA 7:1) 이상이다.
@@ -811,10 +815,13 @@ final class CalcPalette {
     settingsIcon: CalcTheme.settingsIconHighContrast,
   );
 
-  /// 기기의 고대비 설정([MediaQuery.highContrastOf] — 플랫폼별 의미는 [CalcTheme] "고대비 모드" 주석)에 맞는 팔레트.
-  /// 그 설정에만 의존하므로 다른 MediaQuery 값(크기·인셋 등)이 바뀌어도 다시 빌드되지 않는다.
+  /// 기기의 고대비 설정에 맞는 팔레트. [MediaQuery.highContrastOf]나 Android "고대비 텍스트"([HighTextContrastScope])
+  /// 중 하나라도 켜져 있으면 고대비다(플랫폼별 의미는 [CalcTheme] "고대비 모드" 주석).
+  /// 두 설정에만 의존하므로 다른 MediaQuery 값(크기·인셋 등)이 바뀌어도 다시 빌드되지 않는다.
   static CalcPalette of(BuildContext context) =>
-      MediaQuery.highContrastOf(context) ? highContrast : standard;
+      MediaQuery.highContrastOf(context) || HighTextContrastScope.of(context)
+      ? highContrast
+      : standard;
 
   /// [category] 키캡 배경색
   Color keyBackground(KeyCategory category) {
