@@ -642,10 +642,25 @@ void main() {
       expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
     });
 
-    test('분할 배치 LCD 최대 폭 비율: 0 초과 1 이하 — LCD가 키패드보다 넓어지지 않는다 (#71)', () {
+    test('LCD 최대 폭 비율: 0 초과 1 이하 — LCD가 키패드보다 넓어지지 않는다 (#71, #92)', () {
       // LCD 줄 글자가 키 메인 각인보다 큰지는 split_layout_test에서 번들 글꼴로 실측한다.
-      expect(CalcTheme.screenSplitLcdMaxWidthRatio, greaterThan(0));
-      expect(CalcTheme.screenSplitLcdMaxWidthRatio, lessThanOrEqualTo(1));
+      expect(CalcTheme.screenLcdMaxWidthRatio, greaterThan(0));
+      expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
+    });
+
+    test('위아래·테이블톱 LCD 최대 폭: 키패드 최대 폭 × 비율이고, 가장 넓은 폰 본체보다 넓다 (#92)', () {
+      expect(
+        CalcTheme.screenLcdMaxWidth,
+        CalcTheme.keypadMaxWidth * CalcTheme.screenLcdMaxWidthRatio,
+      );
+      // 폰 폭에서는 걸리지 않는다 (가장 넓은 폰 430dp − 좌우 여백).
+      const widestPhoneBody = 430 - 2 * CalcTheme.screenPadding;
+      expect(CalcTheme.screenLcdMaxWidth, greaterThan(widestPhoneBody));
+      // 상한 폭에서도 LCD 최대 높이가 최소 높이 이상이다.
+      expect(
+        CalcTheme.screenLcdMaxWidth / CalcTheme.screenLcdMinAspectRatio,
+        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+      );
     });
 
     test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
