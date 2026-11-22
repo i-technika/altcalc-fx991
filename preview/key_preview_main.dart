@@ -13,7 +13,9 @@
 import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart'
+    show clampDouble, listEquals, precisionErrorTolerance;
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
@@ -450,32 +452,36 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   Widget build(BuildContext context) {
     ref.listen(calcProvider.select(_watchOf), _onChanged);
 
-    final panel = _PanelNavigator(
-      child: _ControlPanel(
-        device: _device,
-        posture: _posture,
-        orientation: _orientation,
-        textScale: _textScale,
-        highContrast: _highContrast,
-        log: _log,
-        inputTotal: _inputTotal,
-        trimmed: _trimmed,
-        // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
-        // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
-        // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
-        onDeviceChanged: (d) {
-          if (identical(d, _device)) return;
-          setState(() {
-            _device = d;
-            _posture = PreviewFoldPosture.flat;
-            _orientation = d.naturalOrientation;
-          });
-        },
-        onPostureChanged: (p) => setState(() => _posture = p),
-        onOrientationChanged: (o) => setState(() => _orientation = o),
-        onTextScaleChanged: (s) => setState(() => _textScale = s),
-        onHighContrastChanged: (v) => setState(() => _highContrast = v),
-        onReset: _reset,
+    // 패널과 기기 화면은 의미 트리에서 서로 독립된 노드로 묶는다 — [_DeviceFrame._deviceScreen] 참조 (#105).
+    final panel = Semantics(
+      container: true,
+      child: _PanelNavigator(
+        child: _ControlPanel(
+          device: _device,
+          posture: _posture,
+          orientation: _orientation,
+          textScale: _textScale,
+          highContrast: _highContrast,
+          log: _log,
+          inputTotal: _inputTotal,
+          trimmed: _trimmed,
+          // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
+          // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
+          // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
+          onDeviceChanged: (d) {
+            if (identical(d, _device)) return;
+            setState(() {
+              _device = d;
+              _posture = PreviewFoldPosture.flat;
+              _orientation = d.naturalOrientation;
+            });
+          },
+          onPostureChanged: (p) => setState(() => _posture = p),
+          onOrientationChanged: (o) => setState(() => _orientation = o),
+          onTextScaleChanged: (s) => setState(() => _textScale = s),
+          onHighContrastChanged: (v) => setState(() => _highContrast = v),
+          onReset: _reset,
+        ),
       ),
     );
     // 앱의 루트 Navigator는 WidgetsApp이 GlobalKey로 들고 있어, 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지된다.
@@ -554,27 +560,35 @@ class _DeviceFrame extends StatelessWidget {
 
   /// 기기 크기의 화면: 기기 MediaQuery와 좌표 원점([ScreenCoordinateRoot]) 아래에 앱 Navigator를 둔다.
   /// 접힘선은 화면(대화상자 포함) 위에 겹쳐 그린다 — 터치는 가로채지 않는다.
+  ///
+  /// 의미 트리에서 화면을 독립된 노드로 묶는다(#105, 패널도 [KeyPreviewScreen]에서 같이 묶는다): 앱 Navigator와 패널
+  /// Navigator([_PanelNavigator])의 라우트 장벽(`ModalBarrier`)은 `BlockSemantics`라 같은 노드 안에서 먼저 그려진
+  /// 형제를 통째로 가린다. 묶지 않으면 넓은 배치(패널 → 기기 틀 순)에서는 패널 전체가, 좁은 배치(기기 틀 → 패널 순)에서는
+  /// 기기 화면 전체(대화상자 포함)가 의미 트리에서 빠진다. 각자를 경계로 묶어 형제로 두면 장벽이 자기 안만 가린다.
   Widget _deviceScreen(BuildContext context, {Key? key}) => SizedBox.fromSize(
     key: key,
     size: device.size,
-    child: CustomPaint(
-      key: const ValueKey('preview-display-features'),
-      foregroundPainter: device.displayFeatures.isEmpty
-          ? null
-          : PreviewDisplayFeaturePainter(device.displayFeatures),
-      child: ScreenCoordinateRoot(
-        data: MediaQuery.of(context).copyWith(
-          size: device.size,
-          padding: device.padding,
-          viewPadding: device.padding,
-          viewInsets: EdgeInsets.zero,
-          systemGestureInsets: device.systemGestureInsets,
-          // 프리셋 값만 넘긴다 — 호스트의 화면 특징은 축소된 화면 좌표와 맞지 않는다.
-          displayFeatures: device.displayFeatures,
-          textScaler: TextScaler.linear(textScale),
-          highContrast: highContrast,
+    child: Semantics(
+      container: true,
+      child: CustomPaint(
+        key: const ValueKey('preview-display-features'),
+        foregroundPainter: device.displayFeatures.isEmpty
+            ? null
+            : PreviewDisplayFeaturePainter(device.displayFeatures),
+        child: ScreenCoordinateRoot(
+          data: MediaQuery.of(context).copyWith(
+            size: device.size,
+            padding: device.padding,
+            viewPadding: device.padding,
+            viewInsets: EdgeInsets.zero,
+            systemGestureInsets: device.systemGestureInsets,
+            // 프리셋 값만 넘긴다 — 호스트의 화면 특징은 축소된 화면 좌표와 맞지 않는다.
+            displayFeatures: device.displayFeatures,
+            textScaler: TextScaler.linear(textScale),
+            highContrast: highContrast,
+          ),
+          child: screen,
         ),
-        child: screen,
       ),
     ),
   );
@@ -817,8 +831,19 @@ class _PanelNavigator extends StatelessWidget {
 /// 기기(폴더블이면 자세·방향 포함)·글자 배율·고대비 선택, 초기화 버튼, 입력 로그.
 ///
 /// 설정 영역을 작게 두고 입력 로그가 남은 높이를 모두 쓴다 — 키를 누르는 동안 로그가 보여야 하기 때문이다.
-/// 패널이 [_scrollAllBelowHeight](폴더블 프리셋은 [_foldControlsHeight]를 더한 값)보다 낮을 때만 설정과 로그를
-/// 한꺼번에 스크롤한다(오버플로 방지).
+/// 설정 영역은 위에 고정하고 로그만 스크롤하되, 설정 영역 아래에 로그가 [_minLogLines]줄 들어가지 않을 만큼
+/// 패널이 낮으면 설정과 로그를 한꺼번에 스크롤한다(오버플로 방지, #105).
+///
+/// 전환 높이는 상수로 두지 않고 그때그때 잰 설정 영역 높이로 정한다([_PinnedWhenRoomSliver]) — 설정 항목
+/// (폴더블 자세·방향 줄 등)과 플랫폼별 버튼 터치 영역(Android 40 / 데스크톱 32), 호스트 글자 배율이 모두
+/// 그 높이에 들어 있다. 두 배치가 같은 스크롤 뷰 하나라, 창 높이가 전환 높이를 넘나들어도 설정 위젯이
+/// 다시 만들어지지 않는다(드롭다운·스위치 상태 유지).
+///
+/// 스크롤 뷰가 하나라 생기는 동작 (의도한 것):
+/// - 설정을 고정한 동안에도 설정 위에서 휠을 굴리면 로그가 스크롤된다. 데스크톱 스크롤바도 패널 전체 높이에 걸친다
+///   (오른쪽 안쪽 여백 안이라 설정 조작을 가리지 않는다).
+/// - 고정한 채 로그를 설정 높이 이상 내려 본 상태에서 패널을 전환 높이보다 낮게 줄이면, 같은 스크롤 위치에서
+///   설정이 함께 스크롤되는 배치가 되어 설정이 위로 밀려나 있다 — 위로 스크롤하면 다시 보인다.
 class _ControlPanel extends StatelessWidget {
   /// 고른 프리셋 (자세·방향을 적용하기 전)
   final PreviewDevice device;
@@ -853,17 +878,13 @@ class _ControlPanel extends StatelessWidget {
     required this.onReset,
   });
 
-  /// 이보다 낮은 패널은 전체를 스크롤한다 (dp). 설정 영역 아래에 로그 몇 줄이 남는 높이다
-  /// (고대비 스위치 행을 넣으며 240 → 290, #54).
-  static const double _scrollAllBelowHeight = 290;
-
-  /// 폴더블 프리셋에서 자세·방향 선택 줄이 더하는 설정 영역 높이 (dp, #93). 그때는 이만큼
-  /// [_scrollAllBelowHeight]를 올린다.
+  /// 설정 영역을 고정할 때 그 아래에 다 보여야 하는 로그 줄 수 (#105).
   ///
-  /// 값은 버튼 터치 영역이 큰 플랫폼(Android·iOS, 테스트 기본값 — 선택 줄 40)에서 잰 증가분(설정 영역 230 → 322)이다.
-  /// 거기서는 로그가 남는 높이가 다른 프리셋과 같다(테스트가 확인). 데스크톱(Chrome on Windows 등)은 터치 영역이
-  /// 줄어 증가분이 76이라 로그 자리가 16dp 더 남는다 — 넘침이 없도록 큰 쪽을 쓴다.
-  static const double _foldControlsHeight = 92;
+  /// SHIFT·ALPHA 조합 입력 하나가 두 줄(`[SHIFT 대기]`, 기능 입력)을 남기므로, 방금 누른 조합과 그 앞의 입력
+  /// 한 줄까지 보이는 3줄로 정했다. 이보다 낮은 패널은 설정을 함께 스크롤해, 설정을 밀어 올리면 로그를 더 볼 수 있다.
+  /// 화면에 보이는 줄 기준이다 — 패널 폭(약 35자, 호스트 글자 130%면 약 27자)을 넘는 긴 입력은 두 줄로 접혀
+  /// 보이는 입력 수가 줄 수 있다(지금 문구는 대부분 이보다 짧다).
+  static const int _minLogLines = 3;
 
   /// 패널 안쪽 여백 (dp)
   static const double _padding = 12;
@@ -1029,7 +1050,10 @@ class _ControlPanel extends StatelessWidget {
   );
 
   /// 입력 로그 (최근 줄이 맨 위). 화면에 보이는 줄만 만든다(지연 생성).
-  Widget _logSliver() => log.isEmpty
+  /// 줄 높이는 [strut]으로 고정한다 — 대체 글꼴로 그리는 글자(`∫`·`∑` 등 Math 글꼴, 한글)가 든 줄도 높이가 같아야
+  /// 전환 높이 계산([_logLineHeight])과 맞는다(`test/widget/key_preview_log_font_test.dart`가 번들 글꼴로 확인).
+  /// 대가로 Math 글꼴 글리프는 줄 상자 아래로 2dp 미만 넘칠 수 있다(자르지 않으므로 다음 줄과 살짝 겹칠 뿐이다).
+  Widget _logSliver(StrutStyle strut) => log.isEmpty
       ? const SliverToBoxAdapter(
           child: Text(
             '키를 누르면 여기에 최근 순으로 기록됩니다.',
@@ -1045,51 +1069,200 @@ class _ControlPanel extends StatelessWidget {
             return Text(
               number == null ? text : '$number. $text',
               style: _logStyle.copyWith(color: _colorOf(layer)),
+              strutStyle: strut,
             );
           },
         );
 
+  /// 로그 줄 높이를 고정하는 strut — 로그 줄([Text])이 [DefaultTextStyle]과 합친 스타일 그대로다.
+  static StrutStyle _logStrut(BuildContext context) => StrutStyle.fromTextStyle(
+    DefaultTextStyle.of(context).style.merge(_logStyle),
+    forceStrutHeight: true,
+  );
+
+  /// 로그 한 줄 높이 (dp). 로그 줄과 같은 [strut]·호스트 글자 배율로 잰다(줄 높이가 strut으로 고정이라
+  /// 글자 내용·대체 글꼴과 상관없다).
+  static double _logLineHeight(BuildContext context, StrutStyle strut) {
+    final defaults = DefaultTextStyle.of(context);
+    final painter = TextPainter(
+      text: TextSpan(text: '0', style: defaults.style.merge(_logStyle)),
+      strutStyle: strut,
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      textHeightBehavior: defaults.textHeightBehavior,
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final strut = _logStrut(context);
     return ColoredBox(
       key: const ValueKey('preview-panel'),
       color: _background,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final scrollAllBelow =
-              _scrollAllBelowHeight +
-              (device.foldable ? _foldControlsHeight : 0);
-          if (constraints.maxHeight < scrollAllBelow) {
-            return CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.all(_padding),
-                  sliver: SliverToBoxAdapter(child: _settings()),
-                ),
-                SliverPadding(
+      child: CustomScrollView(
+        slivers: [
+          _PinnedWhenRoomSliver(
+            // 설정 아래에 로그 [_minLogLines]줄과 아래 여백이 들어가야 설정을 고정한다.
+            minRemainingExtent:
+                _minLogLines * _logLineHeight(context, strut) + _padding,
+            // 고정한 채 로그가 밑으로 스크롤되어 지나가므로 불투명해야 한다. 의미 트리 묶음은
+            // PinnedHeaderSliver와 같다 — 고정된 상자를 스크롤 대상에서 뺄 수 있게 한 노드로 묶는다.
+            child: Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: ColoredBox(
+                color: _background,
+                child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     _padding,
+                    _padding,
+                    _padding,
                     0,
-                    _padding,
-                    _padding,
                   ),
-                  sliver: _logSliver(),
+                  child: _settings(),
                 ),
-              ],
-            );
-          }
-          return Padding(
-            padding: const EdgeInsets.all(_padding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _settings(),
-                Expanded(child: CustomScrollView(slivers: [_logSliver()])),
-              ],
+              ),
             ),
-          );
-        },
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(_padding, 0, _padding, _padding),
+            sliver: _logSliver(strut),
+          ),
+        ],
       ),
     );
+  }
+}
+
+/// 스크롤 뷰 맨 위의 상자 하나. 그 아래에 [minRemainingExtent]가 남을 만큼 화면(뷰포트)이 높으면 위에 고정하고
+/// (뒤 sliver가 그 밑으로 스크롤된다 — [PinnedHeaderSliver]와 같다), 아니면 뒤 sliver와 함께 스크롤한다
+/// ([SliverToBoxAdapter]와 같다) (#105).
+///
+/// 판정에 쓰는 높이는 레이아웃할 때 잰 상자 높이라, 상자 내용이 바뀌면(항목 추가, 플랫폼별 터치 영역, 글자 배율)
+/// 전환 높이도 따라 바뀐다. 아래 방향으로 스크롤하는 뷰의 첫 sliver로만 쓴다(앞 sliver가 없다고 보고 뷰포트 높이만으로
+/// 판정한다 — 디버그 빌드에서 assert로 확인. 겹침은 고정 기하에 그대로 반영한다). 고정할 때 상자는 불투명해야 한다.
+class _PinnedWhenRoomSliver extends SingleChildRenderObjectWidget {
+  /// 상자를 고정하려면 그 아래에 남아야 하는 높이 (dp)
+  final double minRemainingExtent;
+
+  const _PinnedWhenRoomSliver({
+    required this.minRemainingExtent,
+    required Widget super.child,
+  });
+
+  @override
+  _RenderPinnedWhenRoomSliver createRenderObject(BuildContext context) =>
+      _RenderPinnedWhenRoomSliver(minRemainingExtent);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderPinnedWhenRoomSliver renderObject,
+  ) {
+    renderObject.minRemainingExtent = minRemainingExtent;
+  }
+}
+
+class _RenderPinnedWhenRoomSliver extends RenderSliverSingleBoxAdapter {
+  _RenderPinnedWhenRoomSliver(this._minRemainingExtent);
+
+  double get minRemainingExtent => _minRemainingExtent;
+  double _minRemainingExtent;
+  set minRemainingExtent(double value) {
+    if (value == _minRemainingExtent) return;
+    _minRemainingExtent = value;
+    markNeedsLayout();
+  }
+
+  /// 마지막 레이아웃에서 상자를 고정했는지
+  bool _pinned = false;
+
+  @override
+  double childMainAxisPosition(RenderBox child) =>
+      _pinned ? 0 : -constraints.scrollOffset;
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      _pinned = false;
+      geometry = SliverGeometry.zero;
+      return;
+    }
+    final constraints = this.constraints;
+    assert(
+      constraints.precedingScrollExtent == 0,
+      '_PinnedWhenRoomSliver는 첫 sliver여야 한다',
+    );
+    assert(
+      applyGrowthDirectionToAxisDirection(
+            constraints.axisDirection,
+            constraints.growthDirection,
+          ) ==
+          AxisDirection.down,
+      '_PinnedWhenRoomSliver는 아래 방향 스크롤 전용이다',
+    );
+    child.layout(constraints.asBoxConstraints(), parentUsesSize: true);
+    final extent = switch (constraints.axis) {
+      Axis.vertical => child.size.height,
+      Axis.horizontal => child.size.width,
+    };
+    // 부동소수 오차로 경계에서 판정이 흔들리지 않게 작은 여유를 둔다.
+    _pinned =
+        extent + minRemainingExtent <=
+        constraints.viewportMainAxisExtent + precisionErrorTolerance;
+    final cacheExtent = calculateCacheOffset(constraints, from: 0, to: extent);
+    if (_pinned) {
+      // PinnedHeaderSliver와 같은 기하: 스크롤하면 뒤 sliver가 상자 밑으로 들어간다(겹침).
+      geometry = SliverGeometry(
+        scrollExtent: extent,
+        paintOrigin: constraints.overlap,
+        paintExtent: math.min(
+          extent,
+          constraints.remainingPaintExtent - constraints.overlap,
+        ),
+        layoutExtent: clampDouble(
+          extent - constraints.scrollOffset,
+          0,
+          constraints.remainingPaintExtent,
+        ),
+        maxPaintExtent: extent,
+        maxScrollObstructionExtent: extent,
+        cacheExtent: cacheExtent,
+        hasVisualOverflow: true,
+      );
+      (child.parentData! as SliverPhysicalParentData).paintOffset = Offset.zero;
+    } else {
+      // SliverToBoxAdapter와 같은 기하
+      final painted = calculatePaintOffset(constraints, from: 0, to: extent);
+      geometry = SliverGeometry(
+        scrollExtent: extent,
+        paintExtent: painted,
+        cacheExtent: cacheExtent,
+        maxPaintExtent: extent,
+        hitTestExtent: painted,
+        hasVisualOverflow:
+            extent > constraints.remainingPaintExtent ||
+            constraints.scrollOffset > 0,
+      );
+      setChildParentData(child, constraints, geometry!);
+    }
+  }
+
+  @override
+  void describeSemanticsConfiguration(SemanticsConfiguration config) {
+    super.describeSemanticsConfiguration(config);
+    // PinnedHeaderSliver와 같다: 고정된 채 일부가 가려지면 스크롤 대상에서 뺀다.
+    final geometry = this.geometry;
+    if (_pinned &&
+        geometry != null &&
+        child != null &&
+        geometry.layoutExtent < geometry.scrollExtent) {
+      config.addTagForChildren(RenderViewport.excludeFromScrolling);
+    }
   }
 }

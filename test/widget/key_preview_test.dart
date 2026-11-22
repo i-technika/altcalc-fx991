@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/rendering.dart' show SemanticsNode;
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,6 +103,17 @@ Future<void> _setHandedness(WidgetTester tester, Handedness handedness) async {
   await tester.tap(find.byKey(HandednessDialog.closeKey));
   await tester.pumpAndSettle();
   expect(container.read(handednessProvider), handedness);
+}
+
+/// 창(= 패널) 높이를 [height]로 바꾼다 (넓은 배치, 테스트 창에는 시스템 인셋이 없다).
+Future<void> _setPanelHeight(WidgetTester tester, double height) async {
+  tester.view.physicalSize = Size(1280, height) * tester.view.devicePixelRatio;
+  await tester.pumpAndSettle();
+  expect(tester.takeException(), isNull, reason: '패널 높이 $height');
+  expect(
+    tester.getRect(find.byKey(const ValueKey('preview-panel'))).height,
+    height,
+  );
 }
 
 String _logHeader(WidgetTester tester) =>
@@ -2068,100 +2080,6 @@ void main() {
         );
       });
 
-      final settingsArea = find.byKey(const ValueKey('preview-settings'));
-
-      /// 설정과 로그를 한꺼번에 스크롤하는 배치인지 (설정이 스크롤 영역 안에 있다)
-      bool scrollsAll(WidgetTester tester) => find
-          .ancestor(of: settingsArea, matching: find.byType(CustomScrollView))
-          .evaluate()
-          .isNotEmpty;
-
-      /// 창(= 패널) 높이를 [height]로 바꾼다 (넓은 배치, 테스트 창에는 시스템 인셋이 없다).
-      Future<void> setPanelHeight(WidgetTester tester, double height) async {
-        tester.view.physicalSize =
-            Size(1280, height) * tester.view.devicePixelRatio;
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull, reason: '패널 높이 $height');
-        expect(
-          tester.getRect(find.byKey(const ValueKey('preview-panel'))).height,
-          height,
-        );
-      }
-
-      /// 설정 영역을 고정하는(전체 스크롤하지 않는) 가장 낮은 패널 높이 (정수 dp, 이분 탐색)
-      Future<double> lowestFixedHeight(WidgetTester tester) async {
-        var lo = 100.0; // 전체 스크롤
-        var hi = 900.0; // 설정 고정
-        await setPanelHeight(tester, lo);
-        expect(scrollsAll(tester), isTrue);
-        await setPanelHeight(tester, hi);
-        expect(scrollsAll(tester), isFalse);
-        while (hi - lo > 1) {
-          final mid = ((lo + hi) / 2).floorToDouble();
-          await setPanelHeight(tester, mid);
-          if (scrollsAll(tester)) {
-            lo = mid;
-          } else {
-            hi = mid;
-          }
-        }
-        await setPanelHeight(tester, hi);
-        return hi;
-      }
-
-      // 선택 줄 증가분(`_foldControlsHeight`)은 터치 영역이 큰 플랫폼(Android) 기준이다 — 거기서는 로그 자리가
-      // 같고, 미리보기를 실제로 띄우는 데스크톱(Chrome on Windows)에서는 증가분이 작아 폴더블 쪽이 더 남는다.
-      testWidgets(
-        '설정 영역을 고정하는 가장 낮은 패널에서 폴더블의 로그 자리: Android는 다른 프리셋과 같고, 데스크톱은 그 이상',
-        variant: TargetPlatformVariant(const {
-          TargetPlatform.android,
-          TargetPlatform.windows,
-        }),
-        (tester) async {
-          // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고른 뒤 창을 줄인다.
-          double logRoom() =>
-              tester
-                  .getRect(find.byKey(const ValueKey('preview-panel')))
-                  .bottom -
-              tester.getRect(settingsArea).bottom;
-          await _pumpPreview(tester);
-          expect(previewDevices.first.foldable, isFalse);
-          final plain = await lowestFixedHeight(tester);
-          final plainRoom = logRoom();
-
-          await setPanelHeight(tester, _window.height);
-          await _selectDevice(
-            tester,
-            previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
-          );
-          expect(posture, findsOneWidget);
-          final fold = await lowestFixedHeight(tester);
-          final foldRoom = logRoom();
-          expect(fold, greaterThan(plain));
-          if (defaultTargetPlatform == TargetPlatform.android) {
-            expect(foldRoom, moreOrLessEquals(plainRoom, epsilon: 0.01));
-          } else {
-            expect(foldRoom, greaterThanOrEqualTo(plainRoom - 0.01));
-          }
-          // 그 높이에서 로그 안내가 설정 아래·패널 안에 다 보인다.
-          final empty = tester.getRect(
-            find.byKey(const ValueKey('preview-log-empty')),
-          );
-          expect(
-            empty.top,
-            greaterThanOrEqualTo(tester.getRect(settingsArea).bottom),
-          );
-          expect(
-            empty.bottom,
-            lessThanOrEqualTo(
-              tester
-                  .getRect(find.byKey(const ValueKey('preview-panel')))
-                  .bottom,
-            ),
-          );
-        },
-      );
-
       testWidgets('선택 줄이 있어도 낮은 패널에서 넘치지 않는다', (tester) async {
         await _pumpPreview(tester);
         await _selectDevice(
@@ -2169,7 +2087,7 @@ void main() {
           previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
         );
         for (final height in const [120.0, 250.0, 300.0, 340.0, 500.0]) {
-          await setPanelHeight(tester, height);
+          await _setPanelHeight(tester, height);
           expect(posture, findsOneWidget, reason: '$height');
         }
       });
@@ -2236,6 +2154,326 @@ void main() {
           ),
           device.displayFeatures,
           reason: device.name,
+        );
+      }
+    });
+  });
+
+  group('조작 패널 스크롤 전환 (#105)', () {
+    // 함께 스크롤하는 배치에서 설정이 화면 밖으로 밀려 올라가도 찾는다.
+    final settingsArea = find.byKey(
+      const ValueKey('preview-settings'),
+      skipOffstage: false,
+    );
+    final panel = find.byKey(const ValueKey('preview-panel'));
+    final reset = find.byKey(const ValueKey('preview-reset'));
+
+    /// 설정 영역을 고정할 때 그 아래에 다 보여야 하는 로그 줄 수 (`_ControlPanel._minLogLines`)
+    const minLogLines = 3;
+
+    /// 패널 안쪽 여백 (`_ControlPanel._padding`) — 로그 아래에 남는다
+    const padding = 12.0;
+
+    /// 로그를 채울 입력 수 — 900dp 패널에서도 스크롤할 거리가 생기는 줄 수 ([settingsPinned] 판정용)
+    const fullLog = 50;
+
+    /// 미리보기를 띄운다. [desktop]이면 패널의 버튼 밀도를 데스크톱 기본값(터치 영역 줄임 + compact)으로 바꾼다.
+    ///
+    /// 플랫폼 변형(`TargetPlatformVariant`)으로 바꾸지 않는 이유: 앱 테마(`CalcTheme.materialTheme`)가 처음 읽힐 때의
+    /// 플랫폼으로 한 번만 만들어져, 같은 실행 안의 다음 변형은 앞 변형의 밀도를 그대로 쓴다. 기기 화면은 자기
+    /// 테마(`_ScreenTheme`)를 따로 받으므로 이 덮어쓰기는 패널에만 닿는다.
+    Future<void> pumpPanel(WidgetTester tester, {required bool desktop}) async {
+      tester.view.physicalSize = _window * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: AltCalcApp(
+            frameBuilder: (context, screen) {
+              final preview = KeyPreviewScreen(screen: screen);
+              if (!desktop) return preview;
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: preview,
+              );
+            },
+          ),
+        ),
+      );
+      // 전제: 고른 밀도가 패널에 닿았다 — 둘 다 닿아야 하므로 값으로 확인한다.
+      final theme = Theme.of(tester.element(settingsArea));
+      expect(
+        theme.materialTapTargetSize,
+        desktop
+            ? MaterialTapTargetSize.shrinkWrap
+            : MaterialTapTargetSize.padded,
+      );
+      expect(
+        theme.visualDensity,
+        desktop ? VisualDensity.compact : VisualDensity.standard,
+      );
+      // 초기화 버튼 높이: 터치 영역 48 / 데스크톱(줄인 터치 영역 + compact) 32
+      expect(tester.getSize(reset).height, desktop ? 32 : 48);
+    }
+
+    ScrollPosition panelScroll(WidgetTester tester) => tester
+        .state<ScrollableState>(
+          find.ancestor(of: settingsArea, matching: find.byType(Scrollable)),
+        )
+        .position;
+
+    /// 설정 영역이 위에 고정돼 있는지: 패널을 끝까지 스크롤해도 설정이 움직이지 않는다.
+    /// 판정할 수 있도록 스크롤할 거리가 있어야 한다(로그를 [fullLog]줄 채운다).
+    Future<bool> settingsPinned(WidgetTester tester) async {
+      final position = panelScroll(tester);
+      expect(position.maxScrollExtent, greaterThan(0), reason: '로그를 더 채울 것');
+      final top = tester.getRect(settingsArea).top;
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      final moved = tester.getRect(settingsArea).top != top;
+      position.jumpTo(0);
+      await tester.pump();
+      return !moved;
+    }
+
+    /// 설정 영역을 고정하는 가장 낮은 패널 높이 (정수 dp, 이분 탐색)
+    Future<double> lowestPinnedHeight(WidgetTester tester) async {
+      var lo = 100.0; // 함께 스크롤
+      var hi = 900.0; // 설정 고정
+      await _setPanelHeight(tester, lo);
+      expect(await settingsPinned(tester), isFalse);
+      await _setPanelHeight(tester, hi);
+      expect(await settingsPinned(tester), isTrue);
+      while (hi - lo > 1) {
+        final mid = ((lo + hi) / 2).floorToDouble();
+        await _setPanelHeight(tester, mid);
+        if (await settingsPinned(tester)) {
+          hi = mid;
+        } else {
+          lo = mid;
+        }
+      }
+      await _setPanelHeight(tester, hi);
+      return hi;
+    }
+
+    /// 화면에 보이는 로그 줄 영역 (최근 줄이 먼저)
+    List<Rect> logLineRects(WidgetTester tester) => [
+      for (final e
+          in find
+              .descendant(
+                of: find.byKey(const ValueKey('preview-log')),
+                matching: find.byType(Text),
+              )
+              .evaluate())
+        tester.getRect(find.byElementPredicate((x) => x == e)),
+    ];
+
+    /// [presses]번 입력해 로그를 채운다 (보통 창에서 — 낮은 창에서는 기기 화면이 작다).
+    Future<void> fillLog(WidgetTester tester, int presses) async {
+      for (var i = 0; i < presses; i++) {
+        await _press(tester, CalcKeyId.num7);
+      }
+      expect(_logHeader(tester), startsWith('입력 로그 · 입력 $presses회'));
+    }
+
+    // 전환 높이는 잰 설정 영역 높이로 정하므로, 설정 항목(폴더블 선택 줄)·버튼 밀도(Android 터치 영역 40,
+    // 데스크톱 32)·호스트 글자 배율이 달라도 가장 낮은 고정 높이에서 로그 자리가 정확히 [minLogLines]줄이다.
+    for (final desktop in const [false, true]) {
+      for (final (name, hostTextScale) in const [
+        ('일반 폰', 1.0),
+        ('폴더블 내부', 1.0),
+        ('일반 폰', 1.3),
+      ]) {
+        final density = desktop ? '데스크톱' : 'Android';
+        final scale = (hostTextScale * 100).round();
+        testWidgets('$density 밀도·$name·호스트 글자 $scale%: 설정을 고정하는 가장 낮은 패널에서 '
+            '로그가 정확히 $minLogLines줄 보이고, 1dp 낮으면 함께 스크롤한다', (tester) async {
+          tester.platformDispatcher.textScaleFactorTestValue = hostTextScale;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await pumpPanel(tester, desktop: desktop);
+          final index = previewDevices.indexWhere((d) => d.name == name);
+          // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고르고 입력한 뒤 창을 줄인다.
+          if (index != 0) await _selectDevice(tester, index);
+          await fillLog(tester, fullLog);
+
+          final height = await lowestPinnedHeight(tester);
+          final lines = logLineRects(tester);
+          final lineHeight = lines.first.height;
+          // 줄 높이는 strut으로 고정이다(대체 글꼴 글자가 든 줄도 같다).
+          for (final l in lines) {
+            expect(l.height, moreOrLessEquals(lineHeight));
+          }
+          final settingsBottom = tester.getRect(settingsArea).bottom;
+          final logBottom = tester.getRect(panel).bottom - padding;
+          // 설정 바로 아래에서 로그가 시작하고, 최근 [minLogLines]줄이 아래 여백 위에 다 들어간다.
+          expect(lines.first.top, moreOrLessEquals(settingsBottom));
+          expect(
+            lines[minLogLines - 1].bottom,
+            lessThanOrEqualTo(logBottom + 0.01),
+          );
+          // 가장 낮은 높이이므로 남는 자리는 1dp 미만이다(정수 dp 탐색) — 그다음 줄은 다 들어가지 않는다.
+          expect(
+            logBottom - lines[minLogLines - 1].bottom,
+            lessThan(1),
+            reason: '줄 높이 $lineHeight',
+          );
+          expect(lines[minLogLines].bottom, greaterThan(logBottom));
+
+          // 로그를 비우면 안내 문구가 설정 아래·패널 안에 다 보인다(설정은 계속 고정).
+          await tester.tap(reset);
+          await tester.pumpAndSettle();
+          final empty = tester.getRect(
+            find.byKey(const ValueKey('preview-log-empty')),
+          );
+          expect(empty.top, moreOrLessEquals(settingsBottom));
+          expect(empty.bottom, lessThanOrEqualTo(logBottom + 0.01));
+
+          await fillLog(tester, fullLog);
+          await _setPanelHeight(tester, height - 1);
+          expect(await settingsPinned(tester), isFalse);
+        });
+      }
+    }
+
+    testWidgets('호스트 글자 배율이 크면 전환 높이도 올라간다', (tester) async {
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _pumpPreview(tester);
+      await fillLog(tester, fullLog);
+      final plain = await lowestPinnedHeight(tester);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      await tester.pumpAndSettle();
+      expect(await lowestPinnedHeight(tester), greaterThan(plain));
+    });
+
+    testWidgets('고정한 채 스크롤하면 로그만 설정 밑으로 지나가고, 설정은 계속 누를 수 있다', (tester) async {
+      await _pumpPreview(tester);
+      await fillLog(tester, 20);
+      await _setPanelHeight(tester, 400);
+      final position = panelScroll(tester);
+      expect(position.maxScrollExtent, greaterThan(0));
+      final settings = tester.getRect(settingsArea);
+      final first = logLineRects(tester).first;
+
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(tester.getRect(settingsArea), settings);
+      // 가장 오래된 줄이 아래 여백 바로 위에 온다.
+      expect(
+        tester.getRect(find.text('1. 7')).bottom,
+        moreOrLessEquals(tester.getRect(panel).bottom - padding),
+      );
+      // 가장 최근 줄은 설정 밑으로 들어갔다. 그 자리를 눌러도 설정(초기화 버튼, 로그 줄은 패널 폭을 다 쓴다)이 받는다.
+      final newest = tester.getRect(find.text('20. 7'));
+      expect(newest.top, lessThan(first.top));
+      expect(newest.top, lessThan(settings.bottom));
+      await tester.tap(reset);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preview-log-empty')), findsOneWidget);
+      expect(position.pixels, 0);
+    });
+
+    testWidgets('고정한 채 일부가 가려지면 설정은 의미 트리에서 스크롤 대상 밖에 놓인다', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pumpPreview(tester);
+      await fillLog(tester, 20);
+      await _setPanelHeight(tester, 400);
+      final position = panelScroll(tester);
+
+      /// 초기화 버튼의 의미 노드가 스크롤 동작이 있는 노드 안에 있는지
+      bool resetInScrolling() {
+        for (
+          SemanticsNode? n = tester.getSemantics(reset).parent;
+          n != null;
+          n = n.parent
+        ) {
+          final data = n.getSemanticsData();
+          if (data.hasAction(SemanticsAction.scrollUp) ||
+              data.hasAction(SemanticsAction.scrollDown)) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      // 맨 위에서는 다른 sliver처럼 스크롤 노드 안에 있다.
+      expect(resetInScrolling(), isTrue);
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(resetInScrolling(), isFalse);
+      handle.dispose();
+    });
+
+    // 패널과 기기 화면 각자의 Navigator 라우트 장벽(BlockSemantics)이 먼저 그려진 형제를 가리지 않는다.
+    for (final window in const [Size(1280, 900), Size(500, 900)]) {
+      testWidgets('창 $window: 조작 패널과 기기 화면(대화상자 포함)이 모두 의미 트리에 있다', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await _pumpPreview(tester, window: window);
+        expect(find.bySemanticsLabel('초기화'), findsOneWidget);
+        expect(find.bySemanticsLabel('Shift'), findsOneWidget);
+
+        await tester.tap(find.byKey(SettingsButton.buttonKey));
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('초기화'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('Keypad position')), findsWidgets);
+        handle.dispose();
+      });
+    }
+
+    testWidgets('낮은 패널에서는 설정이 로그와 함께 스크롤되어 올라간다', (tester) async {
+      await _pumpPreview(tester);
+      await fillLog(tester, 20);
+      await _setPanelHeight(tester, 200);
+      final position = panelScroll(tester);
+      final top = tester.getRect(settingsArea).top;
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(tester.getRect(settingsArea).top, lessThan(top));
+      expect(
+        tester.getRect(find.text('1. 7')).bottom,
+        moreOrLessEquals(tester.getRect(panel).bottom - padding),
+      );
+    });
+
+    testWidgets('함께 스크롤해 설정을 밀어 올린 채 패널을 키우면 설정이 맨 위에 고정되어 다시 누를 수 있다', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      await fillLog(tester, fullLog);
+      await _setPanelHeight(tester, 200);
+      final position = panelScroll(tester);
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(tester.getRect(settingsArea).bottom, lessThan(0));
+
+      await _setPanelHeight(tester, 900);
+      expect(position.pixels, greaterThan(0));
+      expect(
+        tester.getRect(settingsArea).top,
+        moreOrLessEquals(tester.getRect(panel).top + padding),
+      );
+      await tester.tap(reset);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preview-log-empty')), findsOneWidget);
+    });
+
+    testWidgets('전환 높이를 넘나들어도 설정 위젯이 다시 만들어지지 않는다', (tester) async {
+      await _pumpPreview(tester);
+      final before = tester.element(settingsArea);
+      final dropdownState = tester.state(
+        find.byKey(const ValueKey('preview-device-select')),
+      );
+      for (final height in const [150.0, 900.0, 150.0]) {
+        await _setPanelHeight(tester, height);
+        expect(tester.element(settingsArea), same(before), reason: '$height');
+        expect(
+          tester.state(find.byKey(const ValueKey('preview-device-select'))),
+          same(dropdownState),
+          reason: '$height',
         );
       }
     });
