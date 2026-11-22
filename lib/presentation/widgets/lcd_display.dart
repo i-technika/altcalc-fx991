@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/lcd_status.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'lcd_status_icon.dart';
 import 'text_fit.dart';
 
 /// 입력·결과 줄이 LCD 폭을 넘을 때의 좌/우 스크롤 표시(◄/►) 여부.
@@ -476,13 +477,13 @@ class LcdStatusBar extends StatelessWidget {
     final fontSize = textScaler.scale(resolvedStyle.fontSize!);
     final slots = LcdIndicatorSlot.values;
     // 글자마다 글리프 폭 + 자간 (자간은 글자 배율과 무관한 dp). 음수 자간이 글리프 폭보다 크면 0으로 둔다 —
-    // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 코드포인트(runes)로 센다.
+    // 슬롯 폭이 음수가 되면 레이아웃 예외가 난다(#44 리뷰 R2). 칸 수는 슬롯이 정한다(#57).
     final charWidth = math.max(
       0.0,
       fontSize * CalcTheme.lcdStatusCharWidthRatio +
           (resolvedStyle.letterSpacing ?? 0),
     );
-    double slotWidth(LcdIndicatorSlot s) => charWidth * s.template.runes.length;
+    double slotWidth(LcdIndicatorSlot s) => charWidth * s.columns;
     final slotsWidth = slots.map(slotWidth).fold(0.0, (a, b) => a + b);
     final minGap = fontSize * CalcTheme.lcdStatusSlotGapRatio;
 
@@ -557,6 +558,26 @@ class _IndicatorSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOn = label != null;
+    final color = isOn
+        ? CalcTheme.lcdStatusActive
+        : CalcTheme.lcdStatusInactive;
+    final icon = slot.icon;
+    if (icon != null) {
+      // 글꼴 글자로는 모양이 맞지 않는 표시기는 직접 그린다 (#57).
+      return SizedBox(
+        width: width,
+        height: height,
+        child: isOn || showInactive
+            ? LcdStatusIcon(
+                key: ValueKey(icon),
+                icon: icon,
+                color: color,
+                style: style,
+                textScaler: textScaler,
+              )
+            : null,
+      );
+    }
     final text = label ?? (showInactive ? slot.template : null);
 
     return SizedBox(
@@ -569,11 +590,7 @@ class _IndicatorSlot extends StatelessWidget {
               fit: BoxFit.scaleDown,
               child: Text(
                 text,
-                style: style.copyWith(
-                  color: isOn
-                      ? CalcTheme.lcdStatusActive
-                      : CalcTheme.lcdStatusInactive,
-                ),
+                style: style.copyWith(color: color),
                 textScaler: textScaler,
                 maxLines: 1,
                 softWrap: false,

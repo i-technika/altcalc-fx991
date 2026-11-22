@@ -84,20 +84,45 @@ void main() {
       }
     });
 
+    test('아이콘으로 그리는 슬롯은 →x·√▭✎·‖ 셋이고 아이콘이 겹치지 않는다 (#57)', () {
+      final icons = {
+        for (final slot in LcdIndicatorSlot.values)
+          if (slot.icon != null) slot: slot.icon,
+      };
+      expect(icons, {
+        LcdIndicatorSlot.store: LcdIndicatorIcon.storeArrow,
+        LcdIndicatorSlot.math: LcdIndicatorIcon.mathInput,
+        LcdIndicatorSlot.disp: LcdIndicatorIcon.multiStatement,
+      });
+      // 아이콘 슬롯은 켜지면 대표 문자 하나만 표시한다(값이 여러 개인 아이콘은 없다).
+      for (final MapEntry(key: slot, value: labels)
+          in _possibleIndicators().entries) {
+        if (slot.icon != null) {
+          expect(labels, {slot.template}, reason: slot.name);
+        }
+      }
+      // 실물 아이콘 폭: →x 2칸, √▭✎ 3칸, ‖ 1칸
+      expect(LcdIndicatorSlot.store.columns, 2);
+      expect(LcdIndicatorSlot.math.columns, 3);
+      expect(LcdIndicatorSlot.disp.columns, 1);
+    });
+
     test('슬롯 대표 문자는 비어 있지 않고 서로 다르다', () {
       final templates = LcdIndicatorSlot.values.map((s) => s.template).toList();
       expect(templates.every((t) => t.isNotEmpty), isTrue);
       expect(templates.toSet().length, templates.length);
     });
 
-    test('표시 문자는 슬롯 대표 문자보다 길지 않다 (고정 너비 유지)', () {
+    test('글자 슬롯의 표시 문자는 슬롯 칸 수를 넘지 않는다 (고정 너비 유지)', () {
       for (final MapEntry(key: slot, value: labels)
           in _possibleIndicators().entries) {
         expect(labels, isNotEmpty, reason: '${slot.name} 슬롯을 켤 방법이 없다');
+        expect(slot.columns, greaterThan(0), reason: slot.name);
+        if (slot.icon != null) continue;
         for (final label in labels) {
           expect(
-            label.length,
-            lessThanOrEqualTo(slot.template.length),
+            label.runes.length,
+            lessThanOrEqualTo(slot.columns),
             reason: '${slot.name}: $label',
           );
         }

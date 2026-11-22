@@ -73,56 +73,76 @@ enum ComplexResultIndicator {
 ///     (#58), 가이드에서 확인된 것은 ▲뿐이다(인쇄 3쪽 그림).
 ///   - 사용자 정보의 "Disp"와 "‖"는 가이드 표의 "‖ = 다중 문장 중간 결과" 하나로 보고 슬롯 하나([disp])로 둔다.
 ///   - 태양전지 `☀`는 앱에 해당 상태가 없어 넣지 않는다(#44 결정).
-/// - 글자: `√▭✎`의 `▭`는 두 칸 폭이라 입력 칸과 같은 `◻`로 쓰고, `✎`(U+270E)는 번들 글꼴에 없어 뺐다
-///   (`assets/fonts/README.md` "글리프 선택 규칙"). 아이콘을 직접 그려 실물 모양에 맞추는 일은 #57.
+/// - 그리는 방식: 글자로 그리는 슬롯과, 글꼴에 맞는 글자가 없어 **직접 그리는 아이콘** 슬롯([icon])이 있다(#57).
+///   `→x`·`√▭✎`·`‖`는 글꼴 글자로는 기준선·크기가 맞지 않고(`‖`는 기준선 아래로 내려감, `√`의 윗선이
+///   칸을 덮지 않음), `▭`는 두 칸 폭, `✎`(U+270E)는 번들 글꼴에 없다(`assets/fonts/README.md`).
+///   [template]은 아이콘 슬롯에서도 표시 문자(식별자)로 쓰이고 화면에는 그려지지 않는다.
 enum LcdIndicatorSlot {
   /// S — SHIFT 1회성 대기
-  shift('S'),
+  shift('S', columns: 1),
 
   /// A — ALPHA 1회성 대기
-  alpha('A'),
+  alpha('A', columns: 1),
 
   /// M — 독립 메모리에 값이 있음
-  memory('M'),
+  memory('M', columns: 1),
 
-  /// →x — 변수 지정 대기 (STO 키를 누른 뒤)
-  store('→x'),
+  /// →x — 변수 지정 대기 (STO 키를 누른 뒤). 아이콘으로 그린다.
+  store('→x', columns: 2, icon: LcdIndicatorIcon.storeArrow),
 
   /// D/R/G — 각도 단위 (항상 켜짐, 한 자리에서 셋 중 하나)
-  angleUnit('D'),
+  angleUnit('D', columns: 1),
 
   /// FIX — 소수점 이하 자릿수 고정 (SCI와 다른 자리 — Norm이면 둘 다 꺼짐)
-  fixFormat('FIX'),
+  fixFormat('FIX', columns: 3),
 
   /// SCI — 유효숫자 자릿수 고정
-  sciFormat('SCI'),
+  sciFormat('SCI', columns: 3),
 
   /// E — 공학 기호(Engineer Symbol) On (위치 잠정 — [provisional])
-  engineering('E'),
+  engineering('E', columns: 1),
 
-  /// √◻ — MathI 입출력 (실물 `√▭✎`)
-  math('√◻'),
+  /// √◻ — MathI 입출력. 실물 `√▭✎`(근호 + 칸 + 연필)를 아이콘으로 그린다(3칸).
+  math('√◻', columns: 3, icon: LcdIndicatorIcon.mathInput),
 
   /// i / ∠ — 복소수 결과 형식 설정 (위치 잠정 — [provisional])
-  complex('∠'),
+  complex('∠', columns: 1),
 
   /// ▼ — 아래쪽에 이력·데이터가 더 있음
-  historyDown('▼'),
+  historyDown('▼', columns: 1),
 
   /// ▲ — 위쪽에 이력·데이터가 더 있음 (계산 이력 재생 가능 등)
-  historyUp('▲'),
+  historyUp('▲', columns: 1),
 
-  /// ‖ — 멀티 스테이트먼트 중간 결과 표시 중
-  disp('‖');
+  /// ‖ — 멀티 스테이트먼트 중간 결과 표시 중. 아이콘으로 그린다.
+  disp('‖', columns: 1, icon: LcdIndicatorIcon.multiStatement);
 
-  /// 꺼진 상태에서 흐리게 보여줄 대표 문자이자, 슬롯 너비 산정 기준 문자열 (칸 수 = 코드포인트 수)
+  /// 대표 표시 문자 — 글자 슬롯은 꺼진 상태에서 흐리게 그리는 글자, 아이콘 슬롯은 표시 문자(식별자)
   final String template;
 
-  const LcdIndicatorSlot(this.template);
+  /// 슬롯 폭 (LCD 상태 표시 글자 칸 수). 글자 슬롯은 표시할 수 있는 모든 글자 수 이상이다(테스트로 검증).
+  final int columns;
+
+  /// 직접 그리는 아이콘. `null`이면 [template]·표시 문자를 글자로 그린다.
+  final LcdIndicatorIcon? icon;
+
+  const LcdIndicatorSlot(this.template, {required this.columns, this.icon});
 
   /// 실물 순서 자료에 없어 위치가 잠정인 슬롯 (가이드에는 있는 표시기). 문서·테스트용 — 테스트가
   /// 나머지 슬롯이 실물 순서와 같은지, 잠정 슬롯이 문서에 적은 자리(E는 SCI 뒤, i/∠는 √◻ 뒤)에 있는지 검사한다.
   static const Set<LcdIndicatorSlot> provisional = {engineering, complex};
+}
+
+/// 상태 표시줄에서 글자 대신 직접 그리는 아이콘 (#57). 모양은 표현 계층(`LcdStatusIcon`)이 그린다.
+enum LcdIndicatorIcon {
+  /// `→x` — 오른쪽 화살표 + x (변수 지정 대기, 2칸)
+  storeArrow,
+
+  /// `√▭✎` — 근호가 칸을 덮고 오른쪽에 연필 (MathI 입출력, 3칸)
+  mathInput,
+
+  /// `‖` — 대문자 높이의 세로 이중선 (다중 문장 중간 결과, 1칸)
+  multiStatement,
 }
 
 /// LCD 상태 표시줄에 표시할 상태의 불변 스냅샷.
