@@ -633,13 +633,19 @@ void main() {
       expect(CalcTheme.keypadMaxWidth, lessThanOrEqualTo(77 / 25.4 * 160));
     });
 
-    test('분할 배치 상수: 간격은 양수, 키패드 몫은 0~0.5 (LCD 쪽이 키패드보다 좁아지지 않는다)', () {
+    test('분할 배치 상수: 간격은 양수, 키패드 몫은 0.3~0.5 (LCD 쪽 패널이 키패드보다 좁아지지 않는다)', () {
       expect(CalcTheme.screenSplitGap, greaterThan(0));
       expect(
         CalcTheme.screenSplitKeypadMaxWidthRatio,
         inInclusiveRange(0.3, 0.5),
       );
       expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
+    });
+
+    test('분할 배치 LCD 최대 폭 비율: 0 초과 1 이하 — LCD가 키패드보다 넓어지지 않는다 (#71)', () {
+      // LCD 줄 글자가 키 메인 각인보다 큰지는 split_layout_test에서 번들 글꼴로 실측한다.
+      expect(CalcTheme.screenSplitLcdMaxWidthRatio, greaterThan(0));
+      expect(CalcTheme.screenSplitLcdMaxWidthRatio, lessThanOrEqualTo(1));
     });
 
     test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {

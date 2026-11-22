@@ -638,16 +638,37 @@ abstract final class CalcTheme {
   // 대화면 가로 창(`FormFactor.arrangementOf`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
   // - 키패드: 주로 쓰는 손 쪽 가장자리, 광고 슬롯 바로 위에 붙인다. 폭은 본체 폭의
   //   [screenSplitKeypadMaxWidthRatio] 이하(그리고 [keypadMaxWidth] 이하), 높이는 본체 높이까지.
-  // - LCD: 나머지 폭을 채우고, 높이는 그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다.
+  // - LCD: 나머지 폭(LCD 쪽 패널) 안에서 폭은 키패드 폭 × [screenSplitLcdMaxWidthRatio] 이하이고, 높이는
+  //   그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다 (#71). 상한에 걸리면 키패드 쪽
+  //   (접힘선 기준 배치면 접힘선 쪽)에 붙이고, 남는 폭은 패널 바깥쪽 빈 여백으로 둔다.
   //   LCD 아래 남는 자리에 설정 버튼을 둔다.
+  // - 본체가 키패드 최대 높이보다 높으면(12.9인치 iPad 가로 등) 위아래 배치와 같이 키패드·LCD를 본체 아래에
+  //   붙인 채로 두고, 위쪽 남는 높이는 빈 띠로 둔다. 위쪽 띠·패널 바깥쪽 여백의 활용(과 설정 버튼 위치)은
+  //   세로 폰 상단 띠와 함께 TODO(#41).
+  // - 위아래 배치(태블릿 세로)·테이블톱 배치의 LCD는 여전히 본체(절반) 폭 전체다 — 이 상한은 좌우 분할에만 걸린다
+  //   (위아래·테이블톱 배치의 LCD 폭 상한은 TODO(#92)).
   // - 광고 슬롯: 위아래 배치와 같이 본체 아래 전체 폭 — 키패드 최하단 행 아래 안전 여백 규칙이 그대로 지켜진다.
 
   /// 좌우 분할 배치의 LCD 쪽과 키패드 쪽 사이 간격 (dp)
   static const double screenSplitGap = 16.0;
 
   /// 좌우 분할 배치에서 키패드가 차지할 수 있는 최대 폭 (본체 폭에서 간격을 뺀 폭 대비).
-  /// 이보다 넓히면 LCD 쪽이 키패드보다 좁아져 LCD 글자가 키 각인보다 작아질 수 있다.
+  /// 0.5 이하이면 LCD 쪽 패널이 항상 키패드 폭 이상이라 LCD 폭 상한(키패드 폭 × [screenSplitLcdMaxWidthRatio])이
+  /// 그대로 적용된다 — 넓히면 패널이 키패드보다 좁아져 LCD가 패널 폭으로 줄어든다.
   static const double screenSplitKeypadMaxWidthRatio = 0.5;
+
+  /// 좌우 분할 배치의 LCD 최대 폭 (키패드 실제 폭 대비) (#71).
+  ///
+  /// 상한이 없으면 태블릿 가로에서 LCD가 키패드보다 훨씬 넓어진다 — 12.9인치 iPad 가로(1366×1024)에서
+  /// 키패드는 480dp인데 LCD는 약 854dp(줄 글자 약 72dp)까지 커져, 실물 비례(LCD 창이 본체보다 좁다)와 멀어진다.
+  ///
+  /// 1.0은 디자인 결정이다: 좌우 분할 배치의 LCD와 키패드 폭 비를 세로 폰 화면(둘 다 화면 폭)과 같게 한다
+  /// (실물 LCD 창 폭 실측값이 아니다). 12.9인치 iPad 가로 LCD는 480dp, 줄 글자 약 39dp다
+  /// (390×844 폰은 약 27dp, 키패드 480dp의 메인 각인은 약 16dp).
+  /// 접힘선이 없는 좌우 분할에서는 키패드 폭이 (본체 폭 − 간격) × [screenSplitKeypadMaxWidthRatio](0.5) 이하라
+  /// LCD 쪽 패널이 항상 키패드 이상이므로, **LCD 폭은 언제나 키패드 폭**이 된다(10인치 Android 1280×800도 768 → 480dp).
+  /// 패널이 더 좁은 경우는 접힘선 기준 배치뿐이다. 1보다 크게 두면 LCD가 키패드보다 넓어져 실물 비례에서 멀어진다.
+  static const double screenSplitLcdMaxWidthRatio = 1.0;
 
   /// 좌우 분할 배치의 LCD와 설정 버튼 사이 간격 (dp)
   static const double screenSplitSettingsGap = 8.0;
