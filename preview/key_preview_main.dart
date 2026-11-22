@@ -556,27 +556,34 @@ class _DeviceFrame extends StatelessWidget {
 
   /// 기기 크기의 화면: 기기 MediaQuery와 좌표 원점([ScreenCoordinateRoot]) 아래에 앱 Navigator를 둔다.
   /// 접힘선은 화면(대화상자 포함) 위에 겹쳐 그린다 — 터치는 가로채지 않는다.
+  ///
+  /// 의미 트리에서 화면을 독립된 노드로 묶는다(#105): 앱 Navigator의 라우트 장벽(`ModalBarrier`)은 `BlockSemantics`라
+  /// 같은 노드 안에서 먼저 그려진 형제를 가린다 — 묶지 않으면 기기 틀 앞에 그려지는 조작 패널 전체가
+  /// 의미 트리에서 빠진다(스크린리더·의미 트리 테스트에서 패널이 보이지 않음).
   Widget _deviceScreen(BuildContext context, {Key? key}) => SizedBox.fromSize(
     key: key,
     size: device.size,
-    child: CustomPaint(
-      key: const ValueKey('preview-display-features'),
-      foregroundPainter: device.displayFeatures.isEmpty
-          ? null
-          : PreviewDisplayFeaturePainter(device.displayFeatures),
-      child: ScreenCoordinateRoot(
-        data: MediaQuery.of(context).copyWith(
-          size: device.size,
-          padding: device.padding,
-          viewPadding: device.padding,
-          viewInsets: EdgeInsets.zero,
-          systemGestureInsets: device.systemGestureInsets,
-          // 프리셋 값만 넘긴다 — 호스트의 화면 특징은 축소된 화면 좌표와 맞지 않는다.
-          displayFeatures: device.displayFeatures,
-          textScaler: TextScaler.linear(textScale),
-          highContrast: highContrast,
+    child: Semantics(
+      container: true,
+      child: CustomPaint(
+        key: const ValueKey('preview-display-features'),
+        foregroundPainter: device.displayFeatures.isEmpty
+            ? null
+            : PreviewDisplayFeaturePainter(device.displayFeatures),
+        child: ScreenCoordinateRoot(
+          data: MediaQuery.of(context).copyWith(
+            size: device.size,
+            padding: device.padding,
+            viewPadding: device.padding,
+            viewInsets: EdgeInsets.zero,
+            systemGestureInsets: device.systemGestureInsets,
+            // 프리셋 값만 넘긴다 — 호스트의 화면 특징은 축소된 화면 좌표와 맞지 않는다.
+            displayFeatures: device.displayFeatures,
+            textScaler: TextScaler.linear(textScale),
+            highContrast: highContrast,
+          ),
+          child: screen,
         ),
-        child: screen,
       ),
     ),
   );
@@ -826,6 +833,12 @@ class _PanelNavigator extends StatelessWidget {
 /// (폴더블 자세·방향 줄 등)과 플랫폼별 버튼 터치 영역(Android 40 / 데스크톱 32), 호스트 글자 배율이 모두
 /// 그 높이에 들어 있다. 두 배치가 같은 스크롤 뷰 하나라, 창 높이가 전환 높이를 넘나들어도 설정 위젯이
 /// 다시 만들어지지 않는다(드롭다운·스위치 상태 유지).
+///
+/// 스크롤 뷰가 하나라 생기는 동작 (의도한 것):
+/// - 설정을 고정한 동안에도 설정 위에서 휠을 굴리면 로그가 스크롤된다. 데스크톱 스크롤바도 패널 전체 높이에 걸친다
+///   (오른쪽 안쪽 여백 안이라 설정 조작을 가리지 않는다).
+/// - 고정한 채 로그를 설정 높이 이상 내려 본 상태에서 패널을 전환 높이보다 낮게 줄이면, 같은 스크롤 위치에서
+///   설정이 함께 스크롤되는 배치가 되어 설정이 위로 밀려나 있다 — 위로 스크롤하면 다시 보인다.
 class _ControlPanel extends StatelessWidget {
   /// 고른 프리셋 (자세·방향을 적용하기 전)
   final PreviewDevice device;
@@ -1030,7 +1043,9 @@ class _ControlPanel extends StatelessWidget {
   );
 
   /// 입력 로그 (최근 줄이 맨 위). 화면에 보이는 줄만 만든다(지연 생성).
-  Widget _logSliver() => log.isEmpty
+  /// 줄 높이는 [strut]으로 고정한다 — 대체 글꼴로 그리는 글자(`∫`·`∑` 등 Math 글꼴, 한글)가 든 줄도 높이가 같아야
+  /// 전환 높이 계산([_logLineHeight])과 맞는다.
+  Widget _logSliver(StrutStyle strut) => log.isEmpty
       ? const SliverToBoxAdapter(
           child: Text(
             '키를 누르면 여기에 최근 순으로 기록됩니다.',
@@ -1046,15 +1061,24 @@ class _ControlPanel extends StatelessWidget {
             return Text(
               number == null ? text : '$number. $text',
               style: _logStyle.copyWith(color: _colorOf(layer)),
+              strutStyle: strut,
             );
           },
         );
 
-  /// 로그 한 줄 높이 (dp). 로그 줄([Text])과 같은 방식으로 스타일을 합치고 호스트 글자 배율을 반영해 잰다.
-  static double _logLineHeight(BuildContext context) {
+  /// 로그 줄 높이를 고정하는 strut — 로그 줄([Text])이 [DefaultTextStyle]과 합친 스타일 그대로다.
+  static StrutStyle _logStrut(BuildContext context) => StrutStyle.fromTextStyle(
+    DefaultTextStyle.of(context).style.merge(_logStyle),
+    forceStrutHeight: true,
+  );
+
+  /// 로그 한 줄 높이 (dp). 로그 줄과 같은 [strut]·호스트 글자 배율로 잰다(줄 높이가 strut으로 고정이라
+  /// 글자 내용·대체 글꼴과 상관없다).
+  static double _logLineHeight(BuildContext context, StrutStyle strut) {
     final defaults = DefaultTextStyle.of(context);
     final painter = TextPainter(
       text: TextSpan(text: '0', style: defaults.style.merge(_logStyle)),
+      strutStyle: strut,
       textDirection: TextDirection.ltr,
       textScaler: MediaQuery.textScalerOf(context),
       textHeightBehavior: defaults.textHeightBehavior,
@@ -1067,6 +1091,7 @@ class _ControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strut = _logStrut(context);
     return ColoredBox(
       key: const ValueKey('preview-panel'),
       color: _background,
@@ -1075,7 +1100,7 @@ class _ControlPanel extends StatelessWidget {
           _PinnedWhenRoomSliver(
             // 설정 아래에 로그 [_minLogLines]줄과 아래 여백이 들어가야 설정을 고정한다.
             minRemainingExtent:
-                _minLogLines * _logLineHeight(context) + _padding,
+                _minLogLines * _logLineHeight(context, strut) + _padding,
             // 고정한 채 로그가 밑으로 스크롤되어 지나가므로 불투명해야 한다. 의미 트리 묶음은
             // PinnedHeaderSliver와 같다 — 고정된 상자를 스크롤 대상에서 뺄 수 있게 한 노드로 묶는다.
             child: Semantics(
@@ -1097,7 +1122,7 @@ class _ControlPanel extends StatelessWidget {
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(_padding, 0, _padding, _padding),
-            sliver: _logSliver(),
+            sliver: _logSliver(strut),
           ),
         ],
       ),
@@ -1110,7 +1135,8 @@ class _ControlPanel extends StatelessWidget {
 /// ([SliverToBoxAdapter]와 같다) (#105).
 ///
 /// 판정에 쓰는 높이는 레이아웃할 때 잰 상자 높이라, 상자 내용이 바뀌면(항목 추가, 플랫폼별 터치 영역, 글자 배율)
-/// 전환 높이도 따라 바뀐다. 첫 sliver로만 쓴다(앞 sliver·겹침이 없다고 본다). 고정할 때 상자는 불투명해야 한다.
+/// 전환 높이도 따라 바뀐다. 아래 방향으로 스크롤하는 뷰의 첫 sliver로만 쓴다(앞 sliver·겹침이 없다고 보고
+/// 뷰포트 높이만으로 판정한다 — 디버그 빌드에서 assert로 확인). 고정할 때 상자는 불투명해야 한다.
 class _PinnedWhenRoomSliver extends SingleChildRenderObjectWidget {
   /// 상자를 고정하려면 그 아래에 남아야 하는 높이 (dp)
   final double minRemainingExtent;
@@ -1160,6 +1186,18 @@ class _RenderPinnedWhenRoomSliver extends RenderSliverSingleBoxAdapter {
       return;
     }
     final constraints = this.constraints;
+    assert(
+      constraints.precedingScrollExtent == 0,
+      '_PinnedWhenRoomSliver는 첫 sliver여야 한다',
+    );
+    assert(
+      applyGrowthDirectionToAxisDirection(
+            constraints.axisDirection,
+            constraints.growthDirection,
+          ) ==
+          AxisDirection.down,
+      '_PinnedWhenRoomSliver는 아래 방향 스크롤 전용이다',
+    );
     child.layout(constraints.asBoxConstraints(), parentUsesSize: true);
     final extent = switch (constraints.axis) {
       Axis.vertical => child.size.height,
