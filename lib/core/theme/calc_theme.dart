@@ -462,6 +462,11 @@ abstract final class CalcTheme {
   /// 키패드 최대 가로/세로 비 — 가로로 넓은 화면에서 키가 과도하게 넓어지지 않게 폭을 제한한다.
   static const double keypadMaxAspectRatio = 1.25;
 
+  /// 키패드 최대 폭 (dp) — 태블릿처럼 큰 화면에서 키가 과도하게 커지지 않게 한다 (#24).
+  /// 1dp는 약 1/160인치라 480dp ≈ 76mm로, 실물 fx-991EX 본체 폭(약 77mm)과 비슷하다.
+  /// 키패드 최대 높이는 이 값 / [keypadMinAspectRatio] (640dp). 폰 폭(430dp 이하)에서는 걸리지 않는다.
+  static const double keypadMaxWidth = 480.0;
+
   /// 키캡 터치 영역 최소 높이 (dp). 키캡이 이보다 낮으면 각인 띠까지 터치 영역을 넓힌다.
   /// (Material·Android 접근성 권장 터치 대상 48dp)
   static const double keyMinTouchTargetHeight = 48.0;
@@ -516,7 +521,8 @@ abstract final class CalcTheme {
   // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio]) 때문에 키패드가 다 쓰지 못하는
   //   높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
   //   (실물의 로고·태양전지 자리, 활용은 TODO(#41)). 키패드는 항상 광고 슬롯 바로 위에 붙어 엄지가 닿기 쉽다.
-  // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38), 대화면 좌우 분할은 #24·#25.
+  // 짧은 창(분할 화면 등)에서 LCD를 최소 높이 아래로 줄이는 규칙은 TODO(#38).
+  // 대화면 가로 창의 좌우 분할은 아래 "좌우 분할 배치"(#24), 폴더블 힌지 기준 분할은 TODO(#25).
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
@@ -537,6 +543,30 @@ abstract final class CalcTheme {
   /// 폰 폭(304~414dp)에서 폭 기준([lcdLineColumns])으로 정해진 줄 글자로 내부 구성 전체(상태 표시줄 +
   /// 4행 + 분수 막대)를 담는 높이다. 이보다 높여도 글자는 커지지 않고 빈 줄 여백만 늘어난다.
   static const double screenLcdMinAspectRatio = 1.75;
+
+  // ── 좌우 분할 배치 (#24) ──
+  // 대화면 가로 창(`FormFactor.arrangementOf`)에서는 LCD 쪽과 키패드 쪽을 좌우로 나눈다.
+  // - 키패드: 주로 쓰는 손 쪽 가장자리, 광고 슬롯 바로 위에 붙인다. 폭은 본체 폭의
+  //   [screenSplitKeypadMaxWidthRatio] 이하(그리고 [keypadMaxWidth] 이하), 높이는 본체 높이까지.
+  // - LCD: 나머지 폭을 채우고, 높이는 그 폭의 최대 높이(폭 / [screenLcdMinAspectRatio])로 키패드 윗변에 맞춘다.
+  //   LCD 아래 남는 자리에 설정 버튼을 둔다.
+  // - 광고 슬롯: 위아래 배치와 같이 본체 아래 전체 폭 — 키패드 최하단 행 아래 안전 여백 규칙이 그대로 지켜진다.
+
+  /// 좌우 분할 배치의 LCD 쪽과 키패드 쪽 사이 간격 (dp)
+  static const double screenSplitGap = 16.0;
+
+  /// 좌우 분할 배치에서 키패드가 차지할 수 있는 최대 폭 (본체 폭에서 간격을 뺀 폭 대비).
+  /// 이보다 넓히면 LCD 쪽이 키패드보다 좁아져 LCD 글자가 키 각인보다 작아질 수 있다.
+  static const double screenSplitKeypadMaxWidthRatio = 0.5;
+
+  /// 좌우 분할 배치의 LCD와 설정 버튼 사이 간격 (dp)
+  static const double screenSplitSettingsGap = 8.0;
+
+  /// 설정 버튼 크기 (dp) — 접근성 권장 터치 대상 48dp
+  static const double settingsButtonSize = 48.0;
+
+  /// 설정 버튼 아이콘 색 — 본체 배경([bodyBackground]) 대비 4.5:1 이상, 키 각인보다 눈에 덜 띄게 회색
+  static const Color settingsIcon = Color(0xFFB0B0B0);
 }
 
 /// [KeyCategory]별 키캡 색상 조회 확장.

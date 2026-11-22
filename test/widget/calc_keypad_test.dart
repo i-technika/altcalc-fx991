@@ -372,12 +372,25 @@ void main() {
       );
       expect(small.extendFunctionHitArea, isTrue);
 
+      // 최대 크기 키패드(폭 상한 480dp, #24): 숫자부 키캡은 48dp 이상이라 넓히지 않고,
+      // 함수부 키캡(약 39dp)은 여전히 각인 띠까지 넓힌다.
       final huge = KeypadMetrics.compute(
         const Size(1200, 1600),
         TextScaler.noScaling,
       );
-      expect(huge.extendFunctionHitArea, isFalse);
+      double capHeightOf(double cellHeight) =>
+          cellHeight * (1 - CalcTheme.keyLegendHeightRatio);
+      expect(huge.size.width, CalcTheme.keypadMaxWidth);
+      expect(
+        capHeightOf(huge.numberKeyHeight),
+        greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+      );
       expect(huge.extendNumberHitArea, isFalse);
+      expect(
+        capHeightOf(huge.functionKeyHeight),
+        lessThan(CalcTheme.keyMinTouchTargetHeight),
+      );
+      expect(huge.extendFunctionHitArea, isTrue);
     });
 
     testWidgets('확장 여부가 각 구역 키에 전달된다 (커서 패드는 제외)', (tester) async {
@@ -405,6 +418,36 @@ void main() {
   group('KeypadMetrics.fitSize', () {
     test('비율 범위 안이면 영역을 그대로 쓴다', () {
       expect(KeypadMetrics.fitSize(const Size(360, 420)), const Size(360, 420));
+    });
+
+    test('큰 영역에서도 폭은 최대 폭, 높이는 최대 폭 / 가로세로비 하한을 넘지 않는다 (#24)', () {
+      for (final area in const [
+        Size(1200, 1600),
+        Size(2000, 700),
+        Size(784, 1100),
+        Size(double.infinity, double.infinity),
+      ]) {
+        final s = KeypadMetrics.fitSize(area);
+        expect(
+          s.width,
+          lessThanOrEqualTo(CalcTheme.keypadMaxWidth),
+          reason: '$area',
+        );
+        expect(
+          s.height,
+          lessThanOrEqualTo(
+            CalcTheme.keypadMaxWidth / CalcTheme.keypadMinAspectRatio,
+          ),
+          reason: '$area',
+        );
+      }
+      expect(
+        KeypadMetrics.fitSize(const Size(1200, 1600)),
+        const Size(
+          CalcTheme.keypadMaxWidth,
+          CalcTheme.keypadMaxWidth / CalcTheme.keypadMinAspectRatio,
+        ),
+      );
     });
 
     test('너무 넓으면 폭을, 너무 길면 높이를 줄인다', () {

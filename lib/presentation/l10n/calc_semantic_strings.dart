@@ -56,12 +56,8 @@ abstract class CalcSemanticStrings {
 
   /// 기기 로캘에 맞는 문구. [DeviceLocaleScope] 아래면 기기 언어가 바뀔 때 다시 빌드된다.
   /// (범위 밖 — 위젯 단독 테스트 등 — 에서는 플랫폼 로캘을 직접 읽는다.)
-  static CalcSemanticStrings of(BuildContext context) => forLocale(
-    DeviceLocaleScope.maybeOf(context) ??
-        (View.maybeOf(context)?.platformDispatcher ??
-                WidgetsBinding.instance.platformDispatcher)
-            .locale,
-  );
+  static CalcSemanticStrings of(BuildContext context) =>
+      forLocale(DeviceLocaleScope.of(context));
 
   /// 50키의 음성 라벨. 모든 [CalcKeyId]를 담는다(테스트로 검증).
   Map<CalcKeyId, KeySpeech> get keys;

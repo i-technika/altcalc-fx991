@@ -85,12 +85,12 @@ class KeypadMetrics {
   double get numberKeyHeight => math.max(0.0, numberRowHeight - verticalGap);
 
   /// [available] 영역 안에서 [CalcTheme.keypadMinAspectRatio]~[CalcTheme.keypadMaxAspectRatio]
-  /// 가로/세로 비를 지키는 가장 큰 키패드 크기.
+  /// 가로/세로 비를 지키는 가장 큰 키패드 크기. 폭은 [CalcTheme.keypadMaxWidth]를 넘지 않는다.
   static Size fitSize(Size available) {
     final availableWidth = math.max(0.0, available.width);
     final availableHeight = math.max(0.0, available.height);
     final width = math.min(
-      availableWidth,
+      math.min(availableWidth, CalcTheme.keypadMaxWidth),
       availableHeight * CalcTheme.keypadMaxAspectRatio,
     );
     final height = math.min(

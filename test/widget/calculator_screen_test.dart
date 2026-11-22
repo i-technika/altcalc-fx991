@@ -1,21 +1,26 @@
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/main.dart' as app show main;
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/banner_ad_slot.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
 
@@ -52,6 +57,13 @@ Future<ProviderContainer> _pumpScreen(
   );
   return container;
 }
+
+/// 폴더블 내부 화면의 세로 접힘선 (펼친 상태)
+const _verticalFold = DisplayFeature(
+  bounds: Rect.fromLTWH(420, 0, 0, 701),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
+);
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
@@ -157,8 +169,11 @@ void main() {
       expect(find.byType(CalculatorScreen), findsOneWidget);
       expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
     });
+  });
 
-    testWidgets('main()은 화면을 세로로 고정하고 계산기 화면을 띄운다', (tester) async {
+  group('main() — 방향 고정과 설정 불러오기 (#24)', () {
+    /// 플랫폼 채널 호출을 기록한다.
+    List<MethodCall> recordPlatformCalls(WidgetTester tester) {
       final calls = <MethodCall>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -173,13 +188,173 @@ void main() {
           null,
         ),
       );
+      return calls;
+    }
+
+    List<Object?> orientationRequests(List<MethodCall> calls) => [
+      for (final c in calls)
+        if (c.method == 'SystemChrome.setPreferredOrientations') c.arguments,
+    ];
+
+    /// 물리 화면과 창을 [size](dp)로 맞춘다 (화면 배율 2).
+    void setDevice(WidgetTester tester, Size size) {
+      tester.view.display.devicePixelRatio = 2;
+      tester.view.display.size = size * 2;
+      tester.view.devicePixelRatio = 2;
+      tester.view.physicalSize = size * 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.view.display.reset);
+      addTearDown(DeviceOrientationLock.instance.stop);
+      // 힌지 센서 조회 채널: 기본은 "센서 없음". 채널을 흉내 내지 않으면 테스트의 가짜 비동기 안에서
+      // 응답이 오지 않아 main()이 끝나지 않는다.
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        FormFactor.deviceChannel,
+        (call) async => false,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          FormFactor.deviceChannel,
+          null,
+        ),
+      );
+    }
+
+    testWidgets('폰: 세로로 고정하고 계산기 화면을 띄운다', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(390, 844));
+      final calls = recordPlatformCalls(tester);
       await app.main();
       await tester.pump();
-      final call = calls.singleWhere(
-        (c) => c.method == 'SystemChrome.setPreferredOrientations',
-      );
-      expect(call.arguments, ['DeviceOrientation.portraitUp']);
+      expect(orientationRequests(calls), [
+        ['DeviceOrientation.portraitUp'],
+      ]);
       expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+    });
+
+    testWidgets('태블릿: 가로로 고정하고 좌우 분할로 띄운다', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(1280, 800));
+      final calls = recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      expect(orientationRequests(calls), [
+        ['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'],
+      ]);
+      expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+    });
+
+    testWidgets('저장된 왼손잡이 설정이 첫 화면부터 반영된다', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        HandednessNotifier.storageKey: 'left',
+      });
+      setDevice(tester, const Size(1280, 800));
+      recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      final lcd = tester.getRect(find.byType(LcdDisplay));
+      final keypad = tester.getRect(find.byKey(const ValueKey('calc-keypad')));
+      expect(keypad.right, lessThan(lcd.left));
+    });
+
+    /// 힌지 센서 조회 채널 응답을 [hinge]로 고정한다.
+    void mockHingeSensor(WidgetTester tester, {required bool hinge}) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        FormFactor.deviceChannel,
+        (call) async => hinge,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          FormFactor.deviceChannel,
+          null,
+        ),
+      );
+    }
+
+    testWidgets('폴더블(힌지 센서): 펼친 내부 화면에서도 처음부터 세로만 요청하고 위아래 배치로 띄운다', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      // Fold 내부 화면을 가로로 든 상태, 접힘 정보는 아직 도착 전
+      setDevice(tester, const Size(829, 690));
+      mockHingeSensor(tester, hinge: true);
+      final calls = recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      expect(orientationRequests(calls), [
+        ['DeviceOrientation.portraitUp'],
+      ]);
+      expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.foldable);
+      expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+
+      // 접힘 정보가 나중에 와도 다시 요청하지 않는다.
+      tester.view.displayFeatures = const [_verticalFold];
+      addTearDown(tester.view.resetDisplayFeatures);
+      await tester.pump();
+      expect(orientationRequests(calls), hasLength(1));
+    });
+
+    testWidgets(
+      '힌지 센서를 알리지 않는 폴더블: 접힘 정보가 오면 세로로 다시 요청하고, 같은 종류면 다시 요청하지 않는다',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        setDevice(tester, const Size(841, 701));
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        // 힌지 센서 정보가 없으면 시작 시점에는 태블릿으로 판정된다(대비책 경로).
+        expect(orientationRequests(calls), hasLength(1));
+        expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.tablet);
+
+        tester.view.displayFeatures = const [_verticalFold];
+        addTearDown(tester.view.resetDisplayFeatures);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.foldable);
+        // 접힘선이 창을 지나므로 위아래 배치다 (힌지 기준 분할은 #25).
+        expect(find.byKey(SettingsButton.buttonKey), findsNothing);
+
+        // 기기 종류가 그대로인 화면 정보 변화(회전 등)에는 다시 요청하지 않는다.
+        tester.view.physicalSize = const Size(701, 841) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(2));
+      },
+    );
+
+    testWidgets('방향 요청이 실패해도 앱은 뜨고, 다음 화면 정보 변화 때 다시 요청한다', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(390, 844));
+      var attempts = 0;
+      var fail = true;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'SystemChrome.setPreferredOrientations') {
+            attempts++;
+            if (fail) throw PlatformException(code: 'unavailable');
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await app.main();
+      await tester.pump();
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(attempts, 1);
+      expect(DeviceOrientationLock.instance.appliedKind, isNull);
+
+      fail = false;
+      tester.view.physicalSize = const Size(391, 844) * 2;
+      await tester.pump();
+      expect(attempts, 2);
+      expect(DeviceOrientationLock.instance.appliedKind, DeviceKind.phone);
     });
   });
 
