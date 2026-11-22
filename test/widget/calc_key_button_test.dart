@@ -644,6 +644,7 @@ void main() {
       Widget simulatedScreenHost(
         List<CalcKeyId> log, {
         EdgeInsets rootInset = EdgeInsets.zero,
+        Size mediaQuerySize = screenSize,
       }) {
         final screen = Stack(
           children: [
@@ -684,9 +685,9 @@ void main() {
                     child: Padding(
                       padding: rootInset,
                       child: ScreenCoordinateRoot(
-                        data: const MediaQueryData(
-                          size: screenSize,
-                          systemGestureInsets: EdgeInsets.all(30),
+                        data: MediaQueryData(
+                          size: mediaQuerySize,
+                          systemGestureInsets: const EdgeInsets.all(30),
                         ),
                         child: screen,
                       ),
@@ -742,7 +743,7 @@ void main() {
       });
 
       testWidgets(
-        'ScreenCoordinateRoot가 받은 크기가 MediaQuery 크기와 다르면 첫 레이아웃 때 알린다',
+        'ScreenCoordinateRoot가 받은 크기가 MediaQuery 크기와 다르면 레이아웃할 때 알린다',
         (tester) async {
           await tester.pumpWidget(
             simulatedScreenHost(
@@ -753,6 +754,63 @@ void main() {
           final error = tester.takeException();
           expect(error, isA<FlutterError>());
           expect('$error', contains('ScreenCoordinateRoot'));
+        },
+      );
+
+      testWidgets('제약은 그대로이고 data.size만 바뀌어도 다시 확인한다', (tester) async {
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(simulatedScreenHost(pressed));
+        expect(tester.takeException(), isNull, reason: '처음에는 크기가 맞다');
+
+        // 받는 크기(400×400)는 그대로 두고 MediaQuery 크기만 바꾼다.
+        await tester.pumpWidget(
+          simulatedScreenHost(pressed, mediaQuerySize: const Size(400, 390)),
+        );
+        final error = tester.takeException();
+        expect(error, isA<FlutterError>());
+        expect('$error', contains('ScreenCoordinateRoot'));
+      });
+
+      testWidgets(
+        '루트 없이 키 위쪽에서 MediaQuery.size를 영역 기준으로 덮어쓰면 오류를 보고하고 입력은 처리한다',
+        (tester) async {
+          // #24·#25에서 분할 영역마다 size를 덮어쓰는 실수를 잡는다(배치 계약).
+          _recordHaptics(tester);
+          final pressed = <CalcKeyId>[];
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 400,
+                  height: 600,
+                  child: MediaQuery(
+                    data: const MediaQueryData(
+                      size: Size(400, 600), // 테스트 View는 800×600
+                      systemGestureInsets: EdgeInsets.symmetric(horizontal: 30),
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        width: 64,
+                        height: 72,
+                        child: CalcKeyButton(
+                          keyDef: keyDefOf(CalcKeyId.num1),
+                          onPressed: pressed.add,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          final g = await tester.startGesture(const Offset(200, 300));
+          final error = tester.takeException();
+          expect(error, isA<FlutterError>());
+          expect('$error', contains('MediaQuery.size'));
+          await g.up();
+          await tester.pump();
+          expect(pressed, [CalcKeyId.num1], reason: '보고만 하고 입력 처리는 계속한다');
         },
       );
 

@@ -364,12 +364,12 @@ void main() {
       tester,
     ) async {
       await _pumpPreview(tester);
-      final index = previewDevices.indexWhere(
-        (d) =>
-            d.systemGestureInsets.left > 0 && d.systemGestureInsets.right > 0,
-      );
+      // 키패드 좌우 끝 열이 뒤로가기 영역에 걸리는 프리셋 (폴더블 내부는 화면이 넓어 걸리지 않는다)
+      final index = previewDevices.indexWhere((d) => d.name == '폴더블 커버');
       expect(index, isNonNegative);
       final device = previewDevices[index];
+      expect(device.systemGestureInsets.left, greaterThan(0));
+      expect(device.systemGestureInsets.right, greaterThan(0));
       await _selectDevice(tester, index);
 
       // 기기 화면이 패널 오른쪽으로 밀리고 축소되어 있어야 이 검사가 의미 있다.

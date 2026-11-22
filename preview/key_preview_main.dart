@@ -125,7 +125,7 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 48),
     systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
-  // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다)
+  // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음)
   PreviewDevice(
     '분할 화면 위',
     Size(390, 420),
@@ -308,7 +308,8 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
 /// 화면이 실제 기기에서처럼 배치를 산출하게 한다. 화면은 패널 폭만큼 밀리고 축소되므로, 같은 위젯이
 /// 이 화면을 좌표 원점으로 표시해 키 버튼이 제스처 영역을 화면 기준 좌표로 판정하게 한다(#50).
 /// 실제 기기와 다르게 남는 값:
-/// - `devicePixelRatio`·`displayFeatures`(폴더블 힌지)·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다.
+/// - `devicePixelRatio`·플랫폼(스크린리더 알림 경로)은 호스트(브라우저) 값이다. `displayFeatures`(폴더블 힌지)는
+///   비워 둔다(#51).
 /// - 제스처 영역에서 시작한 터치를 시스템이 가로채지는 않는다 — 손을 뗄 때 확정되는 동작만 확인할 수 있다.
 class _DeviceFrame extends StatelessWidget {
   final PreviewDevice device;
@@ -386,6 +387,8 @@ class _DeviceFrame extends StatelessWidget {
                               viewPadding: device.padding,
                               viewInsets: EdgeInsets.zero,
                               systemGestureInsets: device.systemGestureInsets,
+                              // 호스트의 힌지 정보가 축소된 화면 좌표에 새지 않게 비운다(주입은 #51).
+                              displayFeatures: const [],
                               textScaler: TextScaler.linear(textScale),
                             ),
                             child: const CalculatorScreen(),
