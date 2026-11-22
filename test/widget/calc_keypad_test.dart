@@ -633,8 +633,33 @@ void _cursorPadShapeTests() {
       expect(g.sectorAt(at(g, 0, -1.02)), isNull);
       // 대각선 (0.68, 0.68): 타원이면 안(0.92 < 1)이지만 둥근 마름모는 밖이다.
       expect(g.sectorAt(at(g, 0.68, 0.68)), isNull);
-      // 대각선 (0.55, 0.55): 뾰족한 마름모면 밖(|u|+|v| = 1.1)이지만 꼭짓점이 둥글어 안이다.
+      // 대각선 (0.55, 0.55): 뾰족한 마름모면 밖(|u|+|v| = 1.1)이지만 변이 부풀어 안이다.
       expect(g.sectorAt(at(g, 0.55, 0.55)), CursorPadSector.down);
+    });
+
+    test('외곽 꼭짓점은 뾰족하지 않고 둥글다 (꼭짓점에서 2차로 물러난다)', () {
+      final g = CursorPadGeometry(const Size(114, 66));
+
+      /// 정규화 높이 [v]에서 ▶ 꼭짓점 쪽 외곽까지의 u (이분법, 판정 기준 [CursorPadGeometry.sectorAt])
+      double edgeU(double v) {
+        var lo = 0.5;
+        var hi = 1.5;
+        for (var i = 0; i < 60; i++) {
+          final mid = (lo + hi) / 2;
+          if (g.sectorAt(at(g, mid, v)) == null) {
+            hi = mid;
+          } else {
+            lo = mid;
+          }
+        }
+        return lo;
+      }
+
+      // 둥근 꼭짓점은 후퇴량 1 − u가 v²에 비례(비 4)하고, 뾰족한 꼭짓점은 |v|에 비례(비 2)한다.
+      // (|u|ⁿ+|v|ⁿ 초타원 n=1.5는 |v|^1.5에 비례해 비가 약 2.8이다.)
+      final ratio = (1 - edgeU(0.1)) / (1 - edgeU(0.05));
+      expect(ratio, inInclusiveRange(3.6, 4.4));
+      expect(1 - edgeU(0.1), greaterThan(0));
     });
 
     test('X자 홈은 |u| = k·|v| 이고, k > 1이라 ◀·▶ 쪽으로 좁아진다', () {
@@ -648,15 +673,11 @@ void _cursorPadShapeTests() {
       expect(g.sectorAt(at(g, 0.4, -0.4)), CursorPadSector.up);
     });
 
-    test('허브 반지름 안쪽은 데드존, 바로 바깥은 방향 키다', () {
+    test('데드존 안쪽만 무시하고, 그려진 허브의 바깥 고리는 방향 키다', () {
       for (final size in padSizes) {
         final g = CursorPadGeometry(size);
-        // 허브 지름은 패드 짧은 변의 약 1/4 (실물 사진 눈대중 범위)
-        expect(
-          2 * g.hubRadius / math.min(size.width, size.height),
-          inInclusiveRange(0.2, 0.3),
-          reason: '$size',
-        );
+        expect(g.deadZoneRadius, greaterThan(0), reason: '$size');
+        expect(g.deadZoneRadius, lessThan(g.hubRadius), reason: '$size');
         for (final sector in CursorPadSector.values) {
           final dir = switch (sector) {
             CursorPadSector.up => const Offset(0, -1),
@@ -664,11 +685,18 @@ void _cursorPadShapeTests() {
             CursorPadSector.left => const Offset(-1, 0),
             CursorPadSector.right => const Offset(1, 0),
           };
-          expect(g.sectorAt(g.center + dir * (g.hubRadius - 0.5)), isNull);
+          expect(g.sectorAt(g.center + dir * (g.deadZoneRadius * 0.9)), isNull);
           expect(
-            g.sectorAt(g.center + dir * (g.hubRadius + 0.5)),
+            g.sectorAt(g.center + dir * (g.deadZoneRadius * 1.1)),
             sector,
             reason: '$size ${sector.name}',
+          );
+          // 허브 고리 (데드존과 허브 가장자리 사이)
+          final ring = (g.deadZoneRadius + g.hubRadius) / 2;
+          expect(
+            g.sectorAt(g.center + dir * ring),
+            sector,
+            reason: '$size ${sector.name} 허브 고리',
           );
         }
       }
@@ -700,7 +728,7 @@ void _cursorPadShapeTests() {
       }
     });
 
-    test('구역 경로는 방향 판정과 일치한다 (경계 1dp 이내 제외)', () {
+    test('구역 경로는 방향 판정과 일치한다 (경계 0.3dp 이내 제외)', () {
       for (final size in padSizes) {
         final g = CursorPadGeometry(size);
         final paths = {
@@ -712,7 +740,7 @@ void _cursorPadShapeTests() {
           for (var y = 0.5; y < size.height; y += 1.5) {
             total++;
             final p = Offset(x, y);
-            if (!_stableAt(g, p, 1)) continue;
+            if (!_stableAt(g, p, 0.3)) continue;
             final expected = g.sectorAt(p);
             for (final s in CursorPadSector.values) {
               expect(
@@ -725,27 +753,29 @@ void _cursorPadShapeTests() {
           }
         }
         // 경계 근처로 빠지는 점은 일부뿐이다.
-        expect(checked, greaterThan(total * 0.8), reason: '$size');
+        expect(checked, greaterThan(total * 0.95), reason: '$size');
       }
     });
 
-    test('구역 넓이 합 + 허브 넓이는 외곽 넓이와 같다', () {
+    test('구역 넓이 합 + 데드존 넓이는 외곽 넓이와 같다', () {
       final g = CursorPadGeometry(const Size(114, 66));
-      const n = CalcTheme.cursorPadOutlineExponent;
+      const p = CalcTheme.cursorPadOutlineExponent;
       var inside = 0;
       const step = 0.25;
       for (var x = step / 2; x < g.size.width; x += step) {
         for (var y = step / 2; y < g.size.height; y += step) {
           final d = Offset(x, y) - g.center;
-          final u = (d.dx / g.radiusX).abs();
-          final v = (d.dy / g.radiusY).abs();
-          if (math.pow(u, n) + math.pow(v, n) <= 1) inside++;
+          final u = d.dx / g.radiusX;
+          final v = d.dy / g.radiusY;
+          if (math.pow((u + v).abs(), p) + math.pow((u - v).abs(), p) <= 2) {
+            inside++;
+          }
         }
       }
       final outline = inside * step * step;
       final sum =
           CursorPadSector.values.map(g.sectorArea).reduce((a, b) => a + b) +
-          math.pi * g.hubRadius * g.hubRadius;
+          math.pi * g.deadZoneRadius * g.deadZoneRadius;
       expect(sum, moreOrLessEquals(outline, epsilon: outline * 0.01));
     });
 
@@ -796,7 +826,7 @@ void _cursorPadShapeTests() {
         for (var x = 0.5; x < box.width; x += 3) {
           for (var y = 0.5; y < box.height; y += 3) {
             final p = box.topLeft + Offset(x, y);
-            if (!_stableAt(g, p, 1)) continue;
+            if (!_stableAt(g, p, 0.3)) continue;
             expect(
               local.contains(Offset(x, y)),
               g.sectorAt(p) == sector,
@@ -850,7 +880,7 @@ void _cursorPadShapeTests() {
   group('커서 패드 (누름·라벨)', () {
     for (final area in _areas) {
       testWidgets(
-        '${area.width}×${area.height}: 누른 곳의 방향만 입력되고 허브·외곽 밖은 무시된다',
+        '${area.width}×${area.height}: 누른 곳의 방향만 입력되고 데드존·외곽 밖은 무시된다',
         (tester) async {
           final pressed = <CalcKeyId>[];
           await tester.pumpWidget(
@@ -865,7 +895,7 @@ void _cursorPadShapeTests() {
           for (var i = 0; i <= 12; i++) {
             for (var j = 0; j <= 8; j++) {
               final local = Offset(pad.width * i / 12, pad.height * j / 8);
-              if (!_stableAt(g, local, 1.5)) continue;
+              if (!_stableAt(g, local, 0.5)) continue;
               final expected = g.sectorAt(local);
               hit.add(expected);
               pressed.clear();
@@ -878,32 +908,77 @@ void _cursorPadShapeTests() {
               );
             }
           }
-          // 격자가 네 방향과 데드존(허브·외곽 밖)을 모두 지나갔다.
+          // 격자가 네 방향과 데드존(한가운데·외곽 밖)을 모두 지나갔다.
           expect(hit, {...CursorPadSector.values, null});
         },
       );
     }
 
-    testWidgets('허브를 누르면 아무 키도 입력되지 않는다', (tester) async {
+    testWidgets('허브 한가운데는 무시되고, 허브 바깥 고리는 그쪽 방향이 입력된다', (tester) async {
       final pressed = <CalcKeyId>[];
       await tester.pumpWidget(
         _host(CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false)),
       );
       final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
       final g = CursorPadGeometry(pad.size);
-      expect(g.hubRadius, greaterThan(5));
+      expect(g.deadZoneRadius, greaterThan(2));
+      // 데드존 안: 무입력
       for (final d in [
         Offset.zero,
-        Offset(g.hubRadius * 0.7, 0),
-        Offset(-g.hubRadius * 0.7, 0),
-        Offset(0, -g.hubRadius * 0.7),
-        Offset(0, g.hubRadius * 0.7),
+        Offset(g.deadZoneRadius * 0.6, 0),
+        Offset(0, -g.deadZoneRadius * 0.6),
       ]) {
         await tester.tapAt(pad.center + d);
         await tester.pump();
       }
       expect(pressed, isEmpty);
+      // 허브 고리: 축 방향의 키
+      final ring = (g.deadZoneRadius + g.hubRadius) / 2;
+      for (final (d, id) in [
+        (Offset(0, -ring), CalcKeyId.cursorUp),
+        (Offset(0, ring), CalcKeyId.cursorDown),
+        (Offset(-ring, 0), CalcKeyId.cursorLeft),
+        (Offset(ring, 0), CalcKeyId.cursorRight),
+      ]) {
+        pressed.clear();
+        await tester.tapAt(pad.center + d);
+        await tester.pump();
+        expect(pressed, [id], reason: '$d');
+      }
     });
+
+    for (final area in const [Size(800, 300), Size(360, 900)]) {
+      testWidgets(
+        '${area.width}×${area.height}: 패드 상자 밖 셀 여백은 아무 키도 입력하지 않는다',
+        (tester) async {
+          final pressed = <CalcKeyId>[];
+          await tester.pumpWidget(
+            _host(
+              CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false),
+              size: area,
+            ),
+          );
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          // 전제: 셀 비율이 범위 밖이라 패드 상자가 셀보다 작다.
+          expect(pad.width < cell.width || pad.height < cell.height, isTrue);
+          final margins = [
+            if (pad.left - cell.left > 2) Offset(cell.left + 1, cell.center.dy),
+            if (cell.right - pad.right > 2)
+              Offset(cell.right - 1, cell.center.dy),
+            if (pad.top - cell.top > 2) Offset(cell.center.dx, cell.top + 1),
+            if (cell.bottom - pad.bottom > 2)
+              Offset(cell.center.dx, cell.bottom - 1),
+          ];
+          expect(margins, isNotEmpty);
+          for (final p in margins) {
+            await tester.tapAt(p);
+            await tester.pump();
+          }
+          expect(pressed, isEmpty);
+        },
+      );
+    }
 
     for (final area in _areas) {
       for (final scale in [1.0, 1.3]) {

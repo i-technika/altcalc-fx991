@@ -479,13 +479,16 @@ enum CursorPadSector { up, down, left, right }
 /// 커서 패드 모양 계산기 — 패드 상자([size]) 로컬 좌표의 외곽·X자 홈·허브와 방향 판정.
 ///
 /// 패드 중심을 원점으로, 반폭 [radiusX]·반높이 [radiusY]로 정규화한 좌표 (u, v)를 쓴다.
-/// - **외곽**: 초타원 |u|ⁿ + |v|ⁿ = 1 (n = [CalcTheme.cursorPadOutlineExponent]) — 가로로 긴 둥근 마름모.
+/// - **외곽**: 45° 돌린 Lamé 곡선 |u+v|ᵖ + |u−v|ᵖ = 2 (p = [CalcTheme.cursorPadOutlineExponent]) —
+///   꼭짓점이 (±1, 0)·(0, ±1)에 있고 꼭짓점 곡률이 유한한(둥근) 가로로 긴 마름모.
 ///   외곽선이 상자 밖으로 나가지 않도록 반지름은 선 두께 절반만큼 줄인다.
 /// - **X자 홈**: |u| = k·|v| (k = [CalcTheme.cursorPadGrooveSlope]). |u| ≤ k·|v|이면 ▲·▼, 아니면 ◀·▶.
-/// - **허브**: 중심에서 화면 거리 [hubRadius] 이내의 원. 어느 방향에도 속하지 않는 데드존이다.
+/// - **허브**: 중심에서 화면 거리 [hubRadius]인 원을 검게 그린다. 홈은 허브 가장자리에서 시작한다.
+/// - **데드존**: 중심에서 [deadZoneRadius] 이내만 어느 방향에도 속하지 않는다. 허브보다 작아서,
+///   허브 바깥 고리를 누르면 홈으로 나뉜 방향이 입력된다(작은 화면의 ▲·▼ 터치 깊이 확보, #43).
 ///
 /// [sectorAt]은 위 정의를 그대로 옮긴 명세(참값) 판정이다. 실제 그림·누름·이동 이탈 판정은 이를
-/// 다각형으로 근사한 [sectorPath]가 맡는다(곡선 구간은 [_arcSegments]개 선분, 경계에서 1dp 미만 차이).
+/// 다각형으로 근사한 [sectorPath]가 맡는다(곡선 구간은 [_arcSegments]개 선분, 경계에서 0.3dp 미만 차이).
 /// 테스트는 두 판정이 일치하는지로 경로를 검증한다.
 @immutable
 class CursorPadGeometry {
@@ -498,18 +501,23 @@ class CursorPadGeometry {
   /// 외곽 반높이 (dp)
   final double radiusY;
 
-  /// 허브 반지름 (dp)
+  /// 그려지는 허브 반지름 (dp)
   final double hubRadius;
+
+  /// 누를 수 없는 가운데 원의 반지름 (dp, [hubRadius] 이하)
+  final double deadZoneRadius;
 
   factory CursorPadGeometry(Size size) {
     const inset = CalcTheme.cursorPadDividerWidth / 2;
     final rx = math.max(0.0, size.width / 2 - inset);
     final ry = math.max(0.0, size.height / 2 - inset);
+    final short = math.min(rx, ry);
     return CursorPadGeometry._(
       size,
       rx,
       ry,
-      CalcTheme.cursorPadHubRadiusRatio * math.min(rx, ry),
+      CalcTheme.cursorPadHubRadiusRatio * short,
+      CalcTheme.cursorPadDeadZoneRadiusRatio * short,
     );
   }
 
@@ -518,12 +526,13 @@ class CursorPadGeometry {
     this.radiusX,
     this.radiusY,
     this.hubRadius,
+    this.deadZoneRadius,
   );
 
-  static const double _n = CalcTheme.cursorPadOutlineExponent;
+  static const double _p = CalcTheme.cursorPadOutlineExponent;
   static const double _k = CalcTheme.cursorPadGrooveSlope;
 
-  /// 곡선 구간(외곽 호·허브 호) 하나를 나누는 선분 수
+  /// 곡선 구간(외곽 호·데드존 호) 하나를 나누는 선분 수
   static const int _arcSegments = 32;
 
   /// 패드 중심
@@ -531,14 +540,16 @@ class CursorPadGeometry {
 
   bool get _isEmpty => radiusX <= 0 || radiusY <= 0;
 
-  /// [localPosition](패드 로컬 좌표)이 속한 방향. 허브·외곽 밖이거나 유한하지 않은 좌표면 `null`이다.
+  /// [localPosition](패드 로컬 좌표)이 속한 방향. 데드존·외곽 밖이거나 유한하지 않은 좌표면 `null`이다.
   CursorPadSector? sectorAt(Offset localPosition) {
     if (_isEmpty || !localPosition.isFinite) return null;
     final d = localPosition - center;
-    if (d.distance <= hubRadius) return null;
+    if (d.distance <= deadZoneRadius) return null;
     final u = d.dx / radiusX;
     final v = d.dy / radiusY;
-    if (math.pow(u.abs(), _n) + math.pow(v.abs(), _n) > 1) return null;
+    if (math.pow((u + v).abs(), _p) + math.pow((u - v).abs(), _p) > 2) {
+      return null;
+    }
     if (u.abs() <= _k * v.abs()) {
       return v < 0 ? CursorPadSector.up : CursorPadSector.down;
     }
@@ -564,25 +575,26 @@ class CursorPadGeometry {
     final c = math.cos(phi);
     final s = math.sin(phi);
     final rho = math.pow(
-      math.pow(c.abs(), _n) + math.pow(s.abs(), _n),
-      -1 / _n,
+      2 / (math.pow((c + s).abs(), _p) + math.pow((c - s).abs(), _p)),
+      1 / _p,
     );
     return center + Offset(rho * c * radiusX, rho * s * radiusY);
   }
 
-  /// 정규화 각도 [phi] 방향 직선과 허브 원의 교점
-  Offset _hubPoint(double phi) {
+  /// 정규화 각도 [phi] 방향 직선과 중심에서 반지름 [radius]인 원의 교점
+  Offset _circlePoint(double phi, double radius) {
     final psi = math.atan2(math.sin(phi) * radiusY, math.cos(phi) * radiusX);
-    return center + Offset.fromDirection(psi, hubRadius);
+    return center + Offset.fromDirection(psi, radius);
   }
 
   /// [sector] 구역 다각형 꼭짓점 (패드 로컬 좌표): 외곽 호를 시계 방향으로 따라간 뒤,
-  /// 허브 호를 반시계 방향으로 되돌아온다 (두 호를 잇는 변이 X자 홈이다).
-  List<Offset> _sectorPoints(CursorPadSector sector) {
+  /// 데드존 호를 반시계 방향으로 되돌아온다 (두 호를 잇는 변이 X자 홈이다). 비어 있으면 빈 목록.
+  List<Offset> sectorPolygon(CursorPadSector sector) {
+    if (_isEmpty) return const [];
     final (from, to) = _angles(sector);
-    // 허브 호는 화면 각도로 고르게 나눈다 (끝 각도는 시작보다 작아지게 2π 단위로 맞춘다).
-    final a0 = (_hubPoint(to) - center).direction;
-    var a1 = (_hubPoint(from) - center).direction;
+    // 데드존 호는 화면 각도로 고르게 나눈다 (끝 각도는 시작보다 작아지게 2π 단위로 맞춘다).
+    final a0 = (_circlePoint(to, 1) - center).direction;
+    var a1 = (_circlePoint(from, 1) - center).direction;
     while (a1 > a0) {
       a1 -= 2 * math.pi;
     }
@@ -591,14 +603,17 @@ class CursorPadGeometry {
         _outlinePoint(from + (to - from) * i / _arcSegments),
       for (var i = 0; i <= _arcSegments; i++)
         center +
-            Offset.fromDirection(a0 + (a1 - a0) * i / _arcSegments, hubRadius),
+            Offset.fromDirection(
+              a0 + (a1 - a0) * i / _arcSegments,
+              deadZoneRadius,
+            ),
     ];
   }
 
   /// [sector] 구역 경로 (패드 로컬 좌표)
   Path sectorPath(CursorPadSector sector) {
     if (_isEmpty) return Path();
-    return Path()..addPolygon(_sectorPoints(sector), true);
+    return Path()..addPolygon(sectorPolygon(sector), true);
   }
 
   /// 외곽선 경로 (패드 로컬 좌표)
@@ -611,13 +626,13 @@ class CursorPadGeometry {
     ], true);
   }
 
-  /// X자 홈 네 줄 — 각각 (허브 위 끝, 외곽 위 끝)
+  /// X자 홈 네 줄 — 각각 (허브 가장자리 끝, 외곽 위 끝)
   List<(Offset, Offset)> grooves() {
     if (_isEmpty) return const [];
     final t = _grooveAngle;
     return [
       for (final phi in [t, math.pi - t, math.pi + t, -t])
-        (_hubPoint(phi), _outlinePoint(phi)),
+        (_circlePoint(phi, hubRadius), _outlinePoint(phi)),
     ];
   }
 
@@ -667,7 +682,7 @@ class CursorPadGeometry {
   /// [sector] 구역 넓이 (dp², [sectorPath] 다각형의 신발끈 공식)
   double sectorArea(CursorPadSector sector) {
     if (_isEmpty) return 0;
-    final points = _sectorPoints(sector);
+    final points = sectorPolygon(sector);
     var twice = 0.0;
     for (var i = 0; i < points.length; i++) {
       final p = points[i];
@@ -683,17 +698,19 @@ class CursorPadGeometry {
 ///
 /// ```
 ///   ◀  ╲    ▲    ╱  ▶     ▲·▼: 넓은 사다리꼴, ◀·▶: 좁은 삼각형에 가깝다
-///         ╲ ● ╱           ●: 누를 수 없는 검은 허브 (데드존)
+///         ╲ ● ╱           ●: 검은 허브 (한가운데 작은 원만 데드존)
 ///         ╱   ╲           외곽: 가로로 긴 둥근 마름모 (밖은 무시)
 ///      ╱    ▼    ╲
 /// ```
 /// 각 방향 키캡은 [sectorBox](패드를 반으로 나눈 사각형)에 그리고, [CalcKeyButton.shape]로 구역 경로를
 /// 넘겨 그림·누름·이동 이탈(반복 중단) 판정을 모두 구역 안으로 제한한다.
 ///
-/// ## 허브는 데드존이다 (#43)
+/// ## 허브 한가운데만 데드존이다 (#43)
 /// 가운데는 네 방향이 만나 손가락이 어느 쪽을 노렸는지 가장 모호한 곳이다. 가까운 방향으로 보내면
 /// 의도와 다른 방향으로 커서가 움직이는 오입력이 생기고(되돌리기 어렵다), 무시하면 다시 누르기만 하면 된다.
-/// 그래서 실물처럼 허브는 누를 수 없게 두고, 누른 채 허브로 미끄러지면 반복 입력도 멈춘다.
+/// 그래서 한가운데([CursorPadGeometry.deadZoneRadius])는 누를 수 없게 두고, 누른 채 그리로 미끄러지면
+/// 반복 입력도 멈춘다. 다만 그려진 허브 전체를 데드존으로 두면 작은 폰에서 ▲·▼ 터치 깊이가 28dp 아래로
+/// 줄어들어, 허브 바깥 고리는 홈으로 나뉜 방향 키에 준다(실물보다 누를 수 있는 곳이 조금 넓다).
 ///
 /// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분은 데드존).
 ///
@@ -810,7 +827,7 @@ class CursorPad extends StatelessWidget {
                       child: buttonBuilder(defOf(sector), shapeOf(sector)),
                     ),
                   ),
-                // X자 홈·외곽선·허브 (터치는 통과시킨다 — 허브 아래에는 키가 없어 데드존이 된다)
+                // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
                 // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
                 const Positioned.fill(
                   child: IgnorePointer(

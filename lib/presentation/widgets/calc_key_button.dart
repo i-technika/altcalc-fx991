@@ -174,6 +174,15 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    // 핫 리로드로 모양 상수가 바뀌어도 모양 함수는 같은 인스턴스라 캐시가 남는다 — 비워서 다시 만든다.
+    _shapePath = null;
+    _shapePathSource = null;
+    _shapePathSize = null;
+  }
+
+  @override
   void dispose() {
     _cancelRepeat();
     super.dispose();
