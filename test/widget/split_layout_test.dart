@@ -52,6 +52,7 @@ Future<(ProviderContainer, SharedPreferences)> _pump(
   Handedness? handedness,
   List<DisplayFeature> displayFeatures = const [],
   ProviderContainer? container,
+  bool highContrast = false,
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
@@ -81,6 +82,7 @@ Future<(ProviderContainer, SharedPreferences)> _pump(
             viewPadding: padding,
             textScaler: TextScaler.linear(textScale),
             displayFeatures: displayFeatures,
+            highContrast: highContrast,
           ),
           child: const CalculatorScreen(),
         ),
@@ -447,6 +449,21 @@ void main() {
         find.byKey(HandednessDialog.closeKey).hitTestable(),
         findsOneWidget,
       );
+    });
+
+    testWidgets('설정 아이콘 색은 기기의 고대비 설정을 따른다 (#54)', (tester) async {
+      for (final palette in [CalcPalette.standard, CalcPalette.highContrast]) {
+        await _pump(
+          tester,
+          size: const Size(1280, 800),
+          highContrast: palette.isHighContrast,
+        );
+        expect(
+          tester.widget<IconButton>(_settings).color,
+          palette.settingsIcon,
+          reason: '고대비=${palette.isHighContrast}',
+        );
+      }
     });
 
     testWidgets('한국어 기기에서는 설정 문구가 한국어다', (tester) async {

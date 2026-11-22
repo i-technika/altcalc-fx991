@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
+import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
@@ -333,6 +334,42 @@ void main() {
       expect(tester.getSize(_deviceScreen), previewDevices.first.size);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      '고대비 토글은 기기 화면의 MediaQuery.highContrast를 바꾸고 키캡이 고대비 색이 된다 (#54)',
+      (tester) async {
+        await _pumpPreview(tester);
+        final toggle = find.byKey(const ValueKey('preview-high-contrast'));
+        bool highContrast() => MediaQuery.highContrastOf(
+          tester.element(find.byType(CalculatorScreen)),
+        );
+        Color? keycapColor() =>
+            (tester
+                        .widget<AnimatedContainer>(_keycap(CalcKeyId.add))
+                        .decoration!
+                    as BoxDecoration)
+                .color;
+
+        expect(highContrast(), isFalse);
+        expect(
+          keycapColor(),
+          CalcPalette.standard.keyBackground(KeyCategory.operator),
+        );
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(highContrast(), isTrue);
+        expect(
+          keycapColor(),
+          CalcPalette.highContrast.keyBackground(KeyCategory.operator),
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(highContrast(), isFalse);
+      },
+    );
 
     testWidgets('기능 입력은 번호·층 표기로, 모디파이어 대기 변화는 번호 없이 최근 순으로 기록된다', (
       tester,

@@ -7,10 +7,43 @@
 
 ## 개발 환경
 
-- Flutter 3.50 이상 (Dart 3.14 이상)
+- Flutter 3.50.0 — `pubspec.yaml`의 `environment.flutter`로 고정한다. CI도 같은 값을 읽고(#78),
+  다른 버전의 SDK로는 `flutter pub get`이 `requires Flutter SDK version ...`으로 실패한다.
 - 의존성 설치: `flutter pub get`
 - 생성 플러그인 파일(`linux/flutter/generated_plugin*` 등)은 `.gitattributes`로 LF 고정이다. 이 설정 이전에 받은 Windows 작업 트리에서
   이 파일들이 내용 차이 없이 수정됨으로 보이면 Git Bash에서 `bash .claude/scripts/normalize-generated-eol.sh`를 한 번 실행한다.
+
+### Flutter SDK 버전 올리기
+
+로컬 SDK·`pubspec.yaml`·`pubspec.lock`·README를 **한 커밋**에서 함께 바꾼다. CI는 `pubspec.yaml`을 읽으므로 워크플로는 고치지 않는다.
+
+**먼저 알아 둘 점:** 고정값은 정확한 버전이라, SDK를 바꾸는 순간 옛 고정값을 가진 **같은 PC의 다른 브랜치·worktree**에서
+`flutter pub get`·`test`·`analyze`·VS Code 실행이 모두 실패한다(SDK 폴더는 하나를 공유한다).
+같은 이유로 버전 올리기 절차 밖에서는 `flutter upgrade`를 실행하지 않는다(새 버전 알림이 떠도 무시한다).
+
+- 버전 올리기는 진행 중인 서브이슈 브랜치가 없는 마일스톤 경계에서 한다.
+  SDK를 바꾸기 전에 다른 세션의 `flutter` 명령과 VS Code 창을 닫는다(Windows에서 SDK 파일이 잠겨 있으면 전환이 실패할 수 있다).
+- 그럴 수 없으면 새 버전을 별도 폴더에 받아(`git clone -b X.Y.Z https://github.com/flutter/flutter.git ~/develop/flutter-X.Y.Z`)
+  그 작업에 쓰는 셸의 PATH 앞에만 넣는다. 기존 SDK는 나머지 브랜치가 고정값을 올릴 때까지 그대로 둔다.
+  - PATH는 브랜치가 아니라 셸마다 적용된다. 그 셸에서 실행한 명령만 새 SDK를 쓴다.
+  - VS Code는 사용자 설정 `dart.flutterSdkPath`가 PATH보다 앞선다(아래 "Flutter SDK를 찾는 순서").
+    그 설정이 없으면 새 SDK를 PATH에 넣은 셸에서 `code <worktree 폴더>`로 **새 창**을 연다.
+    설정이 있으면 그 창에서 명령 팔레트의 `Flutter: Change SDK`로 새 폴더를 고른다.
+
+1. 올릴 stable 버전 `X.Y.Z`를 정한다 ([릴리스 목록](https://docs.flutter.dev/install/archive)).
+2. 로컬 SDK를 그 버전으로 바꾼다.
+   - 최신 stable이 `X.Y.Z`면 `flutter upgrade`로 충분하다.
+   - 아니면 SDK 폴더에서 `git fetch --tags && git checkout X.Y.Z`를 실행하고 `flutter --version`으로 확인한다.
+     태그를 체크아웃하면 SDK가 브랜치 밖에 있게 되어 `flutter upgrade`가 거부된다.
+     나중에 최신으로 돌아갈 때는 `git checkout stable` 뒤 `flutter upgrade`를 실행한다.
+3. `pubspec.yaml`의 `environment.flutter`를 `X.Y.Z`로 바꾼다. Dart 버전이 바뀌었으면 `environment.sdk`도 검토한다.
+4. `flutter pub get`을 실행한다. `pubspec.lock`의 `sdks.flutter`가 바뀌고, SDK가 고정하는 의존성(`meta`·`characters` 등)도 바뀔 수 있다.
+5. 위 "개발 환경"의 버전 표기를 고친다. `test/unit/flutter_sdk_pin_test.dart`가 고정값과 대조한다.
+6. `flutter analyze`·`flutter test`를 통과시킨 뒤 위 파일을 함께 커밋한다.
+   - `pubspec.lock`을 빠뜨리면 CI의 작업 트리 검사(`.github/scripts/verify-clean-tree.sh`)가 실패한다.
+   - 로컬 테스트는 이를 잡지 못한다. `flutter test`가 먼저 pub get으로 lock을 다시 쓰기 때문이다.
+
+다른 개발 PC는 이 커밋을 받은 뒤 2번처럼 SDK를 맞춘다.
 
 ## 앱 실행
 
@@ -29,6 +62,9 @@ flutter run            # 연결된 기기·에뮬레이터
   접힘선 기준 좌우 배치를 확인할 수 있다. 접힘선 위치는 기기 화면 위 점선과 캡션으로 표시된다 — 앱이 화면을 나누는 데
   쓰는 접힘선은 주황, 배치에 쓰지 않는 접힘선은 회색 점선과 캡션 `(배치에 안 씀)`이고, 폭이 있는 힌지는 영역을 반투명하게 칠한다.
 - **시스템 글자 배율**: 85% / 100% / 130% / 200% (키패드·LCD는 130%에서 배율을 자르므로 200%는 그 잘림 확인용)
+- **고대비**: 기기의 고대비 설정(`MediaQuery.highContrast` — iOS "대비 증가", Android 14 이상 "색상 대비" 중간·높음)을 켠 화면.
+  호스트(브라우저·OS)의 고대비 설정과 무관하게 이 스위치가 정한다.
+  키 테두리·각인·LCD 꺼진 표시기가 진해지고, 흰 라벨 키는 누르면 반전된다(#54).
 - **입력 로그**: 눌린 기능을 번호와 함께 최근 순으로 기록한다. SHIFT·ALPHA 기능은 각인 색과 `SOLVE  ← SHIFT + CALC` 형식으로,
   길게 눌러 반복된 입력은 `(반복)`으로, 입력 없는 대기 변화는 `[SHIFT 대기]`·`[SHIFT 해제]`로 표시한다.
   `초기화`는 계산기 상태와 로그를 함께 지운다.

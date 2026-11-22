@@ -86,7 +86,7 @@ class SettingsButton extends StatelessWidget {
     return IconButton(
       key: buttonKey,
       tooltip: strings.settingsButton,
-      color: CalcTheme.settingsIcon,
+      color: CalcPalette.of(context).settingsIcon,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       icon: const Icon(Icons.settings),

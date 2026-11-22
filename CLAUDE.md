@@ -9,6 +9,8 @@
 
 ## 1. 핵심 아키텍처 및 기술 스택
 - **프레임워크:** Flutter (Dart 3.14+) — Android / iOS 크로스 플랫폼
+  - SDK 버전은 `pubspec.yaml`의 `environment.flutter`(정확한 버전) 하나로 고정하고 CI도 그 값을 읽는다 (#78). 버전 숫자는 그 파일만 기준으로 삼는다.
+    올릴 때는 README "Flutter SDK 버전 올리기" 절차대로 로컬 SDK·`pubspec.lock`과 함께 바꾼다.
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
 - **상태 관리:** `flutter_riverpod` (현재 2.x)
@@ -24,7 +26,7 @@
 
 ## 2. 디렉토리 구조 (`lib/`)
 - `core/constants/key_definitions.dart`: 50개 버튼 레이아웃 및 SHIFT/ALPHA 키 매핑 정의
-- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트 및 LCD 폰트 스타일
+- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트 및 LCD 폰트 스타일, 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)
 - `core/theme/font_licenses.dart`: 번들 글꼴 OFL 라이선스를 `LicenseRegistry`에 등록
 - `core/layout/form_factor.dart`: 기기 종류(폰·폴더블·태블릿) 판정·방향 고정 규칙, 창 크기·접힘선 기준 배치 판정
 - `domain/models/`: `math_node.dart` (수식 AST 노드), `calc_state.dart` (계산기 전체 상태), `lcd_status.dart` (LCD 상태 표시기 스냅샷), `handedness.dart` (손잡이 설정 — 좌우 분할 시 키패드 위치)
@@ -58,6 +60,11 @@
   - #67 이전 브랜치에 있어서 `M` 때문에 전환·머지가 막히면(스크립트가 아직 없다): 위 생성 파일 7개에 대해
     `git diff --stat -- <7개>`가 비어 있음을 확인한 뒤 그 7개만 `git checkout -- <7개>`로 되돌린다.
   - `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다 — 진짜 변경까지 지워진다.
+- Flutter SDK 폴더는 이 PC의 모든 브랜치·worktree가 함께 쓴다. 고정값(`environment.flutter`)과 다른 SDK로는 `pub get`이 실패하므로,
+  SDK를 바꾸면 고정값이 다른 브랜치가 모두 깨진다 — 버전 올리기는 README 절차의 "먼저 알아 둘 점"을 따른다 (#78).
+  - 버전 올리기 절차 밖에서 `flutter upgrade`를 실행하지 않는다(새 버전 알림이 떠도 무시한다).
+  - 별도 폴더의 새 SDK로 버전을 올리는 동안에는 위 PATH 안내(`~/develop/flutter`)가 옛 SDK를 가리킨다.
+    그 브랜치의 서브에이전트·리뷰 지시에는 쓸 SDK 경로를 명시한다.
 - GitHub CLI(`gh`)로 이슈/PR/프로젝트를 관리한다. 저장소: `i-technika/altcalc-fx991`
 - `gh`에 여러 줄 본문을 넘길 때는 셸 이스케이프 깨짐(과거 이슈 본문의 `\경로\` 깨짐 현상)을 막기 위해
   **반드시 임시 파일 + `--body-file`** 을 사용한다.

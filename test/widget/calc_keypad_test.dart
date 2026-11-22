@@ -16,12 +16,14 @@ Widget _host(
   Widget child, {
   Size size = const Size(360, 420),
   double textScale = 1.0,
+  bool highContrast = false,
 }) {
   return MaterialApp(
     home: MediaQuery(
       data: MediaQueryData(
         size: size,
         textScaler: TextScaler.linear(textScale),
+        highContrast: highContrast,
       ),
       child: Scaffold(
         backgroundColor: CalcTheme.bodyBackground,
@@ -91,6 +93,30 @@ void main() {
         );
       }
       expect(find.byKey(const ValueKey('cursor-pad')), findsOneWidget);
+    });
+
+    testWidgets('커서 패드 홈·외곽선·허브 둘레는 키 테두리 색이고, 고대비 모드에서 함께 바뀐다 (#54)', (
+      tester,
+    ) async {
+      final decoration = find.descendant(
+        of: find.byKey(const ValueKey('cursor-pad')),
+        matching: find.byType(CustomPaint),
+      );
+      for (final palette in [CalcPalette.standard, CalcPalette.highContrast]) {
+        await tester.pumpWidget(
+          _host(const CalcKeypad(), highContrast: palette.isHighContrast),
+        );
+        expect(
+          decoration,
+          paints
+            ..line(color: palette.keyBorder)
+            ..line(color: palette.keyBorder)
+            ..path(color: palette.keyBorder)
+            ..circle(color: CalcTheme.cursorPadHub)
+            ..circle(color: palette.keyBorder),
+          reason: '고대비=${palette.isHighContrast}',
+        );
+      }
     });
 
     testWidgets('반복 콜백은 autoRepeatKeys에만 연결된다', (tester) async {
