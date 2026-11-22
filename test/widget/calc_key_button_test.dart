@@ -1389,6 +1389,63 @@ void _shapeAndLegendTests() {
       await g.up();
     });
 
+    testWidgets('여백이 버튼 상자보다 크면 키는 그리지 않고 터치 영역만 남는다', (tester) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.sin),
+            enableHaptics: false,
+            hitShape: leftThreeQuarters,
+            hitOutset: const EdgeInsets.all(60),
+            onPressed: pressed.add,
+          ),
+          size: outer,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(_keycap(CalcKeyId.sin), findsNothing);
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      await tester.tapAt(box.topLeft + const Offset(20, 40));
+      expect(pressed, [CalcKeyId.sin]);
+    });
+
+    testWidgets('hitOutset이 음수면 디버그 assert로 알린다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.cursorUp),
+            hitShape: leftThreeQuarters,
+            hitOutset: const EdgeInsets.only(left: -1),
+            onPressed: (_) {},
+          ),
+          size: outer,
+        ),
+      );
+      final error = tester.takeException();
+      expect(error, isA<AssertionError>());
+      expect('$error', contains('음수'));
+    });
+
+    testWidgets('hitShape와 extendHitAreaToLegend를 함께 주면 디버그 assert로 알린다', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.sin),
+            hitShape: leftThreeQuarters,
+            extendHitAreaToLegend: true,
+            onPressed: (_) {},
+          ),
+          size: outer,
+        ),
+      );
+      final error = tester.takeException();
+      expect(error, isA<AssertionError>());
+      expect('$error', contains('extendHitAreaToLegend'));
+    });
+
     testWidgets('hitShape 없이 hitOutset만 주면 디버그 assert로 알린다', (tester) async {
       await tester.pumpWidget(
         _host(

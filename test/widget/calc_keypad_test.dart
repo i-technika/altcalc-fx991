@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
@@ -601,6 +602,55 @@ void _cursorPadR2Tests() {
       }
     });
 
+    for (final area in const [Size(800, 300), Size(393, 560), Size(360, 420)]) {
+      testWidgets(
+        '${area.width}×${area.height}: 시맨틱 노드는 계산한 영역(바깥 변은 셀 변)에 놓인다',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          useKoreanLocale(tester);
+          await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final bounds = cell.shift(-pad.topLeft);
+          for (final sector in CursorPadSector.values) {
+            final node = find.semantics
+                .byLabel(
+                  const KoSemanticStrings().keyButton(
+                    CursorPad.defOf(sector).id,
+                  ),
+                )
+                .evaluate()
+                .single;
+            final actual = _semanticsGlobalRect(
+              node,
+              tester.view.devicePixelRatio,
+            );
+            final expected = CursorPad.semanticRect(
+              sector,
+              pad.size,
+              bounds,
+            ).shift(pad.topLeft);
+            final reason = '${sector.name} $area';
+            expect(
+              (actual.topLeft - expected.topLeft).distance +
+                  (actual.bottomRight - expected.bottomRight).distance,
+              lessThan(1e-3),
+              reason: '$reason: $actual ≠ $expected',
+            );
+            // 바깥쪽 변은 셀 변이다.
+            final (got, want) = switch (sector) {
+              CursorPadSector.up => (actual.top, cell.top),
+              CursorPadSector.down => (actual.bottom, cell.bottom),
+              CursorPadSector.left => (actual.left, cell.left),
+              CursorPadSector.right => (actual.right, cell.right),
+            };
+            expect(got, moreOrLessEquals(want, epsilon: 1e-3), reason: reason);
+          }
+          handle.dispose();
+        },
+      );
+    }
+
     testWidgets('방향마다 시맨틱 노드가 하나씩 있고, 시맨틱 탭으로 입력된다', (tester) async {
       final handle = tester.ensureSemantics();
       useKoreanLocale(tester);
@@ -660,6 +710,22 @@ void _cursorPadR2Tests() {
   });
 }
 
+/// 시맨틱 노드의 논리 좌표(dp) 전역 사각형 — 부모 노드 변환을 루트까지 거슬러 쌓은 물리 픽셀 좌표를
+/// 기기 배율([devicePixelRatio])로 나눈다.
+Rect _semanticsGlobalRect(SemanticsNode node, double devicePixelRatio) {
+  var rect = node.rect;
+  for (SemanticsNode? n = node; n != null; n = n.parent) {
+    final transform = n.transform;
+    if (transform != null) rect = MatrixUtils.transformRect(transform, rect);
+  }
+  return Rect.fromLTRB(
+    rect.left / devicePixelRatio,
+    rect.top / devicePixelRatio,
+    rect.right / devicePixelRatio,
+    rect.bottom / devicePixelRatio,
+  );
+}
+
 /// [p] 주변 [eps] 이내에서 터치 방향 판정([CursorPadGeometry.hitSectorAt])이 바뀌지 않는지
 bool _stableHitAt(CursorPadGeometry g, Rect bounds, Offset p, double eps) {
   final s = g.hitSectorAt(p, bounds);
@@ -674,7 +740,7 @@ bool _stableHitAt(CursorPadGeometry g, Rect bounds, Offset p, double eps) {
   return true;
 }
 
-/// 커서 패드 터치 영역 (#64): 외곽 밖·셀 여백을 X자 홈 연장선으로 나눠 가까운 방향 키에 준다
+/// 커서 패드 터치 영역 (#64): 외곽 안은 X자 홈, 외곽 밖·셀 여백은 홈 끝 → 셀 모서리 선으로 나눠 준다
 void _cursorPadHitTests() {
   group('커서 패드 터치 영역 (CursorPadGeometry.hit*)', () {
     // 셀(패드 로컬 좌표): 셀 = 패드, 가로 여백, 세로 여백
@@ -907,6 +973,8 @@ void _cursorPadHitTests() {
         expect(empty.hitArea(s, const Rect.fromLTWH(0, 0, 10, 10)), 0);
       }
       expect(empty.hitSectorAt(Offset.zero, Rect.largest), isNull);
+      // 빈 셀은 hitPolygon과 같이 어느 방향도 아니다 (셀 모서리 위 점도)
+      expect(g.hitSectorAt(Offset.zero, Rect.zero), isNull);
     });
   });
 }
@@ -1216,7 +1284,7 @@ void _cursorPadShapeTests() {
   group('커서 패드 (누름·라벨)', () {
     for (final area in _areas) {
       testWidgets(
-        '${area.width}×${area.height}: 셀 안 어디를 눌러도 홈 연장선으로 나눈 방향이 입력되고 한가운데만 무시된다',
+        '${area.width}×${area.height}: 셀 안 어디를 눌러도 홈·(홈 끝 → 셀 모서리) 선으로 나눈 방향이 입력되고 한가운데만 무시된다',
         (tester) async {
           final pressed = <CalcKeyId>[];
           await tester.pumpWidget(

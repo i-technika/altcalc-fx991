@@ -405,7 +405,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         ? body
         : ClipPath(clipper: _ShapeClipper(shapePath), child: body);
     if (!hitMode) return clipped;
-    // 그림 상자가 비면 키를 그리지 않는다(0 크기 글자는 레이아웃 assert를 낸다). 터치 영역은 남는다.
+    // 그림 상자가 비면 키를 그리지 않는다(보이지 않는 키캡·라벨을 배치할 이유가 없다). 터치 영역은 남는다.
     final drawn = width > 0 && height > 0 ? clipped : const SizedBox.shrink();
     // 터치 모양이 따로 있으면: 버튼 상자 전체를 받는 Listener를 터치 경로로 거르고,
     // 그림은 터치 여백 안쪽에 그린다(그림 클립은 Listener 안이라 터치 영역을 줄이지 않는다).

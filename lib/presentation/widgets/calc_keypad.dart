@@ -728,7 +728,8 @@ class CursorPadGeometry {
   /// 안에서 데드존만 뺀다. 외곽 안은 [sectorAt]과 같고(X자 홈), 외곽 밖은 그 사분면의 홈 끝(홈이 외곽과
   /// 만나는 점)과 셀 모서리를 이은 선의 어느 쪽인지로 정한다. 셀 밖·데드존·유한하지 않은 좌표면 `null`이다.
   CursorPadSector? hitSectorAt(Offset localPosition, Rect bounds) {
-    if (_isEmpty || !localPosition.isFinite) return null;
+    if (_isEmpty || bounds.isEmpty || !localPosition.isFinite) return null;
+    assert(_debugBoundsContainPad(bounds));
     if (!_closedContains(bounds, localPosition)) return null;
     final d = localPosition - center;
     if (d.distance <= deadZoneRadius) return null;
@@ -749,6 +750,18 @@ class CursorPadGeometry {
     return _sameSide(end, corner, localPosition, reference)
         ? vertical
         : horizontal;
+  }
+
+  /// 셀 [bounds]가 패드 상자를 품는지 (터치 영역 계산의 전제, 부동소수 오차 허용) — 디버그 assert용
+  bool _debugBoundsContainPad(Rect bounds) {
+    assert(
+      bounds.left <= 1e-6 &&
+          bounds.top <= 1e-6 &&
+          bounds.right >= size.width - 1e-6 &&
+          bounds.bottom >= size.height - 1e-6,
+      '셀 $bounds가 패드 상자 $size를 품지 않는다',
+    );
+    return true;
   }
 
   /// 경계 포함 사각형 판정 ([Rect.contains]는 오른쪽·아래 변을 뺀다)
@@ -789,13 +802,7 @@ class CursorPadGeometry {
   /// 패드나 셀이 비어 있으면 빈 목록. [bounds](셀)는 패드 상자를 품어야 한다.
   List<Offset> hitPolygon(CursorPadSector sector, Rect bounds) {
     if (_isEmpty || bounds.isEmpty) return const [];
-    assert(
-      bounds.left <= 1e-6 &&
-          bounds.top <= 1e-6 &&
-          bounds.right >= size.width - 1e-6 &&
-          bounds.bottom >= size.height - 1e-6,
-      '셀 $bounds가 패드 상자 $size를 품지 않는다',
-    );
+    assert(_debugBoundsContainPad(bounds));
     final (from, to) = _angles(sector);
     final corners = switch (sector) {
       CursorPadSector.right => [bounds.topRight, bounds.bottomRight],
@@ -844,7 +851,8 @@ class CursorPadGeometry {
 ///   그쪽 방향 하나의 것이 되어, 이웃 키(ALPHA·MENU)와 맞닿은 옆 변은 전부 ◀·▶이고 위·아래 변은 ▲·▼다.
 ///   - 홈을 그대로 연장하는 방식은 되찾은 넓이의 약 80%를 이미 넓은 ▲·▼에 주고, 옆 변의 위·아래 끝까지
 ///     ▲·▼로 만들었다(왼쪽 가장자리를 눌렀는데 ▲ — 리뷰 R1). 모서리로 꺾으면 ◀·▶ 터치 넓이가
-///     함수 키 셀의 0.69~0.74배 → 0.81~0.84배(가로로 긴 셀 0.89 → 0.98)로 커지고, ▲·▼는 1.41배 이상이 남는다.
+///     함수 키 셀의 0.69~0.74배 → 0.81~0.84배(가로로 긴 셀 0.89 → 0.98)로 커지고, ▲·▼는 세로 폰 약
+///     1.41~1.44배, 가로로 긴 셀 약 1.27배가 남는다.
 ///   - ◀·▶에 들어가는 가장 큰 원(내접원)은 거의 그대로다(세로 폰 약 +1dp). 홈 사이의 좁은 쐐기, 즉 그린 구역이
 ///     정하기 때문이며, 그 부분은 실물 모양이라 바꾸지 않았다(가로로 긴 셀만 약 24 → 31dp).
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
