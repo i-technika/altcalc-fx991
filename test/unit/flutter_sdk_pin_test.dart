@@ -305,8 +305,25 @@ void main() {
       expect(result.stdout, '3.50.0\n');
     });
 
-    test('오류 문구는 로캘과 관계없이 나온다 (변수 이름 뒤에 한글이 붙어도)', () {
-      // 단일 바이트 로캘에서는 bash가 한글의 첫 바이트를 변수 이름의 일부로 읽을 수 있다
+    // 단일 바이트 로캘(예: en_US.ISO-8859-1)에서는 bash가 한글의 첫 바이트를 변수 이름의 일부로 읽어
+    // `$count개다`가 `count\xea` 변수를 찾다 `set -u`로 죽는다. 그 로캘이 없는 러너(Ubuntu 기본 이미지)에서도
+    // 지켜지도록, 실행 검사 대신 스크립트 본문에서 이 형태를 찾는다.
+    test('오류 문구에서 변수 이름 뒤에 ASCII가 아닌 글자가 바로 붙지 않는다 (\${이름}으로 쓸 것)', () {
+      final source = File(_pinScript).readAsStringSync();
+      final bare = RegExp(r'\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]')
+          .allMatches(source)
+          .map((m) => m[0])
+          .toList();
+      expect(bare, isEmpty, reason: '$_pinScript: $bare');
+      // 검사 자체가 이 형태를 잡는지 확인한다
+      expect(
+        RegExp(r'\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]').hasMatch(r'$count개다'),
+        isTrue,
+      );
+    });
+
+    test('오류 문구는 로캘과 관계없이 나온다 (그 로캘이 있는 환경에서만 실행)', () {
+      const locale = 'en_US.ISO-8859-1';
       for (final text in [
         'environment:\n  flutter: 3.50.0\n  flutter: 3.50.0\n',
         'environment:\n  flutter: 3.50.0\nenvironment:\n  sdk: ^3.14.0\n',
@@ -314,11 +331,17 @@ void main() {
         final result = runBashScript(
           _pinScript,
           [fixture(text)],
-          environment: {'GITHUB_OUTPUT': '', 'LC_ALL': 'en_US.ISO-8859-1'},
+          environment: {'GITHUB_OUTPUT': '', 'LC_ALL': locale},
         );
+        final stderr = result.stderr as String;
+        // 로캘이 설치되지 않았으면 bash가 경고를 내고 C 로캘로 돈다 — 이 검사의 의미가 없다
+        if (stderr.contains('setlocale')) {
+          markTestSkipped('$locale 로캘이 없다 — 위의 본문 검사가 대신 지킨다');
+          return;
+        }
         expect(result.exitCode, 1);
-        expect(result.stderr, startsWith('::error::'));
-        expect(result.stderr, isNot(contains('unbound variable')));
+        expect(stderr, startsWith('::error::'));
+        expect(stderr, isNot(contains('unbound variable')));
       }
     });
 
