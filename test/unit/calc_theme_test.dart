@@ -262,8 +262,9 @@ void main() {
       expect(normalShape.borderRadius, border.borderRadius);
     });
 
-    // 키보드 포커스 테두리가 겹쳐 그려지는 면 (Material 기본 포커스 겹침 포함) — 닫기 버튼(primary 10%)·설정 버튼
-    // (아이콘색 10%)은 M3 버튼 기본 포커스 겹침이다.
+    // 키보드 포커스 테두리가 겹쳐 그려지는 면. 대화상자 면·본체는 WCAG 2.4.13(포커스 전후 같은 픽셀)의 기준이고,
+    // 포커스 겹침은 테두리 안쪽에 맞닿는 면과의 인접 대비(추가 확인)다. 닫기 버튼(primary 10%)·설정 버튼(아이콘색 10%)은
+    // M3 버튼 기본 포커스 겹침이다 — 실제 위젯이 이 값을 쓰는지는 `test/widget/material_theme_test.dart`가 확인한다.
     Map<String, Color> focusSurfaces(CalcPalette palette) {
       final theme = palette.materialTheme;
       final surface = theme.colorScheme.surfaceContainerHigh;
@@ -311,13 +312,9 @@ void main() {
       },
     );
 
-    test('고대비 키보드 포커스 테두리는 대화상자 면·포커스 겹침 위 모두 3:1 이상이다', () {
-      const ring = CalcTheme.materialFocusRingHighContrast;
+    test('고대비 선택지 포커스 겹침 위의 글자도 7:1 이상 남는다', () {
       final surface = high.colorScheme.surfaceContainerHigh;
       final focusFill = Color.alphaBlend(high.focusColor, surface);
-      expect(contrastRatio(ring, surface), greaterThanOrEqualTo(nonText));
-      expect(contrastRatio(ring, focusFill), greaterThanOrEqualTo(nonText));
-      // 포커스 겹침 위의 글자도 7:1 이상 남는다
       for (final fg in [
         high.colorScheme.onSurface,
         high.colorScheme.onSurfaceVariant,
