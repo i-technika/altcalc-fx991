@@ -40,6 +40,11 @@ void main() => runApp(
 /// 내비게이션 바 높이(3버튼 48dp, 제스처 약 24dp)가 아래 인셋으로 들어온다.
 /// [systemGestureInsets]는 Android가 보고하는 시스템 제스처 영역이다(#50).
 /// [displayFeatures]는 폴더블의 접힘선(힌지) 등 화면 특징이다(#51).
+///
+/// [foldable] 프리셋(폴더블 내부 화면)은 조작 패널에서 자세(펼침/반 접힘)와 방향(세로/가로)을 고를 수 있다(#93).
+/// 이때 [size]·[padding]·[systemGestureInsets]·[displayFeatures]는 기기를 **기본 방향**([naturalOrientation])으로
+/// 들고 **펼친** 상태의 값이고, 고른 자세·방향의 화면은 [posed]가 계산한다. 자세·방향마다 프리셋을 복제하지 않는
+/// 이유: 기기 하나의 값이 한 곳에만 있어야 돌린 화면의 크기·접힘선이 원래 값과 어긋나지 않는다.
 @immutable
 class PreviewDevice {
   /// 표시 이름
@@ -66,17 +71,117 @@ class PreviewDevice {
   /// 폭 0인 접힘선(`DisplayFeatureType.fold`, `postureFlat`)을 보고한다. 값은 근사다.
   final List<DisplayFeature> displayFeatures;
 
+  /// 폴더블 내부 화면인지 — 자세·방향을 고를 수 있다([posed], #93). 접힘선([displayFeatures])이 있어야 한다.
+  final bool foldable;
+
+  /// 자세·방향을 적용한 화면이면 적용하기 전의 프리셋, 프리셋이면 `null` ([base] 참조)
+  final PreviewDevice? _base;
+
   const PreviewDevice(
     this.name,
     this.size, {
     this.padding = EdgeInsets.zero,
     this.systemGestureInsets = EdgeInsets.zero,
     this.displayFeatures = const [],
-  });
+    this.foldable = false,
+  }) : _base = null;
+
+  PreviewDevice._posed(
+    PreviewDevice base,
+    this.size, {
+    required this.displayFeatures,
+  }) : _base = base,
+       name = base.name,
+       padding = base.padding,
+       systemGestureInsets = base.systemGestureInsets,
+       foldable = base.foldable;
+
+  /// 자세·방향을 적용하기 전의 프리셋 (기본 방향으로 펼친 값). 프리셋이면 자기 자신이다.
+  PreviewDevice get base => _base ?? this;
 
   /// 칩에 표시할 이름 (예: `일반 폰 390×844`)
   String get label =>
       '$name ${size.width.toStringAsFixed(0)}×${size.height.toStringAsFixed(0)}';
+
+  /// 기본 방향 — 프리셋([base]) 크기가 가로로 길면 가로, 아니면 세로 (Galaxy Z Fold 내부는 세로, Pixel Fold
+  /// 내부는 가로). 자세·방향을 적용한 화면도 원래 프리셋의 기본 방향을 답한다.
+  PreviewOrientation get naturalOrientation =>
+      base.size.width > base.size.height
+      ? PreviewOrientation.landscape
+      : PreviewOrientation.portrait;
+
+  /// [posture] 자세로 [orientation] 방향으로 든 화면 (#93). [foldable]이 아니면 그대로 돌려준다.
+  /// 항상 [base](기본 방향으로 펼친 프리셋) 기준으로 계산하므로, 자세·방향을 적용한 화면에 다시 불러도
+  /// 결과는 [posture]·[orientation] 그대로다(겹쳐 돌지 않는다). 기본 방향으로 펼친 상태면 [base] 자신이다.
+  ///
+  /// - 방향이 기본 방향과 다르면 기기를 반시계 방향으로 90° 돌린 화면이다: 크기의 가로·세로가 바뀌고,
+  ///   화면 특징 영역은 기본 방향 화면의 위 가장자리가 왼쪽 가장자리가 되도록 옮긴다(가운데 접힘선은 돌리는
+  ///   방향과 상관없이 같은 자리다).
+  /// - 접힘선·힌지(fold·hinge)의 상태는 [posture]의 상태가 된다. 영역은 자세와 상관없다 — Jetpack
+  ///   WindowManager는 반 접어도 같은 영역을 보고한다. 화면 구멍 등 다른 특징은 상태를 바꾸지 않는다.
+  /// - 시스템 인셋·제스처 영역은 화면 기준으로 그대로 둔다: 대화면에서는 돌려도 상태 표시줄은 위, 제스처
+  ///   내비게이션 표시줄은 아래, 뒤로가기 영역은 좌우에 남는다(근사 — 화면 구멍 쪽 인셋은 흉내 내지 않는다).
+  /// - 결과의 [name]·인셋·[foldable]은 [base]와 같다.
+  PreviewDevice posed(
+    PreviewFoldPosture posture,
+    PreviewOrientation orientation,
+  ) {
+    final base = this.base;
+    if (!base.foldable) return base;
+    final rotate = orientation != base.naturalOrientation;
+    if (!rotate && posture == PreviewFoldPosture.flat) return base;
+    final w = base.size.width;
+    return PreviewDevice._posed(
+      base,
+      rotate ? base.size.flipped : base.size,
+      displayFeatures: [
+        for (final f in base.displayFeatures)
+          DisplayFeature(
+            bounds: rotate
+                ? Rect.fromLTRB(
+                    f.bounds.top,
+                    w - f.bounds.right,
+                    f.bounds.bottom,
+                    w - f.bounds.left,
+                  )
+                : f.bounds,
+            type: f.type,
+            state: FormFactor.hasFoldOrHinge([f]) ? posture.state : f.state,
+          ),
+      ],
+    );
+  }
+}
+
+/// 폴더블 내부 화면의 자세 (#93)
+enum PreviewFoldPosture {
+  /// 펼침 — 접힘선 상태 `postureFlat`
+  flat('펼침', DisplayFeatureState.postureFlat),
+
+  /// 반 접힘 — 접힘선 상태 `postureHalfOpened`. 세로 접힘선이면 책 자세, 가로 접힘선이면 테이블톱 자세다.
+  halfOpened('반 접힘', DisplayFeatureState.postureHalfOpened);
+
+  /// 패널 표시 이름
+  final String label;
+
+  /// 접힘선에 넣을 상태
+  final DisplayFeatureState state;
+
+  const PreviewFoldPosture(this.label, this.state);
+}
+
+/// 기기를 든 방향 (#93)
+enum PreviewOrientation {
+  /// 세로 (높이 ≥ 폭)
+  portrait('세로'),
+
+  /// 가로 (폭 > 높이)
+  landscape('가로');
+
+  /// 패널 표시 이름
+  final String label;
+
+  const PreviewOrientation(this.label);
 }
 
 /// Android 제스처 내비게이션의 뒤로가기 영역 폭 근사값 (좌우 각각, dp).
@@ -100,6 +205,16 @@ const EdgeInsets _gestureNavInsets = EdgeInsets.fromLTRB(
 /// 보고 값·밀도 모두 실기기 미확인이다.
 const DisplayFeature previewFoldInnerFold = DisplayFeature(
   bounds: Rect.fromLTWH(345, 0, 0, 829),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
+);
+
+/// Pixel Fold 내부 화면(841×701, 가로가 기본 방향)을 펼쳤을 때의 접힘선 근사값 (#93).
+///
+/// 물리 화면 2208×1840 px 가운데(x=1104 px)의 세로 접힘선을 밀도 2.625 가정으로 dp로 바꾼 값이다(화면
+/// 841.1×701.0, 접힘선 x=420.6 — 프리셋 크기 841의 가운데 420.5로 맞췄다). 보고 값·밀도 모두 실기기 미확인이다.
+const DisplayFeature previewLandscapeFoldInnerFold = DisplayFeature(
+  bounds: Rect.fromLTWH(420.5, 0, 0, 701),
   type: DisplayFeatureType.fold,
   state: DisplayFeatureState.postureFlat,
 );
@@ -134,12 +249,24 @@ const List<PreviewDevice> previewDevices = [
   ),
   // 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
   // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 LCD/키패드를 좌우로 나눈다(#25).
+  // 자세·방향을 고를 수 있다(#93) — 가로로 돌려 반 접으면 테이블톱 배치, 펼친 채 돌리면 위아래 배치다.
   PreviewDevice(
     '폴더블 내부',
     Size(690, 829),
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
     displayFeatures: [previewFoldInnerFold],
+    foldable: true,
+  ),
+  // Pixel Fold 내부, 가로가 기본 방향 (#93). 인셋은 Fold5 내부와 같게 근사했다.
+  // 펼치면 세로 접힘선 기준 좌우 배치, 세로로 돌려 반 접으면 테이블톱 배치다.
+  PreviewDevice(
+    '가로형 폴더블 내부',
+    Size(841, 701),
+    padding: EdgeInsets.only(top: 24, bottom: 24),
+    systemGestureInsets: _gestureNavInsets,
+    displayFeatures: [previewLandscapeFoldInnerFold],
+    foldable: true,
   ),
   // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
   PreviewDevice(
@@ -247,6 +374,8 @@ class KeyPreviewScreen extends ConsumerStatefulWidget {
 
 class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
   PreviewDevice _device = previewDevices.first;
+  PreviewFoldPosture _posture = PreviewFoldPosture.flat;
+  PreviewOrientation _orientation = previewDevices.first.naturalOrientation;
   double _textScale = previewDefaultTextScale;
   bool _highContrast = false;
   final List<PreviewLogEntry> _log = [];
@@ -312,12 +441,26 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
     final panel = _PanelNavigator(
       child: _ControlPanel(
         device: _device,
+        posture: _posture,
+        orientation: _orientation,
         textScale: _textScale,
         highContrast: _highContrast,
         log: _log,
         inputTotal: _inputTotal,
         trimmed: _trimmed,
-        onDeviceChanged: (d) => setState(() => _device = d),
+        // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
+        // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
+        // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
+        onDeviceChanged: (d) {
+          if (identical(d, _device)) return;
+          setState(() {
+            _device = d;
+            _posture = PreviewFoldPosture.flat;
+            _orientation = d.naturalOrientation;
+          });
+        },
+        onPostureChanged: (p) => setState(() => _posture = p),
+        onOrientationChanged: (o) => setState(() => _orientation = o),
         onTextScaleChanged: (s) => setState(() => _textScale = s),
         onHighContrastChanged: (v) => setState(() => _highContrast = v),
         onReset: _reset,
@@ -325,7 +468,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
     );
     // 앱의 루트 Navigator는 WidgetsApp이 GlobalKey로 들고 있어, 창 배치(좌우 ↔ 위아래)가 바뀌어도 유지된다.
     final frame = _DeviceFrame(
-      device: _device,
+      device: _device.posed(_posture, _orientation),
       textScale: _textScale,
       highContrast: _highContrast,
       screen: widget.screen,
@@ -529,7 +672,9 @@ Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
 /// ([FormFactor.hingeOf]) 하나만 보고, 양쪽 패널 길이([FormFactor.hingeMinPanelExtent])와 가로 접힘선의
 /// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
 /// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
-/// 반영하지 않는다.
+/// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을 넘어
+/// 되돌아가지 않는다(테스트가 조합마다 확인). #80에서 하한이나 테이블톱 배치를 바꾸면 이 표시가 실제 배치와
+/// 어긋날 수 있다(주황인데 배치는 접힘선을 가로지름) — 그때 조합 테스트가 실패한다.
 DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
   final used = FormFactor.hingeOf(screen, features);
   if (used == null) return null;
@@ -545,7 +690,9 @@ DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
 /// 앱이 [screen] 크기 화면을 나누는 데 쓰지 않는 접힘선([_splittingFold]가 아닌 것 — 화면을 끝까지
 /// 가로지르지 않음, 한쪽 패널이 너무 좁음, 펼친 가로 접힘선, 두 번째 접힘선)은 `(배치에 안 씀)`을 붙인다.
 /// 점선은 있는데 배치가 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
-/// 지금 프리셋에는 그런 접힘선이 없다 — 회전·자세를 흉내 내는 프리셋이 생길 때를 위한 구분이다.
+/// 폴더블 프리셋을 펼친 채 접힘선이 가로가 되게 돌린 화면(펼친 가로 접힘선)이 그렇다(#93).
+/// 반 접힌 접힘선(`postureHalfOpened`)은 위치 뒤에 `반 접힘`을 적는다 — 세로 접힘선은 펼침과 반 접힘의
+/// 배치가 같아, 캡션 없이는 스크린숏으로 자세를 구분할 수 없다(#93).
 String previewDisplayFeatureCaption(
   Size screen,
   List<DisplayFeature> features,
@@ -560,7 +707,12 @@ String previewDisplayFeatureCaption(
         : '가로 y=${_dp(b.center.dy)}';
     final extent = vertical ? b.width : b.height;
     final unused = identical(f, splitting) ? '' : ' (배치에 안 씀)';
-    parts.add('$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$unused');
+    final halfOpened = f.state == DisplayFeatureState.postureHalfOpened
+        ? ' 반 접힘'
+        : '';
+    parts.add(
+      '$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$halfOpened$unused',
+    );
   }
   return parts.isEmpty ? '' : ' · 접힘선(점선) ${parts.join(', ')}';
 }
@@ -650,30 +802,40 @@ class _PanelNavigator extends StatelessWidget {
   }
 }
 
-/// 기기·글자 배율·고대비 선택, 초기화 버튼, 입력 로그.
+/// 기기(폴더블이면 자세·방향 포함)·글자 배율·고대비 선택, 초기화 버튼, 입력 로그.
 ///
 /// 설정 영역을 작게 두고 입력 로그가 남은 높이를 모두 쓴다 — 키를 누르는 동안 로그가 보여야 하기 때문이다.
-/// 패널이 [_scrollAllBelowHeight]보다 낮을 때만 설정과 로그를 한꺼번에 스크롤한다(오버플로 방지).
+/// 패널이 [_scrollAllBelowHeight](폴더블 프리셋은 [_foldControlsHeight]를 더한 값)보다 낮을 때만 설정과 로그를
+/// 한꺼번에 스크롤한다(오버플로 방지).
 class _ControlPanel extends StatelessWidget {
+  /// 고른 프리셋 (자세·방향을 적용하기 전)
   final PreviewDevice device;
+  final PreviewFoldPosture posture;
+  final PreviewOrientation orientation;
   final double textScale;
   final bool highContrast;
   final List<PreviewLogEntry> log;
   final int inputTotal;
   final bool trimmed;
   final ValueChanged<PreviewDevice> onDeviceChanged;
+  final ValueChanged<PreviewFoldPosture> onPostureChanged;
+  final ValueChanged<PreviewOrientation> onOrientationChanged;
   final ValueChanged<double> onTextScaleChanged;
   final ValueChanged<bool> onHighContrastChanged;
   final VoidCallback onReset;
 
   const _ControlPanel({
     required this.device,
+    required this.posture,
+    required this.orientation,
     required this.textScale,
     required this.highContrast,
     required this.log,
     required this.inputTotal,
     required this.trimmed,
     required this.onDeviceChanged,
+    required this.onPostureChanged,
+    required this.onOrientationChanged,
     required this.onTextScaleChanged,
     required this.onHighContrastChanged,
     required this.onReset,
@@ -682,6 +844,14 @@ class _ControlPanel extends StatelessWidget {
   /// 이보다 낮은 패널은 전체를 스크롤한다 (dp). 설정 영역 아래에 로그 몇 줄이 남는 높이다
   /// (고대비 스위치 행을 넣으며 240 → 290, #54).
   static const double _scrollAllBelowHeight = 290;
+
+  /// 폴더블 프리셋에서 자세·방향 선택 줄이 더하는 설정 영역 높이 (dp, #93). 그때는 이만큼
+  /// [_scrollAllBelowHeight]를 올린다.
+  ///
+  /// 값은 버튼 터치 영역이 큰 플랫폼(Android·iOS, 테스트 기본값 — 선택 줄 40)에서 잰 증가분(설정 영역 230 → 322)이다.
+  /// 거기서는 로그가 남는 높이가 다른 프리셋과 같다(테스트가 확인). 데스크톱(Chrome on Windows 등)은 터치 영역이
+  /// 줄어 증가분이 76이라 로그 자리가 16dp 더 남는다 — 넘침이 없도록 큰 쪽을 쓴다.
+  static const double _foldControlsHeight = 92;
 
   /// 패널 안쪽 여백 (dp)
   static const double _padding = 12;
@@ -713,7 +883,42 @@ class _ControlPanel extends StatelessWidget {
     KeyLayer.alpha => CalcTheme.alphaLabel,
   };
 
+  /// 이름표([label]) + 선택지 한 줄 (폴더블 자세·방향, #93). 선택지 글자의 키는 `<keyPrefix>-<값 이름>`이다.
+  static Widget _choiceRow<T extends Enum>({
+    required String label,
+    required String keyPrefix,
+    required List<T> values,
+    required String Function(T) labelOf,
+    required T selected,
+    required ValueChanged<T> onChanged,
+  }) => Row(
+    children: [
+      SizedBox(width: 40, child: Text(label, style: _label)),
+      Expanded(
+        child: SegmentedButton<T>(
+          key: ValueKey(keyPrefix),
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            for (final v in values)
+              ButtonSegment(
+                value: v,
+                label: Text(
+                  labelOf(v),
+                  key: ValueKey('$keyPrefix-${v.name}'),
+                  maxLines: 1,
+                ),
+              ),
+          ],
+          selected: {selected},
+          onSelectionChanged: (v) => onChanged(v.first),
+        ),
+      ),
+    ],
+  );
+
   Widget _settings() => Column(
+    key: const ValueKey('preview-settings'),
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -737,6 +942,27 @@ class _ControlPanel extends StatelessWidget {
           if (i != null) onDeviceChanged(previewDevices[i]);
         },
       ),
+      // 폴더블 내부 화면의 자세·방향 (#93) — 폴더블 프리셋에서만 보인다.
+      if (device.foldable) ...[
+        const SizedBox(height: 8),
+        _choiceRow<PreviewFoldPosture>(
+          label: '자세',
+          keyPrefix: 'preview-fold-posture',
+          values: PreviewFoldPosture.values,
+          labelOf: (p) => p.label,
+          selected: posture,
+          onChanged: onPostureChanged,
+        ),
+        const SizedBox(height: 4),
+        _choiceRow<PreviewOrientation>(
+          label: '방향',
+          keyPrefix: 'preview-fold-orientation',
+          values: PreviewOrientation.values,
+          labelOf: (o) => o.label,
+          selected: orientation,
+          onChanged: onOrientationChanged,
+        ),
+      ],
       const SizedBox(height: 8),
       const Text('시스템 글자 배율', style: _label),
       const SizedBox(height: 4),
@@ -818,7 +1044,10 @@ class _ControlPanel extends StatelessWidget {
       color: _background,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxHeight < _scrollAllBelowHeight) {
+          final scrollAllBelow =
+              _scrollAllBelowHeight +
+              (device.foldable ? _foldControlsHeight : 0);
+          if (constraints.maxHeight < scrollAllBelow) {
             return CustomScrollView(
               slivers: [
                 SliverPadding(
