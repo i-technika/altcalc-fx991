@@ -135,8 +135,44 @@ abstract final class CalcTheme {
   /// 키캡 테두리 — 어두운 키캡과 본체의 경계 표시용 (본체 대비 3:1 이상)
   static const Color keyBorder = Color(0xFF808080);
 
-  /// 키 눌림 시 오버레이 (20% 불투명 검정)
-  static const Color keyPressedOverlay = Color(0x33000000);
+  // 눌림 표시 (#22) — 두 단서를 함께 쓴다.
+  // 1) 배경 명도 변화: 카테고리별로 평소 색에 흰색 또는 검정을 덧씌운다([KeyCategoryColors.pressedOverlay]).
+  //    눌림 전후 명도 차(CIELAB L*)가 [keyPressedMinLightnessDelta] 이상, 눌린 상태의 메인 라벨이 4.5:1 이상,
+  //    눌린 키가 본체와 [keyPressedMinBodyLightnessDelta] 이상 떨어지도록 방향·세기를 정했다(테스트로 검증).
+  //    - 가장 어두운 키(함수·MENU·ON·DEL·커서, L* 26~32, 흰 라벨): 흰색 20%로 **밝게**. 어둡게 해서 명도 차 12를
+  //      얻으려면 검정 36~42%가 필요한데, 그러면 L* 14~19가 되어 본체(L* 18.5)에 묻힌다.
+  //    - 중간 밝기 흰 라벨 키(연산자·=·AC·ALPHA, L* 43~45): 검정 30%로 **어둡게**. 밝히면 라벨 4.5:1을 지키는
+  //      한도(흰색 약 8~15%)에서 명도 차가 4~7에 그친다.
+  //    - 밝은 키(숫자·SHIFT, 어두운 라벨): 검정 20%로 **어둡게**.
+  //    (L* 약 38~41의 흰 라벨 회색 키는 어느 방향으로도 세 조건을 함께 만족하지 못한다 — 이 구간의 키 색은 피한다.)
+  // 2) 테두리: 눌리면 카테고리와 무관하게 [keyBorder] → [keyPressedBorder]로 바뀐다. 회색 카테고리(L* 26·32·45)가
+  //    좁게 몰려 있어 눌린 색이 다른 카테고리의 평소 색과 겹칠 수 있으므로(눌린 연산자 ≈ 평소 함수 키,
+  //    눌린 함수 키 ≈ 평소 연산자), "종류가 바뀐 것"이 아니라 "눌린 것"으로 읽히게 하는 공통 단서다.
+  //    보이는 단서는 키캡 **바깥쪽** 경계(본체와 맞닿는 쪽)다 — 본체 대비가 평소 3.5:1 → 눌림 12:1로 커진다.
+  //    안쪽(키캡 배경 쪽) 대비는 밝은 키에서 오히려 낮아지지만(숫자 키 3.2 → 1.7:1), 그 키들은 배경 자체가
+  //    크게 어두워져 1)로 충분하다.
+  //    예외: 커서 패드는 부채꼴로 잘리고 그 위에 회색 경계선을 덧그려 눌림 테두리가 거의 보이지 않는다 —
+  //    커서 키는 1)(ΔL* 약 17)에만 의존한다.
+
+  /// 눌림 전후 키캡 배경의 최소 명도 차 (CIELAB L*, 0~100).
+  /// 옛 표현(검정 20% 일괄)에서 "거의 안 보인다"고 보고된 키는 5.4~6.6, 보고되지 않은 키는 8.5 이상이었다.
+  /// 12는 그 경계에 여유를 둔 설계값이다(측정된 지각 임계값이 아니다).
+  static const double keyPressedMinLightnessDelta = 12.0;
+
+  /// 눌린 키캡과 본체 배경([bodyBackground])의 최소 명도 차 (CIELAB L*) — 눌린 키가 본체에 묻히지 않게 한다.
+  static const double keyPressedMinBodyLightnessDelta = 10.0;
+
+  /// 어두운 키 눌림: 흰색 20%를 덧씌워 밝게
+  static const Color keyPressedLightenOverlay = Color(0x33FFFFFF);
+
+  /// 밝은 키 눌림: 검정 20%를 덧씌워 어둡게
+  static const Color keyPressedDarkenOverlay = Color(0x33000000);
+
+  /// 중간 밝기 흰 라벨 키 눌림: 검정 30%를 덧씌워 어둡게
+  static const Color keyPressedDeepDarkenOverlay = Color(0x4D000000);
+
+  /// 눌린 키캡 테두리 — 카테고리와 무관한 눌림 단서. 평소 [keyBorder]보다 L* 30 이상 밝고, 본체와 3:1 이상
+  static const Color keyPressedBorder = Color(0xFFF0F0F0);
 
   // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
@@ -295,7 +331,7 @@ abstract final class CalcTheme {
   /// 비활성 키 메인 라벨 불투명도
   static const double keyDisabledLabelOpacity = 0.5;
 
-  /// 키 눌림 색·그림자 전환 시간
+  /// 키를 뗄 때 눌림 색·테두리·그림자가 돌아오는 시간 (누를 때는 즉시 바뀐다 — #22)
   static const Duration keyPressAnimationDuration = Duration(milliseconds: 60);
 
   // ───────────────────────────────────────────
@@ -480,6 +516,24 @@ extension KeyCategoryColors on KeyCategory {
     KeyCategory.on => CalcTheme.keyON,
     KeyCategory.menu => CalcTheme.keyFunction,
   };
+
+  /// 눌릴 때 키캡 배경에 덧씌우는 색 (#22) — 방향·세기 기준은 [CalcTheme] "눌림 표시" 주석 참조
+  Color get pressedOverlay => switch (this) {
+    KeyCategory.number ||
+    KeyCategory.shift => CalcTheme.keyPressedDarkenOverlay,
+    KeyCategory.operator ||
+    KeyCategory.equals ||
+    KeyCategory.ac ||
+    KeyCategory.alpha => CalcTheme.keyPressedDeepDarkenOverlay,
+    KeyCategory.function ||
+    KeyCategory.menu ||
+    KeyCategory.on ||
+    KeyCategory.del ||
+    KeyCategory.cursor => CalcTheme.keyPressedLightenOverlay,
+  };
+
+  /// 눌린 키캡 배경색 = 평소 색 + [pressedOverlay]. 평소 색을 바꾸면 함께 바뀐다(불변식 테스트가 다시 검사).
+  Color get pressedBackground => Color.alphaBlend(pressedOverlay, background);
 
   /// 키캡 메인 라벨 텍스트색
   Color get foreground => switch (this) {

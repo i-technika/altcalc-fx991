@@ -55,6 +55,23 @@ BoxDecoration _decoration(WidgetTester tester, CalcKeyId id) {
   return container.decoration! as BoxDecoration;
 }
 
+/// 실제로 그려지고 있는 키캡 장식 (AnimatedContainer의 목표값이 아니라 애니메이션 현재값)
+BoxDecoration _renderedDecoration(WidgetTester tester, CalcKeyId id) {
+  final box = tester.widget<DecoratedBox>(
+    find.descendant(of: _keycap(id), matching: find.byType(DecoratedBox)).first,
+  );
+  return box.decoration as BoxDecoration;
+}
+
+final _normalBorder = Border.all(
+  color: CalcTheme.keyBorder,
+  width: CalcTheme.keyBorderWidth,
+);
+final _pressedBorder = Border.all(
+  color: CalcTheme.keyPressedBorder,
+  width: CalcTheme.keyBorderWidth,
+);
+
 bool _isPressed(WidgetTester tester, CalcKeyId id) =>
     _decoration(tester, id).boxShadow!.isEmpty;
 
@@ -138,6 +155,56 @@ void main() {
         final main = tester.widget<Text>(find.text(def.mainLabel));
         expect(main.style!.color, def.category.foreground, reason: '$def');
       }
+    });
+  });
+
+  group('눌림 색 (#22)', () {
+    testWidgets('모든 키: 누르는 즉시 눌림 색·테두리로 그려지고, 떼면 애니메이션 뒤 원래대로 돌아온다', (
+      tester,
+    ) async {
+      for (final def in allKeys) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(_keycap(def.id)),
+        );
+        // 다음 한 프레임에 이미 목표 색이다 (누를 때는 애니메이션하지 않는다).
+        await tester.pump();
+        var drawn = _renderedDecoration(tester, def.id);
+        expect(drawn.color, def.category.pressedBackground, reason: '$def');
+        expect(drawn.border, _pressedBorder, reason: '$def');
+
+        // 뗄 때는 애니메이션한다: 중간 시점에는 눌림 색도 평소 색도 아니다.
+        await gesture.up();
+        await tester.pump();
+        await tester.pump(CalcTheme.keyPressAnimationDuration ~/ 2);
+        drawn = _renderedDecoration(tester, def.id);
+        expect(
+          drawn.color,
+          isNot(def.category.pressedBackground),
+          reason: '$def',
+        );
+        expect(drawn.color, isNot(def.category.background), reason: '$def');
+
+        await tester.pump(CalcTheme.keyPressAnimationDuration);
+        drawn = _renderedDecoration(tester, def.id);
+        expect(drawn.color, def.category.background, reason: '$def');
+        expect(drawn.border, _normalBorder, reason: '$def');
+      }
+    });
+
+    testWidgets('비활성 키는 눌러도 눌림 색이 되지 않는다', (tester) async {
+      final def = keyDefOf(CalcKeyId.sin);
+      await tester.pumpWidget(_host(CalcKeyButton(keyDef: def)));
+      final gesture = await tester.startGesture(
+        tester.getCenter(_keycap(def.id)),
+      );
+      await tester.pump();
+      final drawn = _renderedDecoration(tester, def.id);
+      expect(drawn.color, def.category.background);
+      expect(drawn.border, _normalBorder);
+      await gesture.up();
     });
   });
 

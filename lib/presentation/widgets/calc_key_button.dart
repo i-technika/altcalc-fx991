@@ -489,7 +489,7 @@ class _Keycap extends StatelessWidget {
   Widget build(BuildContext context) {
     final category = keyDef.category;
     final background = pressed
-        ? Color.alphaBlend(CalcTheme.keyPressedOverlay, category.background)
+        ? category.pressedBackground
         : category.background;
     final labelColor = enabled
         ? category.foreground
@@ -497,17 +497,18 @@ class _Keycap extends StatelessWidget {
             alpha: CalcTheme.keyDisabledLabelOpacity,
           );
 
-    // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 낸다.
+    // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 내며, 배경 명도와 테두리가 바뀐다(#22).
+    // 누를 때는 즉시 바꾸고 뗄 때만 애니메이션한다 — 짧은 탭에서도 눌림 색이 끝까지 보이게 한다.
     return Transform.translate(
       offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
       child: AnimatedContainer(
         key: CalcKeyButton.keycapKeyOf(keyDef.id),
-        duration: CalcTheme.keyPressAnimationDuration,
+        duration: pressed ? Duration.zero : CalcTheme.keyPressAnimationDuration,
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(CalcTheme.keyBorderRadius),
           border: Border.all(
-            color: CalcTheme.keyBorder,
+            color: pressed ? CalcTheme.keyPressedBorder : CalcTheme.keyBorder,
             width: CalcTheme.keyBorderWidth,
           ),
           boxShadow: pressed
