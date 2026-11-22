@@ -129,11 +129,21 @@ class DeviceOrientationLock with WidgetsBindingObserver {
 /// 앱 루트. 상태 관리를 위해 [ProviderScope] 아래에 둔다.
 ///
 /// [home]으로 첫 화면을 바꿔 끼울 수 있다 — 테스트·개발 도구가 앱과 같은 테마·로캘 범위에서 자기 화면을 띄울 때 쓴다.
+/// [frameBuilder]로 앱 화면(루트 Navigator)을 바깥에서 감싸 배치할 수 있다 — 개발용 미리보기가 루트 Navigator를
+/// 기기 틀 안에 두어, 화면이 띄우는 대화상자·Overlay가 실제 앱과 같은 구조로 그 틀 안에 뜨게 할 때 쓴다 (#72).
 class AltCalcApp extends StatelessWidget {
   /// 첫 화면 (기본: [CalculatorScreen])
   final Widget home;
 
-  const AltCalcApp({super.key, this.home = const CalculatorScreen()});
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
+  /// 실제 앱은 쓰지 않는다.
+  final Widget Function(BuildContext context, Widget screen)? frameBuilder;
+
+  const AltCalcApp({
+    super.key,
+    this.home = const CalculatorScreen(),
+    this.frameBuilder,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -145,8 +155,12 @@ class AltCalcApp extends StatelessWidget {
         scaffoldBackgroundColor: CalcTheme.bodyBackground,
       ),
       // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
-      builder: (context, child) =>
-          DeviceLocaleScope(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) {
+        final screen = child ?? const SizedBox.shrink();
+        return DeviceLocaleScope(
+          child: frameBuilder?.call(context, screen) ?? screen,
+        );
+      },
       home: home,
     );
   }

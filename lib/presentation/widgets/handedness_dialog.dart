@@ -27,22 +27,44 @@ class HandednessDialog extends ConsumerWidget {
     return AlertDialog(
       title: Text(strings.handednessTitle),
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
-      content: RadioGroup<Handedness>(
-        groupValue: ref.watch(handednessProvider),
-        onChanged: (value) {
-          if (value != null) ref.read(handednessProvider.notifier).set(value);
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final value in Handedness.values)
-              RadioListTile<Handedness>(
-                key: optionKeyOf(value),
-                value: value,
-                title: Text(strings.handedness(value)),
-                subtitle: Text(strings.handednessDetail(value)),
-              ),
-          ],
+      // 작은 창·큰 글자 배율에서도 넘치지 않게 선택지만 스크롤한다 — 제목·닫기 버튼은 고정 (#72, 열린 채
+      // 창이 줄어드는 경우 포함). AlertDialog는 content를 남는 높이 안에 두므로 스크롤 뷰가 그 높이를 받는다.
+      content: SingleChildScrollView(
+        child: RadioGroup<Handedness>(
+          groupValue: ref.watch(handednessProvider),
+          onChanged: (value) {
+            if (value != null) ref.read(handednessProvider.notifier).set(value);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final value in Handedness.values)
+                // 키보드 화살표로 포커스가 옮겨 가면 그 선택지를 화면 안으로 스크롤한다 — RadioGroup의 화살표
+                // 이동은 포커스만 옮기고 스크롤하지 않는다.
+                Builder(
+                  builder: (tileContext) => RadioListTile<Handedness>(
+                    key: optionKeyOf(value),
+                    value: value,
+                    title: Text(strings.handedness(value)),
+                    subtitle: Text(strings.handednessDetail(value)),
+                    onFocusChange: (focused) {
+                      if (focused) {
+                        Scrollable.ensureVisible(
+                          tileContext,
+                          alignmentPolicy:
+                              ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                        );
+                        Scrollable.ensureVisible(
+                          tileContext,
+                          alignmentPolicy:
+                              ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+                        );
+                      }
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
