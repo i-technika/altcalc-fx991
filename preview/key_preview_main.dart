@@ -102,6 +102,8 @@ class PreviewDevice {
   ///   WindowManager는 반 접어도 같은 영역을 보고한다. 화면 구멍 등 다른 특징은 상태를 바꾸지 않는다.
   /// - 시스템 인셋·제스처 영역은 화면 기준으로 그대로 둔다: 대화면에서는 돌려도 상태 표시줄은 위, 제스처
   ///   내비게이션 표시줄은 아래, 뒤로가기 영역은 좌우에 남는다(근사 — 화면 구멍 쪽 인셋은 흉내 내지 않는다).
+  /// - 돌리거나 반 접은 결과는 [foldable]이 `false`다 — 자세·방향이 정해진 화면이라 기본 방향으로 펼친 값이
+  ///   아니므로, 다시 [posed]해도 그대로다(겹쳐 돌리거나 반 접은 값을 기준으로 삼지 않는다).
   PreviewDevice posed(
     PreviewFoldPosture posture,
     PreviewOrientation orientation,
@@ -115,7 +117,6 @@ class PreviewDevice {
       rotate ? size.flipped : size,
       padding: padding,
       systemGestureInsets: systemGestureInsets,
-      foldable: true,
       displayFeatures: [
         for (final f in displayFeatures)
           DisplayFeature(
@@ -430,12 +431,16 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
         inputTotal: _inputTotal,
         trimmed: _trimmed,
         // 기기를 바꾸면 자세·방향은 그 기기의 기본값(기본 방향으로 펼침)으로 돌아간다 — 기본 방향이 기기마다
-        // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다.
-        onDeviceChanged: (d) => setState(() {
-          _device = d;
-          _posture = PreviewFoldPosture.flat;
-          _orientation = d.naturalOrientation;
-        }),
+        // 달라, 고른 방향을 이어 가면 다른 기기에서는 돌린 화면이 된다. 드롭다운은 같은 항목을 다시 골라도
+        // 알리므로, 같은 프리셋이면 고른 자세·방향을 그대로 둔다.
+        onDeviceChanged: (d) {
+          if (identical(d, _device)) return;
+          setState(() {
+            _device = d;
+            _posture = PreviewFoldPosture.flat;
+            _orientation = d.naturalOrientation;
+          });
+        },
         onPostureChanged: (p) => setState(() => _posture = p),
         onOrientationChanged: (o) => setState(() => _orientation = o),
         onTextScaleChanged: (s) => setState(() => _textScale = s),
@@ -648,7 +653,9 @@ Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
 /// ([FormFactor.hingeOf]) 하나만 보고, 양쪽 패널 길이([FormFactor.hingeMinPanelExtent])와 가로 접힘선의
 /// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
 /// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
-/// 반영하지 않는다.
+/// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을 넘어
+/// 되돌아가지 않는다(테스트가 조합마다 확인). #80에서 하한이나 테이블톱 배치를 바꾸면 이 표시가 실제 배치와
+/// 어긋날 수 있다(주황인데 배치는 접힘선을 가로지름) — 그때 조합 테스트가 실패한다.
 DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
   final used = FormFactor.hingeOf(screen, features);
   if (used == null) return null;
@@ -665,6 +672,8 @@ DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
 /// 가로지르지 않음, 한쪽 패널이 너무 좁음, 펼친 가로 접힘선, 두 번째 접힘선)은 `(배치에 안 씀)`을 붙인다.
 /// 점선은 있는데 배치가 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
 /// 폴더블 프리셋을 펼친 채 접힘선이 가로가 되게 돌린 화면(펼친 가로 접힘선)이 그렇다(#93).
+/// 반 접힌 접힘선(`postureHalfOpened`)은 위치 뒤에 `반 접힘`을 적는다 — 세로 접힘선은 펼침과 반 접힘의
+/// 배치가 같아, 캡션 없이는 스크린숏으로 자세를 구분할 수 없다(#93).
 String previewDisplayFeatureCaption(
   Size screen,
   List<DisplayFeature> features,
@@ -679,7 +688,12 @@ String previewDisplayFeatureCaption(
         : '가로 y=${_dp(b.center.dy)}';
     final extent = vertical ? b.width : b.height;
     final unused = identical(f, splitting) ? '' : ' (배치에 안 씀)';
-    parts.add('$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$unused');
+    final halfOpened = f.state == DisplayFeatureState.postureHalfOpened
+        ? ' 반 접힘'
+        : '';
+    parts.add(
+      '$position${extent > 0 ? ' 폭 ${_dp(extent)}' : ''}$halfOpened$unused',
+    );
   }
   return parts.isEmpty ? '' : ' · 접힘선(점선) ${parts.join(', ')}';
 }
@@ -772,7 +786,8 @@ class _PanelNavigator extends StatelessWidget {
 /// 기기(폴더블이면 자세·방향 포함)·글자 배율·고대비 선택, 초기화 버튼, 입력 로그.
 ///
 /// 설정 영역을 작게 두고 입력 로그가 남은 높이를 모두 쓴다 — 키를 누르는 동안 로그가 보여야 하기 때문이다.
-/// 패널이 [_scrollAllBelowHeight]보다 낮을 때만 설정과 로그를 한꺼번에 스크롤한다(오버플로 방지).
+/// 패널이 [_scrollAllBelowHeight](폴더블 프리셋은 [_foldControlsHeight]를 더한 값)보다 낮을 때만 설정과 로그를
+/// 한꺼번에 스크롤한다(오버플로 방지).
 class _ControlPanel extends StatelessWidget {
   /// 고른 프리셋 (자세·방향을 적용하기 전)
   final PreviewDevice device;
@@ -811,8 +826,12 @@ class _ControlPanel extends StatelessWidget {
   /// (고대비 스위치 행을 넣으며 240 → 290, #54).
   static const double _scrollAllBelowHeight = 290;
 
-  /// 폴더블 프리셋에서 자세·방향 선택 줄이 더하는 설정 영역 높이 (dp, #93 — 실측 230 → 322). 그때는 이만큼
-  /// [_scrollAllBelowHeight]를 올려 로그가 남는 높이를 다른 프리셋과 같게 둔다.
+  /// 폴더블 프리셋에서 자세·방향 선택 줄이 더하는 설정 영역 높이 (dp, #93). 그때는 이만큼
+  /// [_scrollAllBelowHeight]를 올린다.
+  ///
+  /// 값은 버튼 터치 영역이 큰 플랫폼(Android·iOS, 테스트 기본값 — 선택 줄 40)에서 잰 증가분(설정 영역 230 → 322)이다.
+  /// 거기서는 로그가 남는 높이가 다른 프리셋과 같다(테스트가 확인). 데스크톱(Chrome on Windows 등)은 터치 영역이
+  /// 줄어 증가분이 76이라 로그 자리가 16dp 더 남는다 — 넘침이 없도록 큰 쪽을 쓴다.
   static const double _foldControlsHeight = 92;
 
   /// 패널 안쪽 여백 (dp)

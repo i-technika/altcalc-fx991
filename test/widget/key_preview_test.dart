@@ -92,19 +92,37 @@ Iterable<PreviewDevice> _posesOf(PreviewDevice d) => d.foldable
       ]
     : [d];
 
-/// 캡션의 dp 표기 (미리보기와 같다: 정수면 소수점 없이, 아니면 소수 첫째 자리까지)
-String _dpText(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-
 String _poseKey(String name, PreviewFoldPosture p, PreviewOrientation o) =>
     '$name·${p.label}·${o.label}';
 
-/// 폴더블 프리셋 자세·방향 조합마다 (기대 배치, 접힘선을 배치에 쓰는지) (#93)
-final Map<String, (ScreenArrangement, bool)> _foldPoseExpectations = {
-  // Galaxy Z Fold 내부 (세로가 기본 방향)
+/// 폴더블 자세·방향 조합 하나의 기대값 (#93). 구현 공식으로 다시 계산하지 않고 값을 적는다.
+typedef _PoseExpectation = ({
+  /// 기대 배치 ([FormFactor.arrangementOf])
+  ScreenArrangement arrangement,
+
+  /// 접힘선을 배치에 쓰는지 — `false`면 앱이 접힘선으로 인식하지만(hingeOf) 배치를 나누지 않는다.
+  /// 미리보기에는 회색 점선과 캡션 `(배치에 안 씀)`으로 나온다.
+  bool usesHinge,
+
+  /// 화면 크기 (dp)
+  Size size,
+
+  /// 접힘선 영역 (화면 좌표 dp)
+  Rect hinge,
+
+  /// 캡션의 접힘선 설명 (`previewDisplayFeatureCaption` 전체 문자열)
+  String caption,
+});
+
+/// 폴더블 프리셋 자세·방향 조합마다 기대값
+final Map<String, _PoseExpectation> _foldPoseExpectations = {
+  // Galaxy Z Fold 내부 (세로가 기본 방향 690×829, 접힘선 x=345)
   _poseKey('폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
-    ScreenArrangement.hingeSplit,
-    true,
+    arrangement: ScreenArrangement.hingeSplit,
+    usesHinge: true,
+    size: const Size(690, 829),
+    hinge: const Rect.fromLTRB(345, 0, 345, 829),
+    caption: ' · 접힘선(점선) 세로 x=345',
   ),
   // 책 자세
   _poseKey(
@@ -112,13 +130,19 @@ final Map<String, (ScreenArrangement, bool)> _foldPoseExpectations = {
     PreviewFoldPosture.halfOpened,
     PreviewOrientation.portrait,
   ): (
-    ScreenArrangement.hingeSplit,
-    true,
+    arrangement: ScreenArrangement.hingeSplit,
+    usesHinge: true,
+    size: const Size(690, 829),
+    hinge: const Rect.fromLTRB(345, 0, 345, 829),
+    caption: ' · 접힘선(점선) 세로 x=345 반 접힘',
   ),
   // 펼친 채 가로로 돌림 — 펼친 폭 0 가로 접힘선은 나누지 않는다
   _poseKey('폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.landscape): (
-    ScreenArrangement.stacked,
-    false,
+    arrangement: ScreenArrangement.stacked,
+    usesHinge: false,
+    size: const Size(829, 690),
+    hinge: const Rect.fromLTRB(0, 345, 829, 345),
+    caption: ' · 접힘선(점선) 가로 y=345 (배치에 안 씀)',
   ),
   // 테이블톱 자세
   _poseKey(
@@ -126,29 +150,56 @@ final Map<String, (ScreenArrangement, bool)> _foldPoseExpectations = {
     PreviewFoldPosture.halfOpened,
     PreviewOrientation.landscape,
   ): (
-    ScreenArrangement.hingeStacked,
-    true,
+    arrangement: ScreenArrangement.hingeStacked,
+    usesHinge: true,
+    size: const Size(829, 690),
+    hinge: const Rect.fromLTRB(0, 345, 829, 345),
+    caption: ' · 접힘선(점선) 가로 y=345 반 접힘',
   ),
-  // Pixel Fold 내부 (가로가 기본 방향)
-  _poseKey('가로형 폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.landscape):
-      (ScreenArrangement.hingeSplit, true),
+  // Pixel Fold 내부 (가로가 기본 방향 841×701, 접힘선 x=420.5)
+  _poseKey(
+    '가로형 폴더블 내부',
+    PreviewFoldPosture.flat,
+    PreviewOrientation.landscape,
+  ): (
+    arrangement: ScreenArrangement.hingeSplit,
+    usesHinge: true,
+    size: const Size(841, 701),
+    hinge: const Rect.fromLTRB(420.5, 0, 420.5, 701),
+    caption: ' · 접힘선(점선) 세로 x=420.5',
+  ),
   _poseKey(
     '가로형 폴더블 내부',
     PreviewFoldPosture.halfOpened,
     PreviewOrientation.landscape,
   ): (
-    ScreenArrangement.hingeSplit,
-    true,
+    arrangement: ScreenArrangement.hingeSplit,
+    usesHinge: true,
+    size: const Size(841, 701),
+    hinge: const Rect.fromLTRB(420.5, 0, 420.5, 701),
+    caption: ' · 접힘선(점선) 세로 x=420.5 반 접힘',
   ),
-  _poseKey('가로형 폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.portrait):
-      (ScreenArrangement.stacked, false),
+  _poseKey(
+    '가로형 폴더블 내부',
+    PreviewFoldPosture.flat,
+    PreviewOrientation.portrait,
+  ): (
+    arrangement: ScreenArrangement.stacked,
+    usesHinge: false,
+    size: const Size(701, 841),
+    hinge: const Rect.fromLTRB(0, 420.5, 701, 420.5),
+    caption: ' · 접힘선(점선) 가로 y=420.5 (배치에 안 씀)',
+  ),
   _poseKey(
     '가로형 폴더블 내부',
     PreviewFoldPosture.halfOpened,
     PreviewOrientation.portrait,
   ): (
-    ScreenArrangement.hingeStacked,
-    true,
+    arrangement: ScreenArrangement.hingeStacked,
+    usesHinge: true,
+    size: const Size(701, 841),
+    hinge: const Rect.fromLTRB(0, 420.5, 701, 420.5),
+    caption: ' · 접힘선(점선) 가로 y=420.5 반 접힘',
   ),
 };
 
@@ -355,9 +406,16 @@ void main() {
 
           final rotated = d.posed(p, other);
           expect(rotated.name, d.name, reason: reason);
-          expect(rotated.foldable, isTrue, reason: reason);
           expect(rotated.size, d.size.flipped, reason: reason);
-          expect(rotated.naturalOrientation, other, reason: reason);
+          // 자세·방향이 정해진 화면은 다시 자세·방향을 적용하지 않는다(겹쳐 돌리지 않는다).
+          for (final r in [rotated, if (p != PreviewFoldPosture.flat) same]) {
+            expect(r.foldable, isFalse, reason: reason);
+            for (final p2 in PreviewFoldPosture.values) {
+              for (final o2 in PreviewOrientation.values) {
+                expect(identical(r.posed(p2, o2), r), isTrue, reason: reason);
+              }
+            }
+          }
           // 인셋은 화면 기준으로 그대로다 (상태 표시줄 위, 내비게이션 아래, 뒤로가기 좌우).
           expect(rotated.padding, d.padding, reason: reason);
           expect(
@@ -438,8 +496,24 @@ void main() {
         for (final p in PreviewFoldPosture.values) {
           for (final o in PreviewOrientation.values) {
             final key = _poseKey(d.name, p, o);
-            final (arrangement, usesHinge) = expected[key]!;
+            final (:arrangement, :usesHinge, :size, :hinge, :caption) =
+                expected[key]!;
             final posed = d.posed(p, o);
+            // 화면 크기·접힘선 영역·상태 (적어 둔 값과 비교한다)
+            expect(posed.size, size, reason: key);
+            expect(posed.displayFeatures, [
+              DisplayFeature(
+                bounds: hinge,
+                type: DisplayFeatureType.fold,
+                state: p.state,
+              ),
+            ], reason: key);
+            expect(
+              previewDisplayFeatureCaption(posed.size, posed.displayFeatures),
+              caption,
+              reason: key,
+            );
+            expect(caption.contains('(배치에 안 씀)'), !usesHinge, reason: key);
             expect(
               FormFactor.hingeOf(posed.size, posed.displayFeatures),
               isNotNull,
@@ -460,19 +534,11 @@ void main() {
               arrangement,
               reason: key,
             );
-            expect(
-              previewDisplayFeatureCaption(
-                posed.size,
-                posed.displayFeatures,
-              ).contains('(배치에 안 씀)'),
-              !usesHinge,
-              reason: key,
-            );
           }
         }
       }
       // 미리보기로 모든 접힘선 기준 배치와 "배치에 안 씀" 표시를 볼 수 있다.
-      final arrangements = expected.values.map((e) => e.$1).toSet();
+      final arrangements = expected.values.map((e) => e.arrangement).toSet();
       expect(
         arrangements,
         containsAll([
@@ -480,8 +546,51 @@ void main() {
           ScreenArrangement.hingeStacked,
         ]),
       );
-      expect(expected.values.where((e) => !e.$2), isNotEmpty);
+      expect(expected.values.where((e) => !e.usesHinge), isNotEmpty);
     });
+
+    // 배치에 쓰는 접힘선은 주황, 쓰지 않는 접힘선(펼친 가로 접힘선)은 회색 점선으로 그린다.
+    for (final MapEntry(:key, value: e) in _foldPoseExpectations.entries) {
+      testWidgets('$key: 접힘선 점선 색', (tester) async {
+        tester.view.physicalSize = e.size * tester.view.devicePixelRatio;
+        addTearDown(tester.view.resetPhysicalSize);
+        final [name, postureLabel, orientationLabel] = key.split('·');
+        final posed = previewDevices
+            .singleWhere((d) => d.name == name)
+            .posed(
+              PreviewFoldPosture.values.singleWhere(
+                (p) => p.label == postureLabel,
+              ),
+              PreviewOrientation.values.singleWhere(
+                (o) => o.label == orientationLabel,
+              ),
+            );
+        await tester.pumpWidget(
+          CustomPaint(
+            key: const ValueKey('painter'),
+            painter: PreviewDisplayFeaturePainter(posed.displayFeatures),
+            child: const SizedBox.expand(),
+          ),
+        );
+        expect(tester.getSize(find.byKey(const ValueKey('painter'))), e.size);
+        final from = FormFactor.isVerticalHinge(e.hinge)
+            ? e.hinge.topCenter
+            : e.hinge.centerLeft;
+        final to = FormFactor.isVerticalHinge(e.hinge)
+            ? from + const Offset(0, 8)
+            : from + const Offset(8, 0);
+        expect(
+          find.byKey(const ValueKey('painter')),
+          paints..line(
+            p1: from,
+            p2: to,
+            color: e.usesHinge
+                ? PreviewDisplayFeaturePainter.splittingColor
+                : PreviewDisplayFeaturePainter.otherColor,
+          ),
+        );
+      });
+    }
 
     test('글자 배율: 기본값을 포함하고 중복 없이 Android 범위(85~200%) 안', () {
       expect(previewTextScales, contains(previewDefaultTextScale));
@@ -553,7 +662,7 @@ void main() {
             state: DisplayFeatureState.postureFlat,
           ),
         ]),
-        ' · 접힘선(점선) 가로 y=420.5, 세로 x=410 폭 20 (배치에 안 씀), '
+        ' · 접힘선(점선) 가로 y=420.5 반 접힘, 세로 x=410 폭 20 (배치에 안 씀), '
         '세로 x=200 (배치에 안 씀)',
       );
       // 화면을 가로지르지만 나누지 않는 접힘선: 펼친 가로 접힘선(Fold 내부를 가로로 돌림),
@@ -1606,37 +1715,38 @@ void main() {
                 await _selectDevice(tester, index);
                 await selectPose(tester, p, o);
                 final posed = device.posed(p, o);
-                final (arrangement, usesHinge) = _foldPoseExpectations[key]!;
+                final want = _foldPoseExpectations[key]!;
+                final arrangement = want.arrangement;
+                final hinge = want.hinge;
+                final features = [
+                  DisplayFeature(
+                    bounds: hinge,
+                    type: DisplayFeatureType.fold,
+                    state: p.state,
+                  ),
+                ];
 
                 final screenElement = tester.element(
                   find.byType(CalculatorScreen),
                 );
                 final mq = MediaQuery.of(screenElement);
-                expect(mq.size, posed.size);
-                expect(mq.padding, posed.padding);
-                expect(mq.systemGestureInsets, posed.systemGestureInsets);
-                expect(mq.displayFeatures, posed.displayFeatures);
-                expect(tester.getSize(_deviceScreen), posed.size);
+                expect(mq.size, want.size);
+                expect(mq.padding, device.padding);
+                expect(mq.systemGestureInsets, device.systemGestureInsets);
+                expect(mq.displayFeatures, features);
+                expect(tester.getSize(_deviceScreen), want.size);
                 expect(
                   (overlay(tester).foregroundPainter!
                           as PreviewDisplayFeaturePainter)
                       .features,
-                  posed.displayFeatures,
+                  features,
                 );
-                // 캡션: 돌린 크기, 접힘선 위치, 배치에 쓰지 않으면 그 표시
+                // 캡션: 돌린 크기, 접힘선 위치·자세, 배치에 쓰지 않으면 그 표시 (적어 둔 값)
                 final c = caption(tester);
-                expect(c, startsWith(posed.label));
-                final hinge = posed.displayFeatures.single.bounds;
-                final vertical = FormFactor.isVerticalHinge(hinge);
-                expect(
-                  c,
-                  contains(
-                    vertical
-                        ? '세로 x=${_dpText(hinge.left)}'
-                        : '가로 y=${_dpText(hinge.top)}',
-                  ),
-                );
-                expect(c.contains('(배치에 안 씀)'), !usesHinge);
+                final size =
+                    '${want.size.width.toInt()}×${want.size.height.toInt()}';
+                expect(c, startsWith('${device.name} $size · 표시 배율 '));
+                expect(c, endsWith('${want.caption} · 글자 100%'));
 
                 final container = ProviderScope.containerOf(screenElement);
                 for (final h in Handedness.values) {
@@ -1817,53 +1927,122 @@ void main() {
         );
       });
 
-      // 패널 높이 = 창 높이 (넓은 배치, 테스트 창에는 시스템 인셋이 없다). 선택 줄이 생겨도 넘치지 않고,
-      // 설정 영역을 고정하는 높이에서는 로그가 남는 높이가 다른 프리셋과 같다.
-      for (final height in const [250.0, 300.0, 381.0, 382.0, 500.0]) {
-        testWidgets('패널 높이 $height: 선택 줄이 있어도 넘치지 않고 로그 안내가 패널 안에 보인다', (
-          tester,
-        ) async {
-          // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고른 뒤 창을 줄인다.
-          await _pumpPreview(tester);
-          await _selectDevice(
-            tester,
-            previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
-          );
-          tester.view.physicalSize =
-              Size(1280, height) * tester.view.devicePixelRatio;
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-          expect(posture, findsOneWidget);
-          final panel = tester.getRect(
-            find.byKey(const ValueKey('preview-panel')),
-          );
-          expect(panel.height, height);
-          final empty = find.byKey(const ValueKey('preview-log-empty'));
-          if (height >= 382) {
-            // 설정 고정 배치: 설정 아래에 로그 안내가 패널 안에 다 보인다.
-            final settings = tester.getRect(
-              find.byKey(const ValueKey('preview-settings')),
-            );
-            expect(
-              tester.getRect(empty).top,
-              greaterThanOrEqualTo(settings.bottom),
-            );
-            expect(
-              tester.getRect(empty).bottom,
-              lessThanOrEqualTo(panel.bottom),
-            );
-          } else {
-            // 전체 스크롤 배치: 설정이 스크롤 영역 안에 있다.
-            expect(
-              find.ancestor(
-                of: find.byKey(const ValueKey('preview-settings')),
-                matching: find.byType(CustomScrollView),
-              ),
-              findsOneWidget,
-            );
-          }
-        });
+      final settingsArea = find.byKey(const ValueKey('preview-settings'));
+
+      /// 설정과 로그를 한꺼번에 스크롤하는 배치인지 (설정이 스크롤 영역 안에 있다)
+      bool scrollsAll(WidgetTester tester) => find
+          .ancestor(of: settingsArea, matching: find.byType(CustomScrollView))
+          .evaluate()
+          .isNotEmpty;
+
+      /// 창(= 패널) 높이를 [height]로 바꾼다 (넓은 배치, 테스트 창에는 시스템 인셋이 없다).
+      Future<void> setPanelHeight(WidgetTester tester, double height) async {
+        tester.view.physicalSize =
+            Size(1280, height) * tester.view.devicePixelRatio;
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: '패널 높이 $height');
+        expect(
+          tester.getRect(find.byKey(const ValueKey('preview-panel'))).height,
+          height,
+        );
       }
+
+      /// 설정 영역을 고정하는(전체 스크롤하지 않는) 가장 낮은 패널 높이 (정수 dp, 이분 탐색)
+      Future<double> lowestFixedHeight(WidgetTester tester) async {
+        var lo = 100.0; // 전체 스크롤
+        var hi = 900.0; // 설정 고정
+        await setPanelHeight(tester, lo);
+        expect(scrollsAll(tester), isTrue);
+        await setPanelHeight(tester, hi);
+        expect(scrollsAll(tester), isFalse);
+        while (hi - lo > 1) {
+          final mid = ((lo + hi) / 2).floorToDouble();
+          await setPanelHeight(tester, mid);
+          if (scrollsAll(tester)) {
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+        await setPanelHeight(tester, hi);
+        return hi;
+      }
+
+      testWidgets('설정 영역을 고정하는 가장 낮은 패널에서 로그가 남는 높이가 폴더블과 다른 프리셋이 같다', (
+        tester,
+      ) async {
+        // 낮은 창에서는 펼친 드롭다운 메뉴가 잘리므로, 보통 창에서 고른 뒤 창을 줄인다.
+        double logRoom() =>
+            tester.getRect(find.byKey(const ValueKey('preview-panel'))).bottom -
+            tester.getRect(settingsArea).bottom;
+        await _pumpPreview(tester);
+        expect(previewDevices.first.foldable, isFalse);
+        final plain = await lowestFixedHeight(tester);
+        final plainRoom = logRoom();
+
+        await setPanelHeight(tester, _window.height);
+        await _selectDevice(
+          tester,
+          previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
+        );
+        expect(posture, findsOneWidget);
+        final fold = await lowestFixedHeight(tester);
+        final foldRoom = logRoom();
+        expect(fold, greaterThan(plain));
+        expect(foldRoom, moreOrLessEquals(plainRoom, epsilon: 1));
+        // 그 높이에서 로그 안내가 설정 아래·패널 안에 다 보인다.
+        final empty = tester.getRect(
+          find.byKey(const ValueKey('preview-log-empty')),
+        );
+        expect(
+          empty.top,
+          greaterThanOrEqualTo(tester.getRect(settingsArea).bottom),
+        );
+        expect(
+          empty.bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.byKey(const ValueKey('preview-panel'))).bottom,
+          ),
+        );
+      });
+
+      testWidgets('선택 줄이 있어도 낮은 패널에서 넘치지 않는다', (tester) async {
+        await _pumpPreview(tester);
+        await _selectDevice(
+          tester,
+          previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
+        );
+        for (final height in const [120.0, 250.0, 300.0, 340.0, 500.0]) {
+          await setPanelHeight(tester, height);
+          expect(posture, findsOneWidget, reason: '$height');
+        }
+      });
+
+      testWidgets('같은 기기를 다시 고르면 고른 자세·방향이 그대로다', (tester) async {
+        await _pumpPreview(tester);
+        final fold = previewDevices.indexWhere((d) => d.name == '폴더블 내부');
+        await _selectDevice(tester, fold);
+        await selectPose(
+          tester,
+          PreviewFoldPosture.halfOpened,
+          PreviewOrientation.landscape,
+        );
+        await _selectDevice(tester, fold);
+        expect(
+          tester.widget<SegmentedButton<PreviewFoldPosture>>(posture).selected,
+          {PreviewFoldPosture.halfOpened},
+        );
+        expect(
+          tester
+              .widget<SegmentedButton<PreviewOrientation>>(orientation)
+              .selected,
+          {PreviewOrientation.landscape},
+        );
+        expect(
+          MediaQuery.sizeOf(tester.element(find.byType(CalculatorScreen))),
+          const Size(829, 690),
+        );
+      });
     });
 
     testWidgets('접힘선이 없는 프리셋은 화면 특징이 비고 표시·캡션도 없다', (tester) async {
