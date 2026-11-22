@@ -33,9 +33,10 @@
 - `presentation/l10n/`: `calc_semantic_strings.dart` (스크린리더 음성 문구 — 키 기능 이름·LCD 표시기 의미, 한국어·영어), `device_locale_scope.dart` (기기 로캘 전달·언어 변경 시 재빌드), `settings_strings.dart` (설정 UI 문구, 한국어·영어)
 - `presentation/screens/`: `calculator_screen.dart`
 - `presentation/widgets/`: `lcd_display.dart`, `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일), `banner_ad_slot.dart`, `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_button.dart`·`handedness_dialog.dart` (설정 진입·키패드 위치 선택), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
-- 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정)
+- 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정)
 - 개발 도구: `preview/key_preview_main.dart` (실제 `CalculatorScreen`을 기기 크기 프리셋·글자 배율·입력 로그와 함께 띄우는 미리보기 — 실행 방법은 README. `lib/`에서 import 금지, 앱 빌드 제외, CI가 웹 빌드로 확인)
 - VS Code: `.vscode/` (실행 구성 `launch.json`·추천 확장 `extensions.json` — 준비 단계·SDK 탐지는 README "VS Code에서 실행". 기기마다 다른 절대경로는 넣지 않으며, 구성과 README 표의 일치와 함께 `test/unit/vscode_config_test.dart`가 검사한다)
+- 줄바꿈: `.gitattributes` (Flutter가 다시 쓰는 생성 플러그인 파일을 LF로 고정 — `test/unit/gitattributes_test.dart`가 대상 누락을, CI가 빌드 뒤 작업 트리가 깨끗한지 검사한다. 아래 "로컬 개발 환경 메모" 참조)
 - 에셋: `assets/fonts/` (번들 글꼴 Noto Sans Mono/Math 서브셋과 OFL 전문 — 출처·서브셋 재현·글리프 선택 규칙은 `assets/fonts/README.md`)
 
 ## 3. 코딩 원칙
@@ -48,6 +49,15 @@
 ## 4. 로컬 개발 환경 메모
 - Flutter SDK가 시스템 PATH에 없을 수 있다. `flutter`를 찾지 못하면 Bash에서
   `export PATH="/c/Users/fmthead/develop/flutter/bin:$PATH"` 후 실행한다.
+- 생성 플러그인 파일(`linux/flutter/generated_plugin*`, `windows/flutter/generated_plugin*`,
+  `macos/Flutter/GeneratedPluginRegistrant.swift`)은 `.gitattributes`로 LF 고정이라, `flutter pub get`·`test` 뒤에도
+  수정됨으로 보이지 않는다 (#67). 그래도 이 파일들이 `M`이면 실제 변경인지 먼저 `git diff`로 본다(줄바꿈만 다르면 비어 있다).
+  - 속성이 생기기 전에 체크아웃한 작업 트리는 CRLF로 남아 있어 Flutter가 다시 쓰면 내용 차이 없이 `M`이 된다.
+    #67이 들어온 브랜치로 전환·머지한 **뒤** Git Bash에서 `bash .claude/scripts/normalize-generated-eol.sh`로 한 번 정리한다
+    (대상은 `.gitattributes`가 정하고, 내용이 실제로 바뀐 파일이 있으면 아무것도 하지 않고 중단한다).
+  - #67 이전 브랜치에 있어서 `M` 때문에 전환·머지가 막히면(스크립트가 아직 없다): 위 생성 파일 7개에 대해
+    `git diff --stat -- <7개>`가 비어 있음을 확인한 뒤 그 7개만 `git checkout -- <7개>`로 되돌린다.
+  - `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다 — 진짜 변경까지 지워진다.
 - GitHub CLI(`gh`)로 이슈/PR/프로젝트를 관리한다. 저장소: `i-technika/altcalc-fx991`
 - `gh`에 여러 줄 본문을 넘길 때는 셸 이스케이프 깨짐(과거 이슈 본문의 `\경로\` 깨짐 현상)을 막기 위해
   **반드시 임시 파일 + `--body-file`** 을 사용한다.
