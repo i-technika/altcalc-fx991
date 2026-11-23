@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/settings_strings.dart';
@@ -327,6 +328,14 @@ void main() {
             expect(tester.takeException(), isNull);
             expect(_notice, findsNothing);
             expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+            // 접힘선 기준 배치로 그렸다(가운데 접힘선이면 영역이 짧은 창 좌우 분할과 같아, 배치 종류로 구분한다 —
+            // 대화상자를 접힘선 기준으로 나눌지가 이것으로 정해진다, #25·#129).
+            expect(
+              tester
+                  .widget<SettingsButton>(find.byType(SettingsButton))
+                  .arrangement,
+              ScreenArrangement.hingeSplit,
+            );
             final drawnTouch = _lowestDrawnTouch(tester);
             expect(drawnTouch, lessThan(CalcTheme.keyTouchHeightFloor));
             expect(
@@ -491,8 +500,10 @@ void main() {
       await _pump(tester, size: const Size(320, 240));
       const message = KoSettingsStrings();
       expect(find.text(message.windowTooSmall), findsOneWidget);
+      // liveRegion 노드 자신이 문구를 라벨로 가져야 Android가 나타날 때 읽는다(라벨 변경 시에만 알림).
       final node = tester.getSemantics(_notice);
       expect(node.flagsCollection.isLiveRegion, isTrue);
+      expect(node.label, message.windowTooSmall);
       expect(find.bySemanticsLabel(message.windowTooSmall), findsOneWidget);
       // 숨긴 계산기(설정 버튼·LCD 알림 노드)는 의미 트리에 없다.
       expect(find.byTooltip(message.settingsButton), findsNothing);
@@ -607,34 +618,73 @@ void main() {
     }
   });
 
+  group('창 폭을 키울 때도 키가 줄지 않고, 짧은 변 600dp 경계는 기록대로다 (#38 R2)', () {
+    for (final height in const [360.0, 598.0]) {
+      testWidgets('높이 $height: 폭 240 → 598dp', (tester) async {
+        var previous = 0.0;
+        for (var width = 240.0; width < 600; width += 4) {
+          final size = Size(width, height);
+          await _pump(tester, size: size);
+          if (_notice.evaluate().isNotEmpty) {
+            expect(previous, 0, reason: '$size: 계산기를 그린 뒤 다시 안내가 나왔다');
+            continue;
+          }
+          final touch = KeypadMetrics.minKeyTouchHeightOf(
+            tester.getSize(_keypad),
+          );
+          expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
+          previous = touch;
+        }
+        expect(previous, greaterThan(0));
+      });
+    }
+
+    testWidgets('거의 정사각형인 세로 창: 짧은 변 600 미만은 키가 큰 좌우 분할, 600부터는 위아래 배치', (
+      tester,
+    ) async {
+      // CalcTheme "짧은 창" 절에 기록한 경계 — 정사각형 대화면(768×768 등)은 FormFactor 규칙대로 위아래 배치다.
+      await _pump(tester, size: const Size(598, 610));
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      await _pump(tester, size: const Size(600, 610));
+      expect(isStackedArrangement(tester), isTrue);
+      await _pump(tester, size: const Size(768, 768));
+      expect(isStackedArrangement(tester), isTrue);
+    });
+  });
+
   // 실제 글꼴로 재는 그룹이라 마지막에 둔다(번들 글꼴은 로드한 뒤 이 파일 안에서 계속 유지된다).
   group('글자 하한: 안내가 나오지 않는 창의 키 글자 (실제 글꼴, #38 R1)', () {
     setUpAll(loadBundledFonts);
 
-    testWidgets('창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (CalcTheme "짧은 창" 절의 실측 하한)', (
-      tester,
-    ) async {
-      var nearThreshold = false;
-      for (var w = 220.0; w <= 900; w += 40) {
-        for (var h = 200.0; h <= 600; h += 20) {
-          final size = Size(w, h);
-          await _pump(tester, size: size);
-          if (_notice.evaluate().isNotEmpty) continue;
-          final keypad = tester.getSize(_keypad);
-          final m = KeypadMetrics.compute(keypad, TextScaler.noScaling);
-          expect(
-            m.mainLabelFontSize,
-            greaterThanOrEqualTo(4.8),
-            reason: '$size',
-          );
-          expect(m.legendFontSize, greaterThanOrEqualTo(3.1), reason: '$size');
-          if (KeypadMetrics.minKeyTouchHeightOf(keypad) < 17) {
-            nearThreshold = true;
+    testWidgets(
+      '창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (CalcTheme "짧은 창" 절의 실측 하한 4.9·3.2dp)',
+      (tester) async {
+        var nearThreshold = false;
+        for (var w = 220.0; w <= 900; w += 40) {
+          for (var h = 200.0; h <= 600; h += 20) {
+            final size = Size(w, h);
+            await _pump(tester, size: size);
+            if (_notice.evaluate().isNotEmpty) continue;
+            final keypad = tester.getSize(_keypad);
+            final m = KeypadMetrics.compute(keypad, TextScaler.noScaling);
+            expect(
+              m.mainLabelFontSize,
+              greaterThanOrEqualTo(4.8),
+              reason: '$size',
+            );
+            expect(
+              m.legendFontSize,
+              greaterThanOrEqualTo(3.1),
+              reason: '$size',
+            );
+            if (KeypadMetrics.minKeyTouchHeightOf(keypad) < 17) {
+              nearThreshold = true;
+            }
           }
         }
-      }
-      // 안내 직전 크기가 격자에 있어야 이 하한이 의미 있다.
-      expect(nearThreshold, isTrue);
-    });
+        // 안내 직전 크기가 격자에 있어야 이 하한이 의미 있다.
+        expect(nearThreshold, isTrue);
+      },
+    );
   });
 }

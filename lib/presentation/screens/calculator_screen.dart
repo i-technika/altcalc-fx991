@@ -547,7 +547,8 @@ class CalcTopStripLayout {
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
-///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다.
+///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
+///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38).
 /// - 접기·펼치기·회전으로 배치가 바뀌어도 상태는 [calcProvider]에 있고 LCD·키패드 element도 유지된다(`_Body`).
 class CalculatorScreen extends ConsumerWidget {
   const CalculatorScreen({super.key});
@@ -1066,6 +1067,9 @@ class WindowTooSmallNotice extends StatelessWidget {
       key: noticeKey,
       container: true,
       liveRegion: true,
+      // liveRegion 노드 자신이 문구를 라벨로 가져야 나타날 때 읽힌다 — Android는 liveRegion 노드의 라벨이 바뀔 때만
+      // 알린다(`ScreenReaderAnnouncer` 참조). 아래 Text는 같은 말을 두 번 읽지 않도록 의미 트리에서 뺀다.
+      label: strings.windowTooSmall,
       child: LayoutBuilder(
         builder: (context, constraints) {
           const padding = CalcTheme.windowTooSmallPadding;
@@ -1086,12 +1090,14 @@ class WindowTooSmallNotice extends StatelessWidget {
                       color: color,
                     ),
                     const SizedBox(height: CalcTheme.windowTooSmallPadding),
-                    Text(
-                      strings.windowTooSmall,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: CalcTheme.windowTooSmallFontSize,
+                    ExcludeSemantics(
+                      child: Text(
+                        strings.windowTooSmall,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: CalcTheme.windowTooSmallFontSize,
+                        ),
                       ),
                     ),
                   ],
