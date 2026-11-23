@@ -320,8 +320,9 @@ abstract final class CalcTheme {
   // 두 테마는 지금 플랫폼([defaultTargetPlatform])별로 한 번씩 만들어 둔다 (#130).
   // `ThemeData`는 만들 때의 플랫폼으로 `platform`·`materialTapTargetSize`·`visualDensity`를 정한다. 정적 값 하나로
   // 두면 처음 읽힌 플랫폼으로 굳어, 위젯 테스트의 플랫폼 변형(`TargetPlatformVariant`)에서 다음 변형이 앞 변형의
-  // 밀도를 그대로 쓴다(실행 순서에 따라 결과가 달라진다). 같은 플랫폼에서는 늘 같은 객체를 돌려주므로 MaterialApp·
-  // [AnimatedTheme]이 매 빌드 새 테마로 보지 않는다. 실제 앱은 실행 중 플랫폼이 바뀌지 않아 값이 하나뿐이다
+  // 밀도를 그대로 쓴다(실행 순서에 따라 결과가 달라진다). 같은 플랫폼에서는 늘 같은 객체를 돌려주므로 매 빌드
+  // `ThemeData`를 다시 만들거나 MaterialApp·[AnimatedTheme]이 값을 하나하나 비교하지 않고(같은 객체면 바로 같다),
+  // 테스트도 `same`으로 앱이 고른 테마를 확인할 수 있다. 실제 앱은 실행 중 플랫폼이 바뀌지 않아 값이 하나뿐이다
   // (디버그 도구의 플랫폼 전환은 다음 빌드부터 그 플랫폼 테마를 쓴다).
   // 만든 값을 계속 쓰므로 아래 정의를 고쳐도 핫 리로드에는 반영되지 않는다(핫 리스타트 필요).
   static final Map<TargetPlatform, ThemeData> _materialThemes = {};
@@ -330,7 +331,7 @@ abstract final class CalcTheme {
   /// 만들어 둔 플랫폼별 테마를 비운다 — 테스트가 같은 isolate 안에서 테마를 만드는 순서를 직접 정할 때 쓴다
   /// (앞 테스트가 이미 만든 테마를 읽기만 하지 않게). 비운 뒤에는 앞서 받은 테마와 다른 객체가 만들어진다.
   @visibleForTesting
-  static void debugResetMaterialThemes() {
+  static void resetMaterialThemesForTesting() {
     _materialThemes.clear();
     _materialHighContrastThemes.clear();
   }

@@ -394,7 +394,9 @@ void main() {
 
     // 테마가 처음 읽힌 플랫폼으로 굳으면 뒤 변형이 앞 변형의 밀도를 쓴다. 두 순서로 돌려 순서와 관계없음을 본다.
     // 앞 테스트가 이미 만든 테마를 읽기만 하지 않도록, 순서마다 첫 변형 전에 만들어 둔 테마를 비운다
-    // (변형마다 비우면 같은 플랫폼 두 번째 읽기를 확인하지 못한다).
+    // (변형마다 비우면 두 번째 변형이 앞 변형이 채운 캐시 뒤에서 만들어지는 경우를 확인하지 못한다).
+    // 순서 효과는 선언 순서대로 실행될 때만 확인된다 — 무작위 순서나 이름 필터로 일부 변형만 돌리면 각 변형이
+    // 자기 플랫폼 값인지만 본다. 정해진 순서의 검사는 `test/unit/calc_theme_test.dart`가 한다.
     for (final order in const [
       {TargetPlatform.android, TargetPlatform.windows},
       {TargetPlatform.windows, TargetPlatform.android},
@@ -404,7 +406,7 @@ void main() {
         '${order.map((p) => p.name).join(' → ')} 순서: MaterialApp·화면·대화상자의 테마가 그 변형 플랫폼의 터치 영역·밀도다',
         (tester) async {
           if (first) {
-            CalcTheme.debugResetMaterialThemes();
+            CalcTheme.resetMaterialThemesForTesting();
             first = false;
           }
           final platform = defaultTargetPlatform;

@@ -372,6 +372,14 @@ void main() {
       }
     }
 
+    test('만들어 둔 테마를 비우면 다음 읽기에서 새로 만든다 (아래 순서 테스트의 전제)', () {
+      final (normal, high) = themesOn(TargetPlatform.android);
+      CalcTheme.resetMaterialThemesForTesting();
+      final (normalAgain, highAgain) = themesOn(TargetPlatform.android);
+      expect(normalAgain, isNot(same(normal)));
+      expect(highAgain, isNot(same(high)));
+    });
+
     // 정적 값 하나로 두면 어느 순서든 처음 읽은 플랫폼으로 굳어 뒤 플랫폼이 틀린다. 두 순서로 확인한다.
     // 앞 테스트가 이미 만든 테마를 읽기만 하지 않도록 만들어 둔 테마를 비워, 실제로 이 순서대로 만든다.
     for (final order in [
@@ -379,7 +387,7 @@ void main() {
       TargetPlatform.values.reversed.toList(),
     ]) {
       test('${order.first.name}부터 차례로 만들어도 테마마다 그 플랫폼의 터치 영역·밀도다', () {
-        CalcTheme.debugResetMaterialThemes();
+        CalcTheme.resetMaterialThemesForTesting();
         for (final platform in order) {
           final (normal, high) = themesOn(platform);
           final (tap, density) = expected[platform]!;
