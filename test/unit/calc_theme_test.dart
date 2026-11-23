@@ -973,6 +973,22 @@ void main() {
       );
     });
 
+    test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수이고, 테이블톱 하한은 그 아래로 내려가지 않는다 (#38)', () {
+      expect(CalcTheme.keyTouchHeightUsableMin, greaterThan(0));
+      expect(
+        CalcTheme.keyTouchHeightUsableMin,
+        lessThan(CalcTheme.keyTouchHeightFloor),
+      );
+      // 테이블톱 하한이 더 낮으면, 고른 테이블톱 배치가 곧바로 "창이 너무 작다" 안내가 된다.
+      expect(
+        CalcTheme.tabletopKeyTouchHeightFloor,
+        greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin),
+      );
+      expect(CalcTheme.windowTooSmallIconSize, greaterThan(0));
+      expect(CalcTheme.windowTooSmallFontSize, greaterThan(0));
+      expect(CalcTheme.windowTooSmallPadding, greaterThanOrEqualTo(0));
+    });
+
     test('접힘선 간격: 양수이고, 폭 0 접힘선 양쪽 내용 사이가 좌우 분할 간격과 같다 (#25)', () {
       expect(CalcTheme.screenHingeMargin, greaterThan(0));
       expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenSplitGap);

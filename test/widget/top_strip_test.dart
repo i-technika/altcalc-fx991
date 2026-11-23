@@ -978,24 +978,38 @@ void main() {
       },
     );
 
-    for (final size in const [Size(360, 300), Size(568, 320), Size(640, 360)]) {
-      testWidgets(
-        '작은 창 ${size.width}×${size.height}: 안내 글이 있어도 첫 선택지가 스크롤 없이 눌린다',
-        (tester) async {
-          final container = await _pump(tester, size: size);
-          expect(isStackedArrangement(tester), isTrue);
-          // 첫 선택지(오른손잡이)를 눌러 바뀌는지 보려고 왼손잡이로 시작한다.
-          container.read(handednessProvider.notifier).set(Handedness.left);
-          await tester.pump();
-          await tester.tap(_button);
-          await tester.pumpAndSettle();
-          expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
-          final first = Handedness.values.first;
-          await tester.tap(find.byKey(HandednessDialog.optionKeyOf(first)));
-          await tester.pumpAndSettle();
-          expect(container.read(handednessProvider), first);
-        },
-      );
+    // 작은 창 — 위아래 배치로 남는 창은 안내 글이 나오고, 짧은 창 규칙으로 좌우 분할이 된 창(#38)은 손잡이가
+    // 적용되므로 안내 글이 없다. 어느 쪽이든 첫 선택지가 스크롤 없이 눌린다.
+    for (final (size, stacked) in const [
+      (Size(300, 420), true),
+      (Size(360, 300), false),
+      (Size(568, 320), false),
+      (Size(640, 360), false),
+    ]) {
+      testWidgets('작은 창 ${size.width}×${size.height}: '
+          '${stacked ? '안내 글이 있어도' : '좌우 분할(#38)에서'} 첫 선택지가 스크롤 없이 눌린다', (
+        tester,
+      ) async {
+        final container = await _pump(tester, size: size);
+        expect(tester.takeException(), isNull);
+        expect(
+          drawnArrangementOf(tester),
+          stacked ? DrawnArrangement.stacked : DrawnArrangement.sideBySide,
+        );
+        // 첫 선택지(오른손잡이)를 눌러 바뀌는지 보려고 왼손잡이로 시작한다.
+        container.read(handednessProvider.notifier).set(Handedness.left);
+        await tester.pump();
+        await tester.tap(_button);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(HandednessDialog.noteKey),
+          stacked ? findsOneWidget : findsNothing,
+        );
+        final first = Handedness.values.first;
+        await tester.tap(find.byKey(HandednessDialog.optionKeyOf(first)));
+        await tester.pumpAndSettle();
+        expect(container.read(handednessProvider), first);
+      });
     }
 
     testWidgets('스크린리더: 설정 버튼은 하나이고 보이는 부분이 영역이며, 장식·넓힌 터치 영역은 읽히지 않는다', (

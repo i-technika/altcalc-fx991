@@ -297,7 +297,6 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
   ),
-  // 짧은 창 대응은 #38에서 다룬다 — 여기서는 현재 배치를 확인만 한다.
   // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 LCD/키패드를 좌우로 나눈다(#25).
   // 자세·방향을 고를 수 있다(#93) — 가로로 돌려 반 접으면 테이블톱 배치, 펼친 채 돌리면 위아래 배치다.
   PreviewDevice(
@@ -362,13 +361,17 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
   ),
-  // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음)
+  // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음).
+  // 짧은 창이라 위아래 배치보다 키가 큰 좌우 분할로 그린다(#38) — 손잡이를 바꾸면 키패드가 옮겨 간다.
   PreviewDevice(
     '분할 화면 위',
     Size(390, 420),
     padding: EdgeInsets.only(top: 24),
     systemGestureInsets: EdgeInsets.only(top: 24),
   ),
+  // 키를 쓸 수 없을 만큼 작은 팝업 창 — 계산기 대신 창을 키워 달라는 안내가 나온다(#38). 다른 기기로 바꾸면
+  // 계산기가 입력 상태 그대로 돌아온다.
+  PreviewDevice('작은 팝업 창', Size(320, 240)),
 ];
 
 /// 기본 시스템 글자 배율

@@ -219,6 +219,7 @@ void main() {
         expect(s.handednessTitle.trim(), isNotEmpty);
         expect(s.handednessNote.trim(), isNotEmpty);
         expect(s.close.trim(), isNotEmpty);
+        expect(s.windowTooSmall.trim(), isNotEmpty);
         final names = Handedness.values.map(s.handedness).toList();
         final details = Handedness.values.map(s.handednessDetail).toList();
         expect(names.every((v) => v.trim().isNotEmpty), isTrue);
