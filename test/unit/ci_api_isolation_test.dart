@@ -10,7 +10,8 @@ import '../support/workflows.dart';
 /// - Sub-issue CI와 Milestone CI에 같은 잡을 둔다.
 /// - 잡은 R8이 도는 릴리스 APK를 빌드한 뒤 검사 스크립트를 그 APK와 mapping.txt로 돌린다.
 /// - 규칙 파일(`.github/api-isolation-rules`)의 allow가 Kotlin 소스의 격리 object와 맞는다:
-///   guard-api 이상의 `object Api<N>`마다 그 object와 합성 람다가 허용되고, 앱 패키지의 allow는 소스에 있는 object를 가리킨다.
+///   guard-api 이상의 `object Api<N>`마다 그 object와 합성 람다가 허용되고, allow는 소스에 있는 격리 object와
+///   그 합성 클래스(`$$*`), R8 API 아웃라인 glob만 쓴다(넓은 glob으로 검사를 무력화하지 않게).
 ///
 /// 스크립트 동작은 `api_isolation_script_test.dart`가, 실제 R8 결과물과의 대조는 CI 실행이 확인한다.
 
@@ -65,7 +66,7 @@ int _stepIndex(List<YamlMap> steps, bool Function(String run) test) =>
   return (guard: guard!, allows: allows);
 }
 
-/// 앱 Kotlin 소스의 `Api<N>` 격리 object: `<패키지>.<바깥 클래스>$Api<N>` → N
+/// 앱 Kotlin 소스의 격리 object(`Api<N>`, androidx·Flutter 관례의 `Api<N>Impl` 포함): `<패키지>.<바깥 클래스>$<이름>` → N
 Map<String, int> _isolationObjects() {
   final result = <String, int>{};
   for (final file in Directory(
@@ -77,18 +78,23 @@ Map<String, int> _isolationObjects() {
       r'^package ([\w.]+)',
       multiLine: true,
     ).firstMatch(source)?[1];
-    // 맨 앞 열의 클래스 선언 = 바깥 클래스 (격리 object는 그 안에 들여 쓴다)
-    final outer = RegExp(
+    // 맨 앞 열의 클래스 선언 = 최상위 클래스. 격리 object는 그 안에 들여 쓰므로 앞에 나온 가장 가까운 최상위 클래스가 바깥 클래스다
+    final outers = RegExp(
       r'^(?:\w+ )*class (\w+)',
       multiLine: true,
-    ).firstMatch(source)?[1];
+    ).allMatches(source).toList();
     for (final m in RegExp(
-      r'^[ \t]+(?:private |internal )?object (Api(\d+))\b',
+      r'^[ \t]+(?:private |internal )?object (Api(\d+)(?:Impl)?)\b',
       multiLine: true,
     ).allMatches(source)) {
       expect(package, isNotNull, reason: '${file.path}: package 선언이 없다');
-      expect(outer, isNotNull, reason: '${file.path}: 바깥 클래스를 찾지 못했다');
-      result['$package.$outer\$${m[1]}'] = int.parse(m[2]!);
+      final before = outers.where((o) => o.start < m.start);
+      expect(
+        before,
+        isNotEmpty,
+        reason: '${file.path}: ${m[1]}의 바깥 클래스를 찾지 못했다',
+      );
+      result['$package.${before.last[1]}\$${m[1]}'] = int.parse(m[2]!);
     }
   }
   return result;
@@ -150,6 +156,19 @@ void main() {
   }
 
   group('규칙 파일', () {
+    test('allow는 격리 object·그 합성 클래스·R8 아웃라인 모양만 쓴다', () {
+      // `allow *`·`allow *Handler*`처럼 넓히면 격리가 깨져도 통과한다 — 넓혀야 하면 이 테스트와 README를 함께 고친다
+      final objects = _isolationObjects().keys.toSet();
+      for (final allow in _rules().allows) {
+        final ok =
+            allow == r'*$$ExternalSyntheticApiModelOutline*' ||
+            objects.contains(allow) ||
+            (allow.endsWith(r'$$*') &&
+                objects.contains(allow.substring(0, allow.length - 3)));
+        expect(ok, isTrue, reason: '허용 모양이 아니다: "allow $allow"');
+      }
+    });
+
     test('R8 API 아웃라인을 허용한다', () {
       expect(
         _rules().allows,
@@ -178,25 +197,6 @@ void main() {
           rules.allows,
           contains('$name\$\$*'),
           reason: '$_rulesPath에 "allow $name\$\$*"(합성 람다)가 없다',
-        );
-      }
-    });
-
-    test('앱 패키지를 가리키는 allow는 소스에 있는 격리 object다', () {
-      final namespace = RegExp(r'namespace = "([\w.]+)"').firstMatch(
-        File('android/app/build.gradle.kts').readAsStringSync(),
-      )![1]!;
-      final objects = _isolationObjects().keys.toSet();
-      for (final allow in _rules().allows) {
-        if (!allow.startsWith('$namespace.')) continue;
-        final base = allow.endsWith(r'$$*')
-            ? allow.substring(0, allow.length - 3)
-            : allow;
-        // 격리 object를 지우거나 이름을 바꾸고 allow를 남기면 그 이름의 클래스에 무엇이든 허용하게 된다
-        expect(
-          objects,
-          contains(base),
-          reason: '"allow $allow"가 가리키는 격리 object가 소스에 없다',
         );
       }
     });

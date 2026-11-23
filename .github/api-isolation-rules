@@ -9,8 +9,11 @@
 #
 # 새 API 수준 전용 코드를 추가할 때(예: API 37 전용 object Api37):
 #   - guard-api는 격리가 필요한 가장 낮은 수준이다. 그보다 낮은 수준 전용 코드를 격리했으면 낮춘다
-#     (낮추면 Flutter 엔진·라이브러리의 참조도 검사 대상이 되므로, 검사를 돌려 보고 그 격리 클래스도 allow에 더한다).
-#   - 격리 object와 그 합성 람다(`$$ExternalSyntheticLambda*`)를 allow에 더한다.
+#     낮추면 Flutter 엔진·라이브러리의 참조도 검사 대상이 된다. 검사를 돌려 보고, 라이브러리 클래스를 허용해야 하면
+#     아래 allow 모양 제한(test/unit/ci_api_isolation_test.dart)과 README도 함께 고친다.
+#   - 격리 object와 그 합성 클래스(`<object 이름>$$*` — R8·D8이 만드는 `$$ExternalSyntheticLambda<N>` 등)를 allow에 더한다.
+#   - allow 모양은 이 셋(격리 object, 그 `$$*`, 아래 아웃라인 glob)만 쓴다. `allow *`처럼 넓히면
+#     test/unit/ci_api_isolation_test.dart가 실패한다.
 
 guard-api 36
 
