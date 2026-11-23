@@ -857,7 +857,11 @@ class _Body extends ConsumerWidget {
       return null;
     }
 
-    final hingeLayout = hingeLayoutFor(handedness);
+    // 손잡이별 후보는 한 번만 계산해 그린 배치·손잡이 판정이 함께 쓴다.
+    final hingeLayouts = {
+      for (final h in Handedness.values) h: hingeLayoutFor(h),
+    };
+    final hingeLayout = hingeLayouts[handedness];
     switch (arrangement) {
       case ScreenArrangement.split:
         final layout = CalcSplitLayout.of(body, handedness);
@@ -898,13 +902,11 @@ class _Body extends ConsumerWidget {
     // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
     final handednessApplies =
         drawn != ScreenArrangement.stacked ||
-        Handedness.values.any(
-          (h) => h != handedness && hingeLayoutFor(h) != null,
-        );
+        hingeLayouts.entries.any((e) => e.key != handedness && e.value != null);
     // 손잡이를 바꿔도 그린 배치가 같은지 (#129): 접힘선 기준 배치는 두 손잡이 모두 그 배치를 쓸 수 있을 때다.
     // 좌우 분할·위아래 배치는 손잡이와 무관하다(위아래 배치로 대체한 화면은 위 판정처럼 반대 손잡이로 달라질 수 있다).
-    final handednessKeepsArrangement = Handedness.values.every(
-      (h) => (hingeLayoutFor(h) == null) == (hingeLayout == null),
+    final handednessKeepsArrangement = hingeLayouts.values.every(
+      (l) => (l == null) == (hingeLayout == null),
     );
     // 상단 띠 (#41): LCD 위에 장식 줄을 두고, 위아래 배치는 설정 버튼도 그 줄에 둔다.
     final strip = CalcTopStripLayout.of(body, lcd, settingsButton: settings);

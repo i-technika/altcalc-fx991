@@ -1670,11 +1670,11 @@ void _hingeLayoutTests() {
 
     // 손잡이에 따라 배치가 갈리는 비대칭 세로 접힘선. 키패드가 좁은 절반에 들어가지 못하는 손잡이는 위아래 배치,
     // 반대 손잡이는 접힘선 기준 배치(버튼은 LCD 쪽 = 좁은 절반)다.
-    // `_splitLikeApp`은 Navigator의 인셋으로 절반 폭을 재므로 View에도 같은 인셋을 넣는다(넣지 않으면 실제 앱에
-    // 없는 "따라가기"가 일어난다 — [_setViewPadding]).
+    // `_splitLikeApp`은 대화상자 경로(View)의 MediaQuery 인셋으로 절반을 재므로 View에도 같은 인셋을 넣는다
+    // (넣지 않으면 실제 앱과 다른 절반을 잰다 — [_setViewPadding]).
 
     testWidgets(
-      '비대칭 접힘선(펼친 폭 0): LCD 쪽 절반이 하한보다 좁아 대화상자는 배치가 바뀌어도 화면 전체에 그대로 뜬다 (#41 인셋 판정)',
+      '비대칭 접힘선(펼친 폭 0): 반대 손잡이로는 위아래 배치라 대화상자는 배치가 바뀌어도 화면 전체에 그대로 뜬다 (#41·#129)',
       (tester) async {
         // x=560, 오른쪽 인셋 48 → 오른쪽 절반 233dp. 오른손잡이는 위아래 배치, 왼손잡이는 접힘선 기준 배치.
         const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
@@ -2455,6 +2455,84 @@ void _hingeLayoutTests() {
         if (stays) expect(dialog.width, moreOrLessEquals(280));
       });
     }
+
+    // 버튼 쪽 하한: 반대쪽 절반도 최소 크기(360dp)에 못 미치면 버튼 쪽 절반이 인셋을 빼고 280dp 이상일 때만 그
+    // 절반이고, 그보다 좁으면 화면 전체다 (R2). 반대쪽 절반 340dp, 두 손잡이 모두 접힘선 기준 배치.
+    for (final (leftHalf, split) in [
+      (280.0, true),
+      (279.0, false),
+      (272.0, false),
+    ]) {
+      testWidgets(
+        '하한: 버튼 쪽 절반 ${leftHalf}dp·반대쪽 340dp → ${split ? '버튼 쪽 절반' : '화면 전체'}',
+        (tester) async {
+          final hingeX = leftInset.left + leftHalf;
+          final size = Size(hingeX + 340, 701);
+          final container = await pumpFold(
+            tester,
+            size: size,
+            padding: leftInset,
+            hingeX: hingeX,
+          );
+          expect(isStackedArrangement(tester), isFalse);
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final dialog = tester.getRect(_dialogSurface);
+          if (split) {
+            expect(onLeftOf(hingeX, dialog), isTrue, reason: '$dialog');
+            final region = Rect.fromLTRB(leftInset.left, 0, hingeX, 701);
+            expect(dialog.center.dx, moreOrLessEquals(region.center.dx));
+          } else {
+            expect(dialog.left, lessThan(hingeX), reason: '$dialog');
+            expect(dialog.right, greaterThan(hingeX), reason: '$dialog');
+          }
+          // 반대 손잡이로도 접힘선 기준 배치라 손잡이를 바꿔도 그 자리다 (#94).
+          await tester.ensureVisible(_option(Handedness.left));
+          await tester.pumpAndSettle();
+          await tester.tap(_option(Handedness.left));
+          await tester.pumpAndSettle();
+          expect(container.read(handednessProvider), Handedness.left);
+          expect(isStackedArrangement(tester), isFalse);
+          expect(tester.getRect(_dialogSurface), dialog);
+        },
+      );
+    }
+
+    testWidgets('열린 채 인셋이 바뀌어 반대 손잡이로는 위아래 배치가 되면, 반대쪽 절반에서 화면 전체로 옮겨 간다', (
+      tester,
+    ) async {
+      // x=320: 왼쪽 인셋 48이면 왼쪽 절반 272dp(두 손잡이 모두 접힘선 기준 배치) → 반대쪽 절반.
+      // 왼쪽 인셋 64로 바뀌면 256dp라 왼손잡이는 위아래 배치 — 그린 배치·손잡이 적용 여부는 그대로이고
+      // [SettingsButton.handednessKeepsArrangement]만 바뀐다.
+      const hingeX = 320.0;
+      final fold = _foldAt(const Rect.fromLTWH(hingeX, 0, 0, 701));
+      final container = await pumpFold(
+        tester,
+        size: wide,
+        padding: leftInset,
+        hingeX: hingeX,
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      expect(onRightOf(hingeX, tester.getRect(_dialogSurface)), isTrue);
+
+      const widerInset = EdgeInsets.only(left: 64, top: 24, bottom: 24);
+      _setViewPadding(tester, widerInset);
+      await _pump(
+        tester,
+        size: wide,
+        padding: widerInset,
+        displayFeatures: [fold],
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(isStackedArrangement(tester), isFalse);
+      final moved = tester.getRect(_dialogSurface);
+      expect(moved.left, lessThan(hingeX), reason: '$moved');
+      expect(moved.right, greaterThan(hingeX), reason: '$moved');
+    });
 
     testWidgets('반대 손잡이로는 위아래 배치가 되는 화면은 반대쪽 절반이 넓어도 화면 전체에 띄워 그대로 남는다 (#94)', (
       tester,
