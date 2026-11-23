@@ -193,7 +193,7 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
 ```bash
 gh pr checks <PR> --watch
 ```
-- `Linux Analyze, Test & Build`와 `Android Unit Tests (JVM)`가 통과해야 한다. 실패 시 로그(`gh run view --log-failed`)로 원인을 고친다.
+- `Linux Analyze, Test & Build`, `Android Unit Tests (JVM)`, `Verify Action Pins`가 통과해야 한다. `Verify Action Pins`만 실패하면 고정 SHA·보안 권고 문제거나 GitHub API 장애다(README "CI 액션 고정 버전 올리기"). 실패 시 로그(`gh run view --log-failed`)로 원인을 고친다.
 
 ### 11. 머지·이슈 Close·보드 갱신
 ```bash

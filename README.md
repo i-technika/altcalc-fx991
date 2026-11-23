@@ -61,12 +61,16 @@ uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
 - 검사는 두 곳에서 한다.
   - `test/unit/ci_actions_test.dart`(오프라인): 모든 `uses:`가 SHA 40자리 + `# vX.Y.Z`인지, 워크플로끼리 같은지,
     주석의 버전이 Node 24 최소 버전(`_minVersions`, #79) 이상인지 본다.
-  - CI Linux 잡의 `Verify action pins` 단계(`bash .github/scripts/action-pins.sh verify`): GitHub API로 SHA가 정말 그 태그의 커밋인지 확인한다.
+  - CI의 `Verify Action Pins` 잡(`bash .github/scripts/action-pins.sh verify`, Sub-issue CI·Milestone CI 모두): GitHub API로
+    SHA가 정말 그 태그의 커밋인지, 그 버전에 해당하는 보안 권고(GitHub Advisory Database의 검토된 GHSA)가 없는지 확인한다.
+    - 외부 API에 기대는 검사라 테스트 잡과 따로 둔다. 이 잡만 빨간색이면 고정·권고 문제거나 API 장애다(조회는 세 번까지 시도한다).
+    - 권고가 새로 나오면 워크플로를 고치지 않은 PR에서도 이 잡이 실패한다. 그 액션을 고친 릴리스로 올리는 서브이슈를 바로 만든다.
 - 한계: composite 액션이 안에서 쓰는 액션은 고정되지 않는다. 예를 들어 flutter-action v2.23.0은 내부에서 `actions/cache@v5`를 쓴다.
   바깥 SHA를 고정해도 그 내부 참조는 `actions/cache`의 v5 태그를 따라 움직인다.
 
 **갱신 방법: 수동 절차, 마일스톤 착수 때 점검.** `/open-ms`가 새 마일스톤 브랜치에서 `action-pins.sh outdated`를 돌린다.
-새 릴리스가 있으면 그 마일스톤의 서브이슈로 등록해 아래 절차로 올린다. 보안 권고처럼 급한 갱신은 바로 서브이슈를 만든다.
+새 릴리스가 있으면 그 마일스톤의 서브이슈로 등록해 아래 절차로 올린다.
+보안 권고는 기다리지 않는다. 위 CI 잡이 실패하거나 `outdated`가 권고를 보이면 바로 서브이슈를 만든다.
 
 Dependabot(`github-actions` 생태계)은 쓰지 않는다.
 
@@ -74,11 +78,13 @@ Dependabot(`github-actions` 생태계)은 쓰지 않는다.
   캐시가 없는 멀티플랫폼 CI가 돈다.
 - `target-branch`는 고정된 이름이라 마일스톤마다 바뀌는 `milestone/m<N>`을 따라가지 못한다.
 - 주 버전이 바뀌면 어차피 사람이 `runs.using`을 확인하고 `_minVersions`를 고쳐야 한다(아래 2번).
-- 저장소 설정의 Dependabot 경고(alerts)는 PR 없이 알림만 보내므로 이 흐름과 부딪히지 않는다.
-  2026-11-23 기준 이 저장소에서는 꺼져 있다. 켤지는 저장소 관리자가 정한다.
+- Dependabot 경고(alerts)도 대신하지 못한다. GitHub 문서("About Dependabot alerts"의 제한 사항)에 따르면
+  Actions 경고는 버전 태그로 참조한 액션에만 나오고, SHA로 고정한 액션에는 나오지 않는다.
+  그래서 권고 확인은 위 `verify`·`outdated`가 Advisory Database API(`advisories?ecosystem=actions`)로 직접 한다.
 
 1. `bash .github/scripts/action-pins.sh outdated`로 액션마다 고정 버전과 새 릴리스를 본다(`gh` 로그인 필요).
-   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 새 릴리스가 있어도 실패하지 않는다.
+   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 고정한 버전에 권고가 있으면 `!` 줄로 보인다.
+   - 새 릴리스나 권고가 있어도 실패하지 않는다. 조회에 실패할 때만 실패한다.
 2. 주 버전이 바뀌면 그 버전의 `action.yml`(`action.yaml`)과 릴리스 노트를 확인한다.
    - `runs.using`이 `node24`여야 한다. `composite`면 내부에서 쓰는 액션들이 node24여야 한다.
    - 입력·기본값 변경(예: 캐시 키 형식)이 워크플로에 영향을 주는지 본다.

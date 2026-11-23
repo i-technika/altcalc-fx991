@@ -38,6 +38,12 @@ const _pinOutputRef = '\${{ steps.$_pinStepId.outputs.version }}';
 /// `shell: bash`는 Windows 러너(기본 셸 pwsh)에서도 같은 bash로 돌리기 위한 것이다.
 const _pinStep = {'id': _pinStepId, 'shell': 'bash', 'run': 'bash $_pinScript'};
 
+/// Flutter를 쓰지 않는 잡 — 고정 버전 설치 검사에서 빼고, 대신 flutter 명령·설치 단계가 없는지 본다
+const _jobsWithoutFlutter = {
+  // 고정 액션 SHA를 GitHub API로 확인한다 (#88, bash와 gh만 쓴다)
+  'verify-action-pins',
+};
+
 /// `pubspec.yaml`의 `environment.flutter` 고정값
 String _pinnedVersion() {
   final env = loadYamlFile('pubspec.yaml')['environment'] as YamlMap?;
@@ -85,7 +91,17 @@ void main() {
             '${step['uses'] ?? ''}'.startsWith(action);
 
         final setups = indexesWhere((s) => uses(s, _flutterAction));
-        // 지금은 모든 잡이 flutter 명령을 쓴다. Flutter가 필요 없는 잡이 생기면 여기서 예외로 둔다.
+        if (_jobsWithoutFlutter.contains(jobId)) {
+          expect(setups, isEmpty, reason: '$where: Flutter를 쓰지 않는 잡으로 정해 두었다');
+          expect(
+            indexesWhere((s) => '${s['run'] ?? ''}'.contains('flutter ')),
+            isEmpty,
+            reason:
+                '$where: Flutter를 쓰지 않는 잡에서 flutter 명령을 쓴다 — _jobsWithoutFlutter에서 뺄 것',
+          );
+          continue;
+        }
+        // Flutter가 필요 없는 잡은 _jobsWithoutFlutter에 이유와 함께 적는다.
         expect(setups, hasLength(1), reason: '$where: Flutter 설치 단계가 하나여야 한다');
 
         // 버전을 읽는 단계: 스크립트를 실행하는 단계와 id가 같은 단계를 모두 세어, 하나뿐이고 정해진 모양인지 본다

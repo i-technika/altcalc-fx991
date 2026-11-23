@@ -27,13 +27,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # 커밋 SHA로 고정한 액션(#88)의 SHA가 끝 주석의 태그가 가리키는 커밋인지 GitHub API로 확인한다.
-      # 형식(모든 uses:가 SHA + 전체 버전 주석인지)은 아래 flutter test의 test/unit/ci_actions_test.dart가 검사한다.
-      - name: Verify action pins
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/action-pins.sh verify
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -79,6 +72,24 @@ jobs:
       # pub get·test·build가 추적 파일을 바꾸거나 무시되지 않은 생성물을 남기지 않았는지 확인한다 (#67).
       - name: Verify clean working tree
         run: bash .github/scripts/verify-clean-tree.sh
+
+  # 커밋 SHA로 고정한 액션(#88)을 GitHub API로 확인한다: SHA가 끝 주석 태그의 커밋인지, 그 버전에 보안 권고가 없는지.
+  # 형식(모든 uses:가 SHA + 전체 버전 주석인지)은 Linux 잡의 flutter test(test/unit/ci_actions_test.dart)가 오프라인으로 검사한다.
+  # 외부 API에 기대는 검사라 테스트 잡과 나눠, 실패하면 잡 이름으로 바로 구별되게 한다(조회는 스크립트가 세 번까지 시도한다).
+  # 이 잡은 Sub-issue CI와 Milestone CI에 같은 단계로 둔다 (ci_actions_test가 대조한다).
+  verify-action-pins:
+    name: Verify Action Pins
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify action pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/action-pins.sh verify
 
   # Android 플랫폼 코드(Kotlin)의 JVM 단위 테스트 (#108) — 기기 없이 Robolectric으로 돈다.
   # 이 잡은 Sub-issue CI와 Milestone CI에 같은 내용으로 둔다 (test/unit/ci_android_unit_test_test.dart가 대조한다).

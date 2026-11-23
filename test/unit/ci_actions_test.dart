@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -12,8 +14,8 @@ import '../support/workflows.dart';
 ///   끝 주석의 버전이 목록의 최소 버전 이상이어야 한다.
 ///
 /// 오프라인 검사라 다음은 확인하지 못한다.
-/// - 커밋 SHA가 정말 끝 주석의 태그를 가리키는지 — CI의 Linux 잡이 `.github/scripts/action-pins.sh verify`로
-///   GitHub API에 물어 확인한다(아래 마지막 테스트가 그 단계가 있는지 본다).
+/// - 커밋 SHA가 정말 끝 주석의 태그를 가리키는지, 그 버전에 보안 권고가 있는지 — CI의 `Verify Action Pins` 잡이
+///   `.github/scripts/action-pins.sh verify`로 GitHub API에 물어 확인한다(아래 마지막 묶음이 그 잡의 모양을 본다).
 /// - composite 액션 내부에서 쓰는 액션의 버전 — 예: flutter-action v2.23.0은 안에서 `actions/cache@v5`(움직이는 태그)를 쓴다.
 ///   바깥 SHA를 고정해도 안쪽 참조는 그 액션이 고정하지 않는 한 움직인다(README "CI 액션 고정 버전 올리기").
 ///
@@ -35,32 +37,14 @@ const _minVersions = <String, List<int>>{
   'subosito/flutter-action': [2, 22],
 };
 
-/// 고정 SHA를 GitHub API로 확인하는 CI 단계의 명령 (#88)
+/// 고정 SHA를 GitHub API로 확인하는 CI 잡 ID와 명령 (#88)
+const _verifyJobId = 'verify-action-pins';
 const _verifyPinsCommand = 'bash .github/scripts/action-pins.sh verify';
 
-/// 워크플로 줄의 `uses: <액션>@<ref>`와 같은 줄 끝 주석 (`@<sha> # v2.23.0`).
-/// 공백은 줄 안(`[ \t]`)으로만 제한해 다음 줄의 주석을 끝 주석으로 읽지 않는다.
-/// YAML과 같은 규칙을 따른다: `uses:` 뒤에 공백이 있어야 키이고, 앞에 공백이 있는 `#`만 주석이다
-/// (`@<sha>#v2.23.0`의 `#`은 ref의 일부로 읽혀 SHA가 아닌 ref로 거부된다).
-/// `.github/scripts/action-pins.sh`도 같은 규칙으로 줄을 읽는다.
-final _usesLine = RegExp(
-  r'''^[ \t]*(?:-[ \t]+)?uses:[ \t]+(['"]?)([^@\s'"#]+)@([^\s'"]+)\1(?:[ \t]+#[ \t]*(\S+))?''',
-  multiLine: true,
-);
-
-/// 전체 버전 태그 `v2.23.0` — 고정한 줄의 주석은 이 형식이어야 한다
-final _fullVersionTag = RegExp(r'^v(\d+)\.(\d+)\.(\d+)$');
-
-/// 커밋 SHA 전체(40자리, 소문자)
-final _commitSha = RegExp(r'^[0-9a-f]{40}$');
-
-/// 워크플로의 `uses:` 한 줄
-typedef _Uses = ({String action, String ref, String? comment});
-
-/// 워크플로 본문에서 `uses:` 줄을 순서대로 뽑는다
-List<_Uses> _extractUses(String text) => [
-  for (final m in _usesLine.allMatches(text))
-    (action: m[2]!, ref: m[3]!, comment: m[4]),
+/// gh에 넘길 수 있는 워크플로 토큰 표기 (둘은 같은 토큰이다)
+const _workflowTokens = [
+  r'${{ github.token }}',
+  r'${{ secrets.GITHUB_TOKEN }}',
 ];
 
 /// YAML로 읽은 워크플로의 모든 `uses:` 값 (잡 수준 재사용 워크플로 호출 포함)
@@ -81,13 +65,6 @@ YamlMap _stepMap(String path, Object? step) {
   return step as YamlMap;
 }
 
-/// 전체 버전 태그를 `[주, 부, 수]`로 바꾼다. 형식이 아니면 null.
-List<int>? _parseVersion(String tag) {
-  final m = _fullVersionTag.firstMatch(tag);
-  if (m == null) return null;
-  return [for (var i = 1; i <= 3; i++) int.parse(m[i]!)];
-}
-
 /// 쓰는 버전이 최소 버전 이상인지 앞자리부터 비교한다 (최소 버전에 없는 뒷자리는 보지 않는다)
 bool _atLeast(List<int> used, List<int> min) {
   for (var i = 0; i < min.length; i++) {
@@ -97,20 +74,14 @@ bool _atLeast(List<int> used, List<int> min) {
 }
 
 /// `uses:` 한 줄의 문제를 돌려준다. 문제가 없으면 null.
-String? _problem(_Uses u) {
+String? _problem(ActionUses u) {
   final min = _minVersions[u.action];
   if (min == null) {
     return '확인하지 않은 액션이다 — runs.using을 확인하고 _minVersions에 추가할 것';
   }
-  if (!_commitSha.hasMatch(u.ref)) {
-    return '커밋 SHA(40자리)로 고정할 것 — 태그·브랜치는 움직인다. '
-        '`@<sha> # vX.Y.Z` (README "CI 액션 고정 버전 올리기")';
-  }
-  // SHA는 버전을 알려 주지 않으므로 주석에 정확한 릴리스를 적어야 버전을 판단할 수 있다
-  final used = u.comment == null ? null : _parseVersion(u.comment!);
-  if (used == null) {
-    return 'SHA로 고정한 줄은 같은 줄 끝에 "# v<주>.<부>.<수>" 주석을 적을 것';
-  }
+  final format = pinFormatProblem(u);
+  if (format != null) return format;
+  final used = parseVersionTag(u.comment!)!;
   if (!_atLeast(used, min)) {
     return 'Node 20 대상 버전이다 — v${min.join('.')} 이상을 쓸 것';
   }
@@ -133,10 +104,10 @@ void main() {
     expect(_atLeast([2, 21, 9], [2, 22]), isFalse);
     expect(_atLeast([2, 22, 0], [2, 22]), isTrue);
     expect(_atLeast([3, 0, 0], [2, 22]), isTrue);
-    expect(_parseVersion('v2.23.0'), [2, 23, 0]);
+    expect(parseVersionTag('v2.23.0'), [2, 23, 0]);
     // 움직이는 태그 형태·대문자·접두사 없는 버전은 주석으로 받지 않는다
     for (final tag in ['v2', 'v2.23', 'V2.23.0', '2.23.0', 'main']) {
-      expect(_parseVersion(tag), isNull, reason: tag);
+      expect(parseVersionTag(tag), isNull, reason: tag);
     }
   });
 
@@ -144,8 +115,8 @@ void main() {
     const sha = '1a449444c387b1966244ae4d4f8c696479add0b2';
 
     /// 한 줄짜리 워크플로 조각에서 뽑은 `uses:` 하나
-    _Uses single(String text) {
-      final found = _extractUses(text);
+    ActionUses single(String text) {
+      final found = extractUses(text);
       expect(found, hasLength(1), reason: text);
       return found.single;
     }
@@ -216,10 +187,7 @@ void main() {
     });
 
     test('콜론 뒤 공백 없는 uses:x는 키가 아니므로 읽지 않는다', () {
-      expect(
-        _extractUses('  - uses:actions/checkout@$sha # v7.0.1\n'),
-        isEmpty,
-      );
+      expect(extractUses('  - uses:actions/checkout@$sha # v7.0.1\n'), isEmpty);
     });
   });
 
@@ -228,7 +196,7 @@ void main() {
     expect(files, isNotEmpty, reason: '.github/workflows에 워크플로가 없다');
 
     for (final file in files) {
-      final uses = _extractUses(file.readAsStringSync());
+      final uses = extractUses(file.readAsStringSync());
       // 줄 단위 추출이 YAML 해석과 같은 목록을 내는지 확인한다 (흐름 표기 등으로 놓친 `uses:`가 없게)
       expect(
         [for (final u in uses) '${u.action}@${u.ref}'],
@@ -249,12 +217,12 @@ void main() {
   });
 
   test('같은 액션은 모든 워크플로에서 같은 SHA·버전으로 고정한다', () {
-    // 액션 → {"sha # 버전" → 쓰는 파일}
+    // 저장소(owner/repo) → {"sha # 버전" → 쓰는 파일}. 하위 경로 액션도 같은 저장소의 태그를 쓴다.
     final pins = <String, Map<String, Set<String>>>{};
     for (final file in workflowFiles()) {
-      for (final u in _extractUses(file.readAsStringSync())) {
+      for (final u in extractUses(file.readAsStringSync())) {
         pins
-            .putIfAbsent(u.action, () => {})
+            .putIfAbsent(actionRepo(u.action), () => {})
             .putIfAbsent('${u.ref} # ${u.comment}', () => {})
             .add(file.path);
       }
@@ -269,35 +237,86 @@ void main() {
     }
   });
 
-  test('flutter test를 돌리는 잡은 고정 SHA 온라인 확인 단계도 돌린다', () {
-    for (final file in workflowFiles()) {
-      final jobs = loadYamlFile(file.path)['jobs'] as YamlMap;
-      var testJobs = 0;
-      for (final MapEntry(key: id, value: job as YamlMap) in jobs.entries) {
-        final steps = (job['steps'] as YamlList? ?? YamlList())
-            .cast<YamlMap>()
-            .toList();
-        String run(YamlMap s) => '${s['run'] ?? ''}'.trim();
-        if (!steps.any((s) => run(s) == 'flutter test')) continue;
-        testJobs++;
-        final verify = steps.where((s) => run(s) == _verifyPinsCommand);
+  group('고정 SHA 온라인 확인 잡 ($_verifyJobId)', () {
+    /// 워크플로의 잡 맵
+    YamlMap jobsOf(String path) => loadYamlFile(path)['jobs'] as YamlMap;
+
+    /// YAML 값을 일반 맵·목록으로 바꾼다 (YamlMap의 ==는 내용 비교가 아니다)
+    Object? plain(Object? yaml) => jsonDecode(jsonEncode(yaml));
+
+    test('워크플로마다 정해진 모양으로 있다 (조건 없이 실패가 드러나게)', () {
+      for (final file in workflowFiles()) {
+        final job = jobsOf(file.path)[_verifyJobId];
         expect(
-          verify,
-          hasLength(1),
-          reason: '${file.path} $id: "$_verifyPinsCommand" 단계가 하나 있어야 한다',
+          job,
+          isA<YamlMap>(),
+          reason: '${file.path}: $_verifyJobId 잡이 없다',
         );
-        // gh는 토큰이 없으면 조회하지 않는다 (공개 저장소 조회라 기본 토큰이면 된다)
+        job as YamlMap;
+        // continue-on-error·needs 같은 키가 끼면 실패가 가려지거나 다른 잡에 묶인다
+        expect(job.keys.toSet(), {
+          'name',
+          'runs-on',
+          'if',
+          'timeout-minutes',
+          'steps',
+        }, reason: file.path);
+        final steps = (job['steps'] as YamlList).cast<YamlMap>().toList();
+        expect(steps, hasLength(2), reason: file.path);
+        expect(steps.first.keys.toSet(), {'name', 'uses'}, reason: file.path);
         expect(
-          (verify.single['env'] as YamlMap?)?['GH_TOKEN'],
-          r'${{ github.token }}',
-          reason: '${file.path} $id: 확인 단계에 GH_TOKEN이 필요하다',
+          '${steps.first['uses']}',
+          startsWith('actions/checkout@'),
+          reason: file.path,
         );
+        final verify = steps.last;
+        expect(verify.keys.toSet(), {'name', 'env', 'run'}, reason: file.path);
+        expect(
+          '${verify['run']}'.trim(),
+          _verifyPinsCommand,
+          reason: file.path,
+        );
+        // gh는 토큰이 없으면 조회하지 않는다 (공개 정보 조회라 기본 토큰이면 된다)
+        final env = verify['env'] as YamlMap;
+        expect(env.keys.toSet(), {'GH_TOKEN'}, reason: file.path);
+        expect(env['GH_TOKEN'], isIn(_workflowTokens), reason: file.path);
       }
-      expect(
-        testJobs,
-        greaterThan(0),
-        reason: '${file.path}: flutter test 잡이 없다',
-      );
-    }
+    });
+
+    test('flutter test를 돌리는 잡과 같은 조건(이벤트)에서 돈다', () {
+      for (final file in workflowFiles()) {
+        final jobs = jobsOf(file.path);
+        final testJobs = [
+          for (final job in jobs.values.cast<YamlMap>())
+            if ((job['steps'] as YamlList? ?? YamlList()).cast<YamlMap>().any(
+              (s) => '${s['run'] ?? ''}'.trim().startsWith('flutter test'),
+            ))
+              job,
+        ];
+        expect(
+          testJobs,
+          isNotEmpty,
+          reason: '${file.path}: flutter test 잡이 없다',
+        );
+        for (final job in testJobs) {
+          expect(
+            (jobs[_verifyJobId] as YamlMap)['if'],
+            job['if'],
+            reason: '${file.path}: ${job['name']}',
+          );
+        }
+      }
+    });
+
+    test('두 워크플로의 확인 잡 단계가 같다', () {
+      final steps = [
+        for (final file in workflowFiles())
+          plain((jobsOf(file.path)[_verifyJobId] as YamlMap)['steps']),
+      ];
+      expect(steps, hasLength(greaterThanOrEqualTo(2)));
+      for (final s in steps.skip(1)) {
+        expect(s, steps.first);
+      }
+    });
   });
 }
