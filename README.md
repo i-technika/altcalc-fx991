@@ -48,6 +48,64 @@
 
 다른 개발 PC는 이 커밋을 받은 뒤 2번처럼 SDK를 맞춘다.
 
+### CI 액션 고정 버전 올리기
+
+워크플로(`.github/workflows/`)의 모든 `uses:`는 커밋 SHA로 고정하고, 같은 줄 끝에 그 SHA의 릴리스 태그를 적는다 (#88).
+태그(`@v2`)는 움직여서, 가리키는 커밋이 바뀌면 CI 동작도 조용히 바뀐다.
+
+```yaml
+uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+```
+
+- 같은 액션은 두 워크플로에서 같은 SHA로 고정한다. 올릴 때도 한꺼번에 올린다.
+- 검사는 두 곳에서 한다.
+  - `test/unit/ci_actions_test.dart`(오프라인): 모든 `uses:`가 SHA 40자리 + `# vX.Y.Z`인지, 워크플로끼리 같은지,
+    주석의 버전이 Node 24 최소 버전(`_minVersions`, #79) 이상인지 본다.
+  - CI의 `Verify Action Pins` 잡(`bash .github/scripts/action-pins.sh verify`, Sub-issue CI·Milestone CI 모두): GitHub API로
+    SHA가 정말 그 태그의 커밋인지, 그 버전에 해당하는 보안 권고(GitHub Advisory Database의 검토된 GHSA, 철회된 것 제외)가 없는지 확인한다.
+    - 외부 API에 기대는 검사라 테스트 잡과 따로 둔다. 이 잡만 빨간색이면 고정·권고 문제거나 API 장애다.
+      일시 장애는 세 번까지 시도하고, HTTP 404(태그·저장소 없음)는 바로 실패한다. 로그의 오류 줄이 원인을 적는다.
+    - 권고가 새로 나오면 워크플로를 고치지 않은 PR에서도 이 잡이 실패한다(아래 "보안 권고가 나왔을 때").
+- 한계: composite 액션이 안에서 쓰는 액션은 고정되지 않는다. 예를 들어 flutter-action v2.23.0은 내부에서 `actions/cache@v5`를 쓴다.
+  바깥 SHA를 고정해도 그 내부 참조는 `actions/cache`의 v5 태그를 따라 움직인다.
+
+**보안 권고가 나왔을 때.** 마일스톤 점검을 기다리지 않고 바로 이번 마일스톤의 서브이슈를 만든다.
+
+- 고친 릴리스가 있으면 아래 절차로 올린다. 그 PR이 머지되기 전까지 다른 서브이슈 PR의 `Verify Action Pins`는 실패한 채로 둔다
+  (머지된 뒤 각 PR에 마일스톤 브랜치를 머지하면 통과한다).
+- 고친 릴리스가 아직 없거나, 이 저장소가 쓰지 않는 입력·기능에만 해당하면 `.github/action-advisories-ignore`에
+  `GHSA-xxxx-xxxx-xxxx YYYY-MM-DD 사유` 한 줄을 적는다(사유에 판단 근거와 추적 이슈 번호). 그 기한까지는 경고만 나온다.
+  - 기한이 지나면 다시 실패한다. 다시 검토해 기한을 늘리거나, 고친 릴리스로 올리고 줄을 지운다.
+  - 형식이 틀린 줄은 `verify`와 `test/unit/ci_actions_test.dart`가 잡는다.
+**갱신 방법: 수동 절차, 마일스톤 착수 때 점검.** `/open-ms`가 새 마일스톤 브랜치에서 `action-pins.sh outdated`를 돌린다.
+새 릴리스가 있으면 그 마일스톤의 서브이슈(`CI 액션 고정 버전 올리기 (M<N>)`)로 등록해 아래 절차로 올린다.
+보안 권고는 기다리지 않는다(위 "보안 권고가 나왔을 때").
+
+Dependabot(`github-actions` 생태계)은 쓰지 않는다.
+
+- Dependabot PR은 기본 브랜치(`main`)로 바로 간다. 서브이슈 → 마일스톤 흐름(이슈·라벨·마일스톤·`Sub-issue Linux CI`)을 건너뛰고,
+  캐시가 없는 멀티플랫폼 CI가 돈다.
+- `target-branch`는 고정된 이름이라 마일스톤마다 바뀌는 `milestone/m<N>`을 따라가지 못한다.
+- 주 버전이 바뀌면 어차피 사람이 `runs.using`을 확인하고 `_minVersions`를 고쳐야 한다(아래 2번).
+- Dependabot 경고(alerts)도 대신하지 못한다. GitHub 문서("About Dependabot alerts"의 제한 사항)에 따르면
+  Actions 경고는 버전 태그로 참조한 액션에만 나오고, SHA로 고정한 액션에는 나오지 않는다.
+  그래서 권고 확인은 위 `verify`·`outdated`가 Advisory Database API(`advisories?ecosystem=actions`)로 직접 한다.
+
+1. `bash .github/scripts/action-pins.sh outdated`로 액션마다 고정 버전과 새 릴리스를 본다(`gh` 로그인 필요).
+   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 고정한 버전에 권고가 있으면 `!` 줄로 보인다
+     (예외 목록에 있는 권고는 기한과 함께 따로 표시한다).
+   - 새 릴리스나 권고가 있어도 실패하지 않는다. 조회에 실패할 때만 실패한다.
+2. 주 버전이 바뀌면 그 버전의 `action.yml`(`action.yaml`)과 릴리스 노트를 확인한다.
+   - `runs.using`이 `node24`여야 한다. `composite`면 내부에서 쓰는 액션들이 node24여야 한다.
+   - 입력·기본값 변경(예: 캐시 키 형식)이 워크플로에 영향을 주는지 본다.
+   - `test/unit/ci_actions_test.dart`의 `_minVersions` 주석과 최소 버전을 갱신한다.
+3. 두 워크플로의 해당 `uses:` 줄을 모두 `@<새 SHA> # <새 태그>`로 바꾼다.
+   - SHA는 1번 출력을 쓰거나 `gh api repos/<owner>/<repo>/commits/refs/tags/<태그> --jq .sha`로 얻는다.
+   - `gh api …/git/ref/tags/<태그>`는 쓰지 않는다. 주석 달린 태그에서 커밋이 아니라 태그 객체의 SHA를 낸다.
+4. `bash .github/scripts/action-pins.sh verify`, `flutter analyze`, `flutter test`를 통과시킨 뒤 커밋한다.
+5. 서브이슈 PR의 CI에서 새 액션으로 잡이 돌고, 실행 주석(annotation)에 Node 런타임 경고가 없는지 확인한다.
+   Milestone CI에만 있는 잡(Windows·macOS·웹 빌드)은 마일스톤 PR을 Ready로 바꿀 때 확인된다.
+
 ## 앱 실행
 
 ```bash

@@ -36,7 +36,29 @@ gh issue view <번호> --json number,title,body,labels,milestone,state,subIssues
    git push -u origin milestone/m<번호>
    ```
 
-## 3. 마일스톤 Draft PR 생성
+## 3. CI 액션 새 릴리스 점검 (#88)
+CI 워크플로의 액션은 커밋 SHA로 고정돼 있어 저절로 올라가지 않는다. 마일스톤을 시작할 때마다 새 마일스톤 브랜치에서
+새 릴리스와 보안 권고를 본다 (README "CI 액션 고정 버전 올리기"). 갱신 이슈를 4단계 PR 본문의 서브이슈 체크리스트에
+처음부터 넣으려고 PR 생성보다 먼저 한다.
+```bash
+bash .github/scripts/action-pins.sh outdated
+```
+- 모두 최신이고 권고가 없으면 보고에 그렇다고만 적는다.
+- 새 릴리스나 권고가 있으면 먼저 열린 서브이슈 목록(`gh issue list --label sub-issue --state open -L 300 --json number,title,milestone`)에서
+  제목이 `CI 액션 고정 버전 올리기`로 시작하는 이슈를 찾는다.
+  - 있으면(이전 마일스톤에서 남은 것) 새로 만들지 않는다. 그 이슈에 이번 출력을 코멘트로 남기고 이번 마일스톤으로 옮긴다:
+    제목의 마일스톤 표시를 바꾸고(`gh issue edit <번호> --title "CI 액션 고정 버전 올리기 (M<번호>)" --milestone "<마일스톤 이름>"`),
+    상위 에픽을 이번 에픽으로 바꾼다(GraphQL `removeSubIssue`로 옛 에픽에서 뗀 뒤 `/fix-issue` 9단계 B 블록을 다시 실행).
+  - 없으면 이 마일스톤의 서브이슈 하나로 등록한다(`/fix-issue` 9단계의 A·B 블록, 타입 Task).
+    제목은 `CI 액션 고정 버전 올리기 (M<번호>)`로 한다 — 버전은 넣지 않고 마일스톤을 넣는다.
+    A 블록은 닫힌 이슈까지 같은 제목을 찾아 막으므로, 마일스톤마다 제목이 달라야 다음 마일스톤에서도 만들 수 있다.
+    본문에 스크립트 출력과 README 절차의 링크를 넣고, 주 버전이 바뀌는 액션은 `runs.using`·릴리스 노트 확인이 필요하다고 적는다.
+  - 어느 쪽이든 그 이슈를 4단계 PR 본문의 서브이슈 체크리스트에 넣는다.
+- 권고가 있으면 이 마일스톤의 첫 서브이슈로 착수하라고 보고에 적는다.
+- 조회가 실패하면(gh 인증·네트워크) 착수는 그대로 마치고, 보고에 실패와 함께 "첫 `/fix-issue` 전에 이 단계를 다시 돌릴 것"을 적는다.
+  그때 갱신 이슈가 생기면 마일스톤 PR 본문의 체크리스트에 추가한다(`gh pr edit <PR번호> --body-file ...`).
+
+## 4. 마일스톤 Draft PR 생성
 본문 파일 예시 (`<scratchpad>/ms-pr-body.md`):
 ```markdown
 ## 마일스톤 M<번호> 통합 PR
@@ -58,12 +80,12 @@ gh pr create --base main --head milestone/m<번호> --draft \
 ```
 - Draft로 유지해야 서브이슈 개발 중 `Milestone Full Multi-Platform CI`가 돌지 않는다.
 
-## 4. 담당자·프로젝트 보드 갱신
+## 5. 담당자·프로젝트 보드 갱신
 ```bash
 gh issue edit <번호> --add-assignee i-technika   # 착수한 에픽의 담당자 (서브이슈는 /fix-issue 착수 시 지정)
 bash .claude/scripts/set-project-status.sh <번호> "In Progress"
 bash .claude/scripts/set-project-status.sh <PR번호> "In Progress"
 ```
 
-## 5. 완료 보고
-- 브랜치명, PR URL, 서브이슈 목록(번호·제목·상태)을 보고하고 첫 서브이슈를 `/fix-issue <번호>`로 착수할 수 있음을 안내한다.
+## 6. 완료 보고
+- 브랜치명, PR URL, 서브이슈 목록(번호·제목·상태), 3단계 점검 결과를 보고하고 첫 서브이슈를 `/fix-issue <번호>`로 착수할 수 있음을 안내한다.

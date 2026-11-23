@@ -16,6 +16,9 @@
     CI의 모든 잡은 `.github/scripts/read-flutter-version.sh`로 값을 읽어 설치 액션의 `flutter-version`에 넘긴다 —
     액션의 `flutter-version-file`은 yq가 필요해(Windows 러너는 Chocolatey 설치) 쓰지 않는다 (#90).
     올릴 때는 README "Flutter SDK 버전 올리기" 절차대로 로컬 SDK·`pubspec.lock`과 함께 바꾼다.
+  - CI 워크플로의 모든 `uses:`는 커밋 SHA로 고정하고 같은 줄 끝에 태그를 적는다(`@<sha> # vX.Y.Z`, #88).
+    태그(`@v2`)로 되돌리지 않는다. 올리는 방법·시기(마일스톤 착수 때 점검)와 보안 권고 예외(`.github/action-advisories-ignore`)는
+    README "CI 액션 고정 버전 올리기"를 따른다.
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
     Cupertino 쪽(`CupertinoTheme` 등)도 material_ui가 쓰는 **`package:cupertino_ui/cupertino_ui.dart`** 를 쓴다 —
@@ -43,7 +46,7 @@
 - `presentation/l10n/`: `calc_semantic_strings.dart` (스크린리더 음성 문구 — 키 기능 이름·LCD 표시기 의미, 한국어·영어), `device_locale_scope.dart` (기기 로캘 전달·언어 변경 시 재빌드), `settings_strings.dart` (설정 UI 문구, 한국어·영어)
 - `presentation/screens/`: `calculator_screen.dart`
 - `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖), `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일), `banner_ad_slot.dart`, `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 버튼), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_button.dart`·`handedness_dialog.dart` (설정 진입·키패드 위치 선택), `top_strip.dart` (LCD 위 상단 띠 장식 — 워드마크·태양전지 모양. 띠 배치 규칙은 `CalcTheme` "상단 띠" 절, 계산은 `calculator_screen.dart`의 `CalcTopStripLayout`), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
-- 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회하고, SDK 고정 검사는 CI의 버전 읽기 스크립트를 bash로 실행한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정, 화면 배치 판정, CI 워크플로 파일 목록·YAML 로더, 셸 스크립트 실행용 bash 찾기)
+- 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회하고, SDK 고정 검사는 CI의 버전 읽기 스크립트를 bash로 실행한다, 액션 고정 스크립트 검사는 가짜 gh로 실행한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정, 화면 배치 판정, CI 워크플로 파일 목록·YAML 로더·`uses:` 줄 추출, 셸 스크립트 실행용 bash 찾기)
 - Android 단위 테스트: `android/app/src/test/kotlin/` (Kotlin 플랫폼 코드의 JVM 테스트 — Robolectric으로 API 수준별 분기를 기기 없이 검사한다.
   `TestSupport.kt`에 테스트 대상 API 수준 상수·가짜 메신저·시스템 설정 흉내 도구, `MainActivityLifecycleTest`는 Mockito `FlutterJNI` 대역 캐시 엔진으로 생명주기를 돈다. `flutter test`와 따로 Gradle로 돌린다 — README "Android 단위 테스트")
 - 개발 도구: `preview/key_preview_main.dart` (실제 `CalculatorScreen`을 기기 크기 프리셋·글자 배율·입력 로그와 함께 띄우는 미리보기 — 실행 방법은 README. `lib/`에서 import 금지, 앱 빌드 제외, CI가 웹 빌드로 확인)
