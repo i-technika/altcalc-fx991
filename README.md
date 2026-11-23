@@ -367,4 +367,57 @@ cd android
     - 직접 지울 때는 `gh cache delete --all --ref refs/heads/<브랜치>`나 `--ref refs/pull/<번호>/merge`를 쓴다.
       사용량은 `gh api repos/i-technika/altcalc-fx991/actions/cache/usage`로, 목록은 `gh cache list`로 본다.
 - 다루지 않는 것: 실제 기기의 시스템 동작(설정 앱에서 바꿨을 때 알림이 오는지 등 — 에뮬레이터·실기기로 확인한다),
-  릴리스 빌드(R8)의 API 36 참조 격리(#109), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).
+  릴리스 빌드(R8)의 API 36 참조 격리(아래 "릴리스 APK의 새 API 격리 검사"), 실제 Flutter 엔진(Dart 실행·플러그인 자동 등록).
+
+### 릴리스 APK의 새 API 격리 검사 (R8)
+
+API 36 전용 타입·메서드(고대비 텍스트 리스너 등)는 `@RequiresApi` 중첩 object(`Api36`)의 `@DoNotInline` 메서드 안에서만 참조한다 (#95).
+바깥 클래스에 쓰면 R8이 늘 실행되는 메서드에 그 타입을 인라인해, API 35 이하 기기에서 클래스 검증·로딩이 실패할 수 있다
+(Flutter 엔진이 같은 이유로 `Api34Impl`에 가둔다 — flutter#192231). 이 격리가 R8 뒤에도 유지되는지는 단위 테스트로 볼 수 없어
+릴리스 APK의 dex를 열어 검사한다 (#109).
+
+```bash
+flutter build apk --release --target-platform android-arm64   # dex는 ABI와 무관하다 (로컬 약 2분)
+export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"                 # Windows Git Bash의 기본 SDK 위치 (macOS·Linux는 각자의 SDK 경로)
+bash .github/scripts/verify-api-isolation.sh \
+  build/app/outputs/flutter-apk/app-release.apk build/app/outputs/mapping/release/mapping.txt
+```
+
+- 검사 방법:
+  - build-tools의 `dexdump`로 dex 전체를 푼다.
+  - compileSdk 이상으로 설치된 가장 높은 플랫폼의 `api-versions.xml`에서 API 36 이상에 추가된 클래스·메서드(생성자 포함)·필드를 모두 찾는다.
+    새 플랫폼의 목록은 상위집합이라 `since="36.1"` 같은 마이너 API 항목까지 담는다.
+  - 그 새 클래스를 (전이적으로) 상속·구현한 dex 클래스(예: 새 리스너 인터페이스를 구현한 람다)도 검사 대상 타입으로 삼는다.
+  - 이 참조들이 어느 dex 클래스에 있는지 본다. 클래스 이름은 R8의 `mapping.txt`로 원래 이름으로 되돌린다.
+    `mapping.txt`가 이 APK의 빌드 것인지는 R8 빌드 id(`# pg_map_id`와 dex 표식의 `pg-map-id`)로 먼저 확인한다.
+  - 검사할 API 목록을 손으로 적지 않으므로 새 API 36 코드를 더해도 자동으로 검사 대상이 된다.
+- 허용 위치(`.github/api-isolation-rules`의 `allow`):
+  - 격리 object와 그 안의 클래스(`$*` — 리스너를 구현한 합성 람다, 익명 object, 중첩 클래스). 그 클래스들을 격리 object 밖에서
+    만들거나 쓰면 새 타입을 구현·상속한 클래스로서 따로 잡힌다.
+  - R8 API 모델링이 새 API 호출을 옮겨 담는 아웃라인 클래스(`*$$ExternalSyntheticApiModelOutline*` — Flutter 엔진 것과 합쳐지기도 한다).
+  - R8이 새 프레임워크 클래스를 대신해 dex에 넣는 API 스텁(프레임워크 이름 그대로이고 대응표에 R8 합성 표시가 있다)은
+    낮은 API에서도 해석·로드되므로(스텁의 목적), 그 타입은 검사 대상에서 빼고 그 스텁을 상속·구현한 클래스도 검사하지 않는다.
+  - 출력에 클래스별 참조 목록이 `위반`·`허용`으로 나온다.
+- 새 API 수준 전용 코드를 더할 때: 같은 방식의 `object Api<N>`으로 가두고 규칙 파일에 그 object와 `<object>$*`를 더한다.
+  - `test/unit/ci_api_isolation_test.dart`가 소스의 격리 object(`Api<N>`·`Api<N>Impl`, N ≥ guard-api)와 규칙의 allow가 맞는지,
+    allow가 그 모양(격리 object, 그 `$*`, 아웃라인 glob)만 쓰는지 확인한다. `allow *` 같은 넓은 glob은 막는다.
+  - guard-api보다 낮은 수준 전용 코드를 가뒀으면 guard-api를 낮춘다. 낮추면 Flutter 엔진·androidx의 참조도 검사 대상이 된다.
+    실측(#109, Flutter 3.50): guard-api 35는 허용 밖 클래스 0개, 34는 4개(Flutter 엔진의 `AccessibilityBridge$Api34Impl`과 그 람다,
+    뒤로 가기 제스처의 `FlutterActivity$1`·`BackGestureChannel`), 25는 45개였다.
+- 실패 메시지가 "위반 <클래스>"이면 그 클래스가 새 API를 직접 참조한다. 흔한 원인은 `@DoNotInline` 빠짐(격리 object 메서드가 바깥 클래스로
+  인라인됨)과 바깥 클래스에서 새 타입의 람다·캐스트를 쓴 경우다. 둘 다 #109에서 일부러 만들어 이 검사가 실패하는 것을 확인했다.
+- 검사가 헛돌지 않게 다음 경우에도 실패한다:
+  - 검사 대상 참조를 하나도 찾지 못함(dexdump 형식 변화 의심)
+  - `mapping.txt`가 없거나 R8 빌드 id가 dex와 다름
+  - minSdk가 guard-api 이상
+- 한계: 프레임워크 클래스 계층은 따라가지 않는다. 하위 클래스 타입으로 부른 새 메서드나, 오래된 클래스가 새로 구현하게 된 인터페이스의 메서드
+  (예: API 36에 `AutoCloseable`을 구현하게 된 `ExecutorService.close()`)는 메서드로는 못 잡는다.
+  보통은 R8이 그런 호출을 API 아웃라인으로 옮기고, 새 타입이 들어간 시그니처·캐스트는 타입으로 잡힌다.
+  아웃라인 클래스 안은 들여다보지 않는다(R8이 API 수준별로 나눠 만드는 합성 클래스다).
+- API 목록은 설치된 가장 높은 플랫폼의 것이라 환경마다 다를 수 있다(#109 때 로컬 `android-37.0`, CI 러너 `android-37.2`).
+  guard-api 이상 항목을 넓게 잡는 쪽이다. 러너 이미지가 바뀌어 새 마이너 API 항목이 들어와도 보통은 결과가 같다.
+  CI만 결과가 다르면, 출력 첫머리의 `API 목록:` 줄로 어느 플랫폼을 썼는지 본다.
+- CI: Sub-issue CI와 Milestone CI의 `Android Release API Isolation` 잡(두 잡의 일치는 `test/unit/ci_api_isolation_test.dart`가 지킨다).
+  - 스크립트 동작은 `test/unit/api_isolation_script_test.dart`가 가짜 SDK(build-tools·플랫폼)와 실제 빌드에서 옮긴 dexdump·mapping 표본으로 검사한다.
+  - 첫 실행(#109)은 3분 36초 걸렸다. 그중 릴리스 빌드가 3분이고, 빌드 안에서 NDK·CMake 내려받기가 약 1분 30초다.
+    같이 도는 `Linux Analyze, Test & Build`(3분 18초)와 거의 같아, NDK 캐시(약 1GB를 범위마다 더 저장)는 두지 않았다.
