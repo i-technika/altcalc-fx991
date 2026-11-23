@@ -51,28 +51,28 @@ class HandednessDialog extends ConsumerWidget {
     return AlertDialog(
       title: Text(strings.handednessTitle),
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
-      // 작은 창·큰 글자 배율에서도 넘치지 않게 안내 글·선택지만 스크롤한다 — 제목·닫기 버튼은 고정 (#72, 열린 채
-      // 창이 줄어드는 경우 포함). AlertDialog는 content를 남는 높이 안에 두므로 스크롤 뷰가 그 높이를 받는다.
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _options(ref, strings, dialogEdge),
-            if (showLayoutNote)
-              // 좌우 여백은 AlertDialog 제목과 같은 24dp (M3 기본값)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                child: Text(
-                  strings.handednessNote,
-                  key: noteKey,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+      // 작은 창·큰 글자 배율에서도 넘치지 않게 제목·안내 글·선택지를 함께 스크롤한다 — 닫기 버튼은 고정
+      // (#72, 열린 채 창이 줄어드는 경우 포함). 제목까지 스크롤하는 이유(#38): 제목을 고정하면 짧은 창에서
+      // 제목·닫기 버튼만으로 높이가 모자라 넘친다(360×300 글자 배율 2.0에서 20dp, 320×260 배율 1.3에서 2.2dp).
+      scrollable: true,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _options(ref, strings, dialogEdge),
+          if (showLayoutNote)
+            // 좌우 여백은 AlertDialog 제목과 같은 24dp (M3 기본값)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                strings.handednessNote,
+                key: noteKey,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
       actions: [
         // TextButton의 M3 기본 모양

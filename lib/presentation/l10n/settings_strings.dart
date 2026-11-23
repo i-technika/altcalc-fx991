@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../domain/models/handedness.dart';
 import 'device_locale_scope.dart';
 
-/// 앱 설정 화면 문구 (#24). 언어 선택은 스크린리더 문구(`CalcSemanticStrings`)와 같다 —
+/// 앱 설정 화면 문구 (#24)와 계산기 화면 안내 문구(#38). 언어 선택은 스크린리더 문구(`CalcSemanticStrings`)와 같다 —
 /// 기기 로캘이 한국어면 [KoSettingsStrings], 그 밖에는 [EnSettingsStrings].
 /// 앱 전체 다국어(ARB) 도입 시 함께 옮긴다 — TODO(#48).
 abstract class SettingsStrings {
@@ -45,6 +45,9 @@ abstract class SettingsStrings {
 
   /// 대화상자 닫기 버튼
   String get close;
+
+  /// 창이 너무 작아 키패드를 표시하지 않는다는 안내 (#38) — 계산기 대신 띄운다. 창을 키우면 돌아온다는 것을 알린다.
+  String get windowTooSmall;
 }
 
 /// 한국어 설정 문구
@@ -76,6 +79,9 @@ class KoSettingsStrings extends SettingsStrings {
 
   @override
   String get close => '닫기';
+
+  @override
+  String get windowTooSmall => '창이 너무 작아 키패드를 표시할 수 없습니다.\n창을 키워 주세요.';
 }
 
 /// 영어 설정 문구
@@ -107,4 +113,8 @@ class EnSettingsStrings extends SettingsStrings {
 
   @override
   String get close => 'Close';
+
+  @override
+  String get windowTooSmall =>
+      'The window is too small for the keypad.\nMake the window larger.';
 }

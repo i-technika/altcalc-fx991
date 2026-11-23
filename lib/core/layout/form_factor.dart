@@ -67,7 +67,10 @@ enum OrientationPolicy {
 ///   반영되지 않는다(전체 화면 강제 `UIRequiresFullScreen`을 켜야 반영되는데, iPadOS 26부터 폐기 예정이다).
 ///   계산기는 다른 앱과 나란히 쓰는 경우가 많아 멀티태스킹을 끄지 않는다 — `Info.plist`의 iPad 방향은
 ///   네 방향 모두 허용한 채로 둔다(멀티태스킹 요건).
-/// - 분할 화면·팝업 창처럼 창 자체가 화면보다 작은 경우.
+/// - 분할 화면·팝업 창처럼 창 자체가 화면보다 작은 경우. 폰도 마찬가지라, 세로 고정과 무관하게 낮은 창이 생긴다.
+///   그런 창은 화면이 본체 크기로 다시 판정해 좌우 분할로 그리거나 창을 키워 달라는 안내를 띄운다
+///   (`CalculatorScreen`, `CalcTheme` "짧은 창" 절, #38). 분할 화면·팝업 창 자체는 막지 않는다
+///   (`resizeableActivity`·최소 창 크기를 선언하지 않는 이유도 그 절).
 /// 그래서 태블릿을 세로로 들면 대개 세로 창이 되고, 그때는 위아래 배치로 보여 준다.
 abstract final class FormFactor {
   /// 대화면 기준 짧은 변 (dp). Material 창 크기 등급 medium(폭 600dp) 이상과 같고, Android가 방향
@@ -256,6 +259,10 @@ abstract final class FormFactor {
   /// 3. 그 밖에는 창 크기로 정한다: 짧은 변이 [largeScreenMinShortestSide] 이상인 가로(폭 > 높이) 창이면
   ///    좌우 분할, 아니면 위아래 배치다. 방향 고정이 무시된 태블릿 세로 화면이나 분할 화면의 좁은 창은
   ///    위아래 배치가 된다.
+  ///
+  /// 위아래 배치를 돌려받은 창이라도 키가 작아지는 짧은 창(분할 화면·팝업 창)이면, 화면이 인셋·광고 슬롯을 뺀
+  /// 본체 크기로 좌우 분할과 비교해 키가 더 큰 쪽으로 그린다 (`CalculatorScreen`, #38). 접힘선 기준 배치를 쓸 수
+  /// 없을 때 위아래 배치로 대체하는 것과 같이, 본체 크기가 필요한 판정은 화면이 한다.
   static ScreenArrangement arrangementOf(
     Size windowSize,
     Iterable<DisplayFeature> features, {

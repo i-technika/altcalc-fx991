@@ -376,7 +376,7 @@ void main() {
         Size(768, 768), // 정사각형
         Size(678, 1024), // iPad Split View 절반
         Size(390, 844), // 폰
-        Size(844, 390), // 가로 폰 — 짧은 창 대응은 #38
+        Size(844, 390), // 가로 폰 — 창 크기로는 위아래 배치(화면이 짧은 창 규칙으로 좌우 분할로 그린다, #38)
         Size(1280, 599), // 낮고 넓은 팝업 창
       ]) {
         expect(_split(size, const []), isFalse, reason: '$size');

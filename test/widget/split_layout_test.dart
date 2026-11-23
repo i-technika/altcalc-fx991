@@ -211,7 +211,8 @@ void main() {
       Size(678, 1024), // iPad Split View 절반
       Size(768, 768), // 정사각형 창
       Size(390, 844),
-      Size(844, 390), // 가로 폰 — 짧은 창 대응은 #38
+      // 짧은 창(키 28dp 미만)이지만 좌우 분할의 키가 더 작아 위아래 배치로 남는다 (#38)
+      Size(412, 520),
     ]) {
       testWidgets(
         '${size.width}×${size.height}: 왼손잡이 설정이어도 위아래 배치이고 설정 버튼은 상단 띠에 있다',
@@ -337,8 +338,9 @@ void main() {
       Size(430, 932),
       Size(440, 956), // iPhone Pro Max
       Size(344, 882),
-      // 가로 폰 (짧은 창 #38) — 폭이 480을 넘어 상한에 걸린다. 키패드는 높이에 묶여 LCD보다 좁다.
-      Size(844, 390),
+      // 짧은 변 600dp 미만의 넓은 창 — 폭이 480을 넘어 상한에 걸리고, 키패드는 높이에 묶여 LCD보다 좁다.
+      // (키가 28dp 이상이라 짧은 창이 아니다 — 가로 폰처럼 더 낮은 창은 좌우 분할이 된다, #38)
+      Size(764, 590),
     ]) {
       testWidgets('${size.width}×${size.height}: LCD 폭 = min(본체 폭, 480)', (
         tester,
@@ -355,18 +357,20 @@ void main() {
     }
 
     testWidgets('좌우 인셋이 비대칭이면 창이 아니라 본체 가운데에 키패드와 함께 정렬한다', (tester) async {
-      // Android 가로 폰: 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 788 (폭 780)
-      const size = Size(844, 390);
+      // 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 756 (폭 748). 가로 폰(844×390)처럼 낮은 창은 짧은 창 규칙으로
+      // 좌우 분할이 되므로(#38) 위아래 배치로 남는 낮고 넓은 창을 쓴다.
+      const size = Size(812, 590);
       const padding = EdgeInsets.only(right: 48);
       await _pump(tester, size: size, padding: padding);
       expect(tester.takeException(), isNull);
+      expect(isStackedArrangement(tester), isTrue);
       final lcd = tester.getRect(_lcd);
       final keypad = tester.getRect(_keypad);
-      const bodyCenter = (8 + (844 - 48 - 8)) / 2;
+      const bodyCenter = (8 + (812 - 48 - 8)) / 2;
       expect(lcd.width, moreOrLessEquals(CalcTheme.screenLcdMaxWidth));
       expect(lcd.center.dx, moreOrLessEquals(bodyCenter));
       expect(keypad.center.dx, moreOrLessEquals(bodyCenter));
-      expect(keypad.width, lessThan(lcd.width)); // 키패드는 높이에 묶인다 (#38)
+      expect(keypad.width, lessThan(lcd.width)); // 키패드는 높이에 묶인다
     });
   });
 
@@ -615,7 +619,7 @@ void main() {
     });
 
     testWidgets(
-      '열린 채 창이 아주 낮아지면 제목·닫기 버튼은 고정되고 선택지만 스크롤되며, 화살표로 옮긴 선택지는 화면 안으로 스크롤된다',
+      '열린 채 창이 아주 낮아지면 닫기 버튼은 고정되고 제목·선택지가 함께 스크롤되며, 화살표로 옮긴 선택지는 화면 안으로 스크롤된다',
       (tester) async {
         const small = Size(700, 300);
         final (container, _) = await _pump(

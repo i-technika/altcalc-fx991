@@ -695,7 +695,7 @@ void main() {
       expect(l.top, moreOrLessEquals(1236 - 480 / 1.75 - 480 / 0.75));
       expectSumsToBody(body, l);
 
-      // 짧고 넓은 본체(가로 폰·분할 화면, #38)도 폭 상한만 걸리고 높이 규칙은 같다.
+      // 짧고 넓은 본체(가로 폰·분할 화면)도 폭 상한만 걸리고 높이 규칙은 같다 — 화면은 그런 창을 대개 좌우 분할로 그린다(#38).
       final short = CalcScreenLayout.of(const Size(2000, 300));
       expect(short.lcdWidth, CalcTheme.screenLcdMaxWidth);
       expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
