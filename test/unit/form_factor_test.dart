@@ -451,7 +451,7 @@ void main() {
       for (final (window, y) in const [
         (Size(841, 673), 336.5), // Fold 내부를 가로로
         (Size(701, 841), 420.5), // Pixel Fold 내부를 세로로
-        (Size(411, 1005), 502.5), // Flip 내부 (Flex 모드)
+        (Size(411, 1006), 503.0), // Flip 내부 (Flex 모드)
       ]) {
         expect(
           FormFactor.arrangementOf(window, [

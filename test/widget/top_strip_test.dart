@@ -709,7 +709,7 @@ void main() {
 
     const flipHalfOpened = [
       DisplayFeature(
-        bounds: Rect.fromLTWH(0, 502.5, 411, 0),
+        bounds: Rect.fromLTWH(0, 503, 411, 0),
         type: DisplayFeatureType.fold,
         state: DisplayFeatureState.postureHalfOpened,
       ),
@@ -724,17 +724,17 @@ void main() {
         DrawnArrangement.sideBySide,
       ),
       (
-        '테이블톱 Flip 411×1005·오른손',
-        const Size(411, 1005),
-        const EdgeInsets.only(top: 24, bottom: 24),
+        '테이블톱 Flip 411×1006·오른손',
+        const Size(411, 1006),
+        const EdgeInsets.only(top: 32, bottom: 24),
         flipHalfOpened,
         Handedness.right,
         DrawnArrangement.tabletop,
       ),
       (
-        '테이블톱 Flip 411×1005·왼손',
-        const Size(411, 1005),
-        const EdgeInsets.only(top: 24, bottom: 24),
+        '테이블톱 Flip 411×1006·왼손',
+        const Size(411, 1006),
+        const EdgeInsets.only(top: 32, bottom: 24),
         flipHalfOpened,
         Handedness.left,
         DrawnArrangement.tabletop,
@@ -1196,14 +1196,14 @@ void main() {
       tester,
     ) async {
       // Flip 내부 화면을 반 접음: 키패드가 아래 절반 폭을 다 써서 설정 버튼이 위 절반 모서리로 간다.
-      const size = Size(411, 1005);
+      const size = Size(411, 1006);
       await _pump(
         tester,
         size: size,
-        padding: const EdgeInsets.only(top: 24, bottom: 24),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
         displayFeatures: const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(0, 502.5, 411, 0),
+            bounds: Rect.fromLTWH(0, 503, 411, 0),
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureHalfOpened,
           ),
@@ -1212,8 +1212,8 @@ void main() {
       expect(tester.takeException(), isNull);
       final lcd = tester.getRect(_lcd);
       final keypad = tester.getRect(_keypad);
-      expect(lcd.bottom, lessThanOrEqualTo(502.5));
-      expect(keypad.top, greaterThanOrEqualTo(502.5));
+      expect(lcd.bottom, lessThanOrEqualTo(503));
+      expect(keypad.top, greaterThanOrEqualTo(503));
       final button = tester.getRect(_button);
       expect(button.bottom, lessThanOrEqualTo(lcd.top)); // 위 절반 모서리
       expect(_button.hitTestable(), findsOneWidget);
