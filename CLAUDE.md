@@ -64,6 +64,9 @@
   - Android 플랫폼 코드(`android/`의 Kotlin·Gradle 설정)를 바꿨으면 Android 단위 테스트도 돌린다:
     `cd android && ./gradlew :app:testDebugUnitTest` (Java 21 이상, 먼저 `flutter build apk --debug --config-only`로 래퍼·`local.properties`를 맞춘다 —
     README "Android 단위 테스트"). Kotlin 로직을 추가·변경하면 `android/app/src/test/kotlin`에 테스트를 함께 둔다 (#108).
+  - minSdk보다 높은 API 전용 타입·메서드는 `@RequiresApi` 중첩 `object Api<N>`의 `@DoNotInline` 메서드에만 쓴다 (#95).
+    R8 뒤에도 격리가 유지되는지 CI가 릴리스 APK의 dex로 검사한다 — 새 격리 object는 `.github/api-isolation-rules`에 더한다
+    (README "릴리스 APK의 새 API 격리 검사", #109).
 
 ## 4. 로컬 개발 환경 메모
 - Flutter SDK가 시스템 PATH에 없을 수 있다. `flutter`를 찾지 못하면 Bash에서
