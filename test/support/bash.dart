@@ -57,7 +57,8 @@ String _findBash() {
   );
 }
 
-/// 패키지 루트에서 bash 스크립트를 실행한다.
+/// 패키지 루트(또는 [workingDirectory])에서 bash 스크립트를 실행한다.
+/// [workingDirectory]를 주면 [script]는 절대 경로로 넘긴다.
 /// 출력은 시스템 인코딩(Windows 한국어는 cp949) 대신 UTF-8로 읽는다 — 스크립트 메시지가 한국어다.
 /// [environment]는 부모 환경에 덮어쓰고, [unset]의 변수는 스크립트를 실행하기 전에 지운다
 /// (`Process`로는 부모 환경의 변수 하나만 뺄 수 없어 bash 안에서 지운다).
@@ -66,6 +67,7 @@ ProcessResult runBashScript(
   List<String> args, {
   Map<String, String> environment = const {},
   List<String> unset = const [],
+  String? workingDirectory,
 }) => Process.runSync(
   bashPath,
   unset.isEmpty
@@ -77,7 +79,7 @@ ProcessResult runBashScript(
           script,
           ...args,
         ],
-  workingDirectory: Directory.current.path,
+  workingDirectory: workingDirectory ?? Directory.current.path,
   environment: environment,
   stdoutEncoding: utf8,
   stderrEncoding: utf8,

@@ -17,7 +17,8 @@
     액션의 `flutter-version-file`은 yq가 필요해(Windows 러너는 Chocolatey 설치) 쓰지 않는다 (#90).
     올릴 때는 README "Flutter SDK 버전 올리기" 절차대로 로컬 SDK·`pubspec.lock`과 함께 바꾼다.
   - CI 워크플로의 모든 `uses:`는 커밋 SHA로 고정하고 같은 줄 끝에 태그를 적는다(`@<sha> # vX.Y.Z`, #88).
-    태그(`@v2`)로 되돌리지 않는다. 올리는 방법·시기(마일스톤 착수 때 점검)는 README "CI 액션 고정 버전 올리기"를 따른다.
+    태그(`@v2`)로 되돌리지 않는다. 올리는 방법·시기(마일스톤 착수 때 점검)와 보안 권고 예외(`.github/action-advisories-ignore`)는
+    README "CI 액션 고정 버전 올리기"를 따른다.
   - Flutter 3.50부터 Material 위젯은 분리 패키지 `material_ui`로 제공된다.
     **`import 'package:material_ui/material_ui.dart';`** 를 사용한다 (`package:flutter/material.dart` 아님).
     Cupertino 쪽(`CupertinoTheme` 등)도 material_ui가 쓰는 **`package:cupertino_ui/cupertino_ui.dart`** 를 쓴다 —

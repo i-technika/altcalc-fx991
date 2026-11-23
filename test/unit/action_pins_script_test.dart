@@ -8,7 +8,8 @@ import '../support/workflows.dart';
 /// `.github/scripts/action-pins.sh`(커밋 SHA로 고정한 액션의 온라인 확인·새 릴리스 조회, #88)를
 /// 가짜 gh로 실행해 검사한다. 실제 GitHub API 응답과의 일치는 CI의 `Verify Action Pins` 잡이 확인한다.
 ///
-/// 가짜 gh는 인자 전체를 키로 응답 표에서 출력을 찾고(없으면 실패 — 조회 실패 흉내), 받은 인자를 기록한다.
+/// 가짜 gh는 인자 전체를 키로 응답 표에서 출력을 찾고(없으면 `FAKE_GH_ERROR`(기본 HTTP 404)를 내고 실패 — 조회 실패 흉내),
+/// 받은 인자를 기록한다. `--jq` 필터도 키에 들어가므로, 필터(예: 철회된 권고 거르기)를 바꾸면 테스트 키도 바뀐다.
 /// 실패 경로 테스트도 기록을 확인한다 — gh가 아예 실행되지 않아도(예: 실행 권한 없음) 종료 코드만으로는 통과하기 때문이다.
 
 const _script = '.github/scripts/action-pins.sh';
@@ -29,7 +30,8 @@ String _releasesKey(String repo) =>
 /// 응답 표의 키: 그 버전에 해당하는 보안 권고 조회 (버전은 `v`를 뗀 semver)
 String _advisoryKey(String repo, String tag) =>
     'api advisories?ecosystem=actions&affects=$repo@${tag.substring(1)}'
-    '&per_page=100 --jq .[] | "\\(.ghsa_id) (\\(.severity)) \\(.summary)"';
+    '&per_page=100 --jq .[] | select(.withdrawn_at == null) | '
+    '"\\(.ghsa_id) (\\(.severity)) \\(.summary)"';
 
 /// 확인이 통과하는 응답 (커밋 일치 + 권고 없음)
 Map<String, String> _okVerify(String repo, String sha, String tag) => {
@@ -46,7 +48,7 @@ while IFS=$'\t' read -r key out; do
     exit 0
   fi
 done <"$FAKE_GH_RESPONSES"
-echo "HTTP 404: Not Found" >&2
+echo "${FAKE_GH_ERROR:-HTTP 404: Not Found}" >&2
 exit 1
 ''';
 
@@ -55,30 +57,42 @@ late Directory _tmp;
 /// Windows의 Git Bash에도 넘길 수 있게 경로 구분자를 `/`로 바꾼다
 String _posix(String path) => path.replaceAll(r'\', '/');
 
-/// 워크플로 조각들을 파일로 쓰고 가짜 gh로 스크립트를 돌린다 ([workflows]가 null이면 파일 인자 없이 — 저장소 워크플로)
+/// 워크플로 조각들을 파일로 쓰고 가짜 gh로 스크립트를 돌린다.
+/// [workflows]가 null이면 파일 인자 없이 [workingDirectory]에서 돌린다(기본 경로 `.github/workflows`).
+/// [ignore]는 권고 예외 목록 내용(null이면 파일 없음), [today]는 스크립트가 쓸 오늘 날짜다.
 ({ProcessResult result, List<String> calls}) _run(
   String mode,
   List<String>? workflows,
   Map<String, String> responses, {
   String? gh,
+  String? ghError,
+  String? ignore,
+  String today = '2026-11-23',
+  String? workingDirectory,
 }) {
   final files = <String>[];
   for (var i = 0; i < (workflows?.length ?? 0); i++) {
     final file = File('${_tmp.path}/w$i.yml')..writeAsStringSync(workflows![i]);
     files.add(_posix(file.path));
   }
+  final ignoreFile = File('${_tmp.path}/ignore');
+  if (ignore != null) ignoreFile.writeAsStringSync(ignore);
   File('${_tmp.path}/responses.tsv').writeAsStringSync(
     responses.entries.map((e) => '${e.key}\t${e.value}\n').join(),
   );
   final log = File('${_tmp.path}/calls.log')..writeAsStringSync('');
   final result = runBashScript(
-    _script,
+    workingDirectory == null ? _script : _posix(File(_script).absolute.path),
     [mode, ...files],
+    workingDirectory: workingDirectory,
     environment: {
       'ACTION_PINS_GH': gh ?? _posix('${_tmp.path}/gh'),
       'ACTION_PINS_RETRY_DELAY': '0',
+      'ACTION_PINS_IGNORE': _posix(ignoreFile.path),
+      'ACTION_PINS_TODAY': today,
       'FAKE_GH_RESPONSES': _posix('${_tmp.path}/responses.tsv'),
       'FAKE_GH_LOG': _posix(log.path),
+      'FAKE_GH_ERROR': ?ghError,
     },
     // 로컬 출력 형식(`오류:`)을 본다 — CI 안에서 돌아도 같게
     unset: ['GITHUB_ACTIONS'],
@@ -137,7 +151,7 @@ void main() {
         },
       );
       expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
-      expect(run.result.stdout, contains('보안 권고가 없다'));
+      expect(run.result.stdout, contains('넘기지 않은 보안 권고가 없다'));
       expect(run.calls, [
         _commitKey('actions/checkout', 'v7.0.1'),
         _advisoryKey('actions/checkout', 'v7.0.1'),
@@ -176,10 +190,10 @@ void main() {
         reason: 'Actions 밖에서는 주석 문법을 쓰지 않는다',
       );
       expect(run.result.stdout, contains('확인: actions/cache@$_shaC = v5.1.0'));
-      // 조회 실패는 세 번 시도하고, SHA가 다르면 권고는 조회하지 않는다
+      // HTTP 404(태그 없음)는 다시 시도하지 않고, SHA가 다르면 권고는 조회하지 않는다
       expect(run.calls, [
         _commitKey('actions/checkout', 'v7.0.1'),
-        for (var i = 0; i < 3; i++) _commitKey('actions/setup-java', 'v6.3.0'),
+        _commitKey('actions/setup-java', 'v6.3.0'),
         _commitKey('actions/cache', 'v5.1.0'),
         _advisoryKey('actions/cache', 'v5.1.0'),
         _commitKey('subosito/flutter-action', 'v2.23.0'),
@@ -221,6 +235,7 @@ void main() {
           'GITHUB_ACTIONS': 'true',
           'ACTION_PINS_GH': _posix('${_tmp.path}/gh'),
           'ACTION_PINS_RETRY_DELAY': '0',
+          'ACTION_PINS_IGNORE': _posix('${_tmp.path}/no-ignore'),
           'FAKE_GH_RESPONSES': _posix('${_tmp.path}/none.tsv'),
           'FAKE_GH_LOG': _posix('${_tmp.path}/calls.log'),
         },
@@ -291,6 +306,12 @@ void main() {
         '        uses: actions/checkout@v7 # v7.0.1',
         '        uses: actions/checkout@${sha.toUpperCase()} # v7.0.1',
         '        uses: actions/checkout@$sha@x # v7.0.1',
+        // 스페이스·탭이 아닌 공백: 수직 탭·폼 피드·줄바꿈 없는 공백(NBSP)
+        '        uses: actions/checkout@$sha\v# v7.0.1',
+        '        uses: actions/checkout@$sha\f# v7.0.1',
+        '        uses: actions/checkout@$sha # v7.0.1 설명',
+        '        uses: actions/checkout@$sha # v7.0.1',
+        '\v       uses: actions/checkout@$sha # v7.0.1',
       ]) {
         final found = extractUses('$line\n');
         final dartAccepts =
@@ -308,20 +329,119 @@ void main() {
           dartAccepts,
           reason: '$line\n${run.result.stderr}',
         );
+        if (!dartAccepts) {
+          // 조회 실패가 아니라 형식 단계에서 거부해야 한다 (bash가 더 느슨하면 gh를 부른 뒤 404로 끝나 구별이 안 된다)
+          expect(run.calls, isEmpty, reason: line);
+          // (줄 앞이 스페이스·탭이 아니면 양쪽 모두 uses: 키로 보지 않아 '고정된 액션이 없다'로 끝난다)
+          expect(
+            run.result.stderr,
+            anyOf(contains('w0.yml:1:'), contains('고정된 액션')),
+            reason: line,
+          );
+        }
       }
     });
 
-    test('파일을 주지 않으면 저장소의 모든 워크플로를 본다', () {
-      final responses = <String, String>{};
-      for (final file in workflowFiles()) {
-        for (final u in extractUses(file.readAsStringSync())) {
-          responses.addAll(_okVerify(actionRepo(u.action), u.ref, u.comment!));
-        }
-      }
-      expect(responses, isNotEmpty);
-      final run = _run('verify', null, responses);
+    test('파일을 주지 않으면 작업 디렉터리의 .github/workflows의 *.yml·*.yaml을 모두 본다', () {
+      final root = Directory('${_tmp.path}/repo')..createSync();
+      final workflows = Directory('${root.path}/.github/workflows')
+        ..createSync(recursive: true);
+      File('${workflows.path}/a.yml')
+          .writeAsStringSync(_uses('actions/checkout', _shaA, 'v7.0.1'));
+      File('${workflows.path}/b.yaml')
+          .writeAsStringSync(_uses('actions/cache', _shaB, 'v5.1.0'));
+      // 워크플로 확장자가 아닌 파일은 보지 않는다 (응답이 없어 읽으면 실패한다)
+      File('${workflows.path}/notes.txt')
+          .writeAsStringSync(_uses('actions/setup-java', _shaC, 'v6.3.0'));
+      final run = _run('verify', null, {
+        ..._okVerify('actions/checkout', _shaA, 'v7.0.1'),
+        ..._okVerify('actions/cache', _shaB, 'v5.1.0'),
+      }, workingDirectory: root.path);
       expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
-      expect(run.calls.toSet(), responses.keys.toSet());
+      expect(run.calls, [
+        _commitKey('actions/checkout', 'v7.0.1'),
+        _advisoryKey('actions/checkout', 'v7.0.1'),
+        _commitKey('actions/cache', 'v5.1.0'),
+        _advisoryKey('actions/cache', 'v5.1.0'),
+      ]);
+
+      final empty = Directory('${_tmp.path}/empty')..createSync();
+      final none = _run('verify', null, {}, workingDirectory: empty.path);
+      expect(none.result.exitCode, 1);
+      expect(none.result.stderr, contains('워크플로가 없다'));
+    });
+
+    group('보안 권고 예외 목록', () {
+      const id = 'GHSA-2345-6789-cfgh';
+      final responses = {
+        _commitKey('actions/checkout', 'v7.0.1'): _shaA,
+        _advisoryKey('actions/checkout', 'v7.0.1'): '$id (high) 고친 릴리스 없음',
+      };
+      final workflow = [_uses('actions/checkout', _shaA, 'v7.0.1')];
+
+      test('기한 안의 예외는 경고만 내고 통과한다 (기한 당일 포함)', () {
+        for (final until in ['2026-12-31', '2026-11-23']) {
+          final run = _run(
+            'verify',
+            workflow,
+            responses,
+            ignore: '# 주석\n\n$id $until 쓰지 않는 입력에만 해당 (#1)\n',
+          );
+          expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+          expect(run.result.stderr, contains('경고: actions/checkout v7.0.1'));
+          expect(run.result.stderr, contains('$until 까지 넘긴다'));
+          expect(run.result.stdout, contains('예외로 넘긴 권고만 있음'));
+        }
+      });
+
+      test('기한이 지났거나 목록에 없으면 실패한다', () {
+        final expired = _run(
+          'verify',
+          workflow,
+          responses,
+          ignore: '$id 2026-11-22 사유\n',
+        );
+        expect(expired.result.exitCode, 1);
+        expect(expired.result.stderr, contains('기한(2026-11-22)이 지났다'));
+        expect(expired.result.stderr, contains('보안 권고가 있다: $id'));
+
+        final other = _run(
+          'verify',
+          workflow,
+          responses,
+          ignore: 'GHSA-2222-3333-4444 2027-01-01 다른 권고\n',
+        );
+        expect(other.result.exitCode, 1);
+        expect(other.result.stderr, contains('보안 권고가 있다: $id'));
+      });
+
+      test('형식이 틀린 줄은 조회 전에 실패한다', () {
+        for (final line in [
+          '$id 2026-12-31',
+          '$id 사유만',
+          'GHSA-aaaa-bbbb-cccc 2026-12-31 GHSA에 쓰지 않는 글자',
+          '$id 2026/12/31 사유',
+          '  $id 2026-12-31 앞 공백',
+        ]) {
+          final run = _run('verify', workflow, responses, ignore: '$line\n');
+          expect(run.result.exitCode, 1, reason: line);
+          expect(run.result.stderr, contains('ignore:1:'), reason: line);
+          expect(run.calls, isEmpty, reason: line);
+        }
+      });
+
+      test('outdated는 예외인 권고를 따로 표시하고 세지 않는다', () {
+        final run = _run('outdated', workflow, {
+          _releasesKey('actions/checkout'): 'v7.0.1',
+          _advisoryKey('actions/checkout', 'v7.0.1'): '$id (high) 권고',
+        }, ignore: '$id 2026-12-31 사유\n');
+        expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+        expect(
+          run.result.stdout,
+          contains('  ! v7.0.1 보안 권고(예외 목록, 2026-12-31 까지): $id (high) 권고'),
+        );
+        expect(run.result.stdout, isNot(contains('보안 권고가 있는 고정')));
+      });
     });
   });
 
@@ -408,15 +528,30 @@ void main() {
       );
     });
 
-    test('릴리스 목록을 조회하지 못하면 세 번 시도한 뒤 실패한다', () {
+    test('일시 장애(HTTP 502)는 세 번 시도한 뒤 실패하고, 마지막 오류만 보인다', () {
+      final run = _run(
+        'outdated',
+        [_uses('actions/checkout', _shaA, 'v7.0.1')],
+        {},
+        ghError: 'HTTP 502: Bad Gateway',
+      );
+      expect(run.result.exitCode, 1);
+      expect(run.result.stderr, contains('릴리스 목록을 조회하지 못했다'));
+      expect(
+        RegExp('HTTP 502').allMatches(run.result.stderr as String),
+        hasLength(1),
+      );
+      expect(run.calls, [
+        for (var i = 0; i < 3; i++) _releasesKey('actions/checkout'),
+      ]);
+    });
+
+    test('HTTP 404는 다시 시도하지 않는다', () {
       final run = _run('outdated', [
         _uses('actions/checkout', _shaA, 'v7.0.1'),
       ], {});
       expect(run.result.exitCode, 1);
-      expect(run.result.stderr, contains('릴리스 목록을 조회하지 못했다'));
-      expect(run.calls, [
-        for (var i = 0; i < 3; i++) _releasesKey('actions/checkout'),
-      ]);
+      expect(run.calls, [_releasesKey('actions/checkout')]);
     });
   });
 }

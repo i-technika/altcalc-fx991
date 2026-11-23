@@ -62,15 +62,24 @@ uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
   - `test/unit/ci_actions_test.dart`(오프라인): 모든 `uses:`가 SHA 40자리 + `# vX.Y.Z`인지, 워크플로끼리 같은지,
     주석의 버전이 Node 24 최소 버전(`_minVersions`, #79) 이상인지 본다.
   - CI의 `Verify Action Pins` 잡(`bash .github/scripts/action-pins.sh verify`, Sub-issue CI·Milestone CI 모두): GitHub API로
-    SHA가 정말 그 태그의 커밋인지, 그 버전에 해당하는 보안 권고(GitHub Advisory Database의 검토된 GHSA)가 없는지 확인한다.
-    - 외부 API에 기대는 검사라 테스트 잡과 따로 둔다. 이 잡만 빨간색이면 고정·권고 문제거나 API 장애다(조회는 세 번까지 시도한다).
-    - 권고가 새로 나오면 워크플로를 고치지 않은 PR에서도 이 잡이 실패한다. 그 액션을 고친 릴리스로 올리는 서브이슈를 바로 만든다.
+    SHA가 정말 그 태그의 커밋인지, 그 버전에 해당하는 보안 권고(GitHub Advisory Database의 검토된 GHSA, 철회된 것 제외)가 없는지 확인한다.
+    - 외부 API에 기대는 검사라 테스트 잡과 따로 둔다. 이 잡만 빨간색이면 고정·권고 문제거나 API 장애다.
+      일시 장애는 세 번까지 시도하고, HTTP 404(태그·저장소 없음)는 바로 실패한다. 로그의 오류 줄이 원인을 적는다.
+    - 권고가 새로 나오면 워크플로를 고치지 않은 PR에서도 이 잡이 실패한다(아래 "보안 권고가 나왔을 때").
 - 한계: composite 액션이 안에서 쓰는 액션은 고정되지 않는다. 예를 들어 flutter-action v2.23.0은 내부에서 `actions/cache@v5`를 쓴다.
   바깥 SHA를 고정해도 그 내부 참조는 `actions/cache`의 v5 태그를 따라 움직인다.
 
+**보안 권고가 나왔을 때.** 마일스톤 점검을 기다리지 않고 바로 이번 마일스톤의 서브이슈를 만든다.
+
+- 고친 릴리스가 있으면 아래 절차로 올린다. 그 PR이 머지되기 전까지 다른 서브이슈 PR의 `Verify Action Pins`는 실패한 채로 둔다
+  (머지된 뒤 각 PR에 마일스톤 브랜치를 머지하면 통과한다).
+- 고친 릴리스가 아직 없거나, 이 저장소가 쓰지 않는 입력·기능에만 해당하면 `.github/action-advisories-ignore`에
+  `GHSA-xxxx-xxxx-xxxx YYYY-MM-DD 사유` 한 줄을 적는다(사유에 판단 근거와 추적 이슈 번호). 그 기한까지는 경고만 나온다.
+  - 기한이 지나면 다시 실패한다. 다시 검토해 기한을 늘리거나, 고친 릴리스로 올리고 줄을 지운다.
+  - 형식이 틀린 줄은 `verify`와 `test/unit/ci_actions_test.dart`가 잡는다.
 **갱신 방법: 수동 절차, 마일스톤 착수 때 점검.** `/open-ms`가 새 마일스톤 브랜치에서 `action-pins.sh outdated`를 돌린다.
-새 릴리스가 있으면 그 마일스톤의 서브이슈로 등록해 아래 절차로 올린다.
-보안 권고는 기다리지 않는다. 위 CI 잡이 실패하거나 `outdated`가 권고를 보이면 바로 서브이슈를 만든다.
+새 릴리스가 있으면 그 마일스톤의 서브이슈(`CI 액션 고정 버전 올리기 (M<N>)`)로 등록해 아래 절차로 올린다.
+보안 권고는 기다리지 않는다(위 "보안 권고가 나왔을 때").
 
 Dependabot(`github-actions` 생태계)은 쓰지 않는다.
 
@@ -83,7 +92,8 @@ Dependabot(`github-actions` 생태계)은 쓰지 않는다.
   그래서 권고 확인은 위 `verify`·`outdated`가 Advisory Database API(`advisories?ecosystem=actions`)로 직접 한다.
 
 1. `bash .github/scripts/action-pins.sh outdated`로 액션마다 고정 버전과 새 릴리스를 본다(`gh` 로그인 필요).
-   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 고정한 버전에 권고가 있으면 `!` 줄로 보인다.
+   - 같은 주 버전의 새 릴리스와 더 높은 주 버전을 따로, 커밋 SHA와 함께 보여 준다. 고정한 버전에 권고가 있으면 `!` 줄로 보인다
+     (예외 목록에 있는 권고는 기한과 함께 따로 표시한다).
    - 새 릴리스나 권고가 있어도 실패하지 않는다. 조회에 실패할 때만 실패한다.
 2. 주 버전이 바뀌면 그 버전의 `action.yml`(`action.yaml`)과 릴리스 노트를 확인한다.
    - `runs.using`이 `node24`여야 한다. `composite`면 내부에서 쓰는 액션들이 node24여야 한다.

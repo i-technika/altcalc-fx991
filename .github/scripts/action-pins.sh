@@ -4,7 +4,8 @@
 # 사용: bash .github/scripts/action-pins.sh <verify|outdated> [워크플로 파일...]
 #   verify   — `uses: <owner>/<repo>@<sha> # vX.Y.Z` 줄마다 확인하고, 하나라도 문제가 있으면 실패한다.
 #              - SHA가 그 태그가 가리키는 커밋인가
-#              - 그 버전에 해당하는 GitHub 보안 권고(GHSA, 검토된 것)가 없는가
+#              - 그 버전에 해당하는 GitHub 보안 권고(Advisory Database의 검토된 GHSA, 철회된 것 제외)가 없는가.
+#                예외 목록(.github/action-advisories-ignore)에 기한 안으로 적힌 권고는 경고만 낸다.
 #              Sub-issue CI·Milestone CI의 `Verify Action Pins` 잡이 돌린다.
 #   outdated — 액션마다 고정한 버전, 같은 주 버전의 최신 릴리스, 더 높은 주 버전의 최신 릴리스와 그 커밋 SHA,
 #              고정한 버전에 해당하는 보안 권고를 보여 준다. 갱신 절차(README "CI 액션 고정 버전 올리기")의 첫 단계다.
@@ -12,8 +13,9 @@
 #   파일을 주지 않으면 .github/workflows의 *.yml·*.yaml 전부를 본다(저장소 루트에서 실행).
 #
 # gh CLI가 필요하다(로그인했거나 GH_TOKEN이 있어야 한다 — 공개 정보 조회라 권한은 필요 없다).
-# 조회는 일시 장애에 대비해 세 번까지 시도한다. 테스트는 ACTION_PINS_GH에 가짜 gh 경로를 넣는다
-# (ACTION_PINS_RETRY_DELAY로 재시도 간격(초)도 줄인다).
+# 조회는 일시 장애에 대비해 세 번까지 시도한다(HTTP 404처럼 다시 해도 같은 실패는 바로 멈춘다).
+# 테스트용 환경 변수: ACTION_PINS_GH(가짜 gh 경로), ACTION_PINS_RETRY_DELAY(재시도 간격 초),
+#   ACTION_PINS_IGNORE(예외 목록 경로), ACTION_PINS_TODAY(오늘 날짜 YYYY-MM-DD).
 #
 # 역할 나눔: 모든 uses:가 "SHA 40자리 + 같은 줄 끝 # vX.Y.Z" 형식인지, 같은 액션을 모든 워크플로에서 같게 고정했는지,
 #   Node 24 최소 버전 이상인지는 test/unit/ci_actions_test.dart가 오프라인으로 검사한다.
@@ -23,13 +25,23 @@ set -euo pipefail
 
 gh=${ACTION_PINS_GH:-gh}
 retry_delay=${ACTION_PINS_RETRY_DELAY:-5}
+ignore_file=${ACTION_PINS_IGNORE:-.github/action-advisories-ignore}
+today=${ACTION_PINS_TODAY:-$(date -u +%Y-%m-%d)}
 
-# 오류는 표준 오류로 낸다. GitHub Actions 안에서만 `::error::`를 붙여 실행 주석으로 보이게 한다.
+# 오류·경고는 표준 오류로 낸다. GitHub Actions 안에서만 `::error::`·`::warning::`을 붙여 실행 주석으로 보이게 한다.
 error() {
   if [ -n "${GITHUB_ACTIONS:-}" ]; then
     echo "::error::$*" >&2
   else
     echo "오류: $*" >&2
+  fi
+}
+
+warning() {
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    echo "::warning::$*" >&2
+  else
+    echo "경고: $*" >&2
   fi
 }
 
@@ -49,6 +61,9 @@ case $mode in
   *) usage ;;
 esac
 
+# 버전 정렬(sort -V)을 못 하면 outdated의 판정이 조용히 틀어지므로 먼저 확인한다 (GNU·최근 BSD sort는 지원한다)
+printf 'v1.10.0\nv1.9.0\n' | sort -V >/dev/null 2>&1 || fail "sort -V(버전 정렬)를 지원하지 않는 sort다"
+
 if [ $# -eq 0 ]; then
   shopt -s nullglob
   set -- .github/workflows/*.yml .github/workflows/*.yaml
@@ -57,12 +72,13 @@ if [ $# -eq 0 ]; then
 fi
 
 # 정규식은 변수에 담아 쓴다 — [[ =~ ]] 오른쪽에 직접 적으면 bash 버전에 따라 따옴표·역슬래시 해석이 다르다.
-# YAML처럼 `uses:` 뒤에 공백이 있어야 키이고, 앞에 공백이 있는 `#`만 주석이다.
+# 줄 안의 공백은 스페이스·탭([[:blank:]])만 본다. YAML처럼 `uses:` 뒤에 공백이 있어야 키이고, 앞에 공백이 있는 `#`만 주석이다.
 # 값은 따옴표 없음·작은따옴표·큰따옴표 중 하나로, 여닫는 따옴표가 같아야 한다(test/support/workflows.dart의 줄 추출과 같은 규칙).
-uses_key='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]'
-pinned="^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+([^@[:space:]'\"#]+@[^[:space:]'\"]+|'[^@[:space:]'\"#]+@[^[:space:]'\"]+'|\"[^@[:space:]'\"#]+@[^[:space:]'\"]+\")[[:space:]]+#[[:space:]]*(v[0-9]+\.[0-9]+\.[0-9]+)([[:space:]].*)?$"
+uses_key='^[[:blank:]]*(-[[:blank:]]+)?uses:[[:blank:]]'
+pinned="^[[:blank:]]*(-[[:blank:]]+)?uses:[[:blank:]]+([^@[:space:]'\"#]+@[^[:space:]'\"]+|'[^@[:space:]'\"#]+@[^[:space:]'\"]+'|\"[^@[:space:]'\"#]+@[^[:space:]'\"]+\")[[:blank:]]+#[[:blank:]]*(v[0-9]+\.[0-9]+\.[0-9]+)([[:blank:]].*)?$"
 action_sha='^([^@]+)@([0-9a-f]{40})$'
 release_tag='^v[0-9]+\.[0-9]+\.[0-9]+$'
+ignore_entry='^(GHSA(-[23456789cfghjmpqrvwx]{4}){3})[[:blank:]]+([0-9]{4}-[0-9]{2}-[0-9]{2})[[:blank:]]+([^[:blank:]].*)$'
 
 # 고정 목록: "owner/repo sha tag" 한 줄씩, 처음 나온 순서대로 중복 없이 (bash 3.2에는 연관 배열이 없어 문자열로 모은다)
 pins=""
@@ -97,25 +113,63 @@ for file in "$@"; do
 done
 [ -n "$pins" ] || fail "고정된 액션(uses:)이 없다: $*"
 
+# 권고 예외 목록: "GHSA-id 기한(YYYY-MM-DD) 사유" 한 줄씩 (# 주석·빈 줄 허용). 파일이 없으면 예외 없음.
+# 고친 릴리스가 아직 없거나 이 저장소가 쓰지 않는 기능에만 해당하는 권고를, 사유와 기한을 적고 잠시 넘기는 용도다.
+# 형식이 틀린 줄은 실패한다(오타로 예외가 조용히 무시되지 않게). 기한이 지난 예외는 없는 것으로 본다.
+ignores="" # "GHSA-id 기한" 줄들
+if [ -f "$ignore_file" ]; then
+  n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line=${line%$'\r'}
+    case $line in '' | '#'*) continue ;; esac
+    [[ $line =~ $ignore_entry ]] ||
+      fail "$ignore_file:$n: 'GHSA-xxxx-xxxx-xxxx YYYY-MM-DD 사유' 형식이 아니다 — $line"
+    ignores+="${BASH_REMATCH[1]} ${BASH_REMATCH[3]}"$'\n'
+  done <"$ignore_file"
+fi
+
+# 권고 id가 기한 안의 예외인지. 예외면 기한을 출력하고 0, 아니면(없거나 기한 지남) 1.
+# 기한 지난 예외는 경고를 남긴다 — 다시 검토하고 기한을 늘리거나 지울 것.
+ignored_until() {
+  local id until
+  while read -r id until; do
+    [ "$id" = "$1" ] || continue
+    if [[ $until < $today ]]; then
+      warning "$ignore_file 의 $id 예외는 기한($until)이 지났다 — 다시 검토할 것"
+      return 1
+    fi
+    echo "$until"
+    return 0
+  done <<<"$ignores"
+  return 1
+}
+
 # gh api 호출. 표준 입력은 막는다(아래 반복문이 고정 목록을 표준 입력으로 읽는다).
-# 세 번까지 시도하고, 마지막 실패의 오류 출력은 그대로 보인다.
+# 세 번까지 시도하고, 마지막 시도의 오류 출력만 보인다. HTTP 404(태그·저장소 없음)는 다시 해도 같으므로 바로 멈춘다.
+gh_err=$(mktemp)
+trap 'rm -f "$gh_err"' EXIT
 gh_api() {
   local attempt=1 out
   while :; do
-    if out=$("$gh" api "$@" </dev/null); then
+    if out=$("$gh" api "$@" </dev/null 2>"$gh_err"); then
       printf '%s\n' "$out"
       return 0
     fi
-    [ "$attempt" -lt 3 ] || return 1
+    if [ "$attempt" -ge 3 ] || grep -q 'HTTP 404' "$gh_err"; then
+      cat "$gh_err" >&2
+      return 1
+    fi
     attempt=$((attempt + 1))
     sleep "$retry_delay"
   done
 }
 
-# 버전 tag(vX.Y.Z)에 해당하는 검토된 보안 권고 "GHSA-… (심각도) 요약" 줄들. 조회 실패는 1로 끝난다.
+# 버전 tag(vX.Y.Z)에 해당하는 보안 권고 "GHSA-… (심각도) 요약" 줄들. 조회 실패는 1로 끝난다.
+# Advisory Database는 기본으로 검토된(reviewed) 권고만 주지만, 철회된(withdrawn) 권고도 섞여 나오므로 거른다.
 advisories() {
   gh_api "advisories?ecosystem=actions&affects=$1@${2#v}&per_page=100" \
-    --jq '.[] | "\(.ghsa_id) (\(.severity)) \(.summary)"'
+    --jq '.[] | select(.withdrawn_at == null) | "\(.ghsa_id) (\(.severity)) \(.summary)"'
 }
 
 if [ "$mode" = verify ]; then
@@ -137,17 +191,29 @@ if [ "$mode" = verify ]; then
       errors=$((errors + 1))
       continue
     fi
+    blocking=0
     if [ -n "$found" ]; then
       while IFS= read -r advisory; do
-        error "$repo $tag 에 보안 권고가 있다: $advisory — 고친 릴리스로 올릴 것 (README \"CI 액션 고정 버전 올리기\")"
+        if until=$(ignored_until "${advisory%% *}"); then
+          warning "$repo $tag 의 보안 권고를 예외 목록에 따라 $until 까지 넘긴다: $advisory"
+        else
+          error "$repo $tag 에 보안 권고가 있다: $advisory — 고친 릴리스로 올리거나, 없으면 $ignore_file 에 사유·기한을 적을 것 (README \"CI 액션 고정 버전 올리기\")"
+          blocking=$((blocking + 1))
+        fi
       done <<<"$found"
+    fi
+    if [ "$blocking" -gt 0 ]; then
       errors=$((errors + 1))
       continue
     fi
-    echo "확인: $repo@$sha = $tag (보안 권고 없음)"
+    if [ -n "$found" ]; then
+      echo "확인: $repo@$sha = $tag (예외로 넘긴 권고만 있음)"
+    else
+      echo "확인: $repo@$sha = $tag (보안 권고 없음)"
+    fi
   done <<<"${pins%$'\n'}"
   [ "$errors" -eq 0 ] || fail "고정 액션 확인 실패 ${errors}건"
-  echo "고정 SHA가 모두 태그와 일치하고 보안 권고가 없다"
+  echo "고정 SHA가 모두 태그와 일치하고, 넘기지 않은 보안 권고가 없다"
   exit 0
 fi
 
@@ -167,7 +233,8 @@ while read -r repo _ _; do
   # 릴리스(초안·사전 릴리스 제외)의 vX.Y.Z 태그만 본다. 최신 100개면 충분하다(새 것부터 나온다).
   releases=$(gh_api "repos/$repo/releases?per_page=100" --jq '.[] | select((.draft or .prerelease) | not) | .tag_name') ||
     fail "$repo 의 릴리스 목록을 조회하지 못했다 (gh 인증·네트워크 확인)"
-  releases=$(printf '%s\n' "$releases" | grep -E "$release_tag" | sort -V || true)
+  # grep의 "일치 없음"(1)만 넘기고 sort의 실패는 드러나게 한다
+  releases=$(printf '%s\n' "$releases" | { grep -E "$release_tag" || true; } | sort -V)
   [ -n "$releases" ] || fail "$repo 에 vX.Y.Z 형식의 릴리스가 없다"
 
   # 이 저장소를 고정한 모든 버전 (ci_actions_test가 하나로 맞추게 하지만, 그 검사 전에 돌려도 다 보이게)
@@ -175,7 +242,7 @@ while read -r repo _ _; do
   highest_fixed=$(printf '%s\n' "$fixed" | tail -n 1)
   # 주 버전은 가장 높은 고정을 기준으로 한다 (고정이 여러 개여도 그 주 버전의 새 릴리스를 놓치지 않게)
   major=${highest_fixed%%.*}
-  same_major=$(printf '%s\n' "$releases" | grep -E "^$major\." | tail -n 1 || true)
+  same_major=$(printf '%s\n' "$releases" | { grep -E "^$major\." || true; } | tail -n 1)
   overall=$(printf '%s\n' "$releases" | tail -n 1)
 
   line="$repo: 고정 $(printf '%s' "$fixed" | tr '\n' ' ')"
@@ -183,7 +250,7 @@ while read -r repo _ _; do
   found=false
   # 같은 주 버전의 새 릴리스(그대로 올려도 되는 갱신)와 더 높은 주 버전(검토가 필요한 갱신)을 따로 알린다
   # (같은 주 버전의 최신이 전체 최신이면 sort -u로 한 번만 본다. 태그는 공백 없는 vX.Y.Z라 단어 분리가 안전하다)
-  for candidate in $(printf '%s\n%s\n' "$same_major" "$overall" | grep . | sort -uV); do
+  for candidate in $(printf '%s\n%s\n' "$same_major" "$overall" | { grep . || true; } | sort -uV); do
     newer_than "$candidate" "$highest_fixed" || continue
     new_sha=$(gh_api "repos/$repo/commits/refs/tags/$candidate" --jq .sha) ||
       fail "$repo 의 태그 $candidate 를 조회하지 못했다"
@@ -201,10 +268,16 @@ while read -r repo _ _; do
   for tag in $fixed; do
     list=$(advisories "$repo" "$tag") || fail "$repo $tag 의 보안 권고를 조회하지 못했다"
     [ -n "$list" ] || continue
+    blocking=false
     while IFS= read -r advisory; do
-      echo "  ! $tag 보안 권고: $advisory"
+      if until=$(ignored_until "${advisory%% *}"); then
+        echo "  ! $tag 보안 권고(예외 목록, $until 까지): $advisory"
+      else
+        echo "  ! $tag 보안 권고: $advisory"
+        blocking=true
+      fi
     done <<<"$list"
-    flagged=$((flagged + 1))
+    ! $blocking || flagged=$((flagged + 1))
   done
 done <<<"${pins%$'\n'}"
 

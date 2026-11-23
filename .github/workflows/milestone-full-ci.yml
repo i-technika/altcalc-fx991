@@ -63,6 +63,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     timeout-minutes: 5
+    # PR 헤드의 스크립트에 토큰을 넘기므로 읽기 권한만 준다 (공개 정보 조회·체크아웃에 충분하다)
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

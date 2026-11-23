@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
@@ -40,6 +41,12 @@ const _minVersions = <String, List<int>>{
 /// 고정 SHA를 GitHub API로 확인하는 CI 잡 ID와 명령 (#88)
 const _verifyJobId = 'verify-action-pins';
 const _verifyPinsCommand = 'bash .github/scripts/action-pins.sh verify';
+
+/// 보안 권고 예외 목록과 한 줄의 형식 `GHSA-xxxx-xxxx-xxxx YYYY-MM-DD 사유` (action-pins.sh의 `ignore_entry`와 같다)
+const _advisoryIgnoreFile = '.github/action-advisories-ignore';
+final _advisoryIgnoreEntry = RegExp(
+  r'^GHSA(-[23456789cfghjmpqrvwx]{4}){3}[ \t]+(\d{4})-(\d{2})-(\d{2})[ \t]+[^ \t].*$',
+);
 
 /// gh에 넘길 수 있는 워크플로 토큰 표기 (둘은 같은 토큰이다)
 const _workflowTokens = [
@@ -259,8 +266,13 @@ void main() {
           'runs-on',
           'if',
           'timeout-minutes',
+          'permissions',
           'steps',
         }, reason: file.path);
+        // PR 헤드의 스크립트에 토큰을 넘기므로 권한은 읽기만 준다 (저장소 기본 권한이 바뀌어도 넓어지지 않게)
+        expect(plain(job['permissions']), {
+          'contents': 'read',
+        }, reason: '${file.path}: permissions는 contents: read만 둔다');
         final steps = (job['steps'] as YamlList).cast<YamlMap>().toList();
         expect(steps, hasLength(2), reason: file.path);
         expect(steps.first.keys.toSet(), {'name', 'uses'}, reason: file.path);
@@ -318,5 +330,33 @@ void main() {
         expect(s, steps.first);
       }
     });
+  });
+
+  test('보안 권고 예외 목록이 있고 모든 항목이 형식에 맞다 (기한은 verify가 CI에서 본다)', () {
+    final file = File(_advisoryIgnoreFile);
+    expect(file.existsSync(), isTrue, reason: '$_advisoryIgnoreFile 이 없다');
+    final lines = const LineSplitter().convert(file.readAsStringSync());
+    final seen = <String>{};
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.isEmpty || line.startsWith('#')) continue;
+      final where = '$_advisoryIgnoreFile:${i + 1}: $line';
+      final m = _advisoryIgnoreEntry.firstMatch(line);
+      expect(m, isNotNull, reason: where);
+      final date = DateTime.tryParse('${m![2]}-${m[3]}-${m[4]}');
+      // DateTime.tryParse는 2026-02-30 같은 날짜를 넘겨 해석하므로 다시 맞춰 본다
+      expect(
+        date != null &&
+            date.month == int.parse(m[3]!) &&
+            date.day == int.parse(m[4]!),
+        isTrue,
+        reason: '$where — 없는 날짜',
+      );
+      expect(
+        seen.add(line.split(RegExp(r'[ \t]')).first),
+        isTrue,
+        reason: '$where — 같은 GHSA가 두 번',
+      );
+    }
   });
 }
