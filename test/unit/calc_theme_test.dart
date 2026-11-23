@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
@@ -320,6 +321,134 @@ void main() {
         high.colorScheme.onSurfaceVariant,
       ]) {
         expect(contrastRatio(fg, focusFill), greaterThanOrEqualTo(aaa));
+      }
+    });
+  });
+
+  group('플랫폼별 Material 테마 (#130)', () {
+    // Flutter가 플랫폼마다 고르는 기본 터치 영역·밀도 — 리터럴로 둔다 (터치 기기는 48dp 터치 영역·standard,
+    // 데스크톱은 줄인 터치 영역·compact)
+    const expected = {
+      TargetPlatform.android: (
+        MaterialTapTargetSize.padded,
+        VisualDensity.standard,
+      ),
+      TargetPlatform.fuchsia: (
+        MaterialTapTargetSize.padded,
+        VisualDensity.standard,
+      ),
+      TargetPlatform.iOS: (
+        MaterialTapTargetSize.padded,
+        VisualDensity.standard,
+      ),
+      TargetPlatform.linux: (
+        MaterialTapTargetSize.shrinkWrap,
+        VisualDensity.compact,
+      ),
+      TargetPlatform.macOS: (
+        MaterialTapTargetSize.shrinkWrap,
+        VisualDensity.compact,
+      ),
+      TargetPlatform.windows: (
+        MaterialTapTargetSize.shrinkWrap,
+        VisualDensity.compact,
+      ),
+    };
+
+    test('표는 모든 플랫폼을 다룬다', () {
+      expect(expected.keys.toSet(), TargetPlatform.values.toSet());
+    });
+
+    /// [platform]인 동안의 두 팔레트 테마 (일반, 고대비)
+    (ThemeData, ThemeData) themesOn(TargetPlatform platform) {
+      debugDefaultTargetPlatformOverride = platform;
+      try {
+        return (
+          CalcPalette.standard.materialTheme,
+          CalcPalette.highContrast.materialTheme,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    }
+
+    test('만들어 둔 테마를 비우면 다음 읽기에서 새로 만든다 (아래 순서 테스트의 전제)', () {
+      final (normal, high) = themesOn(TargetPlatform.android);
+      CalcTheme.resetMaterialThemesForTesting();
+      final (normalAgain, highAgain) = themesOn(TargetPlatform.android);
+      expect(normalAgain, isNot(same(normal)));
+      expect(highAgain, isNot(same(high)));
+    });
+
+    // 정적 값 하나로 두면 어느 순서든 처음 읽은 플랫폼으로 굳어 뒤 플랫폼이 틀린다. 두 순서로 확인한다.
+    // 앞 테스트가 이미 만든 테마를 읽기만 하지 않도록 만들어 둔 테마를 비워, 실제로 이 순서대로 만든다.
+    for (final order in [
+      TargetPlatform.values,
+      TargetPlatform.values.reversed.toList(),
+    ]) {
+      test('${order.first.name}부터 차례로 만들어도 테마마다 그 플랫폼의 터치 영역·밀도다', () {
+        CalcTheme.resetMaterialThemesForTesting();
+        for (final platform in order) {
+          final (normal, high) = themesOn(platform);
+          final (tap, density) = expected[platform]!;
+          for (final (name, theme) in [('일반', normal), ('고대비', high)]) {
+            final reason = '${platform.name} $name';
+            expect(theme.platform, platform, reason: reason);
+            expect(theme.materialTapTargetSize, tap, reason: reason);
+            expect(theme.visualDensity, density, reason: reason);
+          }
+        }
+      });
+    }
+
+    test(
+      '같은 플랫폼에서는 늘 같은 객체다 (MaterialApp·AnimatedTheme이 매 빌드 새 테마로 보지 않는다)',
+      () {
+        for (final platform in TargetPlatform.values) {
+          final (normal, high) = themesOn(platform);
+          // 다른 플랫폼을 한 번 거친 뒤에도 같다
+          themesOn(
+            platform == TargetPlatform.android
+                ? TargetPlatform.windows
+                : TargetPlatform.android,
+          );
+          final (normalAgain, highAgain) = themesOn(platform);
+          expect(normalAgain, same(normal), reason: platform.name);
+          expect(highAgain, same(high), reason: platform.name);
+          expect(normal, isNot(same(high)), reason: platform.name);
+          // 정적 접근자와 팔레트 접근자가 같은 객체다
+          debugDefaultTargetPlatformOverride = platform;
+          try {
+            expect(CalcTheme.materialTheme, same(normal));
+            expect(CalcTheme.materialHighContrastTheme, same(high));
+          } finally {
+            debugDefaultTargetPlatformOverride = null;
+          }
+        }
+      },
+    );
+
+    test('앱이 정한 색 구성·대화상자 모양·배경은 플랫폼과 무관하다', () {
+      final (androidNormal, androidHigh) = themesOn(TargetPlatform.android);
+      for (final platform in TargetPlatform.values) {
+        final (normal, high) = themesOn(platform);
+        for (final (theme, base) in [
+          (normal, androidNormal),
+          (high, androidHigh),
+        ]) {
+          expect(theme.colorScheme, base.colorScheme, reason: platform.name);
+          expect(theme.dialogTheme, base.dialogTheme, reason: platform.name);
+          expect(
+            theme.textButtonTheme,
+            base.textButtonTheme,
+            reason: platform.name,
+          );
+          expect(
+            theme.scaffoldBackgroundColor,
+            base.scaffoldBackgroundColor,
+            reason: platform.name,
+          );
+        }
       }
     });
   });

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoTheme;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -374,6 +375,87 @@ void main() {
               (_dialogSurface(tester).shape! as RoundedRectangleBorder).side;
           expect(side == BorderSide.none, !frame);
         },
+      );
+    }
+  });
+
+  group('플랫폼 변형에서의 앱 테마 (#130)', () {
+    // Flutter 플랫폼 기본값 — 리터럴로 둔다 (Android 48dp 터치 영역·standard, Windows 줄인 터치 영역·compact)
+    const expected = {
+      TargetPlatform.android: (
+        MaterialTapTargetSize.padded,
+        VisualDensity.standard,
+      ),
+      TargetPlatform.windows: (
+        MaterialTapTargetSize.shrinkWrap,
+        VisualDensity.compact,
+      ),
+    };
+
+    // 테마가 처음 읽힌 플랫폼으로 굳으면 뒤 변형이 앞 변형의 밀도를 쓴다. 두 순서로 돌려 순서와 관계없음을 본다.
+    // 앞 테스트가 이미 만든 테마를 읽기만 하지 않도록, 순서마다 첫 변형 전에 만들어 둔 테마를 비운다
+    // (변형마다 비우면 두 번째 변형이 앞 변형이 채운 캐시 뒤에서 만들어지는 경우를 확인하지 못한다).
+    // 순서 효과는 선언 순서대로 실행될 때만 확인된다 — 무작위 순서나 이름 필터로 일부 변형만 돌리면 각 변형이
+    // 자기 플랫폼 값인지만 본다. 정해진 순서의 검사는 `test/unit/calc_theme_test.dart`가 한다.
+    for (final order in const [
+      {TargetPlatform.android, TargetPlatform.windows},
+      {TargetPlatform.windows, TargetPlatform.android},
+    ]) {
+      var first = true;
+      testWidgets(
+        '${order.map((p) => p.name).join(' → ')} 순서: MaterialApp·화면·대화상자의 테마가 그 변형 플랫폼의 터치 영역·밀도다',
+        (tester) async {
+          if (first) {
+            CalcTheme.resetMaterialThemesForTesting();
+            first = false;
+          }
+          final platform = defaultTargetPlatform;
+          final (tap, density) = expected[platform]!;
+          for (final highContrast in [false, true]) {
+            _setDevice(tester, highContrast: highContrast);
+            ThemeData? appTheme;
+            await _pumpApp(
+              tester,
+              frameBuilder: (context, screen) {
+                appTheme = Theme.of(context);
+                return screen;
+              },
+            );
+            // MaterialApp에 넘긴 테마가 이 플랫폼의 앱 테마 그 객체다 (Theme.of는 지역화한 사본을 돌려준다)
+            final expectedTheme = highContrast
+                ? CalcTheme.materialHighContrastTheme
+                : CalcTheme.materialTheme;
+            expect(
+              tester.widget<MaterialApp>(find.byType(MaterialApp)).theme,
+              same(expectedTheme),
+            );
+            _expectTheme(appTheme!, expectedTheme);
+            await _openDialog(tester);
+            for (final (where, theme) in [
+              ('MaterialApp', appTheme!),
+              (
+                '설정 버튼',
+                Theme.of(tester.element(find.byKey(SettingsButton.buttonKey))),
+              ),
+              ('대화상자', Theme.of(tester.element(find.byType(HandednessDialog)))),
+            ]) {
+              final reason =
+                  '${platform.name} highContrast=$highContrast $where';
+              expect(theme.platform, platform, reason: reason);
+              expect(theme.materialTapTargetSize, tap, reason: reason);
+              expect(theme.visualDensity, density, reason: reason);
+            }
+            // 밀도가 실제 위젯 크기에 닿는다: 닫기 버튼(TextButton) 높이 48 / 줄인 터치 영역·compact 32
+            expect(
+              tester.getSize(find.byKey(HandednessDialog.closeKey)).height,
+              tap == MaterialTapTargetSize.padded ? 48 : 32,
+              reason: 'highContrast=$highContrast',
+            );
+            await tester.tap(find.byKey(HandednessDialog.closeKey));
+            await tester.pumpAndSettle();
+          }
+        },
+        variant: TargetPlatformVariant(order),
       );
     }
   });

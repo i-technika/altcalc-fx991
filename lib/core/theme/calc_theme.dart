@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../constants/key_definitions.dart';
@@ -316,37 +317,64 @@ abstract final class CalcTheme {
   /// 키보드 포커스 테두리 굵기 (두 모드 공통)
   static const double materialFocusRingWidth = 2.0;
 
-  /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
-  /// 정적 값이라 핫 리로드에는 반영되지 않는다(핫 리스타트 필요).
-  static final ThemeData materialTheme = ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: bodyBackground,
-    dialogTheme: const DialogThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(materialDialogBorderRadius),
-        ),
-      ),
-    ),
-  );
+  // 두 테마는 지금 플랫폼([defaultTargetPlatform])별로 한 번씩 만들어 둔다 (#130).
+  // `ThemeData`는 만들 때의 플랫폼으로 `platform`·`materialTapTargetSize`·`visualDensity`를 정한다. 정적 값 하나로
+  // 두면 처음 읽힌 플랫폼으로 굳어, 위젯 테스트의 플랫폼 변형(`TargetPlatformVariant`)에서 다음 변형이 앞 변형의
+  // 밀도를 그대로 쓴다(실행 순서에 따라 결과가 달라진다). 같은 플랫폼에서는 늘 같은 객체를 돌려주므로 매 빌드
+  // `ThemeData`를 다시 만들거나 MaterialApp·[AnimatedTheme]이 값을 하나하나 비교하지 않고(같은 객체면 바로 같다),
+  // 테스트도 `same`으로 앱이 고른 테마를 확인할 수 있다. 실제 앱은 실행 중 플랫폼이 바뀌지 않아 값이 하나뿐이다
+  // (디버그 도구의 플랫폼 전환은 다음 빌드부터 그 플랫폼 테마를 쓴다).
+  // 만든 값을 계속 쓰므로 아래 정의를 고쳐도 핫 리로드에는 반영되지 않는다(핫 리스타트 필요).
+  static final Map<TargetPlatform, ThemeData> _materialThemes = {};
+  static final Map<TargetPlatform, ThemeData> _materialHighContrastThemes = {};
 
-  /// 고대비 Material 테마 — 위 "Material 화면 테마" 주석 참조
-  static final ThemeData materialHighContrastTheme = ThemeData(
-    brightness: Brightness.dark,
-    contrastLevel: ContrastLevel.high,
-    scaffoldBackgroundColor: bodyBackground,
-    dialogTheme: const DialogThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(materialDialogBorderRadius),
-        ),
-        side: BorderSide(
-          color: keyBorderHighContrast,
-          width: materialHighContrastDialogBorderWidth,
+  /// 만들어 둔 플랫폼별 테마를 비운다 — 테스트가 같은 isolate 안에서 테마를 만드는 순서를 직접 정할 때 쓴다
+  /// (앞 테스트가 이미 만든 테마를 읽기만 하지 않게). 비운 뒤에는 앞서 받은 테마와 다른 객체가 만들어진다.
+  @visibleForTesting
+  static void resetMaterialThemesForTesting() {
+    _materialThemes.clear();
+    _materialHighContrastThemes.clear();
+  }
+
+  /// 일반 Material 테마 (어두운 테마, 본체색 배경 — 색·모양은 #97 이전과 같다. 대화상자 모양만 기본값을 직접 지정).
+  /// 지금 플랫폼의 테마다(위 #130 주석).
+  static ThemeData get materialTheme {
+    final platform = defaultTargetPlatform;
+    return _materialThemes[platform] ??= ThemeData(
+      platform: platform,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: bodyBackground,
+      dialogTheme: const DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(materialDialogBorderRadius),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+
+  /// 고대비 Material 테마 — 위 "Material 화면 테마" 주석 참조. 지금 플랫폼의 테마다(위 #130 주석).
+  static ThemeData get materialHighContrastTheme {
+    final platform = defaultTargetPlatform;
+    return _materialHighContrastThemes[platform] ??= ThemeData(
+      platform: platform,
+      brightness: Brightness.dark,
+      contrastLevel: ContrastLevel.high,
+      scaffoldBackgroundColor: bodyBackground,
+      dialogTheme: const DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(materialDialogBorderRadius),
+          ),
+          side: BorderSide(
+            color: keyBorderHighContrast,
+            width: materialHighContrastDialogBorderWidth,
+          ),
+        ),
+      ),
+    );
+  }
 
   // ───────────────────────────────────────────
   // 광고 슬롯 (Banner Ad Slot)
@@ -1058,7 +1086,8 @@ final class CalcPalette {
       ? highContrast
       : standard;
 
-  /// 이 팔레트와 짝인 Material 테마 (대화상자·SnackBar, #97)
+  /// 이 팔레트와 짝인 Material 테마 (대화상자·SnackBar, #97) — 지금 플랫폼([defaultTargetPlatform])의 테마다
+  /// ([CalcTheme.materialTheme] 위 #130 주석).
   ThemeData get materialTheme => isHighContrast
       ? CalcTheme.materialHighContrastTheme
       : CalcTheme.materialTheme;
