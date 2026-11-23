@@ -1241,9 +1241,9 @@ void _hingeLayoutTests() {
       // Galaxy Z Flip 내부 화면을 반 접음 (Flex 모드)
       (
         'Flip 내부·반 접힘',
-        const Size(411, 1005),
+        const Size(411, 1006),
         const EdgeInsets.only(top: 32, bottom: 24),
-        _halfOpenedAt(const Rect.fromLTWH(0, 502.5, 411, 0)),
+        _halfOpenedAt(const Rect.fromLTWH(0, 503, 411, 0)),
       ),
     ];
 
@@ -1378,7 +1378,7 @@ void _hingeLayoutTests() {
         const Size(701, 841),
         const Rect.fromLTWH(0, 420.5, 701, 0),
       ),
-      ('Flip 내부', const Size(411, 1005), const Rect.fromLTWH(0, 502.5, 411, 0)),
+      ('Flip 내부', const Size(411, 1006), const Rect.fromLTWH(0, 503, 411, 0)),
     ]) {
       testWidgets('$name ${size.width}×${size.height}: 위아래 배치, 키는 터치 하한 이상', (
         tester,

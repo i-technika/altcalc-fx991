@@ -138,8 +138,8 @@ class PreviewDevice {
   /// 항상 [base](기본 방향으로 펼친 프리셋) 기준으로 계산하므로, 자세·방향을 적용한 화면에 다시 불러도
   /// 결과는 [posture]·[orientation] 그대로다(겹쳐 돌지 않는다). 기본 방향으로 펼친 상태면 [base] 자신이다.
   ///
-  /// - 앱이 돌지 않는 방향([orientations]에 없음)은 기본 방향으로 본다 (#104) — 세로 고정 앱은 기기를 돌려도
-  ///   화면이 세로 그대로다. 조작 패널은 그 방향을 고를 수 없게 한다.
+  /// - [orientation]은 [orientations] 중 하나여야 한다 (#104, 디버그 빌드에서 assert로 확인) — 앱이 돌지 않는
+  ///   방향(세로 고정 화면의 가로)은 조작 패널에서 고를 수 없으므로, 그런 값이 오면 호출하는 쪽의 버그다.
   /// - 방향이 기본 방향과 다르면 기기를 반시계 방향으로 90° 돌린 화면이다: 크기의 가로·세로가 바뀌고,
   ///   화면 특징 영역은 기본 방향 화면의 위 가장자리가 왼쪽 가장자리가 되도록 옮긴다(가운데 접힘선은 돌리는
   ///   방향과 상관없이 같은 자리다).
@@ -154,9 +154,11 @@ class PreviewDevice {
   ) {
     final base = this.base;
     if (!base.foldable) return base;
-    final rotate =
-        orientation != base.naturalOrientation &&
-        base.orientations.contains(orientation);
+    assert(
+      base.orientations.contains(orientation),
+      '${base.name}: 앱이 돌지 않는 방향 $orientation',
+    );
+    final rotate = orientation != base.naturalOrientation;
     if (!rotate && posture == PreviewFoldPosture.flat) return base;
     final w = base.size.width;
     return PreviewDevice._posed(
@@ -249,9 +251,12 @@ const DisplayFeature previewLandscapeFoldInnerFold = DisplayFeature(
 
 /// Galaxy Z Flip5·Flip6 내부 화면(411×1006, 세로)을 펼쳤을 때의 접힘선 근사값 (#104).
 ///
-/// 물리 화면 1080×2640 px 가운데(y=1320 px)를 왼쪽에서 오른쪽까지 가로지르는 가로 접힘선을 밀도 2.625(420dpi,
-/// 기본 화면 크기 설정) 가정으로 dp로 바꾼 값이다(화면 411.43×1005.71, 접힘선 y=502.86 — 프리셋 크기를 정수로
-/// 반올림하고 접힘선은 그 가운데 503으로 맞췄다). 보고 값·밀도 모두 실기기 미확인이다.
+/// 물리 화면 1080×2640 px(Samsung 공개 사양의 내부 화면 해상도) 가운데(y=1320 px)를 왼쪽에서 오른쪽까지 가로지르는
+/// 가로 접힘선을 밀도 2.625(420dpi, 기본 화면 크기 설정) 가정으로 dp로 바꾼 값이다(화면 411.43×1005.71, 접힘선
+/// y=502.86 — 프리셋 크기를 정수로 반올림하고 접힘선은 그 가운데 503으로 맞췄다). 배치 테스트(`split_layout_test` 등)의
+/// Flip 근사도 같은 값을 쓴다. 밀도는 자료에 따라 2.75(393×960dp)로 적힌 것도 있다 — 그 크기로도 반 접힘 테이블톱의
+/// 가장 낮은 키 터치 높이가 일반 하한(28dp)을 넘어(#104 리뷰 실측 약 31~33dp) 배치·방향 판정은 같다.
+/// 보고 값·밀도 모두 실기기 미확인이다.
 const DisplayFeature previewFlipInnerFold = DisplayFeature(
   bounds: Rect.fromLTWH(0, 503, 411, 0),
   type: DisplayFeatureType.fold,
@@ -259,7 +264,7 @@ const DisplayFeature previewFlipInnerFold = DisplayFeature(
 );
 
 /// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
-/// 높게 잡았다. 실기기 미확인이다.
+/// 높게 잡았다(배치 테스트의 Flip 근사와 같다). 실기기 미확인이다.
 const double _flipStatusBarHeight = 32;
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -313,6 +318,9 @@ const List<PreviewDevice> previewDevices = [
   ),
   // Galaxy Z Flip 내부, 제스처 내비게이션 (#104). 짧은 변이 600dp 미만이라 앱이 세로로 고정하므로 자세만 고른다.
   // 펼치면 가로 접힘선을 배치에 쓰지 않는 위아래 배치, 반 접으면(Flex 모드) 테이블톱 배치다.
+  // 출고 기본 내비게이션은 One UI 버전에 따라 3버튼(아래 48dp)일 수 있다. 제스처로 둔 것은 폭을 다 쓰는 키패드의
+  // 바깥쪽 열이 좌우 뒤로가기 영역에 걸리는 것을 이 프리셋에서 보기 위해서다 — 3버튼(아래 48dp)이어도 반 접힘
+  // 테이블톱의 가장 낮은 키 터치 높이는 약 33dp로 일반 하한을 넘는다(#104 리뷰 실측).
   PreviewDevice(
     '플립형 폴더블 내부',
     Size(411, 1006),

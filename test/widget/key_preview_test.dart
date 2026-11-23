@@ -485,27 +485,23 @@ void main() {
       );
     });
 
-    test('세로 고정 폴더블: 고를 수 없는 방향(가로)을 넘겨도 돌지 않고 세로 화면 그대로다 (#104)', () {
+    test('세로 고정 폴더블: 고를 수 없는 방향(가로)을 넘기면 assert로 드러난다 (#104)', () {
       final d = previewDevices.singleWhere((d) => d.name == '플립형 폴더블 내부');
       for (final p in PreviewFoldPosture.values) {
-        final portrait = d.posed(p, PreviewOrientation.portrait);
-        final landscape = d.posed(p, PreviewOrientation.landscape);
-        expect(landscape.size, d.size, reason: p.name);
-        expect(landscape.size, portrait.size, reason: p.name);
         expect(
-          landscape.displayFeatures,
-          portrait.displayFeatures,
+          () => d.posed(p, PreviewOrientation.landscape),
+          throwsAssertionError,
           reason: p.name,
         );
-        expect(landscape.displayFeatures.single.state, p.state, reason: p.name);
+        // 자세를 적용한 화면에서 불러도 같다(항상 원래 프리셋 기준).
+        expect(
+          () => d
+              .posed(PreviewFoldPosture.halfOpened, PreviewOrientation.portrait)
+              .posed(p, PreviewOrientation.landscape),
+          throwsAssertionError,
+          reason: p.name,
+        );
       }
-      expect(
-        identical(
-          d.posed(PreviewFoldPosture.flat, PreviewOrientation.landscape),
-          d,
-        ),
-        isTrue,
-      );
     });
 
     test(
@@ -1917,7 +1913,10 @@ void main() {
         );
         await tester.pumpAndSettle();
         if (orientation.evaluate().isEmpty) {
-          expect(orientationLocked, findsOneWidget);
+          expect(
+            tester.widget<Text>(orientationLocked).data,
+            startsWith('${o.label} 고정'),
+          );
           return;
         }
         await tester.tap(
@@ -2106,6 +2105,17 @@ void main() {
                         moreOrLessEquals(edge, epsilon: e),
                         reason: reason,
                       );
+                      // 설정 버튼은 반대쪽 가장자리 — 손잡이를 바꾸면 키패드가 움직이지 않는 Flip에서도 버튼은 옮겨 간다.
+                      final opposite = h == Handedness.right
+                          ? posed.padding.left + CalcTheme.screenPadding
+                          : posed.size.width -
+                                posed.padding.right -
+                                CalcTheme.screenPadding;
+                      expect(
+                        h == Handedness.right ? s.left : s.right,
+                        moreOrLessEquals(opposite, epsilon: e),
+                        reason: '$reason 설정 버튼 $s',
+                      );
                     case ScreenArrangement.stacked:
                       // 접힘선을 배치에 쓰지 않는다: 위 LCD·아래 키패드가 본체 폭을 다 쓰고, 설정 버튼은
                       // LCD 위 상단 띠의 오른쪽 끝에 있다 (#41).
@@ -2191,6 +2201,37 @@ void main() {
               .displayFeatures,
           [previewFoldInnerFold],
         );
+
+        // 가로를 고른 채 세로 고정 기기(Flip, #104)로 바꾸면 방향이 세로로 돌아간다 — 가로가 남으면
+        // posed()의 assert가 화면을 그릴 때 실패한다.
+        await selectPose(
+          tester,
+          PreviewFoldPosture.halfOpened,
+          PreviewOrientation.landscape,
+        );
+        final flip = previewDevices.indexWhere((d) => d.name == '플립형 폴더블 내부');
+        await _selectDevice(tester, flip);
+        expect(tester.takeException(), isNull);
+        expect(orientationLocked, findsOneWidget);
+        final flipMq = MediaQuery.of(
+          tester.element(find.byType(CalculatorScreen)),
+        );
+        expect(flipMq.size, previewDevices[flip].size);
+        expect(flipMq.displayFeatures, [previewFlipInnerFold]);
+        await selectPose(
+          tester,
+          PreviewFoldPosture.halfOpened,
+          PreviewOrientation.portrait,
+        );
+        expect(tester.takeException(), isNull);
+        final halfOpened = MediaQuery.of(
+          tester.element(find.byType(CalculatorScreen)),
+        );
+        expect(halfOpened.size, const Size(411, 1006));
+        expect(
+          halfOpened.displayFeatures.single.state,
+          DisplayFeatureState.postureHalfOpened,
+        );
       });
 
       testWidgets('자세·방향을 바꿔도 계산기 상태와 입력 로그는 유지된다', (tester) async {
@@ -2215,17 +2256,20 @@ void main() {
         );
       });
 
-      testWidgets('선택 줄이 있어도 낮은 패널에서 넘치지 않는다', (tester) async {
-        await _pumpPreview(tester);
-        await _selectDevice(
-          tester,
-          previewDevices.indexWhere((d) => d.name == '폴더블 내부'),
-        );
-        for (final height in const [120.0, 250.0, 300.0, 340.0, 500.0]) {
-          await _setPanelHeight(tester, height);
-          expect(posture, findsOneWidget, reason: '$height');
-        }
-      });
+      // 방향 줄은 기기에 따라 선택 버튼(Fold 계열) 또는 고정 안내 글자(Flip, #104)다 — 둘 다 본다.
+      for (final name in const ['폴더블 내부', '플립형 폴더블 내부']) {
+        testWidgets('$name: 선택 줄이 있어도 낮은 패널에서 넘치지 않는다', (tester) async {
+          await _pumpPreview(tester);
+          await _selectDevice(
+            tester,
+            previewDevices.indexWhere((d) => d.name == name),
+          );
+          for (final height in const [120.0, 250.0, 300.0, 340.0, 500.0]) {
+            await _setPanelHeight(tester, height);
+            expect(posture, findsOneWidget, reason: '$height');
+          }
+        });
+      }
 
       testWidgets('같은 기기를 다시 고르면 고른 자세·방향이 그대로다', (tester) async {
         await _pumpPreview(tester);
@@ -2410,6 +2454,9 @@ void main() {
     for (final (name, hostTextScale) in const [
       ('일반 폰', 1.0),
       ('폴더블 내부', 1.0),
+      // 방향 줄이 고정 안내 글자다 (#104). 130%는 안내가 두 줄로 접힐 수 있는 경우다.
+      ('플립형 폴더블 내부', 1.0),
+      ('플립형 폴더블 내부', 1.3),
       ('일반 폰', 1.3),
     ]) {
       final scale = (hostTextScale * 100).round();
