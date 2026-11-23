@@ -222,7 +222,8 @@ class CalcSplitLayout {
     );
     final lcd = Rect.fromLTWH(lcdLeft, keypadTop, lcdWidth, lcdHeight);
     // 버튼은 항상 LCD 아래에 둔다. 본체가 버튼 자리보다 낮은 비정상 크기에서만 버튼이 줄어든다
-    // (좌우 분할은 짧은 변 600dp 이상 창에서만 쓰므로 실제로는 생기지 않는다).
+    // (짧은 창의 좌우 분할(#38)도 그 전에 키가 [CalcTheme.keyTouchHeightUsableMin] 미만이 되어 안내로 바뀌므로
+    // 화면에서는 생기지 않는다).
     final buttonTop = math.min(
       lcd.bottom + CalcTheme.screenSplitSettingsGap,
       height,
@@ -521,8 +522,8 @@ class CalcTopStripLayout {
 ///   쪽에 키패드를 둔다. [CalcSplitLayout].
 /// - **접힘선 기준 배치** (폴더블 내부 화면, #25): 세로 접힘선이면 접힘선을 경계로 좌우 분할
 ///   ([CalcSplitLayout]의 `hinge`), 가로 접힘선이면 위 절반 LCD·아래 절반 키패드([CalcTabletopLayout]).
-/// - **짧은 창** (분할 화면·팝업 창·가로로 돈 폰, #38): 위아래 배치의 키가 [CalcTheme.keyTouchHeightFloor]보다
-///   낮으면 좌우 분할 배치의 키가 더 클 때 좌우 분할로 그린다. 어느 배치든 그린 키가
+/// - **짧은 창** (분할 화면·팝업 창·가로로 돈 폰, #38): 짧은 변 600dp 미만 창은 위아래 배치와 좌우 분할 중 키가
+///   큰 쪽으로 그린다(세로 폰은 위아래 배치가 늘 크다). 어느 배치든 그린 키가
 ///   [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을 키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
 /// - 광고 슬롯은 모든 배치에서 본체 아래 전체 폭이다.
 ///
@@ -596,6 +597,9 @@ class CalculatorScreen extends ConsumerWidget {
                         math.max(0.0, constraints.maxHeight - _Body.origin.dy),
                       ),
                       arrangement: arrangement,
+                      smallWindow:
+                          window.shortestSide <
+                          FormFactor.largeScreenMinShortestSide,
                       hinge: hinge,
                     ),
                   ),
@@ -826,7 +830,15 @@ class _Body extends ConsumerWidget {
   /// 창을 가로지르는 접힘선 (본체 좌표, 없으면 `null`) — 접힘선 기준 배치에서 쓴다.
   final Rect? hinge;
 
-  const _Body({required this.body, required this.arrangement, this.hinge});
+  /// 창의 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인지 — 짧은 창 판정 (#38 R1)
+  final bool smallWindow;
+
+  const _Body({
+    required this.body,
+    required this.arrangement,
+    required this.smallWindow,
+    this.hinge,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -839,21 +851,34 @@ class _Body extends ConsumerWidget {
     final ScreenArrangement drawn;
     final hinge = this.hinge;
     final handedness = ref.watch(handednessProvider);
-    // 접힘선 기준 배치 후보. 키가 터치 하한보다 낮아지면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
+    // 위아래 배치 — 접힘선 기준 배치·짧은 창 판정이 이 배치의 키 크기와 비교한다.
+    final stacked = _stackedRects(body);
+    final stackedTouch = KeypadMetrics.minKeyTouchHeightOf(stacked.keypad.size);
+    // 접힘선 기준 배치를 쓸지: 키가 배치별 하한 이상이거나, 하한 미만이어도 쓸 수 있는 크기
+    // ([CalcTheme.keyTouchHeightUsableMin] 이상)이고 위아래 배치보다 크면 쓴다 (#38 R1 — 위아래 배치도 접힘선을
+    // 가로지르므로, 더 작은 위아래 배치나 안내로 물러설 이유가 없다).
+    bool acceptsHingeKeypad(Rect keypad, double floor) {
+      final touch = KeypadMetrics.minKeyTouchHeightOf(keypad.size);
+      return touch >= floor ||
+          (touch >= CalcTheme.keyTouchHeightUsableMin && touch > stackedTouch);
+    }
+
+    // 접힘선 기준 배치 후보. 키가 너무 작으면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
     // 인셋·광고 슬롯·접힘선 간격이 빠진 실제 키패드 크기를 본다).
     ({Rect lcd, Rect keypad, Rect settings})? hingeLayoutFor(Handedness h) {
       if (hinge == null) return null;
       switch (arrangement) {
         case ScreenArrangement.hingeSplit:
           final l = CalcSplitLayout.of(body, h, hinge: hinge);
-          if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
-              CalcTheme.keyTouchHeightFloor) {
+          if (acceptsHingeKeypad(l.keypad, CalcTheme.keyTouchHeightFloor)) {
             return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
           }
         case ScreenArrangement.hingeStacked:
           final l = CalcTabletopLayout.of(body, hinge, h);
-          if (KeypadMetrics.minKeyTouchHeightOf(l.keypad.size) >=
-              CalcTheme.tabletopKeyTouchHeightFloor) {
+          if (acceptsHingeKeypad(
+            l.keypad,
+            CalcTheme.tabletopKeyTouchHeightFloor,
+          )) {
             return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
           }
         case ScreenArrangement.stacked || ScreenArrangement.split:
@@ -880,16 +905,18 @@ class _Body extends ConsumerWidget {
         keypad = hingeLayout.keypad;
         settings = hingeLayout.settings;
         drawn = arrangement;
-      // 접힘선 기준 배치를 쓸 수 없으면(키가 터치 하한보다 낮음, 호출 측 불일치) 위아래 배치로 그린다.
+      // 접힘선 기준 배치를 쓸 수 없으면(키가 너무 작음, 호출 측 불일치) 위아래 배치로 그린다.
       case ScreenArrangement.stacked ||
           ScreenArrangement.hingeSplit ||
           ScreenArrangement.hingeStacked:
-        final stacked = _stackedRects(body);
-        // 짧은 창 (#38): 위아래 배치의 키가 터치 하한보다 낮으면 좌우 분할의 키가 더 클 때 좌우 분할로 그린다.
-        // 접힘선이 있으면 쓰지 않는다 — 좌우 분할이 접힘선을 무시하고 나눈다.
-        final shortWindow = hinge == null
-            ? _shortWindowSplit(body, handedness, stacked.keypad)
-            : null;
+        // 짧은 창 (#38): 좌우 분할의 키가 더 크면 좌우 분할로 그린다. 접힘선 기준 배치를 쓸 수 없어 위아래
+        // 배치로 대체하는 화면에도 적용한다 — 위아래 배치도 접힘선을 가로지른다(#38 R1).
+        final shortWindow = _shortWindowSplit(
+          body,
+          handedness,
+          stackedTouch,
+          smallWindow: smallWindow,
+        );
         if (shortWindow != null) {
           lcd = shortWindow.lcd;
           keypad = shortWindow.keypad;
@@ -902,7 +929,11 @@ class _Body extends ConsumerWidget {
         }
     }
     // 그린 배치의 키도 쓸 수 없을 만큼 작으면(#38) 계산기 대신 안내를 띄운다. LCD·키패드·띠·설정 버튼은
-    // 트리에 남겨(보이지 않게) 창을 다시 키우면 상태 그대로 돌아온다.
+    // 트리에 남겨(보이지 않게) 창을 다시 키우면 상태 그대로 돌아온다. 숨긴 동안은 터치·키보드 포커스·의미
+    // 트리에서 빠진다(`Visibility`). 키를 누른 채 창이 줄면 그 키의 자동 반복은 손을 뗄 때까지 이어진다 —
+    // 드문 경우라 따로 멈추지 않는다.
+    // TODO(#18): 안내 중에도 아래 광고 슬롯은 남는다. 배너를 연결할 때 안내 화면에서는 광고를 싣지 않게 하고
+    // (내용 없는 화면의 광고), 적응형 배너 높이가 본체 높이·안내 기준을 바꾸는 것도 함께 확인한다.
     final tooSmall =
         KeypadMetrics.minKeyTouchHeightOf(keypad.size) <
         CalcTheme.keyTouchHeightUsableMin;
@@ -989,16 +1020,24 @@ class _Body extends ConsumerWidget {
     return (lcd: lcd, keypad: keypad);
   }
 
-  /// 짧은 창에서 위아래 배치 대신 쓸 좌우 분할 배치 (#38). 위아래 배치 키패드 영역([stackedKeypad])의 키가
-  /// [CalcTheme.keyTouchHeightFloor] 이상이거나 좌우 분할의 키가 더 크지 않으면 `null`(위아래 배치 그대로).
-  /// 접힘선이 없을 때만 부른다 — 이때 좌우 분할 키패드 크기는 손잡이와 무관하다.
+  /// 짧은 창에서 위아래 배치 대신 쓸 좌우 분할 배치 (#38). 위아래 배치의 키([stackedTouch])보다 좌우 분할의
+  /// 키가 크지 않으면 `null`(위아래 배치 그대로). 비교하는 창은 둘이다([CalcTheme] "짧은 창" 절).
+  /// - [smallWindow]: 짧은 변 600dp 미만 창 — 키 크기와 무관하게 늘 비교한다(#38 R1). 두 배치의 키 크기는
+  ///   창 크기에 따라 연속으로 변하므로 큰 쪽을 고르면 창을 키울 때 키가 줄지 않는다. 28dp 미만일 때만 비교하면
+  ///   가로 창의 높이를 늘릴 때 좌우 → 위아래(키가 31% 줄어듦, 844×548 → 549) → 좌우(짧은 변 600dp부터
+  ///   `FormFactor`가 좌우 분할)로 튄다. 세로 폰은 좌우 분할이 늘 더 작아 그대로다.
+  /// - 그 밖의 창(접힘선 기준 배치를 쓸 수 없어 위아래 배치로 대체한 대화면 등): 위아래 배치의 키가
+  ///   [CalcTheme.keyTouchHeightFloor]보다 낮을 때만 비교한다.
+  /// 좌우 분할(접힘선 없음) 키패드 크기는 손잡이와 무관하다.
   static CalcSplitLayout? _shortWindowSplit(
     Size body,
     Handedness handedness,
-    Rect stackedKeypad,
-  ) {
-    final stackedTouch = KeypadMetrics.minKeyTouchHeightOf(stackedKeypad.size);
-    if (stackedTouch >= CalcTheme.keyTouchHeightFloor) return null;
+    double stackedTouch, {
+    required bool smallWindow,
+  }) {
+    if (!smallWindow && stackedTouch >= CalcTheme.keyTouchHeightFloor) {
+      return null;
+    }
     final split = CalcSplitLayout.of(body, handedness);
     return KeypadMetrics.minKeyTouchHeightOf(split.keypad.size) > stackedTouch
         ? split
@@ -1009,7 +1048,8 @@ class _Body extends ConsumerWidget {
 /// 창이 너무 작아 키패드를 쓸 수 없다는 안내 (#38) — 본체(위쪽 화면 여백 포함) 전체를 덮는다.
 ///
 /// 그린 배치의 키가 [CalcTheme.keyTouchHeightUsableMin]보다 낮을 때 [CalculatorScreen]이 계산기 대신 띄운다.
-/// 아이콘과 문구는 본체 폭에서 줄을 바꾸고, 높이가 모자라면 통째로 줄여 어떤 크기에서도 넘치지 않는다.
+/// 아이콘과 문구는 본체 폭에서 줄을 바꾸고 본체 가운데에 둔다. 높이가 모자라면 줄이지 않고 스크롤한다 — 줄이면
+/// 큰 글자 배율을 쓰는 사용자의 글자가 되돌려진다(#38 R1).
 /// 나타날 때 스크린리더가 읽도록 liveRegion으로 둔다. 터치·입력은 받지 않는다.
 @visibleForTesting
 class WindowTooSmallNotice extends StatelessWidget {
@@ -1029,35 +1069,32 @@ class WindowTooSmallNotice extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           const padding = CalcTheme.windowTooSmallPadding;
-          final width = constraints.maxWidth.isFinite
-              ? math.max(0.0, constraints.maxWidth - 2 * padding)
+          final minHeight = constraints.maxHeight.isFinite
+              ? math.max(0.0, constraints.maxHeight - 2 * padding)
               : 0.0;
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(padding),
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SizedBox(
-                  width: width,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.open_in_full,
-                        size: CalcTheme.windowTooSmallIconSize,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minHeight),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.open_in_full,
+                      size: CalcTheme.windowTooSmallIconSize,
+                      color: color,
+                    ),
+                    const SizedBox(height: CalcTheme.windowTooSmallPadding),
+                    Text(
+                      strings.windowTooSmall,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
                         color: color,
+                        fontSize: CalcTheme.windowTooSmallFontSize,
                       ),
-                      const SizedBox(height: CalcTheme.windowTooSmallPadding),
-                      Text(
-                        strings.windowTooSmall,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: CalcTheme.windowTooSmallFontSize,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

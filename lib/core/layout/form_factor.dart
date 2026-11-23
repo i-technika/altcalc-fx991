@@ -260,9 +260,9 @@ abstract final class FormFactor {
   ///    좌우 분할, 아니면 위아래 배치다. 방향 고정이 무시된 태블릿 세로 화면이나 분할 화면의 좁은 창은
   ///    위아래 배치가 된다.
   ///
-  /// 위아래 배치를 돌려받은 창이라도 키가 작아지는 짧은 창(분할 화면·팝업 창)이면, 화면이 인셋·광고 슬롯을 뺀
-  /// 본체 크기로 좌우 분할과 비교해 키가 더 큰 쪽으로 그린다 (`CalculatorScreen`, #38). 접힘선 기준 배치를 쓸 수
-  /// 없을 때 위아래 배치로 대체하는 것과 같이, 본체 크기가 필요한 판정은 화면이 한다.
+  /// 위아래 배치를 돌려받은 창이라도 짧은 변이 [largeScreenMinShortestSide] 미만이면(분할 화면·팝업 창 등), 화면이
+  /// 인셋·광고 슬롯을 뺀 본체 크기로 좌우 분할과 비교해 키가 더 큰 쪽으로 그린다 (`CalculatorScreen`, #38). 접힘선
+  /// 기준 배치를 쓸 수 없을 때 위아래 배치로 대체하는 것과 같이, 본체 크기가 필요한 판정은 화면이 한다.
   static ScreenArrangement arrangementOf(
     Size windowSize,
     Iterable<DisplayFeature> features, {

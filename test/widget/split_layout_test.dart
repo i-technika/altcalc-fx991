@@ -338,9 +338,9 @@ void main() {
       Size(430, 932),
       Size(440, 956), // iPhone Pro Max
       Size(344, 882),
-      // 짧은 변 600dp 미만의 넓은 창 — 폭이 480을 넘어 상한에 걸리고, 키패드는 높이에 묶여 LCD보다 좁다.
-      // (키가 28dp 이상이라 짧은 창이 아니다 — 가로 폰처럼 더 낮은 창은 좌우 분할이 된다, #38)
-      Size(764, 590),
+      // 폭이 480을 넘는 정사각형 창 — 상한에 걸리고, 키패드는 높이에 묶여 LCD보다 좁다.
+      // (짧은 변 600dp 미만 창은 키가 큰 쪽인 좌우 분할이 되기 쉬워(#38) 짧은 변 600의 정사각형 창을 쓴다)
+      Size(600, 600),
     ]) {
       testWidgets('${size.width}×${size.height}: LCD 폭 = min(본체 폭, 480)', (
         tester,
@@ -357,16 +357,16 @@ void main() {
     }
 
     testWidgets('좌우 인셋이 비대칭이면 창이 아니라 본체 가운데에 키패드와 함께 정렬한다', (tester) async {
-      // 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 756 (폭 748). 가로 폰(844×390)처럼 낮은 창은 짧은 창 규칙으로
-      // 좌우 분할이 되므로(#38) 위아래 배치로 남는 낮고 넓은 창을 쓴다.
-      const size = Size(812, 590);
+      // 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 544 (폭 536). 가로 폰(844×390)처럼 짧은 변 600dp 미만인 창은 짧은 창
+      // 규칙으로 좌우 분할이 되므로(#38) 위아래 배치로 남는 짧은 변 600의 정사각형 창을 쓴다.
+      const size = Size(600, 600);
       const padding = EdgeInsets.only(right: 48);
       await _pump(tester, size: size, padding: padding);
       expect(tester.takeException(), isNull);
       expect(isStackedArrangement(tester), isTrue);
       final lcd = tester.getRect(_lcd);
       final keypad = tester.getRect(_keypad);
-      const bodyCenter = (8 + (812 - 48 - 8)) / 2;
+      const bodyCenter = (8 + (600 - 48 - 8)) / 2;
       expect(lcd.width, moreOrLessEquals(CalcTheme.screenLcdMaxWidth));
       expect(lcd.center.dx, moreOrLessEquals(bodyCenter));
       expect(keypad.center.dx, moreOrLessEquals(bodyCenter));

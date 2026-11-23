@@ -1,5 +1,7 @@
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -18,6 +20,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dar
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/bundled_fonts.dart';
 import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
 
@@ -293,23 +296,86 @@ void main() {
         greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
       );
     });
+  });
 
-    testWidgets('접힘선이 창을 가로지르면 짧은 창 규칙을 쓰지 않는다 (좌우 분할이 접힘선을 무시하게 된다)', (
+  group('접힘선이 있는 짧은 창 (#38 R1)', () {
+    // 세로 접힘선: 접힘선 기준 좌우 배치가 일반 하한(28dp) 미만이어도 위아래 배치보다 키가 크면 쓴다.
+    for (final (size, padding, hingeX) in const [
+      (
+        Size(640, 360),
+        EdgeInsets.only(top: 24),
+        320.0,
+      ), // 키 22.8dp (위아래 11.6dp → 전에는 안내)
+      (Size(700, 420), EdgeInsets.only(top: 24, bottom: 24), 350.0), // 하한 바로 아래
+    ]) {
+      for (final handedness in Handedness.values) {
+        testWidgets(
+          '${size.width}×${size.height} 세로 접힘선·${handedness.name}: 접힘선 기준 좌우 배치',
+          (tester) async {
+            final fold = DisplayFeature(
+              bounds: Rect.fromLTWH(hingeX, 0, 0, size.height),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            );
+            await _pump(
+              tester,
+              size: size,
+              padding: padding,
+              handedness: handedness,
+              displayFeatures: [fold],
+            );
+            expect(tester.takeException(), isNull);
+            expect(_notice, findsNothing);
+            expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+            final drawnTouch = _lowestDrawnTouch(tester);
+            expect(drawnTouch, lessThan(CalcTheme.keyTouchHeightFloor));
+            expect(
+              drawnTouch,
+              greaterThan(_stackedTouchOf(_bodyOf(size, padding))),
+            );
+            // LCD·키패드·설정 버튼 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 키패드는 손 쪽 절반이다.
+            const m = CalcTheme.screenHingeMargin - 0.01;
+            for (final rect in [
+              tester.getRect(_lcd),
+              tester.getRect(_keypad),
+              tester.getRect(_settings),
+            ]) {
+              expect(
+                rect.right <= hingeX - m || rect.left >= hingeX + m,
+                isTrue,
+                reason: '$rect',
+              );
+            }
+            final keypad = tester.getRect(_keypad);
+            expect(
+              handedness.keypadOnRight
+                  ? keypad.left >= hingeX
+                  : keypad.right <= hingeX,
+              isTrue,
+            );
+          },
+        );
+      }
+    }
+
+    testWidgets('접힘선 기준 배치를 쓰지 않는 펼친 가로 접힘선이어도 짧은 창이면 좌우 분할과 비교한다', (
       tester,
     ) async {
-      // 펼친 폭 0 가로 접힘선 — 접힘선 기준 배치 조건(양쪽 280dp)에 맞지 않아 위아래 배치로 둔다.
+      // 펼친 폭 0 가로 접힘선은 접힘선 기준 배치 조건(양쪽 280dp)에 맞지 않아 위아래 배치를 받는다. 위아래 배치도
+      // 접힘선을 가로지르므로, 키가 더 큰 좌우 분할(전에는 키패드 237×190 → 402×322)로 그린다.
+      const size = Size(844, 390);
       const fold = DisplayFeature(
         bounds: Rect.fromLTWH(0, 195, 844, 0),
         type: DisplayFeatureType.fold,
         state: DisplayFeatureState.postureFlat,
       );
-      await _pump(
-        tester,
-        size: const Size(844, 390),
-        displayFeatures: const [fold],
-      );
+      await _pump(tester, size: size, displayFeatures: const [fold]);
       expect(tester.takeException(), isNull);
-      expect(isStackedArrangement(tester), isTrue);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(
+        _lowestDrawnTouch(tester),
+        greaterThan(_stackedTouchOf(_bodyOf(size, EdgeInsets.zero))),
+      );
     });
   });
 
@@ -380,7 +446,12 @@ void main() {
             expect(_settings, findsNothing);
             final text = find.text(const EnSettingsStrings().windowTooSmall);
             expect(text, findsOneWidget);
-            // 안내는 인셋·광고 슬롯을 뺀 본체 영역(위쪽 화면 여백 포함) 안에 있다.
+            // 글자 배율을 되돌리지 않는다(줄이지 않고 스크롤한다).
+            expect(
+              tester.renderObject<RenderParagraph>(text).textScaler.scale(10),
+              moreOrLessEquals(10 * textScale),
+            );
+            // 안내(스크롤 영역)는 인셋·광고 슬롯을 뺀 본체 영역(위쪽 화면 여백 포함)과 같다.
             final area = Rect.fromLTRB(
               padding.left + CalcTheme.screenPadding,
               padding.top,
@@ -390,12 +461,22 @@ void main() {
                   CalcTheme.adSlotSafetyMargin -
                   padding.bottom,
             );
-            for (final part in [text, find.byIcon(Icons.open_in_full)]) {
+            final notice = tester.getRect(_notice);
+            expect(notice.left, moreOrLessEquals(area.left));
+            expect(notice.top, moreOrLessEquals(area.top));
+            expect(notice.right, moreOrLessEquals(area.right));
+            expect(notice.bottom, moreOrLessEquals(area.bottom));
+            // 아이콘·문구는 본체 폭 안에 있고, 스크롤하면 끝까지 본체 안에 보인다.
+            for (final part in [find.byIcon(Icons.open_in_full), text]) {
+              await tester.ensureVisible(part);
+              await tester.pumpAndSettle();
               final r = tester.getRect(part);
               expect(r.left, greaterThanOrEqualTo(area.left - 0.01));
-              expect(r.top, greaterThanOrEqualTo(area.top - 0.01));
               expect(r.right, lessThanOrEqualTo(area.right + 0.01));
-              expect(r.bottom, lessThanOrEqualTo(area.bottom + 0.01));
+              if (r.height <= area.height) {
+                expect(r.top, greaterThanOrEqualTo(area.top - 0.01));
+                expect(r.bottom, lessThanOrEqualTo(area.bottom + 0.01));
+              }
             }
           },
         );
@@ -467,6 +548,93 @@ void main() {
       }
       expect(container.read(calcProvider), before);
       expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('키보드 포커스가 있던 설정 버튼은 안내 중 포커스를 잃는다 (숨긴 계산기는 포커스 대상이 아니다)', (
+      tester,
+    ) async {
+      final container = await _pump(tester, size: const Size(411, 600));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      bool focusInSettings() {
+        final focused = FocusManager.instance.primaryFocus?.context;
+        if (focused == null) return false;
+        return find
+            .descendant(
+              of: find.byType(SettingsButton, skipOffstage: false),
+              matching: find.byElementPredicate(
+                (e) => identical(e, focused),
+                skipOffstage: false,
+              ),
+              skipOffstage: false,
+            )
+            .evaluate()
+            .isNotEmpty;
+      }
+
+      expect(focusInSettings(), isTrue);
+      await _pump(tester, size: const Size(320, 240), container: container);
+      expect(_notice, findsOneWidget);
+      expect(focusInSettings(), isFalse);
+      // 안내 중 Tab을 눌러도 숨긴 설정 버튼으로 가지 않는다.
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(focusInSettings(), isFalse);
+    });
+  });
+
+  group('창 크기를 키울 때 키가 줄지 않는다 (#38 R1)', () {
+    // 두 배치 중 키가 큰 쪽을 고르므로 짧은 변 600dp 미만에서는 높이를 늘려도 키가 줄지 않는다. (600dp부터는
+    // 광고 슬롯이 50 → 60dp로 커지는 이 이슈 전부터의 경계가 있어 범위에서 뺀다.)
+    for (final width in const [844.0, 640.0, 560.0, 411.0]) {
+      testWidgets('폭 $width: 높이 260 → 599dp', (tester) async {
+        var previous = 0.0;
+        for (var height = 260.0; height < 600; height += 3) {
+          final size = Size(width, height);
+          await _pump(tester, size: size);
+          if (_notice.evaluate().isNotEmpty) {
+            expect(previous, 0, reason: '$size: 계산기를 그린 뒤 다시 안내가 나왔다');
+            continue;
+          }
+          final touch = KeypadMetrics.minKeyTouchHeightOf(
+            tester.getSize(_keypad),
+          );
+          expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
+          previous = touch;
+        }
+        expect(previous, greaterThan(0));
+      });
+    }
+  });
+
+  // 실제 글꼴로 재는 그룹이라 마지막에 둔다(번들 글꼴은 로드한 뒤 이 파일 안에서 계속 유지된다).
+  group('글자 하한: 안내가 나오지 않는 창의 키 글자 (실제 글꼴, #38 R1)', () {
+    setUpAll(loadBundledFonts);
+
+    testWidgets('창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (CalcTheme "짧은 창" 절의 실측 하한)', (
+      tester,
+    ) async {
+      var nearThreshold = false;
+      for (var w = 220.0; w <= 900; w += 40) {
+        for (var h = 200.0; h <= 600; h += 20) {
+          final size = Size(w, h);
+          await _pump(tester, size: size);
+          if (_notice.evaluate().isNotEmpty) continue;
+          final keypad = tester.getSize(_keypad);
+          final m = KeypadMetrics.compute(keypad, TextScaler.noScaling);
+          expect(
+            m.mainLabelFontSize,
+            greaterThanOrEqualTo(4.8),
+            reason: '$size',
+          );
+          expect(m.legendFontSize, greaterThanOrEqualTo(3.1), reason: '$size');
+          if (KeypadMetrics.minKeyTouchHeightOf(keypad) < 17) {
+            nearThreshold = true;
+          }
+        }
+      }
+      // 안내 직전 크기가 격자에 있어야 이 하한이 의미 있다.
+      expect(nearThreshold, isTrue);
     });
   });
 }
