@@ -11,7 +11,7 @@ import '../support/workflows.dart';
 /// - 잡은 R8이 도는 릴리스 APK를 빌드한 뒤 검사 스크립트를 그 APK와 mapping.txt로 돌린다.
 /// - 규칙 파일(`.github/api-isolation-rules`)의 allow가 Kotlin 소스의 격리 object와 맞는다:
 ///   guard-api 이상의 `object Api<N>`마다 그 object와 합성 람다가 허용되고, allow는 소스에 있는 격리 object와
-///   그 합성 클래스(`$$*`), R8 API 아웃라인 glob만 쓴다(넓은 glob으로 검사를 무력화하지 않게).
+///   그 안의 클래스(`$*` — 합성 람다·익명 object·중첩 클래스), R8 API 아웃라인 glob만 쓴다(넓은 glob으로 검사를 무력화하지 않게).
 ///
 /// 스크립트 동작은 `api_isolation_script_test.dart`가, 실제 R8 결과물과의 대조는 CI 실행이 확인한다.
 
@@ -156,15 +156,15 @@ void main() {
   }
 
   group('규칙 파일', () {
-    test('allow는 격리 object·그 합성 클래스·R8 아웃라인 모양만 쓴다', () {
+    test('allow는 격리 object·그 안의 클래스·R8 아웃라인 모양만 쓴다', () {
       // `allow *`·`allow *Handler*`처럼 넓히면 격리가 깨져도 통과한다 — 넓혀야 하면 이 테스트와 README를 함께 고친다
       final objects = _isolationObjects().keys.toSet();
       for (final allow in _rules().allows) {
         final ok =
             allow == r'*$$ExternalSyntheticApiModelOutline*' ||
             objects.contains(allow) ||
-            (allow.endsWith(r'$$*') &&
-                objects.contains(allow.substring(0, allow.length - 3)));
+            (allow.endsWith(r'$*') &&
+                objects.contains(allow.substring(0, allow.length - 2)));
         expect(ok, isTrue, reason: '허용 모양이 아니다: "allow $allow"');
       }
     });
@@ -195,8 +195,8 @@ void main() {
         );
         expect(
           rules.allows,
-          contains('$name\$\$*'),
-          reason: '$_rulesPath에 "allow $name\$\$*"(합성 람다)가 없다',
+          contains('$name\$*'),
+          reason: '$_rulesPath에 "allow $name\$*"(격리 object 안의 클래스)가 없다',
         );
       }
     });

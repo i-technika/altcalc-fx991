@@ -389,16 +389,19 @@ bash .github/scripts/verify-api-isolation.sh \
   - 이 참조들이 어느 dex 클래스에 있는지 본다. 클래스 이름은 R8의 `mapping.txt`로 원래 이름으로 되돌린다.
     `mapping.txt`가 이 APK의 빌드 것인지는 R8 빌드 id(`# pg_map_id`와 dex 표식의 `pg-map-id`)로 먼저 확인한다.
   - 검사할 API 목록을 손으로 적지 않으므로 새 API 36 코드를 더해도 자동으로 검사 대상이 된다.
-- 허용 위치(`.github/api-isolation-rules`의 `allow`): 격리 object와 그 합성 클래스(`$$*` — 리스너를 구현한 람다 등),
-  R8 API 모델링이 새 API 호출을 옮겨 담는 아웃라인 클래스(`*$$ExternalSyntheticApiModelOutline*` — Flutter 엔진 것과 합쳐지기도 한다).
-  R8이 프레임워크 클래스 이름 그대로 넣는 API 스텁(대응표에 R8 합성 표시가 있다)도 허용한다.
-  출력에 클래스별 참조 목록이 `위반`·`허용`·`허용(R8 스텁)`으로 나온다.
-- 새 API 수준 전용 코드를 더할 때: 같은 방식의 `object Api<N>`으로 가두고 규칙 파일에 그 object와 `<object>$$*`를 더한다.
+- 허용 위치(`.github/api-isolation-rules`의 `allow`):
+  - 격리 object와 그 안의 클래스(`$*` — 리스너를 구현한 합성 람다, 익명 object, 중첩 클래스). 그 클래스들을 격리 object 밖에서
+    만들거나 쓰면 새 타입을 구현·상속한 클래스로서 따로 잡힌다.
+  - R8 API 모델링이 새 API 호출을 옮겨 담는 아웃라인 클래스(`*$$ExternalSyntheticApiModelOutline*` — Flutter 엔진 것과 합쳐지기도 한다).
+  - R8이 새 프레임워크 클래스를 대신해 dex에 넣는 API 스텁(프레임워크 이름 그대로이고 대응표에 R8 합성 표시가 있다)은
+    낮은 API에서도 해석·로드되므로(스텁의 목적), 그 타입은 검사 대상에서 빼고 그 스텁을 상속·구현한 클래스도 검사하지 않는다.
+  - 출력에 클래스별 참조 목록이 `위반`·`허용`으로 나온다.
+- 새 API 수준 전용 코드를 더할 때: 같은 방식의 `object Api<N>`으로 가두고 규칙 파일에 그 object와 `<object>$*`를 더한다.
   - `test/unit/ci_api_isolation_test.dart`가 소스의 격리 object(`Api<N>`·`Api<N>Impl`, N ≥ guard-api)와 규칙의 allow가 맞는지,
-    allow가 그 모양(격리 object, 그 `$$*`, 아웃라인 glob)만 쓰는지 확인한다. `allow *` 같은 넓은 glob은 막는다.
+    allow가 그 모양(격리 object, 그 `$*`, 아웃라인 glob)만 쓰는지 확인한다. `allow *` 같은 넓은 glob은 막는다.
   - guard-api보다 낮은 수준 전용 코드를 가뒀으면 guard-api를 낮춘다. 낮추면 Flutter 엔진·androidx의 참조도 검사 대상이 된다.
-    실측(#109, Flutter 3.50): guard-api 35는 허용 밖 클래스 0개, 34는 5개(Flutter 엔진의 `AccessibilityBridge$Api34Impl`과 그 람다,
-    뒤로 가기 제스처 콜백을 쓰는 `FlutterActivity`·`FlutterActivity$1`·`BackGestureChannel`), 25는 48개였다.
+    실측(#109, Flutter 3.50): guard-api 35는 허용 밖 클래스 0개, 34는 4개(Flutter 엔진의 `AccessibilityBridge$Api34Impl`과 그 람다,
+    뒤로 가기 제스처의 `FlutterActivity$1`·`BackGestureChannel`), 25는 45개였다.
 - 실패 메시지가 "위반 <클래스>"이면 그 클래스가 새 API를 직접 참조한다. 흔한 원인은 `@DoNotInline` 빠짐(격리 object 메서드가 바깥 클래스로
   인라인됨)과 바깥 클래스에서 새 타입의 람다·캐스트를 쓴 경우다. 둘 다 #109에서 일부러 만들어 이 검사가 실패하는 것을 확인했다.
 - 검사가 헛돌지 않게 다음 경우에도 실패한다:
@@ -409,6 +412,9 @@ bash .github/scripts/verify-api-isolation.sh \
   (예: API 36에 `AutoCloseable`을 구현하게 된 `ExecutorService.close()`)는 메서드로는 못 잡는다.
   보통은 R8이 그런 호출을 API 아웃라인으로 옮기고, 새 타입이 들어간 시그니처·캐스트는 타입으로 잡힌다.
   아웃라인 클래스 안은 들여다보지 않는다(R8이 API 수준별로 나눠 만드는 합성 클래스다).
+- API 목록은 설치된 가장 높은 플랫폼의 것이라 환경마다 다를 수 있다(#109 때 로컬 `android-37.0`, CI 러너 `android-37.2`).
+  guard-api 이상 항목을 넓게 잡는 쪽이다. 러너 이미지가 바뀌어 새 마이너 API 항목이 들어와도 보통은 결과가 같다.
+  CI만 결과가 다르면, 출력 첫머리의 `API 목록:` 줄로 어느 플랫폼을 썼는지 본다.
 - CI: Sub-issue CI와 Milestone CI의 `Android Release API Isolation` 잡(두 잡의 일치는 `test/unit/ci_api_isolation_test.dart`가 지킨다).
   - 스크립트 동작은 `test/unit/api_isolation_script_test.dart`가 가짜 SDK(build-tools·플랫폼)와 실제 빌드에서 옮긴 dexdump·mapping 표본으로 검사한다.
   - 첫 실행(#109)은 3분 36초 걸렸다. 그중 릴리스 빌드가 3분이고, 빌드 안에서 NDK·CMake 내려받기가 약 1분 30초다.

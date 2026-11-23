@@ -11,15 +11,17 @@
 #   - guard-api는 격리가 필요한 가장 낮은 수준이다. 그보다 낮은 수준 전용 코드를 격리했으면 낮춘다
 #     낮추면 Flutter 엔진·라이브러리의 참조도 검사 대상이 된다. 검사를 돌려 보고, 라이브러리 클래스를 허용해야 하면
 #     아래 allow 모양 제한(test/unit/ci_api_isolation_test.dart)과 README도 함께 고친다.
-#   - 격리 object와 그 합성 클래스(`<object 이름>$$*` — R8·D8이 만드는 `$$ExternalSyntheticLambda<N>` 등)를 allow에 더한다.
-#   - allow 모양은 이 셋(격리 object, 그 `$$*`, 아래 아웃라인 glob)만 쓴다. `allow *`처럼 넓히면
+#   - 격리 object와 그 안의 클래스(`<object 이름>$*` — R8·D8이 만드는 합성 람다 `$$ExternalSyntheticLambda<N>`,
+#     Kotlin 익명 object `$addListener$1`, 중첩 클래스)를 allow에 더한다. 그 클래스들을 격리 object 밖에서 쓰면
+#     새 타입을 구현·상속한 클래스로서 따로 잡힌다.
+#   - allow 모양은 이 셋(격리 object, 그 `$*`, 아래 아웃라인 glob)만 쓴다. `allow *`처럼 넓히면
 #     test/unit/ci_api_isolation_test.dart가 실패한다.
 
 guard-api 36
 
 # 고대비 텍스트 API 36 리스너·조회 (#95) — @RequiresApi(36) 중첩 object와 그 람다(리스너 구현 클래스)
 allow com.example.itechnika_altcalc_fx991.HighTextContrastStreamHandler$Api36
-allow com.example.itechnika_altcalc_fx991.HighTextContrastStreamHandler$Api36$$*
+allow com.example.itechnika_altcalc_fx991.HighTextContrastStreamHandler$Api36$*
 
 # R8 API 모델링이 새 API 호출을 옮겨 담는 아웃라인 클래스 — 호출 하나만 하는 정적 메서드 모음이라
 # 그 메서드를 부를 때(이미 SDK_INT 분기 안)만 새 API를 찾는다. R8이 여러 출처의 아웃라인을 한 클래스에 합치기도 한다.

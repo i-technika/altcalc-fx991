@@ -221,16 +221,24 @@ ALLOW=$(printf '%s\n' "${allows[@]}") GUARD=$guard awk '
   }
   # 3) dexdump 1차: 클래스마다 상위 클래스·인터페이스
   file_no == 3 {
-    if ($0 ~ /^  Class descriptor  *: '\''L/) { cls = quoted_descriptor($0); in_ifaces = 0; classes++ }
+    if ($0 ~ /^  Class descriptor  *: '\''L/) {
+      cls = quoted_descriptor($0); in_ifaces = 0; classes++
+      d = descriptor_name(cls)
+      if ((d in framework) && (!(d in original) || (d in synthesized))) stub[cls] = 1
+    }
     else if ($0 ~ /^  Superclass  *: '\''L/) supers[cls] = supers[cls] " " quoted_descriptor($0)
     else if ($0 ~ /^  Interfaces  *-/) in_ifaces = 1
     else if (in_ifaces && $0 ~ /^    #[0-9]+  *: '\''L/) supers[cls] = supers[cls] " " quoted_descriptor($0)
     else if ($0 ~ /^  [A-Z]/) in_ifaces = 0
     next
   }
-  # 1차와 2차 사이: 검사 대상 타입을 상속·구현한 dex 클래스를 검사 대상 타입에 더한다 (전이적으로)
+  # 1차와 2차 사이:
+  # - R8이 새 프레임워크 클래스를 대신해 dex에 넣은 스텁 타입은 낮은 API에서도 해석·로드되므로(스텁의 목적) 검사 대상에서 뺀다.
+  #   그 스텁을 상속·구현한 클래스도 안전하다.
+  # - 검사 대상 타입을 상속·구현한 dex 클래스를 검사 대상 타입에 더한다 (전이적으로)
   file_no == 4 && FNR == 1 {
     cls = ""
+    for (c in stub) delete types[c]
     do {
       changed = 0
       for (c in supers) {
@@ -257,8 +265,9 @@ ALLOW=$(printf '%s\n' "${allows[@]}") GUARD=$guard awk '
         q = index(substr(token, p + 2), ":")
         if (substr(token, 1, p + 1 + q) in fields) hit(substr(token, 1, p + 1 + q))
       }
-      # 멤버 참조의 시그니처 안 타입도 본다 (예: 메서드 인자·반환 타입)
-      rest_types = substr(token, p + 1)
+      # 멤버 참조의 시그니처 안 타입도 본다 (예: 메서드 인자·반환 타입, 필드 타입).
+      # 시그니처는 멤버 이름 뒤 첫 ":" 다음부터다 — 이름 안의 L(mListener, R8 이름 L 등)을 타입 시작으로 읽지 않게
+      rest_types = (length(token) > p) ? substr(token, p + 1 + index(substr(token, p + 1), ":")) : ""
       while (match(rest_types, /L[^;]+;/)) {
         type = substr(rest_types, RSTART, RLENGTH)
         rest_types = substr(rest_types, RSTART + RLENGTH)

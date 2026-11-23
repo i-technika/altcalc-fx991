@@ -83,6 +83,7 @@ com.example.app.Handler\$Api36\$\$ExternalSyntheticLambda0 -> c:
       # {"id":"com.android.tools.r8.synthesized"}
 io.flutter.view.Foo\$\$ExternalSyntheticApiModelOutline0 -> d:
 # {"id":"com.android.tools.r8.synthesized"}
+com.example.app.Back -> g:
 android.window.NewCallback -> android.window.NewCallback:
 # {"id":"com.android.tools.r8.synthesized"}
     void <clinit>() -> <clinit>
@@ -175,6 +176,9 @@ Map<String, String> _okDexes() => {
     _dexClass('Landroid/window/NewCallback;', [
       "      type          : '(Landroid/window/NewCallback;)V'",
     ]),
+    _dexClass('Lg;', [
+      '0000: check-cast v0, Landroid/window/NewCallback; // type@0130',
+    ], superclass: 'Landroid/window/NewCallback;'),
   ]),
 };
 
@@ -334,12 +338,9 @@ void main() {
         '    $_newMethod',
       ),
     );
-    expect(
-      out,
-      contains(
-        '허용(R8 스텁) android.window.NewCallback (dex android.window.NewCallback)',
-      ),
-    );
+    // R8 스텁으로 dex에 든 새 타입(NewCallback)은 낮은 API에서도 해석되므로, 그 타입을 쓰거나 상속한 클래스도 목록에 없다
+    expect(out, isNot(contains('NewCallback')));
+    expect(out, isNot(contains('com.example.app.Back')));
     expect(out, isNot(contains('위반')));
     expect(out, contains('통과'));
     // 검사 대상이 아닌 참조(오래된 메서드·필드, API 35 메서드)만 있는 바깥 클래스는 목록에 없다
@@ -367,6 +368,16 @@ void main() {
         '0000: invoke-direct {v0, v1}, $_newConstructor // method@0462',
       ],
       '배열·예외 처리 타입': ['0000: new-array v0, v1, [$_listener // type@0120'],
+      // 이름 안의 L을 타입 시작으로 읽으면 바로 뒤 타입을 놓친다 (mListener, R8이 붙이는 이름 L 등)
+      '이름에 L이 든 필드의 새 타입': [
+        '0000: iget-object v0, v1, Lb;.mListener:$_listener // field@09ee',
+      ],
+      '이름이 L인 메서드의 첫 인자 새 타입': [
+        '0000: invoke-static {v0}, Lb;.L:($_listener)V // method@1780',
+      ],
+      '이름에 L이 든 메서드의 첫 인자 새 타입': [
+        '0000: invoke-static {v0}, Lb;.addListener:(${_listener}I)V // method@1781',
+      ],
       '새 인터페이스를 구현한 합성 람다 생성 (격리 object 밖)': [
         '0000: new-instance v0, Lc; // type@057a',
         '0002: invoke-direct {v0}, Lc;.<init>:()V // method@1778',
