@@ -44,6 +44,7 @@ void main() => runApp(
 /// [displayFeatures]는 폴더블의 접힘선(힌지) 등 화면 특징이다(#51).
 ///
 /// [foldable] 프리셋(폴더블 내부 화면)은 조작 패널에서 자세(펼침/반 접힘)와 방향(세로/가로)을 고를 수 있다(#93).
+/// 앱이 세로로 고정하는 화면(Galaxy Z Flip 내부 등, [orientations])은 자세만 고른다(#104).
 /// 이때 [size]·[padding]·[systemGestureInsets]·[displayFeatures]는 기기를 **기본 방향**([naturalOrientation])으로
 /// 들고 **펼친** 상태의 값이고, 고른 자세·방향의 화면은 [posed]가 계산한다. 자세·방향마다 프리셋을 복제하지 않는
 /// 이유: 기기 하나의 값이 한 곳에만 있어야 돌린 화면의 크기·접힘선이 원래 값과 어긋나지 않는다.
@@ -112,10 +113,33 @@ class PreviewDevice {
       ? PreviewOrientation.landscape
       : PreviewOrientation.portrait;
 
+  /// 앱 화면이 돌 수 있는 방향 (#104). 첫 항목이 [naturalOrientation]이다.
+  ///
+  /// 폴더블 프리셋은 앱의 방향 정책([FormFactor.orientationPolicyOf], 폴더블 기기·프리셋 크기 = 물리 화면 크기)을 따른다.
+  /// 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인 화면(Flip 내부)은 앱이 세로로 고정하므로 세로뿐이고,
+  /// Fold 계열 내부 화면은 네 방향을 허용하므로 세로·가로 둘 다다. 폴더블이 아니면 고를 수 없으므로 기본 방향뿐이다.
+  List<PreviewOrientation> get orientations {
+    final base = this.base;
+    final natural = base.naturalOrientation;
+    if (!base.foldable) return [natural];
+    final allowed = switch (FormFactor.orientationPolicyOf(
+      DeviceKind.foldable,
+      base.size,
+    )) {
+      OrientationPolicy.portrait => const [PreviewOrientation.portrait],
+      OrientationPolicy.landscape => const [PreviewOrientation.landscape],
+      OrientationPolicy.any => PreviewOrientation.values,
+    };
+    assert(allowed.contains(natural), '${base.name}: 기본 방향을 앱이 허용하지 않는다');
+    return [natural, ...allowed.where((o) => o != natural)];
+  }
+
   /// [posture] 자세로 [orientation] 방향으로 든 화면 (#93). [foldable]이 아니면 그대로 돌려준다.
   /// 항상 [base](기본 방향으로 펼친 프리셋) 기준으로 계산하므로, 자세·방향을 적용한 화면에 다시 불러도
   /// 결과는 [posture]·[orientation] 그대로다(겹쳐 돌지 않는다). 기본 방향으로 펼친 상태면 [base] 자신이다.
   ///
+  /// - 앱이 돌지 않는 방향([orientations]에 없음)은 기본 방향으로 본다 (#104) — 세로 고정 앱은 기기를 돌려도
+  ///   화면이 세로 그대로다. 조작 패널은 그 방향을 고를 수 없게 한다.
   /// - 방향이 기본 방향과 다르면 기기를 반시계 방향으로 90° 돌린 화면이다: 크기의 가로·세로가 바뀌고,
   ///   화면 특징 영역은 기본 방향 화면의 위 가장자리가 왼쪽 가장자리가 되도록 옮긴다(가운데 접힘선은 돌리는
   ///   방향과 상관없이 같은 자리다).
@@ -130,7 +154,9 @@ class PreviewDevice {
   ) {
     final base = this.base;
     if (!base.foldable) return base;
-    final rotate = orientation != base.naturalOrientation;
+    final rotate =
+        orientation != base.naturalOrientation &&
+        base.orientations.contains(orientation);
     if (!rotate && posture == PreviewFoldPosture.flat) return base;
     final w = base.size.width;
     return PreviewDevice._posed(
@@ -221,6 +247,21 @@ const DisplayFeature previewLandscapeFoldInnerFold = DisplayFeature(
   state: DisplayFeatureState.postureFlat,
 );
 
+/// Galaxy Z Flip5·Flip6 내부 화면(411×1006, 세로)을 펼쳤을 때의 접힘선 근사값 (#104).
+///
+/// 물리 화면 1080×2640 px 가운데(y=1320 px)를 왼쪽에서 오른쪽까지 가로지르는 가로 접힘선을 밀도 2.625(420dpi,
+/// 기본 화면 크기 설정) 가정으로 dp로 바꾼 값이다(화면 411.43×1005.71, 접힘선 y=502.86 — 프리셋 크기를 정수로
+/// 반올림하고 접힘선은 그 가운데 503으로 맞췄다). 보고 값·밀도 모두 실기기 미확인이다.
+const DisplayFeature previewFlipInnerFold = DisplayFeature(
+  bounds: Rect.fromLTWH(0, 503, 411, 0),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
+);
+
+/// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
+/// 높게 잡았다. 실기기 미확인이다.
+const double _flipStatusBarHeight = 32;
+
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
 const List<PreviewDevice> previewDevices = [
   // iPhone 14·13 (상태 표시줄 47, 홈 표시줄 34)
@@ -268,6 +309,21 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
     displayFeatures: [previewLandscapeFoldInnerFold],
+    foldable: true,
+  ),
+  // Galaxy Z Flip 내부, 제스처 내비게이션 (#104). 짧은 변이 600dp 미만이라 앱이 세로로 고정하므로 자세만 고른다.
+  // 펼치면 가로 접힘선을 배치에 쓰지 않는 위아래 배치, 반 접으면(Flex 모드) 테이블톱 배치다.
+  PreviewDevice(
+    '플립형 폴더블 내부',
+    Size(411, 1006),
+    padding: EdgeInsets.only(top: _flipStatusBarHeight, bottom: 24),
+    systemGestureInsets: EdgeInsets.fromLTRB(
+      previewBackGestureWidth,
+      _flipStatusBarHeight,
+      previewBackGestureWidth,
+      24,
+    ),
+    displayFeatures: [previewFlipInnerFold],
     foldable: true,
   ),
   // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
@@ -698,8 +754,8 @@ Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
 /// ([FormFactor.hingeOf]) 하나만 보고, 양쪽 패널 길이([FormFactor.hingeMinPanelExtent])와 가로 접힘선의
 /// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
 /// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
-/// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을 넘어
-/// 되돌아가지 않는다(테스트가 조합마다 확인). #80에서 하한이나 테이블톱 배치를 바꾸면 이 표시가 실제 배치와
+/// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93, Flip 내부 #104)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을
+/// 넘어 되돌아가지 않는다(테스트가 조합마다 확인). #80에서 하한이나 테이블톱 배치를 바꾸면 이 표시가 실제 배치와
 /// 어긋날 수 있다(주황인데 배치는 접힘선을 가로지름) — 그때 조합 테스트가 실패한다.
 DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
   final used = FormFactor.hingeOf(screen, features);
@@ -987,14 +1043,29 @@ class _ControlPanel extends StatelessWidget {
           onChanged: onPostureChanged,
         ),
         const SizedBox(height: 4),
-        _choiceRow<PreviewOrientation>(
-          label: '방향',
-          keyPrefix: 'preview-fold-orientation',
-          values: PreviewOrientation.values,
-          labelOf: (o) => o.label,
-          selected: orientation,
-          onChanged: onOrientationChanged,
-        ),
+        // 앱이 세로로 고정하는 화면(Flip 내부, #104)은 돌린 화면이 실제로 나오지 않으므로 고를 수 없게 하고 이유를 적는다.
+        if (device.orientations.length > 1)
+          _choiceRow<PreviewOrientation>(
+            label: '방향',
+            keyPrefix: 'preview-fold-orientation',
+            values: device.orientations,
+            labelOf: (o) => o.label,
+            selected: orientation,
+            onChanged: onOrientationChanged,
+          )
+        else
+          Row(
+            children: [
+              const SizedBox(width: 40, child: Text('방향', style: _label)),
+              Expanded(
+                child: Text(
+                  '${device.orientations.single.label} 고정 (앱이 돌지 않는 화면 크기)',
+                  key: const ValueKey('preview-fold-orientation-locked'),
+                  style: _label,
+                ),
+              ),
+            ],
+          ),
       ],
       const SizedBox(height: 8),
       const Text('시스템 글자 배율', style: _label),
