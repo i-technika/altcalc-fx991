@@ -31,14 +31,27 @@ import 'handedness_dialog.dart';
 /// 예외는 아래 "좁은 하위 화면").
 /// Flutter는 반 접힘·물리 힌지만 화면을 나누는 것으로 보지만, 앱은 펼친 폭 0 세로 접힘선에서도 화면을 나눈다
 /// (`FormFactor.arrangementOf`). 그 경우 대화상자가 주름을 가로지르지 않도록 같은 기준으로 한 번 더 나눈다.
-/// 다만 다음 두 조건을 모두 만족할 때만이다 (#41 R1·R2).
-/// - 실제로 그린 배치([arrangement])가 세로 접힘선 기준 배치다. 키가 터치 하한보다 낮아 위아래 배치로 그렸다면
-///   앱도 화면을 나누지 않았으므로 대화상자를 한쪽 절반에 가두지 않는다.
-/// - 버튼 쪽 절반이 그쪽 시스템 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상이다. 그보다 좁으면 대화상자
-///   카드가 150dp 안팎으로 줄어 읽기 어려우므로, 주름을 가로지르더라도 화면 전체에 띄운다.
-///   이 하한은 앱 배치 판정과 같은 값이라, 절반이 280~360dp이면 카드가 Material 최소 폭(280dp)보다 좁은
-///   200~280dp로 나뉘어 뜬다(대칭인 Galaxy Z Fold 내부 세로 화면은 절반 336.5dp, 카드 256dp — 주름을 피하는 쪽을
-///   택했다, #25).
+/// 어디에 띄울지는 다음 순서로 정한다 (#41 R1·R2, #129).
+/// 1. 실제로 그린 배치([arrangement])가 세로 접힘선 기준 배치가 아니면 화면 전체다. 키가 터치 하한보다 낮아 위아래
+///    배치로 그렸다면 앱도 화면을 나누지 않았으므로 대화상자를 한쪽 절반에 가두지 않는다.
+/// 2. 절반은 아래 "좁은 하위 화면"과 같은 규칙으로 고른다. 버튼 쪽 절반이 인셋을 빼고 대화상자 최소 크기
+///    ([dialogMinRegionOf], 폭 360dp)에 못 미치면 카드가 Material 최소 폭(280dp)보다 좁게 나뉘므로, 최소 크기를
+///    넘는 반대쪽 절반을 고른다. 넘는 곳이 없으면 버튼 쪽 절반이다.
+/// 3. 반대쪽 절반을 골랐으면, 손잡이를 바꿔도 그린 배치가 그대로일 때([handednessKeepsArrangement])만 그 절반이고
+///    아니면 화면 전체다. 반대 손잡이로는 위아래 배치가 되는 화면(키패드가 LCD 쪽 절반에 들어가지 못한다)은 열린 채
+///    손잡이를 바꾸면 대화상자가 화면 전체로 옮겨 가야 하므로, 처음부터 화면 전체에 띄워 그대로 남게 한다(아래
+///    "대화상자가 열린 채 손잡이를 바꾸면", #94).
+/// 4. 버튼 쪽 절반을 골랐으면, 그 절반이 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상일 때만 그 절반이고
+///    아니면 화면 전체다(카드가 200dp 아래로 줄어 읽기 어렵다 — 주름을 가로지르더라도 화면 전체에 띄운다).
+///
+/// 그래서 양쪽 절반이 모두 최소 크기에 못 미치면 카드가 280dp보다 좁게 남는다 — 버튼 쪽 절반 280~360dp에 맞춰
+/// 200~280dp다(예: 680×701·왼쪽 인셋 48·x=330이면 버튼 쪽 282dp에 카드 202dp, 반대쪽은 350dp). 조금 더 넓을 뿐인
+/// 곳으로 버튼과 멀어지지 않는 #125의 규칙을 따른 것이고, 대칭인 Galaxy Z Fold 내부 세로 화면(절반 336.5dp, 카드
+/// 256dp)도 주름을 피하는 쪽을 택했다 (#25).
+///
+/// 앱이 나눌 때는 대화상자 경로의 SafeArea를 끄고, 나눈 절반 안쪽에서 SafeArea를 씌운다. 경로의 SafeArea 안에서
+/// 나누면 화면 크기 기준으로 잰 절반이 인셋만큼 줄어든 상자 안에 놓여, 반대쪽 가장자리 인셋만큼 밀리고 좁아진다
+/// (#129 R1 — Flutter 경로도 `DisplayFeatureSubScreen` 안쪽에 SafeArea를 둔다).
 ///
 /// ### 좁은 하위 화면 (#125)
 /// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 `showDialog`
@@ -51,12 +64,12 @@ import 'handedness_dialog.dart';
 /// 화면 전체에 띄우지 않는 이유: `showDialog`를 쓰는 한 경로의 나눔을 끌 수 없고(끄려면 `RawDialogRoute`를 직접
 /// 만들어야 한다), 물리 힌지는 가로지르면 내용이 힌지 틈에 가려진다. 버튼과 다른 절반이지만 모달이라 대화상자만
 /// 다루면 된다. 그 결과 이런 화면에서는 손잡이와 무관하게 대화상자가 넓은 절반에 뜬다.
-/// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아 바로 위 규칙(앱이 나눌 때만 나누고, 좁으면 화면 전체)만 쓴다.
+/// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아, 앱이 나눌 때 바로 위 절의 순서 안에서 이 규칙을 쓴다 (#129).
 ///
 /// ## 대화상자가 열린 동안 배치가 바뀌면
-/// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]가 바뀌면 다음 프레임에 열린 대화상자에도
-/// 반영된다(나뉨 여부와 그 기준 위치, 적용 안내 글). 대화상자는 다른 경로라 이 위젯이 다시 빌드되는 중에는 바꿀 수
-/// 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은 [GlobalKey]로 옮겨
+/// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]·[handednessKeepsArrangement]가 바뀌면 다음 프레임에
+/// 열린 대화상자에도 반영된다(나뉨 여부와 그 기준 위치, 적용 안내 글). 대화상자는 다른 경로라 이 위젯이 다시
+/// 빌드되는 중에는 바꿀 수 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은 [GlobalKey]로 옮겨
 /// 가므로 키보드 포커스·스크롤 위치가 유지된다.
 /// 다시 잰 기준 위치는 앱만 나누는 펼친 폭 0 세로 접힘선에만 쓰인다. Flutter도 나누는 반 접힘·물리 힌지는
 /// `showDialog` 경로가 연 시점의 `anchorPoint`로 절반을 고르고, 그 값은 경로가 열린 동안 바뀌지 않는다.
@@ -65,8 +78,8 @@ import 'handedness_dialog.dart';
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 버튼이 반대쪽 절반으로 옮겨 가도, 대화상자는 연 자리(연 시점의
 /// 버튼 쪽 절반)에 남는다. 고른 뒤에는 버튼과 대화상자가 서로 다른 절반에 있고 옮겨 간 키패드를 대화상자가
 /// 가리지만, 고르는 순간 반대쪽 절반에서 키패드가 빠지고 LCD가 들어오는 것은 대화상자 바깥에서 보인다(미리 보기).
-/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다(좁은 절반 예외는 위 "좁은 하위 화면"). 다른 두 방식을 쓰지 않는
-/// 이유:
+/// 닫았다가 다시 열면 지금 버튼이 있는 절반에 뜬다(좁은 절반 예외는 위 "좁은 하위 화면" — 그 경우 연 자리가 처음부터
+/// 반대쪽 넓은 절반이고, 거기 그대로 남는다). 다른 두 방식을 쓰지 않는 이유:
 /// - 버튼 쪽으로 따라가기: 키보드 화살표로 선택지를 옮기면 선택도 바뀌므로([HandednessDialog]) 화살표를 누를
 ///   때마다 대화상자가 접힘선 건너로 뛴다. 손가락·스크린리더 터치 탐색 위치에서도 대화상자가 사라진다.
 ///   (반 접힘·물리 힌지까지 따라가게 하려면 `showDialog` 대신 `anchorPoint`를 바꿀 수 있는 `DialogRoute`를
@@ -77,9 +90,9 @@ import 'handedness_dialog.dart';
 /// - 손잡이를 바꾸면 배치까지 바뀌는 비대칭 세로 접힘선(키패드가 들어갈 절반 폭이 손잡이마다 다르다): 반 접힘·물리
 ///   힌지는 연 시점의 `anchorPoint`가 고정이라, 버튼이 반대쪽 절반으로 가도 옮겨 가지 않는다(넓은 절반이 대화상자
 ///   최소 크기를 넘으면 어느 손잡이로 열어도 넓은 절반이다 — 위 "좁은 하위 화면"). 펼친 폭 0 접힘선은 위 절대로
-///   버튼 중심을 다시 재지만, 접힘선 기준 배치일 때 버튼이 있는 LCD 쪽은 키패드가 들어가지 못한 좁은 절반이라
-///   하한([FormFactor.hingeMinPanelExtent])보다 늘 좁아, 대화상자는 화면 전체에 그대로 뜬다
-///   (하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `split_layout_test`가 검사한다).
+///   버튼 중심을 다시 재지만, 이런 화면은 [handednessKeepsArrangement]가 `false`이고 접힘선 기준 배치일 때 버튼이
+///   있는 LCD 쪽은 키패드가 들어가지 못한 좁은 절반이라 하한([FormFactor.hingeMinPanelExtent])보다 좁아, 대화상자는
+///   화면 전체에 그대로 뜬다(하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `split_layout_test`가 검사한다).
 /// - 가로 접힘선 기준 배치(테이블톱): 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고
 ///   어느 쪽인지는 손잡이와 무관하다(`CalcTabletopLayout`) — 손잡이를 바꾸면 같은 절반 안에서 좌우로만 옮겨 간다.
 /// - 좌우 분할 배치(접힘선 없음): 대화상자가 화면 가운데 한 자리다.
@@ -95,6 +108,11 @@ class SettingsButton extends StatefulWidget {
   /// `CalculatorScreen`이 두 손잡이로 모두 판정해 넘긴다.
   final bool handednessApplies;
 
+  /// 어느 손잡이로 그려도 [arrangement]가 같은지 — 손잡이를 바꿔도 접힘선 기준 배치가 위아래 배치로 바뀌지 않는지.
+  /// 앱이 나누는 펼친 폭 0 세로 접힘선에서 대화상자를 버튼 반대쪽 절반에 띄워도 되는지 고를 때 쓴다
+  /// ("접힘선이 있을 때 대화상자 위치", #129). `CalculatorScreen`이 두 손잡이로 모두 판정해 넘긴다.
+  final bool handednessKeepsArrangement;
+
   /// 자리 위쪽에서 버튼을 그리는 구간 높이 (dp). `null`이거나 자리 높이 이상이면 자리 전체에 그린다.
   final double? visualHeight;
 
@@ -105,6 +123,7 @@ class SettingsButton extends StatefulWidget {
     super.key,
     required this.arrangement,
     required this.handednessApplies,
+    required this.handednessKeepsArrangement,
     this.visualHeight,
     this.iconSize,
   }) : assert(visualHeight == null || visualHeight >= 0),
@@ -195,35 +214,43 @@ class SettingsButton extends StatefulWidget {
   State<SettingsButton> createState() => _SettingsButtonState();
 }
 
-/// 열린 대화상자가 보는 화면 상태 — 배치, 손잡이 적용 여부, 버튼 중심(Navigator 좌표, 나눌 절반을 고르는 기준)
+/// 열린 대화상자가 보는 화면 상태 — 배치, 손잡이 적용 여부, 손잡이를 바꿔도 배치가 같은지, 버튼 중심(Navigator
+/// 좌표, 나눌 절반을 고르는 기준)
 typedef _DialogLayout = ({
   ScreenArrangement arrangement,
   bool handednessApplies,
+  bool handednessKeepsArrangement,
   Offset? anchor,
 });
 
 class _SettingsButtonState extends State<SettingsButton> {
   /// 열린 대화상자가 보는 화면 상태 ([SettingsButton]의 값을 한 프레임 늦게 따른다)
-  late final ValueNotifier<_DialogLayout> _layout = ValueNotifier((
+  late final ValueNotifier<_DialogLayout> _layout = ValueNotifier(
+    _layoutOf(null),
+  );
+
+  /// 지금 [widget] 값과 [anchor]로 만든 대화상자 화면 상태
+  _DialogLayout _layoutOf(Offset? anchor) => (
     arrangement: widget.arrangement,
     handednessApplies: widget.handednessApplies,
-    anchor: null,
-  ));
+    handednessKeepsArrangement: widget.handednessKeepsArrangement,
+    anchor: anchor,
+  );
 
   @override
   void didUpdateWidget(SettingsButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.arrangement != oldWidget.arrangement ||
-        widget.handednessApplies != oldWidget.handednessApplies) {
+        widget.handednessApplies != oldWidget.handednessApplies ||
+        widget.handednessKeepsArrangement !=
+            oldWidget.handednessKeepsArrangement) {
       // 대화상자 경로는 이 위젯의 자손이 아니라 빌드 중에 다시 빌드하라고 표시할 수 없다 — 프레임이 끝난 뒤
       // (버튼이 새 자리에 놓인 뒤) 알린다. 버튼 중심도 그때 다시 잰다.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final navigator = Navigator.maybeOf(context, rootNavigator: true);
-        _layout.value = (
-          arrangement: widget.arrangement,
-          handednessApplies: widget.handednessApplies,
-          anchor: navigator == null
+        _layout.value = _layoutOf(
+          navigator == null
               ? _layout.value.anchor
               : _anchorIn(context, navigator),
         );
@@ -254,33 +281,30 @@ class _SettingsButtonState extends State<SettingsButton> {
   }
 
   /// 앱이 화면을 나누는데 Flutter는 나누지 않는 접힘선(펼친 폭 0 세로 접힘선)을, 대화상자 배치에서는
-  /// 나누는 접힘선(반 접힘)으로 바꾼다. 바꿀 것이 없으면 `null`.
-  /// 앱이 실제로 세로 접힘선 기준 배치로 그렸고([arrangement]), [anchor] 쪽 절반이 충분히 넓을 때만 바꾼다
-  /// ([SettingsButton] "접힘선이 있을 때 대화상자 위치").
+  /// 나누는 접힘선(반 접힘)으로 바꾼 접힘 정보와, 대화상자를 둘 절반을 고르는 기준점을 돌려준다.
+  /// 화면 전체에 띄우면 `null`이다 ([SettingsButton] "접힘선이 있을 때 대화상자 위치", #41·#129).
+  /// - 앱이 실제로 세로 접힘선 기준 배치로 그렸어야 한다([_DialogLayout.arrangement]). 버튼 위치를 모르면
+  ///   ([_DialogLayout.anchor]가 `null` — 배치 전에는 열 수 없어 실제로는 생기지 않는다) 화면 전체다.
+  /// - 기준점은 [SettingsButton.dialogAnchorPointOf]로 고른다. 반대쪽 절반을 고르면 손잡이를 바꿔도 배치가 그대로일
+  ///   때만 나누고, 버튼 쪽 절반이면 그 절반이 인셋을 빼고 [FormFactor.hingeMinPanelExtent] 이상일 때만 나눈다.
   ///
-  /// [screenPadding]은 화면의 시스템 인셋이다. 대화상자 내용은 `showDialog`의 SafeArea 안이라 [media]의 인셋이
-  /// 이미 0이므로 Navigator의 MediaQuery 값을 따로 받는다.
-  static List<DisplayFeature>? _splitLikeApp(
+  /// [media]는 대화상자 경로의 MediaQuery다(경로의 SafeArea를 껐으므로 시스템·키보드 인셋이 그대로 있다).
+  static ({List<DisplayFeature> features, Offset anchorPoint})? _splitLikeApp(
     MediaQueryData media,
-    ScreenArrangement arrangement,
-    Offset? anchor,
-    EdgeInsets screenPadding,
+    _DialogLayout layout,
+    Size minRegion,
   ) {
-    if (arrangement != ScreenArrangement.hingeSplit) return null;
+    final anchor = layout.anchor;
+    if (layout.arrangement != ScreenArrangement.hingeSplit || anchor == null) {
+      return null;
+    }
     bool splitByAppOnly(DisplayFeature f) =>
         !FormFactor.separates(f) &&
         FormFactor.hingeOf(media.size, [f]) != null &&
         FormFactor.isVerticalHinge(f.bounds);
     final hinge = media.displayFeatures.where(splitByAppOnly).firstOrNull;
     if (hinge == null) return null;
-    // 버튼 쪽 절반의 폭 (그쪽 시스템 인셋 제외) — 버튼 위치를 모르면 좁은 쪽으로 본다.
-    final left = hinge.bounds.left - screenPadding.left;
-    final right = media.size.width - hinge.bounds.right - screenPadding.right;
-    final half = anchor == null
-        ? math.min(left, right)
-        : (anchor.dx < hinge.bounds.center.dx ? left : right);
-    if (half < FormFactor.hingeMinPanelExtent) return null;
-    return [
+    final features = [
       for (final f in media.displayFeatures)
         splitByAppOnly(f)
             ? DisplayFeature(
@@ -290,16 +314,33 @@ class _SettingsButtonState extends State<SettingsButton> {
               )
             : f,
     ];
+    // 나눈 접힘 정보로 Flutter가 나누는 접힘선과 같은 규칙(#125)을 적용한다.
+    final anchorPoint = SettingsButton.dialogAnchorPointOf(
+      media.copyWith(displayFeatures: features),
+      anchor,
+      minRegion,
+    )!;
+    if (anchorPoint != anchor) {
+      // 반대쪽(최소 크기를 넘는) 절반 — 열린 채 손잡이를 바꿔 위아래 배치가 되면 화면 전체로 옮겨 가야 하므로
+      // 그런 화면은 처음부터 화면 전체다 (#94).
+      return layout.handednessKeepsArrangement
+          ? (features: features, anchorPoint: anchorPoint)
+          : null;
+    }
+    // 버튼 쪽 절반의 폭 (그쪽 인셋 제외 — `dialogAnchorPointOf`처럼 시스템·키보드 인셋을 함께 뺀다). 하한보다
+    // 좁으면 카드가 읽기 어려워 화면 전체에 띄운다.
+    final inset = media.padding + media.viewInsets;
+    final half = anchor.dx < hinge.bounds.center.dx
+        ? hinge.bounds.left - inset.left
+        : media.size.width - hinge.bounds.right - inset.right;
+    if (half < FormFactor.hingeMinPanelExtent) return null;
+    return (features: features, anchorPoint: anchor);
   }
 
   void _open(BuildContext context) {
     final navigator = Navigator.of(context, rootNavigator: true);
     final anchor = _anchorIn(context, navigator);
-    _layout.value = (
-      arrangement: widget.arrangement,
-      handednessApplies: widget.handednessApplies,
-      anchor: anchor,
-    );
+    _layout.value = _layoutOf(anchor);
     // 나뉨 여부가 바뀌어 감싸는 위젯이 달라져도 대화상자 element(포커스·스크롤)를 옮겨 유지한다.
     final dialogKey = GlobalKey(debugLabel: 'handedness-dialog');
     showDialog<void>(
@@ -313,27 +354,31 @@ class _SettingsButtonState extends State<SettingsButton> {
         anchor,
         SettingsButton.dialogMinRegionOf(DialogTheme.of(context)),
       ),
+      // SafeArea는 아래에서 직접 씌운다 — 앱이 나눌 때는 나눈 절반 안쪽에 있어야 한다([SettingsButton]
+      // "접힘선이 있을 때 대화상자 위치"). 나누지 않으면 기본값(경로가 씌우는 SafeArea)과 같은 자리다.
+      useSafeArea: false,
       builder: (dialogContext) => ValueListenableBuilder<_DialogLayout>(
         valueListenable: _layout,
         builder: (dialogContext, layout, _) {
-          final dialog = HandednessDialog(
-            key: dialogKey,
-            showLayoutNote: !layout.handednessApplies,
+          final dialog = SafeArea(
+            child: HandednessDialog(
+              key: dialogKey,
+              showLayoutNote: !layout.handednessApplies,
+            ),
           );
           final media = MediaQuery.of(dialogContext);
-          final features = _splitLikeApp(
+          final split = _splitLikeApp(
             media,
-            layout.arrangement,
-            layout.anchor,
-            MediaQuery.paddingOf(navigator.context),
+            layout,
+            SettingsButton.dialogMinRegionOf(DialogTheme.of(dialogContext)),
           );
-          if (features == null) return dialog;
+          if (split == null) return dialog;
           // 바깥 `DisplayFeatureSubScreen`이 나누지 않아 화면 전체(경로 좌표 = 이 좌표)를 받았으므로,
-          // 지금 버튼 중심으로 앱 기준 절반을 고른다.
+          // 고른 기준점(버튼 중심, 버튼 쪽이 좁으면 넓은 반대쪽 절반 가운데)으로 앱 기준 절반을 고른다.
           return MediaQuery(
-            data: media.copyWith(displayFeatures: features),
+            data: media.copyWith(displayFeatures: split.features),
             child: DisplayFeatureSubScreen(
-              anchorPoint: layout.anchor,
+              anchorPoint: split.anchorPoint,
               child: dialog,
             ),
           );
