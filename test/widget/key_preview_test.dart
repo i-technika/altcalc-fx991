@@ -457,13 +457,13 @@ void main() {
       );
     });
 
-    test('폴더블 방향 선택지: 앱의 방향 정책을 따르고 기본 방향이 먼저다 (#104)', () {
-      // 값을 적어 둔다 — Fold 계열은 네 방향 허용(세로·가로), Flip은 세로 고정.
+    test('폴더블 방향 선택지: 앱의 방향 정책을 따르고 순서는 기기와 상관없이 세로·가로다 (#104)', () {
+      // 값을 적어 둔다 — Fold 계열은 네 방향 허용(세로·가로), Flip은 세로 고정. 버튼 순서가 기기마다 바뀌지 않는다.
       const expected = {
         '폴더블 내부': [PreviewOrientation.portrait, PreviewOrientation.landscape],
         '가로형 폴더블 내부': [
-          PreviewOrientation.landscape,
           PreviewOrientation.portrait,
+          PreviewOrientation.landscape,
         ],
         '플립형 폴더블 내부': [PreviewOrientation.portrait],
       };
@@ -473,7 +473,7 @@ void main() {
           expected[d.name] ?? [d.naturalOrientation],
           reason: d.name,
         );
-        expect(d.orientations.first, d.naturalOrientation, reason: d.name);
+        expect(d.orientations, contains(d.naturalOrientation), reason: d.name);
         // 자세·방향을 적용한 화면도 같은 선택지를 답한다.
         for (final r in _posesOf(d)) {
           expect(r.orientations, d.orientations, reason: d.name);
@@ -504,40 +504,34 @@ void main() {
       }
     });
 
-    test(
-      '폴더블 프리셋: 접힘선이 있는 프리셋 = 자세·방향을 고를 수 있는 프리셋이고, 기본 자세·방향이면 프리셋 그대로다',
-      () {
-        for (final d in previewDevices) {
-          expect(
-            d.foldable,
-            FormFactor.hasFoldOrHinge(d.displayFeatures),
-            reason: d.name,
-          );
-          expect(
-            identical(
-              d.posed(PreviewFoldPosture.flat, d.naturalOrientation),
-              d,
-            ),
-            isTrue,
-            reason: d.name,
-          );
-          if (!d.foldable) {
-            // 폴더블이 아니면 어떤 자세·방향을 골라도 그대로다.
-            for (final p in PreviewFoldPosture.values) {
-              for (final o in PreviewOrientation.values) {
-                expect(identical(d.posed(p, o), d), isTrue, reason: d.name);
-              }
+    test('폴더블 프리셋: 접힘선이 있는 프리셋 = 자세(방향은 앱이 돌 수 있을 때)를 고를 수 있는 프리셋이고, 기본 자세·방향이면 프리셋 그대로다', () {
+      for (final d in previewDevices) {
+        expect(
+          d.foldable,
+          FormFactor.hasFoldOrHinge(d.displayFeatures),
+          reason: d.name,
+        );
+        expect(
+          identical(d.posed(PreviewFoldPosture.flat, d.naturalOrientation), d),
+          isTrue,
+          reason: d.name,
+        );
+        if (!d.foldable) {
+          // 폴더블이 아니면 어떤 자세·방향을 골라도 그대로다.
+          for (final p in PreviewFoldPosture.values) {
+            for (final o in PreviewOrientation.values) {
+              expect(identical(d.posed(p, o), d), isTrue, reason: d.name);
             }
-            continue;
           }
-          // 기본 방향의 접힘선은 펼친 상태로 정의한다(자세는 [PreviewDevice.posed]가 바꾼다).
-          for (final f in d.displayFeatures) {
-            expect(f.state, DisplayFeatureState.postureFlat, reason: d.name);
-          }
+          continue;
         }
-        expect(previewDevices.where((d) => d.foldable), hasLength(3));
-      },
-    );
+        // 기본 방향의 접힘선은 펼친 상태로 정의한다(자세는 [PreviewDevice.posed]가 바꾼다).
+        for (final f in d.displayFeatures) {
+          expect(f.state, DisplayFeatureState.postureFlat, reason: d.name);
+        }
+      }
+      expect(previewDevices.where((d) => d.foldable), hasLength(3));
+    });
 
     test('폴더블 자세·방향: 돌리면 크기의 가로·세로가 바뀌고, 자세는 접힘선 상태만 바꾼다', () {
       // 접힘선 영역 값은 아래 "조합마다 기대 배치" 표에 적어 둔 값으로 확인한다.
@@ -1083,52 +1077,56 @@ void main() {
       }
     });
 
-    testWidgets('제스처 영역이 있는 프리셋: 화면 가장자리 키는 손을 뗄 때, 안쪽 키는 누르는 순간 입력된다', (
-      tester,
-    ) async {
-      await _pumpPreview(tester);
-      // 키패드 좌우 끝 열이 모두 뒤로가기 영역에 걸리는 프리셋 (폴더블 내부는 접힘선 기준 분할이라 바깥쪽 열만 걸린다)
-      final index = previewDevices.indexWhere((d) => d.name == '폴더블 커버');
-      expect(index, isNonNegative);
-      final device = previewDevices[index];
-      expect(device.systemGestureInsets.left, greaterThan(0));
-      expect(device.systemGestureInsets.right, greaterThan(0));
-      await _selectDevice(tester, index);
+    // 키패드 좌우 끝 열이 모두 뒤로가기 영역에 걸리는 프리셋 — 폭을 다 쓰는 위아래 배치 (폴더블 내부는 접힘선 기준
+    // 분할이라 바깥쪽 열만 걸린다). 플립형 폴더블 내부는 펼친 기본 자세가 위아래 배치다(#104).
+    for (final name in const ['폴더블 커버', '플립형 폴더블 내부']) {
+      testWidgets(
+        '$name: 제스처 영역이 있는 프리셋에서 화면 가장자리 키는 손을 뗄 때, 안쪽 키는 누르는 순간 입력된다',
+        (tester) async {
+          await _pumpPreview(tester);
+          final index = previewDevices.indexWhere((d) => d.name == name);
+          expect(index, isNonNegative);
+          final device = previewDevices[index];
+          expect(device.systemGestureInsets.left, greaterThan(0));
+          expect(device.systemGestureInsets.right, greaterThan(0));
+          await _selectDevice(tester, index);
 
-      // 기기 화면이 패널 오른쪽으로 밀리고 축소되어 있어야 이 검사가 의미 있다.
-      final screen = tester.getRect(_deviceScreen);
-      final scale = screen.width / device.size.width;
-      expect(screen.left, greaterThan(KeyPreviewScreen.panelWidth));
-      expect(scale, lessThan(1));
-      double toScreenX(double globalX) => (globalX - screen.left) / scale;
+          // 기기 화면이 패널 오른쪽으로 밀리고 축소되어 있어야 이 검사가 의미 있다.
+          final screen = tester.getRect(_deviceScreen);
+          final scale = screen.width / device.size.width;
+          expect(screen.left, greaterThan(KeyPreviewScreen.panelWidth));
+          expect(scale, lessThan(1));
+          double toScreenX(double globalX) => (globalX - screen.left) / scale;
 
-      // 왼쪽 끝 열(7)의 왼쪽 가장자리 — 화면 기준으로 뒤로가기 영역 안
-      final left = tester.getRect(_keycap(CalcKeyId.num7));
-      final leftX = left.left + 2 * scale;
-      expect(toScreenX(leftX), lessThan(device.systemGestureInsets.left));
-      expect(await _pressAt(tester, Offset(leftX, left.center.dy)), (
-        '',
-        '1. 7',
-      ));
+          // 왼쪽 끝 열(7)의 왼쪽 가장자리 — 화면 기준으로 뒤로가기 영역 안
+          final left = tester.getRect(_keycap(CalcKeyId.num7));
+          final leftX = left.left + 2 * scale;
+          expect(toScreenX(leftX), lessThan(device.systemGestureInsets.left));
+          expect(await _pressAt(tester, Offset(leftX, left.center.dy)), (
+            '',
+            '1. 7',
+          ));
 
-      // 오른쪽 끝 열(AC)의 오른쪽 가장자리
-      final right = tester.getRect(_keycap(CalcKeyId.ac));
-      final rightX = right.right - 2 * scale;
-      expect(
-        toScreenX(rightX),
-        greaterThan(device.size.width - device.systemGestureInsets.right),
+          // 오른쪽 끝 열(AC)의 오른쪽 가장자리
+          final right = tester.getRect(_keycap(CalcKeyId.ac));
+          final rightX = right.right - 2 * scale;
+          expect(
+            toScreenX(rightX),
+            greaterThan(device.size.width - device.systemGestureInsets.right),
+          );
+          expect(await _pressAt(tester, Offset(rightX, right.center.dy)), (
+            '1. 7',
+            '2. AC | 1. 7',
+          ));
+
+          // 가운데 열(8)은 누르는 순간 입력된다.
+          expect(
+            await _pressAt(tester, tester.getCenter(_keycap(CalcKeyId.num8))),
+            ('3. 8 | 2. AC | 1. 7', '3. 8 | 2. AC | 1. 7'),
+          );
+        },
       );
-      expect(await _pressAt(tester, Offset(rightX, right.center.dy)), (
-        '1. 7',
-        '2. AC | 1. 7',
-      ));
-
-      // 가운데 열(8)은 누르는 순간 입력된다.
-      expect(
-        await _pressAt(tester, tester.getCenter(_keycap(CalcKeyId.num8))),
-        ('3. 8 | 2. AC | 1. 7', '3. 8 | 2. AC | 1. 7'),
-      );
-    });
+    }
 
     // 좌우 분할 배치(#24)에서 키패드는 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62). 제스처 내비게이션이면 그 바깥쪽
     // 끝 열 키의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가
@@ -1959,7 +1957,21 @@ void main() {
           if (!rotatable) {
             expect(
               tester.widget<Text>(orientationLocked).data,
-              startsWith('${d.naturalOrientation.label} 고정'),
+              '${d.naturalOrientation.label} 고정',
+              reason: d.name,
+            );
+            // 한 줄로 들어간다 — 이름표('방향')와 높이가 같다.
+            final label = find.ancestor(
+              of: orientationLocked,
+              matching: find.byType(Row),
+            );
+            expect(
+              tester.getSize(orientationLocked).height,
+              tester
+                  .getSize(
+                    find.descendant(of: label, matching: find.text('방향')),
+                  )
+                  .height,
               reason: d.name,
             );
             continue;
@@ -2454,7 +2466,7 @@ void main() {
     for (final (name, hostTextScale) in const [
       ('일반 폰', 1.0),
       ('폴더블 내부', 1.0),
-      // 방향 줄이 고정 안내 글자다 (#104). 130%는 안내가 두 줄로 접힐 수 있는 경우다.
+      // 방향 줄이 버튼이 아니라 고정 안내 글자 한 줄이다 (#104). 130%는 글자 줄 높이가 호스트 배율을 따르는 경우다.
       ('플립형 폴더블 내부', 1.0),
       ('플립형 폴더블 내부', 1.3),
       ('일반 폰', 1.3),

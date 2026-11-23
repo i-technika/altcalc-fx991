@@ -74,7 +74,8 @@ class PreviewDevice {
   /// 폭 0인 접힘선(`DisplayFeatureType.fold`, `postureFlat`)을 보고한다. 값은 근사다.
   final List<DisplayFeature> displayFeatures;
 
-  /// 폴더블 내부 화면인지 — 자세·방향을 고를 수 있다([posed], #93). 접힘선([displayFeatures])이 있어야 한다.
+  /// 폴더블 내부 화면인지 — 자세를 고를 수 있고, 방향은 [orientations]가 둘 이상일 때만 고른다([posed], #93·#104).
+  /// 접힘선([displayFeatures])이 있어야 한다.
   final bool foldable;
 
   /// 자세·방향을 적용한 화면이면 적용하기 전의 프리셋, 프리셋이면 `null` ([base] 참조)
@@ -113,7 +114,8 @@ class PreviewDevice {
       ? PreviewOrientation.landscape
       : PreviewOrientation.portrait;
 
-  /// 앱 화면이 돌 수 있는 방향 (#104). 첫 항목이 [naturalOrientation]이다.
+  /// 앱 화면이 돌 수 있는 방향 (#104). 순서는 [PreviewOrientation.values] 그대로다 — 조작 패널 버튼 순서가 기기마다
+  /// 바뀌지 않게 한다. [naturalOrientation]은 항상 들어 있다.
   ///
   /// 폴더블 프리셋은 앱의 방향 정책([FormFactor.orientationPolicyOf], 폴더블 기기·프리셋 크기 = 물리 화면 크기)을 따른다.
   /// 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인 화면(Flip 내부)은 앱이 세로로 고정하므로 세로뿐이고,
@@ -131,7 +133,7 @@ class PreviewDevice {
       OrientationPolicy.any => PreviewOrientation.values,
     };
     assert(allowed.contains(natural), '${base.name}: 기본 방향을 앱이 허용하지 않는다');
-    return [natural, ...allowed.where((o) => o != natural)];
+    return allowed;
   }
 
   /// [posture] 자세로 [orientation] 방향으로 든 화면 (#93). [foldable]이 아니면 그대로 돌려준다.
@@ -264,7 +266,7 @@ const DisplayFeature previewFlipInnerFold = DisplayFeature(
 );
 
 /// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
-/// 높게 잡았다(배치 테스트의 Flip 근사와 같다). 실기기 미확인이다.
+/// 높게 잡았다(배치 테스트 `split_layout_test`·`top_strip_test`의 Flip 근사와 같다). 실기기 미확인이다.
 const double _flipStatusBarHeight = 32;
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -1067,7 +1069,8 @@ class _ControlPanel extends StatelessWidget {
               const SizedBox(width: 40, child: Text('방향', style: _label)),
               Expanded(
                 child: Text(
-                  '${device.orientations.single.label} 고정 (앱이 돌지 않는 화면 크기)',
+                  // 이유(짧은 변 600dp 미만이라 앱이 세로로 고정)는 README에 있다 — 패널 폭에서 한 줄로 둔다.
+                  '${device.orientations.single.label} 고정',
                   key: const ValueKey('preview-fold-orientation-locked'),
                   style: _label,
                 ),

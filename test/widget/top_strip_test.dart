@@ -726,7 +726,7 @@ void main() {
       (
         '테이블톱 Flip 411×1006·오른손',
         const Size(411, 1006),
-        const EdgeInsets.only(top: 24, bottom: 24),
+        const EdgeInsets.only(top: 32, bottom: 24),
         flipHalfOpened,
         Handedness.right,
         DrawnArrangement.tabletop,
@@ -734,7 +734,7 @@ void main() {
       (
         '테이블톱 Flip 411×1006·왼손',
         const Size(411, 1006),
-        const EdgeInsets.only(top: 24, bottom: 24),
+        const EdgeInsets.only(top: 32, bottom: 24),
         flipHalfOpened,
         Handedness.left,
         DrawnArrangement.tabletop,
@@ -1200,7 +1200,7 @@ void main() {
       await _pump(
         tester,
         size: size,
-        padding: const EdgeInsets.only(top: 24, bottom: 24),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
         displayFeatures: const [
           DisplayFeature(
             bounds: Rect.fromLTWH(0, 503, 411, 0),
