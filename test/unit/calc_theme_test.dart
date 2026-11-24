@@ -960,29 +960,27 @@ void main() {
       );
     });
 
-    test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
+    test('키 터치 하한: 터치 확장 기준 이하의 양수 (#25, 테이블톱 하한은 #80에서 합침)', () {
       expect(CalcTheme.keyTouchHeightFloor, greaterThan(0));
       expect(
         CalcTheme.keyTouchHeightFloor,
         lessThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
       );
-      expect(CalcTheme.tabletopKeyTouchHeightFloor, greaterThan(0));
-      expect(
-        CalcTheme.tabletopKeyTouchHeightFloor,
-        lessThan(CalcTheme.keyTouchHeightFloor),
-      );
     });
 
-    test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수이고, 테이블톱 하한은 그 아래로 내려가지 않는다 (#38)', () {
+    test('넓은 키패드 배열 블록 간격: 키 사이 가로 간격보다 넓고 블록 폭보다 훨씬 좁다 (#80)', () {
+      expect(
+        CalcTheme.keypadWideSectionGapRatio,
+        greaterThan(CalcTheme.keyHorizontalGapRatio),
+      );
+      expect(CalcTheme.keypadWideSectionGapRatio, lessThan(0.2));
+    });
+
+    test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수 (#38)', () {
       expect(CalcTheme.keyTouchHeightUsableMin, greaterThan(0));
       expect(
         CalcTheme.keyTouchHeightUsableMin,
         lessThan(CalcTheme.keyTouchHeightFloor),
-      );
-      // 테이블톱 하한이 더 낮으면, 고른 테이블톱 배치가 곧바로 "창이 너무 작다" 안내가 된다.
-      expect(
-        CalcTheme.tabletopKeyTouchHeightFloor,
-        greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin),
       );
       expect(CalcTheme.windowTooSmallIconSize, greaterThan(0));
       expect(CalcTheme.windowTooSmallFontSize, greaterThan(0));

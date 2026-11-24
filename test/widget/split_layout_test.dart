@@ -376,7 +376,8 @@ void main() {
 
   group('테이블톱 배치: LCD 폭 상한 고정값 (#92)', () {
     // Galaxy Z Fold 내부 가로 반 접힘 841×673, 인셋 24/24: 본체 825 폭, 접힘선 336.5(본체 304.5).
-    // 상한 전 LCD 825×296.5 → 480×274.3. 키패드는 약 293dp(아래 절반 높이에 묶임 — #80).
+    // 상한 전 LCD 825×296.5 → 480×274.3. 키패드는 넓은 배열로 아래 절반 폭을 다 쓰고(825dp, #80), LCD는 넓히지
+    // 않는다(근거는 `CalcTheme.screenLcdMaxWidth`). LCD 손 쪽 끝이 키패드 바깥 끝과 맞는다.
     for (final handedness in Handedness.values) {
       testWidgets('Fold 가로 반 접힘·${handedness.name}', (tester) async {
         await _pump(
@@ -392,7 +393,11 @@ void main() {
         expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
         final lcd = tester.getRect(_lcd);
         final keypad = tester.getRect(_keypad);
-        expect(keypad.width, lessThan(300));
+        expect(keypad.width, moreOrLessEquals(825));
+        expect(
+          tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+          KeypadArrangement.wide,
+        );
         expect(lcd.size.width, moreOrLessEquals(480));
         expect(lcd.size.height, moreOrLessEquals(480 / 1.75));
         expect(lcd.bottom, moreOrLessEquals(336.5 - 8));
@@ -1055,9 +1060,12 @@ void _expectTouchTargets(
     if (touch < lowest) lowest = touch;
     expect(touch, greaterThanOrEqualTo(floor), reason: b.keyDef.id.name);
   }
-  // 배치 판정에 쓰는 계산값이 실제로 그린 키의 최소 터치 높이와 같다.
+  // 배치 판정에 쓰는 계산값이 실제로 그린 키의 최소 터치 높이와 같다 (그린 구역 배열 기준, #80).
   expect(
-    KeypadMetrics.minKeyTouchHeightOf(tester.getSize(_keypad)),
+    KeypadMetrics.minKeyTouchHeightOf(
+      tester.getSize(_keypad),
+      tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+    ),
     moreOrLessEquals(lowest, epsilon: 0.01),
   );
   final pad = CursorPadGeometry(
@@ -1310,11 +1318,11 @@ void _hingeLayoutTests() {
               expect(settings.overlaps(keypad), isFalse);
               expect(settings.overlaps(lcd), isFalse);
               expect(_settings.hitTestable(), findsOneWidget);
-              // 반 접은 테이블톱 자세는 완화된 하한을 지킨다 (사용자 결정, #25 R2).
+              // 반 접은 테이블톱 자세도 일반 하한을 지킨다 (#25 R2의 완화된 하한은 넓은 키패드 배열로 #80에서 합쳤다).
               if (scale == 1.0) {
                 _expectTouchTargets(
                   tester,
-                  floor: CalcTheme.tabletopKeyTouchHeightFloor,
+                  floor: CalcTheme.keyTouchHeightFloor,
                 );
               }
               expect(
@@ -1439,7 +1447,7 @@ void _hingeLayoutTests() {
       );
       expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
       expect(tester.getRect(_keypad).top, greaterThanOrEqualTo(336.5));
-      _expectTouchTargets(tester, floor: CalcTheme.tabletopKeyTouchHeightFloor);
+      _expectTouchTargets(tester, floor: CalcTheme.keyTouchHeightFloor);
     });
 
     testWidgets('접힘선이 인셋 안(창 가장자리)에 있으면 접힘선 기준으로 나누지 않는다', (tester) async {
@@ -1551,19 +1559,31 @@ void _hingeLayoutTests() {
       expect(tester.getRect(_dialogSurface).right, lessThanOrEqualTo(336.5));
     });
 
-    testWidgets('반 접은 테이블톱: 대화상자는 설정 버튼이 있는 아래 절반에 뜬다', (tester) async {
-      await _pump(
-        tester,
-        size: const Size(701, 841),
-        padding: const EdgeInsets.only(top: 32, bottom: 24),
-        displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 420.5, 701, 0))],
-      );
-      expect(tester.getRect(_settings).top, greaterThanOrEqualTo(420.5));
-      await tester.tap(_settings);
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(tester.getRect(_dialogSurface).top, greaterThanOrEqualTo(420.5));
-    });
+    // 버튼이 놓이는 절반별 — Pixel Fold 세로는 넓은 키패드 배열(#80)이 아래 절반 폭을 다 써 버튼이 위 절반 모서리,
+    // 세로로 긴 대화면(근사 716×1200)은 실물 배열 키패드 옆에 버튼 자리가 남아 아래 절반이다.
+    for (final (name, size, hingeY, buttonBelow) in [
+      ('Pixel Fold 세로', const Size(701, 841), 420.5, false),
+      ('세로로 긴 대화면', const Size(716, 1200), 600.0, true),
+    ]) {
+      testWidgets('반 접은 테이블톱($name): 대화상자는 설정 버튼이 있는 절반에 뜬다', (tester) async {
+        await _pump(
+          tester,
+          size: size,
+          padding: const EdgeInsets.only(top: 32, bottom: 24),
+          displayFeatures: [
+            _halfOpenedAt(Rect.fromLTWH(0, hingeY, size.width, 0)),
+          ],
+        );
+        expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
+        bool sameHalf(Rect r) =>
+            buttonBelow ? r.top >= hingeY - 0.01 : r.bottom <= hingeY + 0.01;
+        expect(sameHalf(tester.getRect(_settings)), isTrue);
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(sameHalf(tester.getRect(_dialogSurface)), isTrue);
+      });
+    }
   });
 
   group('대화상자를 연 채 손잡이를 바꾸면 대화상자는 연 자리에 남는다 (#94)', () {
@@ -1751,7 +1771,8 @@ void _hingeLayoutTests() {
     // 반 접은 테이블톱: 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고, 어느 쪽인지는
     // 손잡이와 무관하다(`CalcTabletopLayout`). 손잡이를 바꾸면 같은 절반 안에서 좌우로만 옮겨 간다.
     for (final (name, size, hingeY, buttonBelow) in [
-      ('키패드 옆 자리', const Size(701, 841), 420.5, true),
+      // 실물 배열 키패드 옆에 자리가 남는다 (Pixel Fold 세로는 넓은 키패드 배열이 폭을 다 쓴다 — #80)
+      ('키패드 옆 자리', const Size(716, 1200), 600.0, true),
       ('위 절반 모서리 자리', const Size(412, 915), 457.5, false),
     ]) {
       testWidgets('반 접은 테이블톱($name): 버튼은 같은 절반 안에서만 옮겨 가고 대화상자는 그 자리다', (
@@ -2055,15 +2076,19 @@ void _hingeLayoutTests() {
       }
     }
 
-    // 높이 경계: 가로 접힘선 기준 배치(테이블톱, 버튼은 키패드 옆 아래 절반)에서 아래 절반이 인셋을 빼고 카드 최소
-    // 높이 + 위아래 여백(280 + 24×2 = 328dp)이면 그 절반에(카드 280dp 이하), 1dp 낮으면 위 절반에 뜬다.
-    for (final (lowerHalf, stays) in [(328.0, true), (327.0, false)]) {
+    // 높이 경계: 가로 접힘선 기준 배치(테이블톱)에서 버튼 쪽 절반이 인셋을 빼고 카드 최소 높이 + 위아래 여백
+    // (280 + 24×2 = 328dp)이면 그 절반에(카드 280dp 이하), 1dp 낮으면 반대쪽 절반에 뜬다.
+    // 버튼 쪽 절반은 둘 다 본다(`CalcTabletopLayout` — 키패드 옆 자리면 아래 절반, 아니면 위 절반 위 모서리).
+    // - 위 절반: 701×841 — 아래 절반이 넓어 넓은 키패드 배열(#80)이 폭을 다 쓰므로 버튼은 위 절반 모서리다.
+    // - 아래 절반: 아래 절반 높이 328dp로 실물 배열을 쓰면서 키패드 옆 자리가 남는 창은, 키가 키 터치 하한(28dp)에
+    //   못 미쳐 테이블톱 배치가 되지 않는다(#80에서 테이블톱 하한을 합친 뒤) — 그래서 이 경계는 위 절반에서만 생긴다.
+    for (final (upperHalf, stays) in [(328.0, true), (327.0, false)]) {
       for (final textScale in [1.0, 2.0]) {
-        testWidgets('높이 경계: 버튼 쪽 아래 절반 ${lowerHalf}dp·글자 배율 $textScale → '
-            '${stays ? '그 절반' : '위 절반'}', (tester) async {
+        testWidgets('높이 경계: 버튼 쪽 위 절반 ${upperHalf}dp·글자 배율 $textScale → '
+            '${stays ? '그 절반' : '아래 절반'}', (tester) async {
           final hinge = Rect.fromLTWH(
             0,
-            tall.height - portraitInset.bottom - lowerHalf,
+            portraitInset.top + upperHalf,
             tall.width,
             0,
           );
@@ -2076,20 +2101,42 @@ void _hingeLayoutTests() {
             displayFeatures: [_halfOpenedAt(hinge)],
           );
           expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
-          expect(after(hinge, tester.getRect(_settings)), isTrue);
+          expect(
+            tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+            KeypadArrangement.wide,
+          );
+          expect(before(hinge, tester.getRect(_settings)), isTrue);
           await tester.tap(_settings);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           final dialog = tester.getRect(_dialogSurface);
           if (stays) {
-            expect(after(hinge, dialog), isTrue, reason: '$dialog');
+            expect(before(hinge, dialog), isTrue, reason: '$dialog');
             expect(dialog.height, lessThanOrEqualTo(280.01));
           } else {
-            expect(before(hinge, dialog), isTrue, reason: '$dialog');
+            expect(after(hinge, dialog), isTrue, reason: '$dialog');
           }
         });
       }
     }
+
+    test(
+      '아래 절반 높이 328dp(카드 최소 높이 + 여백)의 테이블톱은 키패드 옆 자리가 남으면 키 하한에 못 미친다 (#80)',
+      () {
+        // 위 높이 경계 테스트가 아래 절반을 보지 않는 근거. 아래 절반 328dp에서 광고 슬롯(최대 60 + 안전 여백 12)과
+        // 접힘선 간격을 뺀 키패드 자리 높이가 가장 큰 경우를 본다. 키패드 옆 자리가 남는 실물 배열의 키패드는 이 높이에
+        // 묶이므로, 그 키가 하한보다 낮으면 어느 폭에서도 버튼이 아래 절반에 놓이는 테이블톱 배치가 생기지 않는다.
+        const region =
+            328.0 -
+            CalcTheme.screenHingeMargin -
+            CalcTheme.adSlotMaxHeight -
+            CalcTheme.adSlotMinSafetyMargin;
+        expect(
+          KeypadMetrics.minKeyTouchHeightOf(const Size(10000, region)),
+          lessThan(CalcTheme.keyTouchHeightFloor),
+        );
+      },
+    );
 
     // 높이 기준([SettingsButton.dialogFallbackMinCardHeight])을 확인한다: 최소 크기 하위 화면(카드 280×280)에서
     // 큰 글자 배율에도 넘치지 않고 고정된 닫기 버튼이 보인다. 안내 글까지 보이는(가장 긴) 대화상자로 확인한다.
@@ -2702,11 +2749,14 @@ void _hingeLayoutTests() {
     });
 
     test('가로 접힘선: LCD 폭 상한 (#92) — 넓은 위 절반에서 480dp, 키패드 쪽 가장자리', () {
-      // 본체 825×593 (접힘선 304.5): 아래 절반 280.5 → 키패드 약 351dp(높이에 묶임), LCD는 480dp
-      const body = Size(825, 593);
-      const hinge = Rect.fromLTWH(0, 304.5, 825, 0);
+      // 본체 520×662.5 (접힘선 304.5): 아래 절반 350 → 실물 배열 키패드 437.5dp(높이에 묶임), LCD는 480dp.
+      // 넓은 배열(#80)은 폭에 묶여 키가 더 작다(28.6 < 29.75dp). 키패드 옆에 설정 버튼 자리(82.5dp)가 남는다.
+      const body = Size(520, 662.5);
+      const hinge = Rect.fromLTWH(0, 304.5, 520, 0);
       final r = CalcTabletopLayout.of(body, hinge, Handedness.right);
-      expect(r.keypad.width, moreOrLessEquals(280.5 * 1.25));
+      expect(r.keypadArrangement, KeypadArrangement.standard);
+      expect(r.keypad.width, moreOrLessEquals(350 * 1.25));
+      expect(r.settingsButton.top, r.keypad.top);
       expect(r.lcd.width, CalcTheme.screenLcdMaxWidth);
       expect(r.lcd.height, moreOrLessEquals(480 / 1.75));
       expect(r.lcd.right, body.width);
@@ -2722,6 +2772,31 @@ void _hingeLayoutTests() {
       expect(l.lcd, mirror(r.lcd));
       expect(l.keypad, mirror(r.keypad));
       expect(l.settingsButton, mirror(r.settingsButton));
+    });
+
+    test('가로 접힘선: 넓은 키패드 배열은 아래 절반 폭을 쓰고 LCD는 480dp 그대로다 (#80)', () {
+      // Fold 가로 반 접힘 본체 825×547 (접힘선 304.5): 아래 절반 234.5 → 넓은 배열 825×234.5.
+      const body = Size(825, 547);
+      const hinge = Rect.fromLTWH(0, 304.5, 825, 0);
+      for (final h in Handedness.values) {
+        final l = CalcTabletopLayout.of(body, hinge, h);
+        expect(l.keypadArrangement, KeypadArrangement.wide, reason: '$h');
+        expect(l.keypad, const Rect.fromLTRB(0, 312.5, 825, 547), reason: '$h');
+        expect(
+          KeypadMetrics.minKeyTouchHeightOf(l.keypad.size, l.keypadArrangement),
+          greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
+        );
+        // 키패드 옆 자리가 없어 버튼은 위 절반 모서리, LCD(480)는 버튼 옆으로 비켜 있어 줄지 않는다.
+        expect(l.settingsButton.top, 0, reason: '$h');
+        expect(l.lcd.width, CalcTheme.screenLcdMaxWidth, reason: '$h');
+        expect(l.lcd.height, moreOrLessEquals(480 / 1.75), reason: '$h');
+        expect(l.lcd.overlaps(l.settingsButton), isFalse, reason: '$h');
+        expect(
+          h.keypadOnRight ? l.lcd.right : l.lcd.left,
+          h.keypadOnRight ? l.keypad.right : l.keypad.left,
+          reason: '$h',
+        );
+      }
     });
 
     test('가로 접힘선: 설정 버튼이 위 절반으로 가도 LCD가 버튼 옆으로 비켜 있으면 LCD를 줄이지 않는다 (#92)', () {
