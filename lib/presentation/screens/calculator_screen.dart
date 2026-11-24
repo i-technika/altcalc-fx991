@@ -255,7 +255,7 @@ class CalcSplitLayout {
 /// 가로 접힘선 기준 위아래 배치 (#25, [ScreenArrangement.hingeStacked]) — 반 접어 세워 둔 테이블톱 자세(Flip의
 /// Flex 모드 포함)나 물리 힌지. 기준은 [CalcTheme]의 "접힘선 기준 배치" 절을 따른다.
 ///
-/// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭):
+/// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭). 실물 배열 키패드 옆에 버튼 자리가 남는 경우:
 /// ```
 ///  ┌─────────────────────────────────────────────┐
 ///  │               (띠 — 장식 줄)                 │
@@ -266,13 +266,28 @@ class CalcSplitLayout {
 ///  │                        │   50키 키패드     │  │  ← 아래 절반
 ///  └────────────────────────┴──────────────────┘──┘ ← 본체 아래 (광고 슬롯은 그 아래 전체 폭)
 /// ```
+/// 넓은 배열이 아래 절반 폭을 다 쓰는 경우 (Fold 가로·Pixel Fold 세로 반 접힘, #80):
+/// ```
+///  ┌─────────────────────────────────────────────┐
+///  │ [설정]               (띠 — 장식 줄)          │  ← 버튼은 위 절반 위 모서리
+///  │  (여백)          ┌───────────────────────────┤
+///  │                  │            LCD            │
+///  ├ ─ ─ ─ ─ ─ ─ ─ ─ ─┴─ ─ 접힘선 ─ ─ ─ ─ ─ ─ ─ ─ ┤
+///  │┌ 상단 조작부+함수부 ┐  ┌───── 숫자부 ───────┐ │
+///  ││   5행 × 6열        │  │    4행 × 5열       │ │  ← 아래 절반
+///  └┴────────────────────┴──┴────────────────────┴─┘
+/// ```
 /// - 접힘선([hinge], 본체 좌표) 위아래로 [CalcTheme.screenHingeMargin]씩 비운다.
 /// - 키패드: 아래 절반에 [KeypadMetrics.fitSize]로 맞춰, 주로 쓰는 손 쪽 가장자리·본체 아래에 붙인다.
+///   아래 절반은 낮고 넓어, 넓은 배열([KeypadArrangement.wide] — 숫자부를 함수부 오른쪽에 둔다)의 키가 실물 배열보다
+///   크면 그 배열을 쓴다(#80, 사용자 결정 — Fold 가로 반 접힘 19.9 → 39.9dp, Pixel Fold 세로 27.1 → 37.7dp).
+///   넓은 배열은 대개 아래 절반 폭을 다 써서, 설정 버튼은 위 절반 모서리로 간다(아래).
+///   폭이 좁은 화면(Flip 내부)은 실물 배열의 키가 더 커 그대로다.
 /// - LCD: 폭은 위 절반 폭과 [CalcTheme.screenLcdMaxWidth] 중 작은 쪽이고 (#92), 키패드와 같은 쪽(주로 쓰는
 ///   손 쪽) 가장자리에 붙인다 — 상한에 걸리면 LCD의 손 쪽 끝이 키패드의 바깥 끝과 맞고, 반대쪽은 빈 여백이 된다.
-///   상한은 실제 키패드 폭이 아니라 키패드 최대 폭 기준이다: 이 자세의 키패드는 아래 절반 높이에 묶여 좁아지는데
-///   (Fold 가로 반 접힘 약 293dp, #80), 보는 쪽인 위 절반의 LCD까지 그 폭으로 줄이면 글자만 작아진다.
-///   그래서 LCD가 키패드보다 넓을 수 있다(Fold 가로 반 접힘 약 1.6배). #80과의 접점은 [CalcTheme.screenLcdMaxWidth] 참조.
+///   상한은 실제 키패드 폭이 아니라 키패드 최대 폭 기준이다. 실물 배열의 키패드가 아래 절반 높이에 묶여 좁아질 때
+///   보는 쪽인 위 절반의 LCD까지 그 폭으로 줄이면 글자만 작아지므로 LCD가 키패드보다 넓을 수 있고,
+///   반대로 넓은 배열의 키패드(Fold 가로 반 접힘 825dp)보다는 좁다 — 근거는 [CalcTheme.screenLcdMaxWidth].
 ///   높이는 폭의 최대 높이(폭 / [CalcTheme.screenLcdMinAspectRatio])와 위 절반 높이 중
 ///   작은 쪽이고, 접힘선 쪽(아래)에 붙인다 — 남는 높이는 LCD 위 띠가 된다(위아래 배치와 같은 방식,
 ///   장식은 [CalcTopStripLayout]).
@@ -285,8 +300,11 @@ class CalcTabletopLayout {
   /// LCD 영역 (본체 좌표, dp)
   final Rect lcd;
 
-  /// 키패드 영역 (본체 좌표, dp) — [KeypadMetrics.fitSize] 결과 크기
+  /// 키패드 영역 (본체 좌표, dp) — [keypadArrangement] 배열의 [KeypadMetrics.fitSize] 결과 크기
   final Rect keypad;
+
+  /// 키패드 구역 배열 — 아래 절반에서 키가 더 큰 쪽 ([KeypadMetrics.preferredArrangementFor], #80)
+  final KeypadArrangement keypadArrangement;
 
   /// 설정 버튼 영역 (본체 좌표, dp)
   final Rect settingsButton;
@@ -294,6 +312,7 @@ class CalcTabletopLayout {
   const CalcTabletopLayout._({
     required this.lcd,
     required this.keypad,
+    required this.keypadArrangement,
     required this.settingsButton,
   });
 
@@ -310,7 +329,10 @@ class CalcTabletopLayout {
     final bottomStart = (finite(hinge.bottom) + CalcTheme.screenHingeMargin)
         .clamp(topEnd, height);
 
-    final keypadSize = KeypadMetrics.fitSize(Size(width, height - bottomStart));
+    // 아래 절반은 낮고 넓어, 넓은 배열의 키가 더 크면 그 배열로 놓는다 (#80).
+    final keypadRegion = Size(width, height - bottomStart);
+    final arrangement = KeypadMetrics.preferredArrangementFor(keypadRegion);
+    final keypadSize = KeypadMetrics.fitSize(keypadRegion, arrangement);
     final keypad = Rect.fromLTWH(
       onRight ? width - keypadSize.width : 0.0,
       height - keypadSize.height,
@@ -356,13 +378,14 @@ class CalcTabletopLayout {
     return CalcTabletopLayout._(
       lcd: lcd,
       keypad: keypad,
+      keypadArrangement: arrangement,
       settingsButton: settings,
     );
   }
 
   @override
   String toString() =>
-      'CalcTabletopLayout(lcd: $lcd, keypad: $keypad, '
+      'CalcTabletopLayout(lcd: $lcd, keypad: $keypad ($keypadArrangement), '
       'settings: $settingsButton)';
 }
 
@@ -797,11 +820,15 @@ String? announcementFor(
 
 /// 키 입력을 notifier로 전달하는 키패드. 상태를 구독하지 않는다.
 class _KeypadPanel extends ConsumerWidget {
-  const _KeypadPanel();
+  /// 키패드 구역 배열 (#80)
+  final KeypadArrangement arrangement;
+
+  const _KeypadPanel({required this.arrangement});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return CalcKeypad(
+      arrangement: arrangement,
       onKeyPressed: (id) => ref.read(calcProvider.notifier).pressKey(id),
       onKeyRepeat: (id) => ref.read(calcProvider.notifier).repeatKey(id),
     );
@@ -845,6 +872,8 @@ class _Body extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final Rect lcd;
     final Rect keypad;
+    // 키패드 구역 배열 — 테이블톱 배치만 넓은 배열을 쓸 수 있다 (#80)
+    var keypadArrangement = KeypadArrangement.standard;
     // 띠 밖에 놓는 설정 버튼 (좌우 분할·접힘선 기준 배치). 위아래 배치는 상단 띠 안에 둔다.
     Rect? settings;
     // 실제로 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래 배치로 그리면 [ScreenArrangement.stacked]다.
@@ -854,33 +883,65 @@ class _Body extends ConsumerWidget {
     final handedness = ref.watch(handednessProvider);
     // 위아래 배치 — 접힘선 기준 배치·짧은 창 판정이 이 배치의 키 크기와 비교한다.
     final stacked = _stackedRects(body);
-    final stackedTouch = KeypadMetrics.minKeyTouchHeightOf(stacked.keypad.size);
-    // 접힘선 기준 배치를 쓸지: 키가 배치별 하한 이상이거나, 하한 미만이어도 쓸 수 있는 크기
+    final stackedTouch = KeypadMetrics.minKeyTouchHeightOf(
+      stacked.keypad.size,
+      KeypadArrangement.standard,
+    );
+    // 접힘선 기준 배치를 쓸지: 키가 배치별 하한([floor]) 이상이거나, 하한 미만이어도 쓸 수 있는 크기
     // ([CalcTheme.keyTouchHeightUsableMin] 이상)이고 위아래 배치보다 크면 쓴다 (#38 R1 — 위아래 배치도 접힘선을
     // 가로지르므로, 더 작은 위아래 배치나 안내로 물러설 이유가 없다).
-    bool acceptsHingeKeypad(Rect keypad, double floor) {
-      final touch = KeypadMetrics.minKeyTouchHeightOf(keypad.size);
+    bool acceptsHingeKeypad(
+      Rect keypad,
+      KeypadArrangement keypadArrangement,
+      double floor,
+    ) {
+      final touch = KeypadMetrics.minKeyTouchHeightOf(
+        keypad.size,
+        keypadArrangement,
+      );
       return touch >= floor ||
           (touch >= CalcTheme.keyTouchHeightUsableMin && touch > stackedTouch);
     }
 
     // 접힘선 기준 배치 후보. 키가 너무 작으면 쓰지 않는다 (#25 R2 — 본체 좌표로 판정해야
     // 인셋·광고 슬롯·접힘선 간격이 빠진 실제 키패드 크기를 본다).
-    ({Rect lcd, Rect keypad, Rect settings})? hingeLayoutFor(Handedness h) {
+    ({
+      Rect lcd,
+      Rect keypad,
+      KeypadArrangement keypadArrangement,
+      Rect settings,
+    })?
+    hingeLayoutFor(Handedness h) {
       if (hinge == null) return null;
       switch (arrangement) {
         case ScreenArrangement.hingeSplit:
           final l = CalcSplitLayout.of(body, h, hinge: hinge);
-          if (acceptsHingeKeypad(l.keypad, CalcTheme.keyTouchHeightFloor)) {
-            return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
+          if (acceptsHingeKeypad(
+            l.keypad,
+            KeypadArrangement.standard,
+            CalcTheme.keyTouchHeightFloor,
+          )) {
+            return (
+              lcd: l.lcd,
+              keypad: l.keypad,
+              keypadArrangement: KeypadArrangement.standard,
+              settings: l.settingsButton,
+            );
           }
         case ScreenArrangement.hingeStacked:
           final l = CalcTabletopLayout.of(body, hinge, h);
+          // 반 접은 테이블톱은 완화된 하한 — 위아래 배치는 세워진 위 절반으로 키 행이 올라간다(#25, #80 R1).
           if (acceptsHingeKeypad(
             l.keypad,
+            l.keypadArrangement,
             CalcTheme.tabletopKeyTouchHeightFloor,
           )) {
-            return (lcd: l.lcd, keypad: l.keypad, settings: l.settingsButton);
+            return (
+              lcd: l.lcd,
+              keypad: l.keypad,
+              keypadArrangement: l.keypadArrangement,
+              settings: l.settingsButton,
+            );
           }
         case ScreenArrangement.stacked || ScreenArrangement.split:
           break;
@@ -904,6 +965,7 @@ class _Body extends ConsumerWidget {
           when hingeLayout != null:
         lcd = hingeLayout.lcd;
         keypad = hingeLayout.keypad;
+        keypadArrangement = hingeLayout.keypadArrangement;
         settings = hingeLayout.settings;
         drawn = arrangement;
       // 접힘선 기준 배치를 쓸 수 없으면(키가 너무 작음, 호출 측 불일치) 위아래 배치로 그린다.
@@ -936,13 +998,28 @@ class _Body extends ConsumerWidget {
     // TODO(#18): 안내 중에도 아래 광고 슬롯은 남는다. 배너를 연결할 때 안내 화면에서는 광고를 싣지 않게 하고
     // (내용 없는 화면의 광고), 적응형 배너 높이가 본체 높이·안내 기준을 바꾸는 것도 함께 확인한다.
     final tooSmall =
-        KeypadMetrics.minKeyTouchHeightOf(keypad.size) <
+        KeypadMetrics.minKeyTouchHeightOf(keypad.size, keypadArrangement) <
         CalcTheme.keyTouchHeightUsableMin;
     // 손잡이를 바꾸면 배치가 달라지는지 (#41 R2): 위아래 배치로 그렸어도, 반대 손잡이로는 접힘선 기준 배치가
     // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
+    // 접힘선 기준 배치는 반대 손잡이로도 같은 배치이고 키패드 자리가 같으면 키패드가 옮겨 가지 않는다 — 넓은
+    // 키패드 배열(#80)이 아래 절반 폭을 다 쓰는 테이블톱(Fold 가로·Pixel Fold 세로 반 접힘)이 그렇다(#80 R1).
+    final otherLayout =
+        hingeLayouts[handedness == Handedness.right
+            ? Handedness.left
+            : Handedness.right];
+    final keypadMoves = switch (drawn) {
+      ScreenArrangement.split => true,
+      ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked =>
+        otherLayout == null || !_keypadStaysPut(otherLayout.keypad, keypad),
+      ScreenArrangement.stacked => false,
+    };
     final handednessApplies =
-        drawn != ScreenArrangement.stacked ||
-        hingeLayouts.entries.any((e) => e.key != handedness && e.value != null);
+        keypadMoves ||
+        (drawn == ScreenArrangement.stacked &&
+            hingeLayouts.entries.any(
+              (e) => e.key != handedness && e.value != null,
+            ));
     // 손잡이를 바꿔도 그린 배치가 같은지 (#129): 접힘선 기준 배치는 두 손잡이 모두 그 배치를 쓸 수 있을 때다.
     // 좌우 분할·위아래 배치는 손잡이와 무관하다(위아래 배치로 대체한 화면은 위 판정처럼 반대 손잡이로 달라질 수 있다).
     final handednessKeepsArrangement = hingeLayouts.values.every(
@@ -962,7 +1039,16 @@ class _Body extends ConsumerWidget {
         ),
         Positioned.fromRect(
           rect: keypad.shift(origin),
-          child: shown(const _KeypadPanel()),
+          // 배열마다 const 인스턴스라, 손잡이만 바뀌고 키패드 크기·배열이 같으면 키패드 50개를 다시 빌드하지 않는다
+          // (크기가 바뀌면 `CalcKeypad`가 새 치수로 다시 빌드한다).
+          child: shown(switch (keypadArrangement) {
+            KeypadArrangement.standard => const _KeypadPanel(
+              arrangement: KeypadArrangement.standard,
+            ),
+            KeypadArrangement.wide => const _KeypadPanel(
+              arrangement: KeypadArrangement.wide,
+            ),
+          }),
         ),
         Positioned.fromRect(
           rect: strip.row.shift(origin),
@@ -997,6 +1083,17 @@ class _Body extends ConsumerWidget {
         if (tooSmall) const Positioned.fill(child: WindowTooSmallNotice()),
       ],
     );
+  }
+
+  /// 손잡이를 바꿔도 키패드가 [a] → [b]로 사실상 같은 자리인지. 크기는 같고(부동소수점 오차 0.5dp 미만), 가로 이동이
+  /// [CalcTheme.screenSplitGap](16dp) 미만이면 같은 자리로 본다 — 넓은 배열 블록 폭이 상한에 걸려 아래 절반 폭에서
+  /// 몇 dp만 남는 창(반 접힌 폭 약 1010dp: 5.2dp 이동)은 키패드가 옮겨 갔다고 느낄 수 없다(#80 R2).
+  static bool _keypadStaysPut(Rect a, Rect b) {
+    const e = 0.5;
+    return (a.width - b.width).abs() < e &&
+        (a.top - b.top).abs() < e &&
+        (a.bottom - b.bottom).abs() < e &&
+        (a.left - b.left).abs() < CalcTheme.screenSplitGap;
   }
 
   /// 위아래 배치의 LCD·키패드 영역 (본체 좌표) — [CalcScreenLayout].
@@ -1040,7 +1137,11 @@ class _Body extends ConsumerWidget {
       return null;
     }
     final split = CalcSplitLayout.of(body, handedness);
-    return KeypadMetrics.minKeyTouchHeightOf(split.keypad.size) > stackedTouch
+    return KeypadMetrics.minKeyTouchHeightOf(
+              split.keypad.size,
+              KeypadArrangement.standard,
+            ) >
+            stackedTouch
         ? split
         : null;
   }

@@ -768,8 +768,9 @@ Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
 /// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
 /// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
 /// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93, Flip 내부 #104)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을
-/// 넘어 되돌아가지 않는다(테스트가 조합마다 확인). #80에서 하한이나 테이블톱 배치를 바꾸면 이 표시가 실제 배치와
-/// 어긋날 수 있다(주황인데 배치는 접힘선을 가로지름) — 그때 조합 테스트가 실패한다.
+/// 넘어 되돌아가지 않는다(테스트가 조합마다 되돌아가지 않음을 확인 — 테이블톱은 실물·넓은 키패드 배열(#80) 중 키가 큰
+/// 쪽이다). 하한이나 테이블톱 배치를 바꿔 이 표시가 실제 배치와 어긋나면(주황인데 배치는 접힘선을 가로지름) 조합
+/// 테스트가 실패한다.
 DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
   final used = FormFactor.hingeOf(screen, features);
   if (used == null) return null;

@@ -666,7 +666,8 @@ void main() {
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
         'The keypad position does not change on this screen. '
-        'It applies when the LCD and keypad are side by side or split by a fold.',
+        'It applies when the keypad sits against one side, '
+        'such as when the LCD and keypad are side by side.',
       );
       // 안내 글은 선택지 아래에 있고, 라디오 그룹 밖에 있다.
       final note = tester.getRect(find.byKey(HandednessDialog.noteKey));
@@ -703,7 +704,7 @@ void main() {
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
         '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-        'LCD와 키패드가 좌우로 나뉘거나 접힘선으로 나뉜 화면에서 적용됩니다.',
+        'LCD와 키패드가 좌우로 나뉜 화면처럼 키패드를 한쪽 가장자리에 붙이는 화면에서 적용됩니다.',
       );
     });
 
@@ -723,19 +724,18 @@ void main() {
         Handedness.right,
         DrawnArrangement.sideBySide,
       ),
+      // 테이블톱에서 키패드 옆에 자리가 남아 손잡이로 키패드가 옮겨 가는 화면 (세로로 긴 대화면 근사)
       (
-        '테이블톱 Flip 411×1006·오른손',
-        const Size(411, 1006),
+        '테이블톱 716×1200',
+        const Size(716, 1200),
         const EdgeInsets.only(top: 32, bottom: 24),
-        flipHalfOpened,
-        Handedness.right,
-        DrawnArrangement.tabletop,
-      ),
-      (
-        '테이블톱 Flip 411×1006·왼손',
-        const Size(411, 1006),
-        const EdgeInsets.only(top: 32, bottom: 24),
-        flipHalfOpened,
+        const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 600, 716, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+        ],
         Handedness.left,
         DrawnArrangement.tabletop,
       ),
@@ -769,6 +769,50 @@ void main() {
         expect(_dialog, findsOneWidget);
         expect(find.byKey(HandednessDialog.noteKey), findsNothing);
       });
+    }
+
+    // 키패드가 아래 절반 폭을 다 써 손잡이를 바꿔도 키패드가 옮겨 가지 않는 테이블톱 (#80 R1) — Flip은 실물 배열,
+    // Fold 가로는 넓은 배열이 폭을 다 쓴다. 설정 버튼(폭 상한에 걸린 LCD — Fold 가로)만 좌우로 옮겨 가므로 안내 글을
+    // 보인다.
+    for (final (name, size, padding, features) in [
+      (
+        '테이블톱 Flip 411×1006',
+        const Size(411, 1006),
+        const EdgeInsets.only(top: 32, bottom: 24),
+        flipHalfOpened,
+      ),
+      (
+        '테이블톱 Fold 가로 841×673',
+        const Size(841, 673),
+        const EdgeInsets.only(top: 24, bottom: 24),
+        const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 336.5, 841, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+        ],
+      ),
+    ]) {
+      for (final handedness in Handedness.values) {
+        testWidgets('$name·${handedness.name}: 키패드가 옮겨 가지 않아 안내 글을 보인다', (
+          tester,
+        ) async {
+          final container = await _pump(
+            tester,
+            size: size,
+            padding: padding,
+            displayFeatures: features,
+          );
+          container.read(handednessProvider.notifier).set(handedness);
+          await tester.pump();
+          expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
+          await tester.tap(_button);
+          await tester.pumpAndSettle();
+          expect(_dialog, findsOneWidget);
+          expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+        });
+      }
     }
 
     testWidgets('대화상자가 열린 채 배치가 바뀌면 안내 글이 따라 나타나고 사라진다', (tester) async {

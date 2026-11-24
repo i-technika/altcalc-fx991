@@ -91,11 +91,13 @@ Size _bodyOf(Size window, EdgeInsets padding) => Size(
 /// 위아래 배치로 그렸을 때의 가장 낮은 키 터치 높이 (dp)
 double _stackedTouchOf(Size body) => KeypadMetrics.minKeyTouchHeightOf(
   Size(body.width, CalcScreenLayout.of(body).keypadHeight),
+  KeypadArrangement.standard,
 );
 
 /// 좌우 분할로 그렸을 때의 가장 낮은 키 터치 높이 (dp)
 double _splitTouchOf(Size body) => KeypadMetrics.minKeyTouchHeightOf(
   CalcSplitLayout.of(body, Handedness.right).keypad.size,
+  KeypadArrangement.standard,
 );
 
 /// 그린 키(커서 패드 제외) 중 가장 낮은 터치 높이 (dp) — `CalcKeyButton`의 터치 영역 규칙
@@ -149,7 +151,10 @@ void main() {
             expect(drawnTouch, greaterThanOrEqualTo(minTouch));
             // 배치를 고르는 계산값이 실제로 그린 키와 같다.
             expect(
-              KeypadMetrics.minKeyTouchHeightOf(tester.getSize(_keypad)),
+              KeypadMetrics.minKeyTouchHeightOf(
+                tester.getSize(_keypad),
+                KeypadArrangement.standard,
+              ),
               moreOrLessEquals(drawnTouch, epsilon: 0.01),
             );
 
@@ -609,6 +614,7 @@ void main() {
           }
           final touch = KeypadMetrics.minKeyTouchHeightOf(
             tester.getSize(_keypad),
+            KeypadArrangement.standard,
           );
           expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
           previous = touch;
@@ -631,6 +637,7 @@ void main() {
           }
           final touch = KeypadMetrics.minKeyTouchHeightOf(
             tester.getSize(_keypad),
+            KeypadArrangement.standard,
           );
           expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
           previous = touch;
@@ -677,7 +684,11 @@ void main() {
               greaterThanOrEqualTo(3.1),
               reason: '$size',
             );
-            if (KeypadMetrics.minKeyTouchHeightOf(keypad) < 17) {
+            if (KeypadMetrics.minKeyTouchHeightOf(
+                  keypad,
+                  KeypadArrangement.standard,
+                ) <
+                17) {
               nearThreshold = true;
             }
           }

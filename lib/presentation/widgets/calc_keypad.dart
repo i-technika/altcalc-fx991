@@ -9,19 +9,56 @@ import '../l10n/calc_semantic_strings.dart';
 import 'calc_key_button.dart';
 import 'text_fit.dart';
 
-/// 키패드 크기에서 산출한 배치·글자 치수. 화면 크기와 시스템 글자 배율, 라벨 글자 폭으로 정해진다.
+/// 키패드 구역 배열 (#80).
 ///
-/// 세로 배치 (행 높이 단위, 숫자부 행은 [CalcTheme.keypadNumberRowHeightRatio]배):
+/// 두 배열 모두 구역 안의 키 배열·행 수는 실물 그대로이고, 구역(상단 조작부+함수부 / 숫자부)을 놓는 방향만 다르다.
+/// ```
+///  standard (실물)           wide (낮고 넓은 영역)
+///  ┌───────────────┐         ┌───────────────┐   ┌────────────┐
+///  │ 상단 조작부 2행 │         │ 상단 조작부 2행 │   │            │
+///  │ 함수부 3행      │         │ 함수부 3행      │   │ 숫자부 4행  │
+///  ├───────────────┤         └───────────────┘   └────────────┘
+///  │ 숫자부 4행      │          └─── 블록 ───┘ 간격 └── 블록 ──┘
+///  └───────────────┘
+/// ```
+enum KeypadArrangement {
+  /// 실물 배열 — 숫자부가 함수부 아래에 있다.
+  standard,
+
+  /// 숫자부를 함수부 오른쪽에 나란히 둔다. 반 접은 테이블톱 자세의 아래 절반처럼 낮고 넓은 영역에서
+  /// [standard]보다 키가 클 때만 쓴다([KeypadMetrics.preferredArrangementFor]). 높이가 [standard]의 약 절반이라
+  /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
+  /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것).
+  /// 대표 기기(Fold 가로·Pixel Fold 세로 반 접힘)에서는 이 배열이 아래 절반 폭을 다 써서 손잡이로 옮길 자리가 없다.
+  /// 블록 폭이 [CalcTheme.keypadMaxWidth]에 걸리는 더 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
+  /// 가장자리로 가므로, 왼손잡이면 숫자부가 화면 가운데 쪽에 온다 — 숫자부 위치가 손잡이마다 바뀌면 손에 익은
+  /// 위치가 설정에 따라 달라지므로 블록 순서는 바꾸지 않는다.
+  wide,
+}
+
+/// 키패드 크기에서 산출한 배치·글자 치수. 화면 크기와 시스템 글자 배율, 라벨 글자 폭, 구역 배열로 정해진다.
+///
+/// 세로 배치 (행 높이 단위, 숫자부 행은 [CalcTheme.keypadNumberRowHeightRatio]배 — [KeypadArrangement.standard]):
 /// ```
 ///  상단 조작부  2행 (좌 2×2 · 커서 패드 · 우 2×2, 각 2열 폭 = 함수부 6열과 같은 열 폭)
 ///  함수부       3행 × 6열
 ///  (구역 간격)
 ///  숫자부       4행 × 5열
 /// ```
+/// [KeypadArrangement.wide]는 위 두 구역을 같은 폭의 블록([blockWidth])으로 좌우에 놓는다. 숫자부 4행이 함수부 5행과
+/// 같은 높이를 나누므로 숫자부 행은 함수부 행의 1.25배다(실물 비 1.2에 가깝다). 키 사이 간격과 블록의 가로/세로 비
+/// 범위는 같은 함수부 행 높이의 [KeypadArrangement.standard] 키패드와 같게 맞춰, 배열만 다르고 키 하나의 모양은
+/// 같은 범위다.
 @immutable
 class KeypadMetrics {
+  /// 구역 배열
+  final KeypadArrangement arrangement;
+
   /// 실제 키패드 크기 (가로/세로 비 제한 반영, 주어진 영역 이하)
   final Size size;
+
+  /// 구역 블록 폭 (dp) — [KeypadArrangement.standard]는 키패드 폭, [KeypadArrangement.wide]는 좌우 블록 하나의 폭
+  final double blockWidth;
 
   /// 키 사이 가로 간격 (dp)
   final double horizontalGap;
@@ -29,7 +66,7 @@ class KeypadMetrics {
   /// 키 사이 세로 간격 (dp)
   final double verticalGap;
 
-  /// 함수부와 숫자부 사이 간격 (dp)
+  /// 함수부와 숫자부 사이 간격 (dp) — [KeypadArrangement.standard]는 세로, [KeypadArrangement.wide]는 가로 간격
   final double sectionGap;
 
   /// 상단 조작부·함수부 행 높이 (간격 포함, dp)
@@ -51,7 +88,9 @@ class KeypadMetrics {
   final bool extendNumberHitArea;
 
   const KeypadMetrics._({
+    required this.arrangement,
     required this.size,
+    required this.blockWidth,
     required this.horizontalGap,
     required this.verticalGap,
     required this.sectionGap,
@@ -69,13 +108,28 @@ class KeypadMetrics {
   /// 상단 조작부 + 함수부 행 수 (같은 행 높이를 쓴다)
   static int get functionRowCount => controlRowCount + functionRows.length;
 
+  /// [KeypadArrangement.standard] 키패드 높이(구역 간격 제외)를 함수부 행 높이 단위로 센 값 (9.8)
+  static double get _standardRowUnits =>
+      functionRowCount +
+      numberRows.length * CalcTheme.keypadNumberRowHeightRatio;
+
+  /// [KeypadArrangement.wide] 키패드 높이에 곱하면 함수부 행 높이가 같은 [KeypadArrangement.standard] 키패드 높이가
+  /// 되는 배수 (2.0). 키 사이 세로 간격과 블록의 가로/세로 비 범위를 그 "같은 행 높이의 표준 키패드"에 맞춘다.
+  static double get wideHeightFactor =>
+      _standardRowUnits /
+      (1 - CalcTheme.keypadSectionGapRatio) /
+      functionRowCount;
+
+  /// [KeypadArrangement.wide] 키패드 폭을 블록 폭 단위로 센 값 (블록 2개 + 블록 사이 간격)
+  static const double _wideWidthUnits = 2 + CalcTheme.keypadWideSectionGapRatio;
+
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
   double get functionKeyWidth =>
-      math.max(0.0, size.width / functionColumns - horizontalGap);
+      math.max(0.0, blockWidth / functionColumns - horizontalGap);
 
   /// 숫자부 키의 셀 너비 (간격 제외, dp)
   double get numberKeyWidth =>
-      math.max(0.0, size.width / numberColumns - horizontalGap);
+      math.max(0.0, blockWidth / numberColumns - horizontalGap);
 
   /// 상단 조작부·함수부 키의 셀 높이 (간격 제외, dp)
   double get functionKeyHeight =>
@@ -84,20 +138,105 @@ class KeypadMetrics {
   /// 숫자부 키의 셀 높이 (간격 제외, dp)
   double get numberKeyHeight => math.max(0.0, numberRowHeight - verticalGap);
 
-  /// [available] 영역 안에서 [CalcTheme.keypadMinAspectRatio]~[CalcTheme.keypadMaxAspectRatio]
-  /// 가로/세로 비를 지키는 가장 큰 키패드 크기. 폭은 [CalcTheme.keypadMaxWidth]를 넘지 않는다.
-  static Size fitSize(Size available) {
+  /// [available] 영역 안에서 [arrangement] 배열이 가로/세로 비 범위를 지키는 가장 큰 키패드 크기.
+  ///
+  /// - [KeypadArrangement.standard]: 가로/세로 비 [CalcTheme.keypadMinAspectRatio]~[CalcTheme.keypadMaxAspectRatio],
+  ///   폭은 [CalcTheme.keypadMaxWidth] 이하.
+  /// - [KeypadArrangement.wide]: 블록 하나의 가로/세로 비가 위 범위 × [wideHeightFactor]이고(같은 행 높이의
+  ///   표준 키패드와 키 모양 범위가 같다), 블록 폭은 [CalcTheme.keypadMaxWidth] 이하, 블록 사이 간격은
+  ///   블록 폭 × [CalcTheme.keypadWideSectionGapRatio]다.
+  static Size fitSize(
+    Size available, [
+    KeypadArrangement arrangement = KeypadArrangement.standard,
+  ]) {
     final availableWidth = math.max(0.0, available.width);
     final availableHeight = math.max(0.0, available.height);
-    final width = math.min(
-      math.min(availableWidth, CalcTheme.keypadMaxWidth),
-      availableHeight * CalcTheme.keypadMaxAspectRatio,
-    );
-    final height = math.min(
-      availableHeight,
-      width / CalcTheme.keypadMinAspectRatio,
-    );
-    return Size(width, height);
+    switch (arrangement) {
+      case KeypadArrangement.standard:
+        final width = math.min(
+          math.min(availableWidth, CalcTheme.keypadMaxWidth),
+          availableHeight * CalcTheme.keypadMaxAspectRatio,
+        );
+        final height = math.min(
+          availableHeight,
+          width / CalcTheme.keypadMinAspectRatio,
+        );
+        return Size(width, height);
+      case KeypadArrangement.wide:
+        final factor = wideHeightFactor;
+        final block = math.min(
+          math.min(availableWidth / _wideWidthUnits, CalcTheme.keypadMaxWidth),
+          availableHeight * CalcTheme.keypadMaxAspectRatio * factor,
+        );
+        final height = math.min(
+          availableHeight,
+          block / (CalcTheme.keypadMinAspectRatio * factor),
+        );
+        // 폭은 영역 폭을 넘지 않는다 (블록 폭 × 단위 수의 부동소수점 오차로 넘치지 않게).
+        return Size(math.min(block * _wideWidthUnits, availableWidth), height);
+    }
+  }
+
+  /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키가 [KeypadArrangement.standard]보다
+  /// **클 때만** wide다(같으면 실물 배열). 낮고 넓은 영역(반 접은 테이블톱 자세의 아래 절반)에서 쓴다 (#80).
+  static KeypadArrangement preferredArrangementFor(Size available) =>
+      minKeyTouchHeightOf(available, KeypadArrangement.wide) >
+          minKeyTouchHeightOf(available, KeypadArrangement.standard)
+      ? KeypadArrangement.wide
+      : KeypadArrangement.standard;
+
+  /// 키패드 크기 [size]의 치수:
+  /// (블록 폭, 키 사이 가로 간격, 키 사이 세로 간격, 구역 간격, 함수부 행 높이, 숫자부 행 높이)
+  static (double, double, double, double, double, double) _geometryOf(
+    Size size,
+    KeypadArrangement arrangement,
+  ) {
+    switch (arrangement) {
+      case KeypadArrangement.standard:
+        final sectionGap = size.height * CalcTheme.keypadSectionGapRatio;
+        final rowUnit =
+            math.max(0.0, size.height - sectionGap) / _standardRowUnits;
+        return (
+          size.width,
+          size.width * CalcTheme.keyHorizontalGapRatio,
+          size.height * CalcTheme.keyVerticalGapRatio,
+          sectionGap,
+          rowUnit,
+          rowUnit * CalcTheme.keypadNumberRowHeightRatio,
+        );
+      case KeypadArrangement.wide:
+        final block = size.width / _wideWidthUnits;
+        return (
+          block,
+          block * CalcTheme.keyHorizontalGapRatio,
+          // 함수부 행 높이가 같은 표준 키패드와 같은 세로 간격
+          size.height * wideHeightFactor * CalcTheme.keyVerticalGapRatio,
+          math.max(0.0, size.width - 2 * block),
+          size.height / functionRowCount,
+          size.height / numberRows.length,
+        );
+    }
+  }
+
+  /// [available] 영역에 [arrangement] 배열 키패드를 놓았을 때 가장 낮은 키의 터치 높이 (dp, 커서 패드 제외).
+  ///
+  /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
+  /// 넓힌 셀 높이, 아니면 키캡 높이. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
+  ///
+  /// [arrangement]는 기본값 없이 받는다 — 빠뜨리면 넓은 배열 키패드를 실물 배열로 재어 배치 판정이 조용히 틀린다(#80 R1).
+  static double minKeyTouchHeightOf(
+    Size available,
+    KeypadArrangement arrangement,
+  ) {
+    final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
+        _geometryOf(fitSize(available, arrangement), arrangement);
+    double touchOf(double rowHeight) {
+      final cell = math.max(0.0, rowHeight - verticalGap);
+      final cap = cell * (1 - CalcTheme.keyLegendHeightRatio);
+      return cap < CalcTheme.keyMinTouchTargetHeight ? cell : cap;
+    }
+
+    return math.min(touchOf(functionRowHeight), touchOf(numberRowHeight));
   }
 
   /// [available] 영역과 시스템 글자 배율([textScaler], `MediaQuery` 값 그대로)로 치수를 계산한다.
@@ -114,44 +253,23 @@ class KeypadMetrics {
   ///    `FittedBox`가 개별로 줄인다.
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
-  /// 키패드 크기 [size]의 세로 치수: (키 사이 세로 간격, 구역 간격, 함수부 행 높이, 숫자부 행 높이)
-  static (double, double, double, double) _rowsOf(Size size) {
-    final verticalGap = size.height * CalcTheme.keyVerticalGapRatio;
-    final sectionGap = size.height * CalcTheme.keypadSectionGapRatio;
-    final rowUnits =
-        functionRowCount +
-        numberRows.length * CalcTheme.keypadNumberRowHeightRatio;
-    final rowUnit = math.max(0.0, size.height - sectionGap) / rowUnits;
-    return (
+  factory KeypadMetrics.compute(
+    Size available,
+    TextScaler textScaler, {
+    KeypadArrangement arrangement = KeypadArrangement.standard,
+  }) {
+    final size = fitSize(available, arrangement);
+    final (
+      blockWidth,
+      horizontalGap,
       verticalGap,
       sectionGap,
-      rowUnit,
-      rowUnit * CalcTheme.keypadNumberRowHeightRatio,
+      functionRowHeight,
+      numberRowHeight,
+    ) = _geometryOf(
+      size,
+      arrangement,
     );
-  }
-
-  /// [available] 영역에 키패드를 놓았을 때 가장 낮은 키의 터치 높이 (dp, 커서 패드 제외).
-  ///
-  /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
-  /// 넓힌 셀 높이, 아니면 키캡 높이. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
-  static double minKeyTouchHeightOf(Size available) {
-    final (verticalGap, _, functionRowHeight, numberRowHeight) = _rowsOf(
-      fitSize(available),
-    );
-    double touchOf(double rowHeight) {
-      final cell = math.max(0.0, rowHeight - verticalGap);
-      final cap = cell * (1 - CalcTheme.keyLegendHeightRatio);
-      return cap < CalcTheme.keyMinTouchTargetHeight ? cell : cap;
-    }
-
-    return math.min(touchOf(functionRowHeight), touchOf(numberRowHeight));
-  }
-
-  factory KeypadMetrics.compute(Size available, TextScaler textScaler) {
-    final size = fitSize(available);
-    final horizontalGap = size.width * CalcTheme.keyHorizontalGapRatio;
-    final (verticalGap, sectionGap, functionRowHeight, numberRowHeight) =
-        _rowsOf(size);
 
     // CalcKeyButton 내부 치수와 같은 방식으로 각인 띠·키캡 높이를 구한다.
     double capHeightOf(double rowHeight) =>
@@ -188,9 +306,9 @@ class KeypadMetrics {
     final widths = _LabelWidthLimits.measure(
       functionKeyWidth: math.max(
         0.0,
-        size.width / functionColumns - horizontalGap,
+        blockWidth / functionColumns - horizontalGap,
       ),
-      numberKeyWidth: math.max(0.0, size.width / numberColumns - horizontalGap),
+      numberKeyWidth: math.max(0.0, blockWidth / numberColumns - horizontalGap),
     );
     double unify(double byHeight, double maxScaledByWidth) => math.max(
       fitFontSize(
@@ -202,7 +320,9 @@ class KeypadMetrics {
     );
 
     return KeypadMetrics._(
+      arrangement: arrangement,
       size: size,
+      blockWidth: blockWidth,
       horizontalGap: horizontalGap,
       verticalGap: verticalGap,
       sectionGap: sectionGap,
@@ -324,8 +444,9 @@ class _LabelWidthLimits {
 /// 상태 관리에 의존하지 않으며 입력은 콜백으로만 내보낸다.
 ///
 /// ## 배치 계약
-/// - 주어진 영역 안에서 가로/세로 비를 제한한 크기([KeypadMetrics.fitSize])로 가운데 정렬한다.
-///   제약이 무한한 축은 [fallbackSize]의 값을 쓴다.
+/// - 주어진 영역 안에서 [arrangement] 배열의 가로/세로 비를 제한한 크기([KeypadMetrics.fitSize])로 가운데 정렬한다.
+///   제약이 무한한 축은 [fallbackSize]의 값을 쓴다. 배열은 호출자가 정한다 — 영역에서 키가 더 큰 배열은
+///   [KeypadMetrics.preferredArrangementFor]로 고른다.
 /// - [CalcKeyButton]은 누르는 순간 입력하므로 **스크롤 영역 안에 두지 않는다**.
 /// - 키 사이 간격은 터치 영역에 넣지 않는다(실물처럼 인접 키 오입력을 막는 중립 영역).
 ///
@@ -343,6 +464,9 @@ class CalcKeypad extends StatelessWidget {
   /// 햅틱 피드백 사용 여부
   final bool enableHaptics;
 
+  /// 구역 배열 (#80)
+  final KeypadArrangement arrangement;
+
   /// 제약이 무한한 축에 쓰는 기본 크기
   static const Size fallbackSize = Size(360, 420);
 
@@ -351,6 +475,7 @@ class CalcKeypad extends StatelessWidget {
     this.onKeyPressed,
     this.onKeyRepeat,
     this.enableHaptics = true,
+    this.arrangement = KeypadArrangement.standard,
   });
 
   @override
@@ -376,7 +501,11 @@ class CalcKeypad extends StatelessWidget {
               ? constraints.maxHeight
               : fallbackSize.height,
         );
-        final metrics = KeypadMetrics.compute(available, textScaler);
+        final metrics = KeypadMetrics.compute(
+          available,
+          textScaler,
+          arrangement: arrangement,
+        );
         return Center(
           child: SizedBox.fromSize(
             key: const ValueKey('calc-keypad'),
@@ -457,53 +586,85 @@ class _KeypadBody extends StatelessWidget {
     );
   }
 
+  /// 구역 하나를 스크린리더 탐색 단위로 묶는다 — 넓은 배열에서 두 구역의 행 높이가 달라, 묶지 않으면 화면 위치순
+  /// 정렬이 함수부와 숫자부 키를 섞어 읽는다. 키는 각자 노드로 남는다(`explicitChildNodes`).
+  static Widget _section(Widget child) =>
+      Semantics(container: true, explicitChildNodes: true, child: child);
+
   @override
   Widget build(BuildContext context) {
     final controlHeight =
         metrics.functionRowHeight * KeypadMetrics.controlRowCount;
     final extendFunction = metrics.extendFunctionHitArea;
-    return Column(
+    final wide = metrics.arrangement == KeypadArrangement.wide;
+    // 두 배열을 같은 위젯 트리(`Flex` + 같은 자식 종류·순서)로 그린다 — 테이블톱 자세로 접고 펼 때 배열이 바뀌어도
+    // 키 element가 유지되어 키 눌림 상태와 스크린리더 포커스가 사라지지 않는다 (#80, `_Body`의 배치 전환과 같은 이유).
+    return Flex(
+      direction: wide ? Axis.horizontal : Axis.vertical,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 상단 조작부: 좌 2×2 / 커서 패드 / 우 2×2 (각 2열 폭)
+        // 상단 조작부 + 함수부 — 표준 배열은 위, 넓은 배열은 왼쪽 블록
         SizedBox(
-          height: controlHeight,
-          child: Row(
-            children: [
-              Expanded(
-                child: _grid(controlLeftRows, extendHitArea: extendFunction),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: _cellPadding,
-                  child: CursorPad(
-                    buttonBuilder: (def, keyShape) => _button(
-                      def,
-                      showLegendBand: false,
-                      shape: keyShape.shape,
-                      hitShape: keyShape.hitShape,
-                      hitOutset: keyShape.hitOutset,
-                    ),
-                    onKeyPressed: onKeyPressed,
-                    enableHaptics: enableHaptics,
-                  ),
+          width: wide ? metrics.blockWidth : null,
+          height: wide
+              ? null
+              : metrics.functionRowHeight * KeypadMetrics.functionRowCount,
+          child: _section(
+            Column(
+              children: [
+                _controlSection(controlHeight, extendFunction),
+                // 함수부는 블록의 남은 높이를 모두 쓴다 (부동소수 오차로 넘치지 않게).
+                Expanded(
+                  child: _grid(functionRows, extendHitArea: extendFunction),
                 ),
-              ),
-              Expanded(
-                child: _grid(controlRightRows, extendHitArea: extendFunction),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         SizedBox(
-          height: metrics.functionRowHeight * functionRows.length,
-          child: _grid(functionRows, extendHitArea: extendFunction),
+          width: wide ? metrics.sectionGap : null,
+          height: wide ? null : metrics.sectionGap,
         ),
-        SizedBox(height: metrics.sectionGap),
-        // 숫자부는 남은 높이를 모두 쓴다 (부동소수 오차로 넘치지 않게).
+        // 숫자부는 남은 높이(넓은 배열은 남은 폭)를 모두 쓴다 (부동소수 오차로 넘치지 않게).
         Expanded(
-          child: _grid(numberRows, extendHitArea: metrics.extendNumberHitArea),
+          child: _section(
+            _grid(numberRows, extendHitArea: metrics.extendNumberHitArea),
+          ),
         ),
       ],
+    );
+  }
+
+  /// 상단 조작부: 좌 2×2 / 커서 패드 / 우 2×2 (각 2열 폭)
+  Widget _controlSection(double controlHeight, bool extendFunction) {
+    return SizedBox(
+      height: controlHeight,
+      child: Row(
+        children: [
+          Expanded(
+            child: _grid(controlLeftRows, extendHitArea: extendFunction),
+          ),
+          Expanded(
+            child: Padding(
+              padding: _cellPadding,
+              child: CursorPad(
+                buttonBuilder: (def, keyShape) => _button(
+                  def,
+                  showLegendBand: false,
+                  shape: keyShape.shape,
+                  hitShape: keyShape.hitShape,
+                  hitOutset: keyShape.hitOutset,
+                ),
+                onKeyPressed: onKeyPressed,
+                enableHaptics: enableHaptics,
+              ),
+            ),
+          ),
+          Expanded(
+            child: _grid(controlRightRows, extendHitArea: extendFunction),
+          ),
+        ],
+      ),
     );
   }
 }

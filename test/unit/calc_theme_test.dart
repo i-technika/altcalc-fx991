@@ -973,6 +973,14 @@ void main() {
       );
     });
 
+    test('넓은 키패드 배열 블록 간격: 키 사이 가로 간격보다 넓고 블록 폭보다 훨씬 좁다 (#80)', () {
+      expect(
+        CalcTheme.keypadWideSectionGapRatio,
+        greaterThan(CalcTheme.keyHorizontalGapRatio),
+      );
+      expect(CalcTheme.keypadWideSectionGapRatio, lessThan(0.2));
+    });
+
     test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수이고, 테이블톱 하한은 그 아래로 내려가지 않는다 (#38)', () {
       expect(CalcTheme.keyTouchHeightUsableMin, greaterThan(0));
       expect(
