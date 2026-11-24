@@ -1011,7 +1011,7 @@ class _Body extends ConsumerWidget {
     final keypadMoves = switch (drawn) {
       ScreenArrangement.split => true,
       ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked =>
-        otherLayout == null || !_sameRect(otherLayout.keypad, keypad),
+        otherLayout == null || !_keypadStaysPut(otherLayout.keypad, keypad),
       ScreenArrangement.stacked => false,
     };
     final handednessApplies =
@@ -1085,13 +1085,15 @@ class _Body extends ConsumerWidget {
     );
   }
 
-  /// 두 영역이 같은 자리인지 — 계산 순서에 따른 부동소수점 오차(0.5dp 미만)는 같은 것으로 본다.
-  static bool _sameRect(Rect a, Rect b) {
+  /// 손잡이를 바꿔도 키패드가 [a] → [b]로 사실상 같은 자리인지. 크기는 같고(부동소수점 오차 0.5dp 미만), 가로 이동이
+  /// [CalcTheme.screenSplitGap](16dp) 미만이면 같은 자리로 본다 — 넓은 배열 블록 폭이 상한에 걸려 아래 절반 폭에서
+  /// 몇 dp만 남는 창(반 접힌 폭 약 1010dp: 5.2dp 이동)은 키패드가 옮겨 갔다고 느낄 수 없다(#80 R2).
+  static bool _keypadStaysPut(Rect a, Rect b) {
     const e = 0.5;
-    return (a.left - b.left).abs() < e &&
+    return (a.width - b.width).abs() < e &&
         (a.top - b.top).abs() < e &&
-        (a.right - b.right).abs() < e &&
-        (a.bottom - b.bottom).abs() < e;
+        (a.bottom - b.bottom).abs() < e &&
+        (a.left - b.left).abs() < CalcTheme.screenSplitGap;
   }
 
   /// 위아래 배치의 LCD·키패드 영역 (본체 좌표) — [CalcScreenLayout].

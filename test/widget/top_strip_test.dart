@@ -666,7 +666,7 @@ void main() {
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
         'The keypad position does not change on this screen. '
-        'It applies when there is room beside the keypad, '
+        'It applies when the keypad sits against one side, '
         'such as when the LCD and keypad are side by side.',
       );
       // 안내 글은 선택지 아래에 있고, 라디오 그룹 밖에 있다.
@@ -704,7 +704,7 @@ void main() {
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
         '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-        '키패드 옆에 빈 자리가 있는 화면(LCD와 키패드가 좌우로 나뉜 화면 등)에서 적용됩니다.',
+        'LCD와 키패드가 좌우로 나뉜 화면처럼 키패드를 한쪽 가장자리에 붙이는 화면에서 적용됩니다.',
       );
     });
 
@@ -772,7 +772,8 @@ void main() {
     }
 
     // 키패드가 아래 절반 폭을 다 써 손잡이를 바꿔도 키패드가 옮겨 가지 않는 테이블톱 (#80 R1) — Flip은 실물 배열,
-    // Fold 가로는 넓은 배열이 폭을 다 쓴다. LCD·설정 버튼만 좌우로 옮겨 가므로 안내 글을 보인다.
+    // Fold 가로는 넓은 배열이 폭을 다 쓴다. 설정 버튼(폭 상한에 걸린 LCD — Fold 가로)만 좌우로 옮겨 가므로 안내 글을
+    // 보인다.
     for (final (name, size, padding, features) in [
       (
         '테이블톱 Flip 411×1006',

@@ -518,6 +518,10 @@ void main() {
     for (final (name, size, hingeY, keypadMoves) in [
       ('Fold 가로(넓은 배열이 폭을 다 씀)', foldSize, 336.5, false),
       ('세로로 긴 대화면 716×1200(실물 배열)', const Size(716, 1200), 600.0, true),
+      // 블록 폭이 상한에 걸려 키패드(988.8dp)가 아래 절반(994dp)보다 5.2dp 좁다 — 손잡이로 5.2dp만 움직인다 (#80 R2)
+      ('반 접힌 폭 1010(넓은 배열이 거의 다 씀)', const Size(1010, 700), 350.0, false),
+      // 넓은 창: 넓은 배열 키패드 옆에 남는 폭이 커서(1200 → 195dp) 손잡이로 옮겨 간다
+      ('반 접힌 폭 1200(넓은 배열 옆 자리)', const Size(1200, 800), 424.0, true),
     ]) {
       testWidgets('$name: 키패드가 옮겨 가지 않으면 대화상자에 그 안내를 보인다 (#80 R1)', (
         tester,
@@ -542,7 +546,14 @@ void main() {
         await tester.tap(_option(Handedness.left));
         await tester.pumpAndSettle();
         final after = tester.getRect(_keypad);
-        expect(after == before, !keypadMoves, reason: '$before → $after');
+        // 옮겨 가지 않음 = 크기 그대로·가로 이동이 좌우 분할 간격(16dp) 미만 (`_Body`의 판정과 같은 기준)
+        final shift = (after.left - before.left).abs();
+        expect(after.size, before.size);
+        expect(
+          shift < CalcTheme.screenSplitGap,
+          !keypadMoves,
+          reason: '$before → $after',
+        );
       });
     }
 

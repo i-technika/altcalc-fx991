@@ -131,10 +131,10 @@ void main() {
           arrangement: KeypadArrangement.wide,
         );
         expect(m.size, s, reason: '$area');
-        // 두 블록 + 블록 사이 간격 = 키패드 폭 (fitSize와 치수 계산이 같은 폭 단위를 쓴다)
+        // 블록 사이 간격 = 블록 폭 × 비율 (fitSize의 폭 단위와 치수 계산의 블록 폭이 맞는다)
         expect(
-          2 * m.blockWidth + m.sectionGap,
-          moreOrLessEquals(m.size.width),
+          m.sectionGap,
+          moreOrLessEquals(m.blockWidth * CalcTheme.keypadWideSectionGapRatio),
           reason: '$area',
         );
         expect(
