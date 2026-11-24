@@ -20,7 +20,7 @@ const _flipTabletop = Size(395, 411);
 /// 테스트 화면(기본 800×600)을 넓은 키패드 자리보다 넓게 키운다.
 void _wideView(WidgetTester tester) {
   tester.view.physicalSize =
-      const Size(1000, 600) * tester.view.devicePixelRatio;
+      const Size(2100, 600) * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
 }
 
@@ -131,6 +131,12 @@ void main() {
           arrangement: KeypadArrangement.wide,
         );
         expect(m.size, s, reason: '$area');
+        // 두 블록 + 블록 사이 간격 = 키패드 폭 (fitSize와 치수 계산이 같은 폭 단위를 쓴다)
+        expect(
+          2 * m.blockWidth + m.sectionGap,
+          moreOrLessEquals(m.size.width),
+          reason: '$area',
+        );
         expect(
           m.blockWidth,
           lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 1e-9),
@@ -151,7 +157,10 @@ void main() {
     test('preferredArrangementFor: 넓은 배열의 키가 클 때만 넓은 배열이다', () {
       // Fold 가로 반 접힘: 19.9 → 39.9dp
       expect(
-        KeypadMetrics.minKeyTouchHeightOf(_foldTabletop),
+        KeypadMetrics.minKeyTouchHeightOf(
+          _foldTabletop,
+          KeypadArrangement.standard,
+        ),
         moreOrLessEquals(19.93, epsilon: 0.01),
       );
       expect(
@@ -184,6 +193,37 @@ void main() {
   });
 
   group('CalcKeypad — 넓은 배열 배치', () {
+    for (final area in const [
+      Size(1, 1),
+      Size(50, 20),
+      Size(360, 150),
+      Size(2000, 300),
+      Size(400.3, 133.7),
+    ]) {
+      for (final scale in [0.85, 2.0]) {
+        testWidgets(
+          '${area.width}×${area.height}·글자 배율 $scale: 예외·넘침 없이 영역 안에 들어간다',
+          (tester) async {
+            _wideView(tester);
+            await tester.pumpWidget(
+              _host(
+                const CalcKeypad(arrangement: KeypadArrangement.wide),
+                size: area,
+                textScale: scale,
+              ),
+            );
+            expect(tester.takeException(), isNull);
+            final keypad = tester.getRect(
+              find.byKey(const ValueKey('calc-keypad')),
+            );
+            final bounds = (Offset.zero & area).inflate(0.01);
+            expect(bounds.contains(keypad.topLeft), isTrue);
+            expect(bounds.contains(keypad.bottomRight), isTrue);
+          },
+        );
+      }
+    }
+
     for (final scale in [1.0, 1.3, 2.0]) {
       testWidgets('Fold 가로 반 접힘 자리·글자 배율 $scale: 넘침 없이 숫자부가 함수부 오른쪽에 놓인다', (
         tester,

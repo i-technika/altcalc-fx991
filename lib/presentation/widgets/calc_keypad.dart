@@ -28,8 +28,11 @@ enum KeypadArrangement {
   /// 숫자부를 함수부 오른쪽에 나란히 둔다. 반 접은 테이블톱 자세의 아래 절반처럼 낮고 넓은 영역에서
   /// [standard]보다 키가 클 때만 쓴다([KeypadMetrics.preferredArrangementFor]). 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
-  /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다 — 이 배열은 아래 절반 폭을 거의 다 써서 손잡이로 옮길 자리가 없고,
-  /// 숫자부 위치가 손잡이마다 바뀌면 손에 익은 위치가 설정에 따라 달라진다.
+  /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것).
+  /// 대표 기기(Fold 가로·Pixel Fold 세로 반 접힘)에서는 이 배열이 아래 절반 폭을 다 써서 손잡이로 옮길 자리가 없다.
+  /// 블록 폭이 [CalcTheme.keypadMaxWidth]에 걸리는 더 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
+  /// 가장자리로 가므로, 왼손잡이면 숫자부가 화면 가운데 쪽에 온다 — 숫자부 위치가 손잡이마다 바뀌면 손에 익은
+  /// 위치가 설정에 따라 달라지므로 블록 순서는 바꾸지 않는다.
   wide,
 }
 
@@ -178,7 +181,7 @@ class KeypadMetrics {
   /// **클 때만** wide다(같으면 실물 배열). 낮고 넓은 영역(반 접은 테이블톱 자세의 아래 절반)에서 쓴다 (#80).
   static KeypadArrangement preferredArrangementFor(Size available) =>
       minKeyTouchHeightOf(available, KeypadArrangement.wide) >
-          minKeyTouchHeightOf(available)
+          minKeyTouchHeightOf(available, KeypadArrangement.standard)
       ? KeypadArrangement.wide
       : KeypadArrangement.standard;
 
@@ -219,10 +222,12 @@ class KeypadMetrics {
   ///
   /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
   /// 넓힌 셀 높이, 아니면 키캡 높이. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
+  ///
+  /// [arrangement]는 기본값 없이 받는다 — 빠뜨리면 넓은 배열 키패드를 실물 배열로 재어 배치 판정이 조용히 틀린다(#80 R1).
   static double minKeyTouchHeightOf(
-    Size available, [
-    KeypadArrangement arrangement = KeypadArrangement.standard,
-  ]) {
+    Size available,
+    KeypadArrangement arrangement,
+  ) {
     final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
         _geometryOf(fitSize(available, arrangement), arrangement);
     double touchOf(double rowHeight) {

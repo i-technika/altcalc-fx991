@@ -63,7 +63,7 @@ class KoSettingsStrings extends SettingsStrings {
   @override
   String get handednessNote =>
       '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-      'LCD와 키패드가 좌우로 나뉘거나 접힘선으로 나뉜 화면에서 적용됩니다.';
+      '키패드 옆에 빈 자리가 있는 화면(LCD와 키패드가 좌우로 나뉜 화면 등)에서 적용됩니다.';
 
   @override
   String handedness(Handedness value) => switch (value) {
@@ -97,7 +97,8 @@ class EnSettingsStrings extends SettingsStrings {
   @override
   String get handednessNote =>
       'The keypad position does not change on this screen. '
-      'It applies when the LCD and keypad are side by side or split by a fold.';
+      'It applies when there is room beside the keypad, '
+      'such as when the LCD and keypad are side by side.';
 
   @override
   String handedness(Handedness value) => switch (value) {
