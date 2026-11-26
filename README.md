@@ -198,38 +198,43 @@ flutter run -d chrome -t preview/key_preview_main.dart
 ### Android 기기에서 실행
 
 `AltCalc (앱)`은 기기를 지정하지 않는다. F5 전에 상태 표시줄 오른쪽의 기기 이름을 눌러 Android 기기를 고른다.
-아래에서 **(실측)** 은 #68에서 Android 16(API 36) 에뮬레이터로 본 것이다. **(소스)** 는 확장(Dart-Code 3.146) 소스로 확인한 것이다.
+아래에서 **(실측)** 은 #68에서 실제 VS Code 창으로 본 것이다(맨 아래 "확인 방법"). **(소스)** 는 확장(Dart-Code 3.146) 소스로만 확인한 것이다.
 
-**기기 고르기 (소스)**
+**기기 고르기**
 
-- 목록의 "Available Devices"에는 연결된 실기기와 켜져 있는 에뮬레이터가 나온다. 항목 설명에는 기기 ID가 붙는다(예: `emulator-5560 - mobile`).
-  꺼진 에뮬레이터는 `Start <AVD 이름>` 항목으로 켤 수 있다. 이미 켜져 있는 AVD는 이 목록에서 빠지므로, 같은 AVD를 하나 더 띄울 수는 없다.
-- 상태 표시줄에는 에뮬레이터의 AVD 이름이 `<AVD 이름> (android-x64 emulator)` 형태로 나온다.
-  같은 AVD를 두 개 띄우면 상태 표시줄 글자가 똑같다. 그때는 목록 설명의 기기 ID로 가린다.
-- 새 모바일 기기가 연결되면 확장이 그 기기를 자동으로 고른다(`dart.flutterSelectDeviceWhenConnected`, 기본값 켜짐).
-  예외가 있다. 지금 고른 기기가 이 프로젝트에서 전에 직접 고른 기기이면 바꾸지 않는다(`dart.flutterRememberSelectedDevice`, 기본값 켜짐).
-  그러므로 F5 전에 상태 표시줄의 기기를 확인한다.
+- 목록의 "Available Devices"에는 연결된 실기기와 켜져 있는 에뮬레이터가 나온다. 항목 설명에는 기기 ID가 붙는다(예: `emulator-5560 - mobile`) (소스).
+  꺼진 에뮬레이터는 `Start <AVD 이름>` 항목으로 켤 수 있다. 이미 켜져 있는 AVD는 이 목록에서 빠지므로, 같은 AVD를 하나 더 띄울 수는 없다 (소스).
+- 상태 표시줄과 실행 세션 이름에는 에뮬레이터의 AVD 이름이 나온다(예: `AltCalc (앱) (Medium Phone API 36.1)`) (실측).
+  같은 AVD를 두 개 띄우면 이름이 똑같다. 그때는 목록 설명의 기기 ID로 가린다 (소스).
+- 새 모바일 기기가 연결되면 확장이 그 기기를 자동으로 고른다(`dart.flutterSelectDeviceWhenConnected`, 기본값 켜짐) (실측).
+  예외가 있다. 지금 고른 기기가 이 프로젝트에서 전에 직접 고른 기기이면 바꾸지 않는다(`dart.flutterRememberSelectedDevice`, 기본값 켜짐) (소스).
+  목록에서 직접 고른 기기는 기억된다(확장 로그 `Saving chrome as preferred device`) (실측).
+- 창을 켤 때 이미 켜져 있던 에뮬레이터를 고르지 못할 수 있다 (실측 1회).
+  - 확장은 기기가 지원 플랫폼인지 Flutter 데몬에 묻는데, 5초 안에 답이 없으면 지원 플랫폼을 비어 있는 것으로 본다(소스).
+  - 그래서 상태 표시줄이 `No Device`로 남는다. 이때 F5를 누르면 기기 목록이 떠서 고를 때까지 기다린다.
+  - 그러니 F5 전에 상태 표시줄의 기기를 확인한다. `No Device`이거나 다른 기기이면 직접 고른다.
 
 **실행 (실측)**
 
 - Debug Console에는 `Launching lib\main.dart on <기기 모델명> in debug mode...`가 먼저 나온다.
   - 이어서 `√ Built build\app\outputs\flutter-apk\app-debug.apk`, `Connecting to VM Service at ws://…`, `Connected to the VM Service.`가 나온다.
-  - 그 사이의 `Running Gradle task 'assembleDebug'...`, `Installing …app-debug.apk...`는 콘솔이 아니라 진행 알림으로 나온다.
+  - 그 사이의 `Running Gradle task 'assembleDebug'...`, `Installing …app-debug.apk...`, `Syncing files to device ...`는 콘솔이 아니라 진행 알림으로 나온다.
   - 경로 구분자와 `√`는 Windows 표기다. macOS·Linux에서는 `/`와 `✓`로 나온다.
-- 앱이 뜨기까지 108초 걸렸다. 그중 Gradle 빌드가 91초였다.
-  이는 `build/`가 빈 작업 트리 기준이다. 이 PC에는 다른 작업 트리가 남긴 Gradle 캐시가 있었다.
+- 걸린 시간은 다음과 같다. 이 PC에는 다른 작업 트리가 남긴 Gradle 캐시가 있었다.
   Gradle 배포판과 의존성을 처음 내려받는 PC에서는 더 오래 걸린다.
+  - `build/`가 빈 작업 트리의 첫 실행: Gradle 빌드 91초, 앱이 뜨기까지 108초.
+  - 같은 작업 트리에서 다시 실행: 빌드 27초, 앱이 뜨기까지 44초.
 
 **핫 리로드·리스타트**
 
-- 저장하면 핫 리로드가 된다 (소스).
-  - 설정 기본값이 `dart.flutterHotReloadOnSave: manual`이라 Ctrl+S 같은 직접 저장일 때만 한다. 자동 저장(지연·포커스 이동)으로는 하지 않는다.
-  - 저장한 파일에 Dart 오류가 있으면 하지 않는다.
-- 디버그 도구 모음의 번개 단추는 저장한 뒤 핫 리로드한다. Ctrl+F5는 저장하지 않고 핫 리로드한다(macOS에서도 Control+F5) (소스).
-- 핫 리스타트는 도구 모음의 다시 시작(Ctrl+Shift+F5, macOS는 Cmd+Shift+F5)이다 (소스).
-- 핫 리로드하면 Debug Console에 `Reloaded 1 of … libraries`가 찍힌다. 리스타트하면 `Restarted application`이 찍힌다 (실측).
-  - 리로드는 0.6~0.8초, 리스타트는 1.9초 걸렸다.
-  - 이 값은 확장이 저장 뒤·명령으로 보내는 것과 같은 요청을 디버그 어댑터에 직접 보내 쟀다(아래 "확인 방법").
+- Ctrl+S로 저장하면 핫 리로드가 된다. 화면에 보이는 글자를 바꾸고 저장하면 1~1.5초 안에 화면에 반영됐다 (실측).
+  - 설정 기본값이 `dart.flutterHotReloadOnSave: manual`이라 직접 저장일 때만 한다. 자동 저장(지연·포커스 이동)으로는 하지 않는다 (소스).
+  - 저장한 파일에 Dart 오류가 있으면 하지 않는다 (소스).
+- 명령 팔레트의 `Flutter: Hot Reload`로도 한다 (실측).
+- 디버그 도구 모음의 번개 단추는 저장한 뒤 핫 리로드한다. Ctrl+F5는 저장하지 않고 핫 리로드한다. 이 단축키는 macOS에서도 Control+F5다 (소스).
+- 핫 리스타트는 도구 모음의 다시 시작(Ctrl+Shift+F5, macOS는 Cmd+Shift+F5)이다. 3초쯤 걸렸다 (실측).
+- Debug Console에는 리로드 때 `Reloaded <n> of … libraries`가, 리스타트 때 `Restarted application`이 찍힌다 (실측).
+- 디버그를 멈추면 `Application finished.`, `Exited (-1).`이 찍힌다. 멈춘 경우의 정상 출력이다 (실측).
 
 **병렬 작업**
 
@@ -244,9 +249,13 @@ flutter run -d chrome -t preview/key_preview_main.dart
 
 **확인 방법 (#68)**
 
-- VS Code 화면에서 F5를 누르지는 않았다. 확장이 F5에서 만드는 `launch` 인자를 `flutter debug_adapter`에 직접 보냈다.
-  인자는 절대 `program`·`cwd`, `toolArgs: ["-d", <기기 ID>]`, `FLUTTER_ROOT`가 든 `toolEnv` 등이다. 이 실행은 VS Code UI를 거치지 않는다.
-- 그래서 위 **(소스)** 항목(기기 목록·자동 선택·저장 처리·단축키)은 실제 창에서 재지 않았다.
+- 사용자 설정과 분리한 VS Code 1.147 창(`--user-data-dir`·`--extensions-dir`, Dart-Code 3.146)을 열었다.
+  - 에뮬레이터는 Android 16(API 36)이다.
+  - 탐침 확장이 F5와 같은 API(`vscode.debug.startDebugging`)로 `AltCalc (앱)`을 실행했다.
+  - 이어서 저장, `flutter.hotReload` 명령, 디버그 다시 시작을 차례로 했다.
+  - Debug Console 출력과 에뮬레이터 화면 캡처로 결과를 봤다.
+- 확장은 `-d <기기 ID>`와 `--devtools-server-address`를 붙여 실행했다.
+- 키를 직접 누른 것이 아니어서 단축키와 도구 모음 단추는 소스로만 확인했다.
 
 ### Flutter SDK를 찾는 순서
 
