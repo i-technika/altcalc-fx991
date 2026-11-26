@@ -183,6 +183,27 @@ void main() {
       expect(LcdIndicatorSlot.disp.columns, 1);
     });
 
+    test('반전 상자 글자 슬롯은 S·A·D·R·G 다섯이고, 글자 하나짜리 1칸 글자 슬롯이다 (#160)', () {
+      final boxed = [
+        for (final slot in LcdIndicatorSlot.values)
+          if (slot.boxed) slot,
+      ];
+      expect(boxed, [
+        LcdIndicatorSlot.shift,
+        LcdIndicatorSlot.alpha,
+        LcdIndicatorSlot.angleDegree,
+        LcdIndicatorSlot.angleRadian,
+        LcdIndicatorSlot.angleGradian,
+      ]);
+      for (final slot in boxed) {
+        // 상자는 한 칸 폭이고 아이콘과 겹치지 않는다. 켜지면 대표 문자 그대로를 상자 안에 그린다.
+        expect(slot.icon, isNull, reason: slot.name);
+        expect(slot.columns, 1, reason: slot.name);
+        expect(slot.template.runes.length, 1, reason: slot.name);
+        expect(_possibleIndicators()[slot], {slot.template}, reason: slot.name);
+      }
+    });
+
     test('슬롯 대표 문자는 비어 있지 않고 서로 다르다', () {
       final templates = LcdIndicatorSlot.values.map((s) => s.template).toList();
       expect(templates.every((t) => t.isNotEmpty), isTrue);

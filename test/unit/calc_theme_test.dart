@@ -710,23 +710,30 @@ void main() {
   });
 
   group('치수', () {
-    test(
-      '상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘다 (#57)',
-      () {
-        expect(CalcTheme.lcdStatusXHeightRatio, greaterThan(0));
-        expect(
-          CalcTheme.lcdStatusXHeightRatio,
-          lessThan(CalcTheme.lcdStatusCapHeightRatio),
-        );
-        expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
-        expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
-        // ‖ 두 획 중심 간격 = 칸 폭(0.6em)의 40% — 획 굵기가 그보다 작아야 사이가 빈다.
-        expect(
-          CalcTheme.lcdStatusIconStrokeRatio,
-          lessThan(0.4 * CalcTheme.lcdStatusCharWidthRatio),
-        );
-      },
-    );
+    test('상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘고, 상자 안 글자는 상자보다 작다 (#57, #160)', () {
+      expect(CalcTheme.lcdStatusXHeightRatio, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusXHeightRatio,
+        lessThan(CalcTheme.lcdStatusCapHeightRatio),
+      );
+      expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
+      expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
+      // ‖ 밝은 두 획 중심 간격 = 칸 폭(0.6em)의 26%(37%·63% 위치) — 획 굵기가 그보다 작아야 두 획 사이에
+      // 어두운 부분이 남는다(#160).
+      expect(
+        CalcTheme.lcdStatusIconStrokeRatio,
+        lessThan(0.26 * CalcTheme.lcdStatusCharWidthRatio),
+      );
+      // 상자 안 글자는 상자보다 작다(위아래에 상자가 남는다).
+      expect(CalcTheme.lcdStatusBoxedLetterRatio, greaterThan(0));
+      expect(CalcTheme.lcdStatusBoxedLetterRatio, lessThan(1));
+      // →x의 x는 테두리에 붙지 않도록 상자 글자보다 작다.
+      expect(CalcTheme.lcdStatusStoreXRatio, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusStoreXRatio,
+        lessThan(CalcTheme.lcdStatusBoxedLetterRatio),
+      );
+    });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
       for (final v in [
@@ -813,6 +820,72 @@ void main() {
         CalcTheme.keyPressAnimationDuration,
         lessThanOrEqualTo(const Duration(milliseconds: 100)),
       );
+    });
+
+    test('2차원 각인 배치 상수 (#155)', () {
+      // 크기 비율은 바탕 글자보다 작다(첨자·분자·분모·근호 지수). 각인 전체가 분수 하나일 때만 더 크게 그린다.
+      for (final scale in [
+        CalcTheme.keyLegendScriptScale,
+        CalcTheme.keyLegendFractionScale,
+        CalcTheme.keyLegendRadicalIndexScale,
+      ]) {
+        expect(scale, inExclusiveRange(0.4, 1));
+      }
+      expect(
+        CalcTheme.keyLegendFractionScale,
+        lessThan(CalcTheme.keyLegendDisplayFractionScale),
+      );
+      expect(CalcTheme.keyLegendDisplayFractionScale, lessThanOrEqualTo(1));
+      // 위치·두께·간격 비율은 글자 크기보다 작은 양수다.
+      for (final ratio in [
+        CalcTheme.keyLegendSuperscriptRaise,
+        CalcTheme.keyLegendSubscriptDrop,
+        CalcTheme.keyLegendScriptGap,
+        CalcTheme.keyLegendFractionAxis,
+        CalcTheme.keyLegendFractionBarThickness,
+        CalcTheme.keyLegendFractionGap,
+        CalcTheme.keyLegendFractionOverhang,
+        CalcTheme.keyLegendRadicalStroke,
+        CalcTheme.keyLegendRadicalGap,
+        CalcTheme.keyLegendRadicalSignWidth,
+      ]) {
+        expect(ratio, inExclusiveRange(0, 1));
+      }
+      // 분수 가로줄 아래 가장자리와 간격을 빼도 기준선 위다 — 분모가 바탕 글자보다 지나치게 내려가지 않는다.
+      expect(
+        CalcTheme.keyLegendFractionAxis -
+            CalcTheme.keyLegendFractionBarThickness / 2 -
+            CalcTheme.keyLegendFractionGap,
+        greaterThan(0),
+      );
+      // 선은 아무리 작은 각인에서도 보인다(1dp 미만의 얇은 선은 화면에 따라 흐려진다 — 1dp를 넘지 않게 둔다).
+      expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
+    });
+
+    test('최소 선 두께로 굵게 칠해도 각인 글자 4dp 이상에서 분수·근호 가로줄 옆 여백이 남는다 (#155 R2)', () {
+      // 배치는 비율 두께로 하고 칠은 최소 두께로 굵게 한다. 굵어진 만큼은 가로줄 옆 여백을 덮는다
+      // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
+      // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
+      for (var f = 4.0; f <= 12; f += 0.1) {
+        final bar = f * CalcTheme.keyLegendFractionBarThickness;
+        final paintBar = bar > CalcTheme.keyLegendMinStroke
+            ? bar
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendFractionGap - (paintBar - bar) / 2,
+          greaterThan(0),
+          reason: '분수 $f',
+        );
+        final stroke = f * CalcTheme.keyLegendRadicalStroke;
+        final paintStroke = stroke > CalcTheme.keyLegendMinStroke
+            ? stroke
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendRadicalGap - (paintStroke - stroke),
+          greaterThan(0),
+          reason: '근호 $f',
+        );
+      }
     });
 
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
@@ -1140,6 +1213,52 @@ void main() {
           greaterThan(1.2),
         );
       });
+    });
+  });
+
+  group('본체 아래 여백 규칙 (screenBottomMargin, #63)', () {
+    test('실측한 기기들은 화면 여백 그대로다 (#63)', () {
+      // (인셋, 제스처 영역) — CalcTheme.screenBottomMargin 문서의 실측값
+      for (final (padding, gesture) in const [
+        (24.0, 32.0), // API 36 폰, 제스처 내비게이션
+        (48.0, 48.0), // 같은 폰, 3버튼
+        (32.0, 32.0), // API 36 Pixel Fold 내부
+        (0.0, 8.0), // API 33 폰, 제스처 내비게이션(edge-to-edge 아님)
+        (34.0, 0.0), // iOS — 제스처 영역을 전달하지 않는다
+        (0.0, 0.0),
+      ]) {
+        expect(
+          CalcTheme.screenBottomMargin(
+            bottomInset: padding,
+            bottomGestureInset: gesture,
+          ),
+          CalcTheme.screenPadding,
+          reason: '인셋 $padding / 제스처 $gesture',
+        );
+      }
+    });
+
+    test('제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 차이만큼 넓힌다', () {
+      expect(
+        CalcTheme.screenBottomMargin(bottomInset: 0, bottomGestureInset: 32),
+        32,
+      );
+      expect(
+        CalcTheme.screenBottomMargin(bottomInset: 24, bottomGestureInset: 48),
+        24,
+      );
+      // 본체 아래 끝(화면 높이 − 인셋 − 여백)이 언제나 제스처 영역 윗변(화면 높이 − 제스처 영역) 이상 위에 있고,
+      // 여백은 화면 여백보다 작아지지 않는다.
+      for (final padding in [0.0, 8.0, 24.0, 48.0]) {
+        for (final gesture in [0.0, 8.0, 24.0, 32.0, 40.0, 64.0]) {
+          final margin = CalcTheme.screenBottomMargin(
+            bottomInset: padding,
+            bottomGestureInset: gesture,
+          );
+          expect(margin, greaterThanOrEqualTo(CalcTheme.screenPadding));
+          expect(padding + margin, greaterThanOrEqualTo(gesture));
+        }
+      }
     });
   });
 }

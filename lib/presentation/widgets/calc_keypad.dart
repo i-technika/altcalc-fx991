@@ -7,6 +7,7 @@ import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
 import 'calc_key_button.dart';
+import 'key_legend_view.dart';
 import 'text_fit.dart';
 
 /// 키패드 구역 배열 (#80).
@@ -225,6 +226,43 @@ class KeypadMetrics {
     return math.min(touchOf(functionRowHeight), touchOf(numberRowHeight));
   }
 
+  /// 높이 기준 글자 크기: 배율을 반영한 한 줄 높이(정수 올림, [fitFontSizeToHeight])와 [tallLegends]
+  /// (한 줄보다 높을 수 있는 2차원 각인, #155)의 실제 높이([KeyLegendView.tallestAt])가 모두 [maxHeight] 이하인
+  /// 가장 큰 글자 크기 (배율 반영 전).
+  ///
+  /// 2차원 각인의 높이는 잉크(비례)와 한 줄 상자(작은 글자에서 반올림)를 합친 값이다. 비례 높이로만 판정하면
+  /// 작은 글자에서 넘치고(#155 R2), 전체를 정수로 올리면 실제로는 들어가는데도 줄어든다(#155 R1). 그래서 실제
+  /// 높이로 판정한다. 테스트가 같은 판정을 쓰도록 공개한다.
+  @visibleForTesting
+  static double fitToHeight(
+    double fontSize, {
+    required double maxHeight,
+    required TextScaler textScaler,
+    required TextStyle style,
+    required List<KeyLegendEmMetrics> tallLegends,
+  }) => _fitToHeight(
+    fontSize,
+    maxHeight: maxHeight,
+    textScaler: textScaler,
+    style: style,
+    tallLegends: tallLegends,
+  );
+
+  static double _fitToHeight(
+    double fontSize, {
+    required double maxHeight,
+    required TextScaler textScaler,
+    required TextStyle style,
+    required List<KeyLegendEmMetrics> tallLegends,
+  }) => fitFontSize(
+    fontSize,
+    textScaler: textScaler,
+    fits: (scaled) =>
+        (scaled * (style.height ?? 1.0)).ceilToDouble() <= maxHeight &&
+        (tallLegends.isEmpty ||
+            KeyLegendView.tallestAt(tallLegends, style, scaled) <= maxHeight),
+  );
+
   /// [available] 영역과 시스템 글자 배율([textScaler], `MediaQuery` 값 그대로)로 치수를 계산한다.
   ///
   /// ## 글자 크기 통일
@@ -270,9 +308,17 @@ class KeypadMetrics {
     final scaler = textScaler.clamp(
       maxScaleFactor: CalcTheme.keyMaxTextScaleFactor,
     );
+    final limits = _LabelLimits.measure(
+      functionKeyWidth: math.max(
+        0.0,
+        blockWidth / functionColumns - horizontalGap,
+      ),
+      numberKeyWidth: math.max(0.0, blockWidth / numberColumns - horizontalGap),
+    );
 
-    // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141)
-    final legendByHeight = fitFontSizeToHeight(
+    // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141). 가장 높은 각인(분수 등 2차원 각인, #155)까지
+    //    띠·키캡 안에 들어가게 한다.
+    final legendByHeight = _fitToHeight(
       math.max(
         minFittedFontSize,
         math.min(
@@ -282,14 +328,15 @@ class KeypadMetrics {
       ),
       maxHeight: legendHeight,
       textScaler: scaler,
-      heightFactor: CalcTheme.keyShiftLabelStyle.height ?? 1.0,
+      style: CalcTheme.keyShiftLabelStyle,
+      tallLegends: limits.tallLegends,
     );
     // 키캡 안쪽 높이: 눌림 이동 여유와 테두리를 뺀다.
     final capInnerHeight =
         capHeight -
         math.min(CalcTheme.keyPressedOffset, capHeight) -
         2 * CalcTheme.keyBorderWidth;
-    final mainByHeight = fitFontSizeToHeight(
+    final mainByHeight = _fitToHeight(
       math.max(
         minFittedFontSize,
         math.min(
@@ -299,17 +346,12 @@ class KeypadMetrics {
       ),
       maxHeight: capInnerHeight,
       textScaler: scaler,
-      heightFactor: CalcTheme.keyMainLabelStyle.height ?? 1.0,
+      style: CalcTheme.keyMainLabelStyle,
+      tallLegends: limits.tallMains,
     );
 
     // 2·3. 폭 기준 + 하한
-    final widths = _LabelWidthLimits.measure(
-      functionKeyWidth: math.max(
-        0.0,
-        blockWidth / functionColumns - horizontalGap,
-      ),
-      numberKeyWidth: math.max(0.0, blockWidth / numberColumns - horizontalGap),
-    );
+    final widths = limits;
     double unify(double byHeight, double maxScaledByWidth) => math.max(
       fitFontSize(
         byHeight,
@@ -337,51 +379,36 @@ class KeypadMetrics {
   }
 }
 
-/// 모든 라벨이 자기 셀 폭에 들어가는 (배율 반영) 최대 글자 크기.
-class _LabelWidthLimits {
+/// 모든 라벨이 자기 셀 폭에 들어가는 (배율 반영) 최대 글자 크기와, 가장 높은 라벨의 높이.
+///
+/// 크기는 실제 글꼴로 그린 각인 크기([KeyLegendView.emSize] — 2차원 각인 포함, 글자 크기 1dp당 값)로 잰다.
+/// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 폭이 글자 크기에 비례하지 않는 일은 없다.)
+class _LabelLimits {
   /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp)
   final double main;
 
   /// 각인 최대 글자 크기 (배율 반영 후, dp)
   final double legend;
 
-  const _LabelWidthLimits(this.main, this.legend);
+  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155)
+  final List<KeyLegendEmMetrics> tallMains;
 
-  /// 폭 측정 기준 글자 크기 — 폭은 글자 크기에 비례한다고 보고 1dp당 폭(em 폭)을 구한다.
-  /// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 비례가 깨지지 않는다.)
-  static const double _probeFontSize = 100;
+  /// 2차원 SHIFT·ALPHA 각인의 em 치수
+  final List<KeyLegendEmMetrics> tallLegends;
 
-  /// em 폭 캐시. 화면 크기와 무관하므로 라벨·스타일별로 한 번만 잰다.
-  /// 시스템 글꼴이 바뀌면(글꼴 지연 로드 등) 비운다.
-  static final Map<(String, TextStyle), double> _emWidthCache = {};
-  static bool _listeningSystemFonts = false;
+  const _LabelLimits(this.main, this.legend, this.tallMains, this.tallLegends);
 
-  static double _emWidth(String text, TextStyle style) {
-    if (!_listeningSystemFonts) {
-      _listeningSystemFonts = true;
-      PaintingBinding.instance.systemFonts.addListener(_emWidthCache.clear);
-    }
-    return _emWidthCache.putIfAbsent((text, style), () {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: text,
-          style: style.copyWith(fontSize: _probeFontSize),
-        ),
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-      )..layout();
-      final width = painter.width / _probeFontSize;
-      painter.dispose();
-      return width;
-    });
-  }
+  static double _emWidth(KeyLegend legend, TextStyle style) =>
+      KeyLegendView.emSize(legend, style).width;
 
-  static _LabelWidthLimits measure({
+  static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,
   }) {
     var main = double.infinity;
     var legend = double.infinity;
+    final tallMains = <KeyLegendEmMetrics>[];
+    final tallLegends = <KeyLegendEmMetrics>[];
     final numberIds = {
       for (final row in numberRows)
         for (final def in row) def.id,
@@ -401,15 +428,28 @@ class _LabelWidthLimits {
       main = math.min(
         main,
         math.max(0.0, capInner) /
-            _emWidth(def.mainLabel, CalcTheme.keyMainLabelStyle),
+            _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle),
       );
+      if (!def.mainLegend.isPlain) {
+        tallMains.add(
+          KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
+        );
+      }
+      for (final (l, style) in [
+        (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
+        (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
+      ]) {
+        if (l != null && !l.isPlain) {
+          tallLegends.add(KeyLegendView.emMetrics(l, style));
+        }
+      }
 
       // 각인: CalcKeyButton의 각인 띠와 같은 규칙. 두 각인이 함께 들어가려면 (어느 배분이든)
       // 두 폭의 합이 띠 폭 이하여야 하고, 짧은 쪽이 우선 배분을 받으면 절반 이하여야 한다.
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
-      final shift = def.shiftLabel;
-      final alpha = def.alphaLabel;
+      final shift = def.shiftLegend;
+      final alpha = def.alphaLegend;
       if (shift == null && alpha == null) continue;
       if (shift == null || alpha == null) {
         final (text, style) = shift != null
@@ -425,15 +465,15 @@ class _LabelWidthLimits {
       final shiftEm = _emWidth(shift, CalcTheme.keyShiftLabelStyle);
       final alphaEm = _emWidth(alpha, CalcTheme.keyAlphaLabelStyle);
       legend = math.min(legend, usable / (shiftEm + alphaEm));
-      final shortRunes = math.min(shift.runes.length, alpha.runes.length);
-      if (shortRunes <= CalcTheme.keyLegendPriorityMaxRunes) {
-        final shortEm = shift.runes.length <= alpha.runes.length
-            ? shiftEm
-            : alphaEm;
+      final shiftRunes = shift.plainText.runes.length;
+      final alphaRunes = alpha.plainText.runes.length;
+      if (math.min(shiftRunes, alphaRunes) <=
+          CalcTheme.keyLegendPriorityMaxRunes) {
+        final shortEm = shiftRunes <= alphaRunes ? shiftEm : alphaEm;
         legend = math.min(legend, usable / 2 / shortEm);
       }
     }
-    return _LabelWidthLimits(main, legend);
+    return _LabelLimits(main, legend, tallMains, tallLegends);
   }
 }
 

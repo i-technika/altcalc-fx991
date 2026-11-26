@@ -6,10 +6,12 @@ import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
+import '../support/key_legends.dart';
 import '../support/lcd_glyphs.dart';
 
 /// 실제 번들 글꼴로 [text]를 [style]로 그린 폭 (글자 크기 1dp당, 자간 제외).
@@ -120,7 +122,8 @@ void main() {
               ),
             );
             for (final slot in LcdIndicatorSlot.values) {
-              if (slot.icon != null) continue; // 아이콘은 슬롯 크기에 맞춰 그린다
+              // 아이콘·반전 상자 글자(#160)는 슬롯 크기에 맞춰 그린다
+              if (slot.icon != null || slot.boxed) continue;
               final slotBox = find.byKey(ValueKey(slot));
               final text = find.descendant(
                 of: slotBox,
@@ -215,71 +218,87 @@ void main() {
   });
 
   group('키 라벨 폭 실측', () {
-    test('라벨 글자는 두 칸 폭 ⇔와 대체 글꼴 기호(∑·∛·∫)를 빼면 모두 한 칸이다', () {
-      // 글자 폭이 글자 수에 비례한다는 가정(각인 배분)이 실제 글꼴에서도 성립하는지 본다.
+    test('각인 글자는 두 칸 폭 ⇔와 대체 글꼴 기호(∑·∫)를 빼면 모두 한 칸이다', () {
+      // 글자만 있는 각인은 폭이 글자 수에 비례한다는 가정(각인 배분의 우선 배분 판정)이 실제 글꼴에서도
+      // 성립하는지 본다. 2차원 각인(#155)의 글자 조각도 같은 글꼴로 그린다(근호는 글자가 아니라 그림).
       const style = CalcTheme.keyShiftLabelStyle;
       final odd = <String, double>{};
       for (final key in allKeys) {
-        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
-          for (final ch in (label ?? '').split('')) {
-            final w = _emWidth(ch, style);
-            if ((w - cell).abs() > 0.005) odd[ch] = w;
+        for (final legend in [
+          key.mainLegend,
+          ?key.shiftLegend,
+          ?key.alphaLegend,
+        ]) {
+          for (final piece in legend.texts) {
+            for (final ch in piece.text.split('')) {
+              final w = _emWidth(ch, style);
+              if ((w - cell).abs() > 0.005) odd[ch] = w;
+            }
           }
         }
       }
-      // ∑·∛·∫는 대체 글꼴 Noto Sans Math의 진행폭(852·679·836/1000)이어야 한다.
+      // ∑·∫는 대체 글꼴 Noto Sans Math의 진행폭(852·836/1000)이어야 한다.
       // 테스트 글꼴(1em)이나 플랫폼 글꼴로 떨어지면 값이 달라진다.
-      expect(odd.keys.toSet(), {'⇔', '∑', '∛', '∫'});
+      expect(odd.keys.toSet(), {'⇔', '∑', '∫'});
       expect(odd['⇔'], moreOrLessEquals(2 * cell, epsilon: 0.005));
       expect(odd['∑'], moreOrLessEquals(0.852, epsilon: 0.005));
-      expect(odd['∛'], moreOrLessEquals(0.679, epsilon: 0.005));
       expect(odd['∫'], moreOrLessEquals(0.836, epsilon: 0.005));
     });
 
-    test('가장 넓은 메인 라벨은 SHIFT·ALPHA(5칸)이고 log◼◻도 5칸을 넘지 않는다', () {
+    test('가장 넓은 메인 각인은 SHIFT·ALPHA(5칸)이고, 2차원 각인(log◼◻ 등)도 5칸을 넘지 않는다', () {
       const style = CalcTheme.keyMainLabelStyle;
       final shift = _emWidth('SHIFT', style);
       expect(shift, moreOrLessEquals(5 * cell, epsilon: 0.01));
       for (final key in allKeys) {
         expect(
-          _emWidth(key.mainLabel, style),
+          KeyLegendView.emSize(key.mainLegend, style).width,
           lessThanOrEqualTo(shift + 0.001),
           reason: key.mainLabel,
         );
       }
-      expect(
-        _emWidth(keyDefOf(CalcKeyId.logBase).mainLabel, style),
-        moreOrLessEquals(5 * cell, epsilon: 0.01),
-      );
     });
 
     for (final scale in [1.0, 1.3]) {
-      testWidgets('배율 $scale: 대체 글꼴 글자(∑·∛·∫)가 섞인 라벨도 줄 높이가 다른 라벨과 같다', (
-        tester,
-      ) async {
-        // Noto Sans Math의 descent(423)는 Noto Sans Mono(293)보다 깊어, strut 없이는 그 라벨만
-        // 줄이 높아진다(20 → 21dp). 키 라벨은 기본 글꼴 기준 strut로 줄 높이를 고정한다.
-        // strut 글자 크기도 textScaler를 따르므로 배율을 바꿔도 같아야 한다.
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MediaQuery(
-              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
-              child: const Center(
-                child: SizedBox(
-                  width: 390,
-                  height: 520,
-                  child: CalcKeypad(enableHaptics: false),
+      testWidgets(
+        '배율 $scale: 대체 글꼴 글자(∑·∫)가 섞인 2차원 각인도 줄 상자는 기본 글꼴 strut 기준이다',
+        (tester) async {
+          // Noto Sans Math의 descent(423)는 Noto Sans Mono(293)보다 깊어, strut 없이는 그 글자가 섞인
+          // 줄만 높아진다(#16 실측 20 → 21dp). 2차원 각인(#155)도 글자 조각을 기본 글꼴 strut로 배치하므로,
+          // 각인 높이는 strut 한 줄과 잉크 표(KeyLegendView.glyphInk)의 ∫·∑ 범위로만 정해진다.
+          await tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                child: const Center(
+                  child: SizedBox(
+                    width: 390,
+                    height: 520,
+                    child: CalcKeypad(enableHaptics: false),
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-        double heightOf(String label) =>
-            tester.getSize(find.text(label)).height;
-        expect(heightOf('∫◻◻◼'), heightOf('OPTN'));
-        expect(heightOf('∛◼'), heightOf('x³'));
-        expect(heightOf('∑◻◻◼'), heightOf('x³'));
-      });
+          );
+          final optn = tester.getSize(find.text('OPTN')).height;
+          final integral = keyDefOf(CalcKeyId.integral).mainLegend;
+          final style = legendStyleOf(tester, findLegend(integral));
+          final fontSize = TextScaler.linear(scale).scale(style.fontSize!);
+          // ∫ 잉크(−0.238 ~ 0.893em)가 strut 한 줄(위 ≈0.785·아래 ≈0.215em)을 위아래로 조금 넘는 만큼만 높다.
+          final (inkBottom, inkTop) = KeyLegendView.glyphInk['∫']!;
+          final lineAscent = optn * 1069 / (1069 + 293);
+          final expected =
+              optn +
+              (inkTop * fontSize - lineAscent).clamp(0, double.infinity) +
+              (-inkBottom * fontSize - (optn - lineAscent)).clamp(
+                0,
+                double.infinity,
+              );
+          expect(
+            tester.getSize(findLegend(integral)).height,
+            moreOrLessEquals(expected, epsilon: 0.1),
+          );
+        },
+      );
     }
 
     test('글자 배율은 keyMaxTextScaleFactor(1.3)에서 멈춘다 — 2.0도 1.3과 같은 크기', () {
@@ -293,12 +312,12 @@ void main() {
     // 실제 글꼴에서 라벨이 FittedBox로 따로 줄지 않는지 본다 (#11 메모: 하한에 걸리는 화면 크기 확인).
     // 배율 1.0에서는 모든 라벨이 통일 크기 그대로 그려진다. 배율을 키우면 통일 크기가 하한
     // (keypadUniformFontMinRatio)에 걸릴 수 있고, 그때는 가장 긴 라벨만 FittedBox로 조금 준다.
-    // 실측(#16): 412×915 배율 1.3에서만 각인 띠가 하한에 걸려 `a b/c⇔d/c`가 약 0.4% 준다.
-    // 이 표는 레이아웃 상수(각인 띠 비율·하한 비율·간격 등)에 대한 실측 스냅샷이다. 상수를 바꾸면
+    // 실측(#16): 412×915 배율 1.3에서만 각인 띠가 하한에 걸려 `a b/c⇔d/c`가 약 0.4% 줄었다.
+    // 실측(#155): 그 각인을 2차원(쌓은 분수)으로 그린 뒤로는 폭이 6.6em → 약 2.8em으로 줄어, 아래 모든 크기·배율에서
+    // 줄어드는 라벨이 없다. 2차원 각인의 높이(가장 높은 `d/dx◼` 약 1.14em)도 통일 글자 크기 계산이 함께 잰다.
+    // 이 표는 레이아웃 상수(각인 띠 비율·하한 비율·간격·2차원 배치 비율 등)에 대한 실측 스냅샷이다. 상수를 바꾸면
     // 다시 실측해 갱신한다. 허용 항목도 1% 넘게 줄면 실패한다.
-    final allowedShrink = {
-      (412.0, 915.0, 1.3): {'sdToggle "a b/c⇔d/c"'},
-    };
+    final allowedShrink = <(double, double, double), Set<String>>{};
     for (final size in const [
       Size(320, 568),
       Size(360, 640),
@@ -333,20 +352,20 @@ void main() {
             )) {
               final def = b.keyDef;
               if (def.category == KeyCategory.cursor) continue;
-              for (final label in [
-                def.mainLabel,
-                def.shiftLabel,
-                def.alphaLabel,
+              for (final legend in [
+                def.mainLegend,
+                def.shiftLegend,
+                def.alphaLegend,
               ]) {
-                if (label == null) continue;
+                if (legend == null) continue;
                 final text = find.descendant(
                   of: find.byWidget(b),
-                  matching: find.text(label),
+                  matching: findLegend(legend),
                 );
                 final rendered = tester.getRect(text).height;
                 final natural = tester.getSize(text).height;
                 if (rendered < natural - 0.01) {
-                  final id = '${def.id.name} "$label"';
+                  final id = '${def.id.name} "${legend.plainText}"';
                   shrunk.add(id);
                   expect(rendered / natural, greaterThan(0.99), reason: id);
                 }
