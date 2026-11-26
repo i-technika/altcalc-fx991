@@ -179,6 +179,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
 - **VS Code**: 실행 및 디버그에서 `Key Preview (Chrome)`을 고른다 — 준비 단계는 아래 [VS Code에서 실행](#vs-code에서-실행).
 - **Windows 데스크톱** (`-d windows`, `Key Preview (Windows)`): 플러그인 빌드에 심볼릭 링크가 필요해
   Windows **개발자 모드**를 켜야 한다 (`start ms-settings:developers`). Chrome 실행에는 필요 없다.
+  다만 꺼져 있으면 새 클론·`flutter clean` 뒤의 첫 실행이 한 번 실패한다([알아 둘 점](#알아-둘-점)).
 - 미리보기는 `lib/` 밖에 있고, 앱 진입점(`lib/main.dart`)에서 도달할 수 없으므로 앱 빌드에 포함되지 않는다.
   `test/widget/key_preview_test.dart`가 `lib/`의 preview import와 pubspec 에셋의 preview 경로를 금지하고,
   Sub-issue CI와 Milestone Full CI가 미리보기를 웹으로 빌드해 깨지지 않았는지 확인한다.
@@ -199,7 +200,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
 | 구성 | 진입점 | 기기 | 비고 |
 | --- | --- | --- | --- |
 | `AltCalc (앱)` | `lib/main.dart` | 상태 표시줄에서 고른 기기 | 기기를 지정하지 않아 VS Code 하단 상태 표시줄의 기기 선택을 따른다 (Windows 데스크톱을 고르면 개발자 모드 필요) |
-| `Key Preview (Chrome)` | `preview/key_preview_main.dart` | Chrome | Windows 개발자 모드 불필요 |
+| `Key Preview (Chrome)` | `preview/key_preview_main.dart` | Chrome | Windows 개발자 모드 불필요 (꺼져 있으면 새 클론의 첫 실행이 한 번 실패 — [알아 둘 점](#알아-둘-점)) |
 | `Key Preview (Windows)` | `preview/key_preview_main.dart` | Windows 데스크톱 | Windows 개발자 모드 필요 |
 
 ### 처음 한 번 준비
@@ -209,7 +210,8 @@ flutter run -d chrome -t preview/key_preview_main.dart
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
    명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다([Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서) 아래 알림 설명).
-   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome·Android 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
+   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝난다. 그래도 그 뒤의 Chrome·Android 실행은 지나간다
+   (이 순서는 소스로 확인 — [알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
    `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트의 `Workspaces: Manage Workspace Trust`를 쓴다.
@@ -344,7 +346,9 @@ flutter run -d chrome -t preview/key_preview_main.dart
 그 시점의 stable이 `pubspec.yaml`의 고정 버전과 다르면 이 PC의 모든 클론·워크트리에서 `pub get`이 실패한다([개발 환경](#개발-환경)).
 푸는 방법은 아래 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
 이 알림과 두 방법은 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)로 열어 실측했다
-(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows는 이번에 확인하지 않았다 — #52의 실측 결과는 [알아 둘 점](#알아-둘-점)).
+(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows에서는 이 알림과 두 방법을 확인하지 않았다).
+개발자 모드가 꺼진 PC의 새 클론에서는 어느 방법이든 처음 도는 pub get이나 F5가 한 번 실패한다(#164 실측).
+그다음 명령은 같은 명령이든 다른 명령이든 지나간다(같은 명령은 실측, 다른 명령은 소스 — [알아 둘 점](#알아-둘-점)).
 
 - **SDK를 PATH에 넣은 셸에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
   - VS Code 통합 터미널도 그 창의 PATH를 물려받으므로, 셸 프로필이 SDK를 PATH에 넣지 않으면 `flutter`를 전체 경로로 실행한다.
@@ -373,25 +377,52 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 ### 알아 둘 점
 
-- **개발자 모드가 꺼진 Windows**에서는 플러그인 목록 파일이 없거나 플러그인이 바뀐 뒤 처음 도는 `flutter pub get`이 종료 코드 1로 끝난다(아래).
-  - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
-  - 확장이 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (package:...)` 채널에 기록된다
-    (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측했다. 루트 체크아웃이 #66이 들어간 브랜치이면
-    그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
-  - 이 오류는 Windows용 플러그인 심볼릭 링크를 만들 때 난다. 링크는 플러그인 목록 파일(`.flutter-plugins-dependencies`)이
-    새로 생기거나 플러그인 구성이 바뀔 때만 만든다(Flutter 도구 소스 기준). Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면, 고른 기기와 상관없이 만든다.
-    - 그래서 목록 파일이 없을 때(새 클론, `flutter clean` 뒤)와 플러그인 의존성을 바꾼 뒤에는 처음 도는 Flutter 명령이 이 오류로 끝난다.
-      pub get도, Android·Chrome을 고른 F5도 마찬가지다.
-    - 그 명령이 목록 파일을 먼저 써 두므로, 같은 명령을 다시 실행하면 지나간다(소스 기준, 개발자 모드를 끄고 다시 재지는 않음).
-  - `package_config.json`은 오류 전에 기록된다. 그래서 SDK 탐지에는 지장이 없다.
-  - 늘 실패하는 것은 Windows 데스크톱 실행뿐이다.
+개발자 모드가 꺼진 Windows의 동작이다. 아래 라벨은 근거의 종류다.
+
+- **(실측)**: #164에서 개발자 모드를 끈 Windows 11로 잰 것이다. Flutter는 측정 당시 `pubspec.yaml`의 고정 버전이다.
+  - pub get: 새 워크트리에서 세 번, `flutter clean` 뒤에 두 번 연달아 실행했다.
+  - F5: 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)을 썼다. 탐침 확장이 `AltCalc (앱)` 구성을 읽어 기기 ID를 지정하고
+    `vscode.debug.startDebugging`으로 실행했다(키는 누르지 않음). 목록 파일을 지운 뒤 Android 에뮬레이터(API 34)로 두 번,
+    다시 지운 뒤 Chrome으로 두 번 실행했다.
+  - Windows 빌드: 목록 파일이 있는 상태에서 `flutter build windows --debug`를 두 번 실행했다.
+- **(#52 실측)**: #52에서 개발자 모드가 꺼져 있던 이 PC로 본 것이다.
+- **(소스)**: Flutter 도구 소스로만 확인한 것이다.
+
+동작은 다음과 같다.
+
+- 플러그인 목록 파일(`.flutter-plugins-dependencies`)이 없을 때(새 클론, `flutter clean` 뒤) 처음 도는 Flutter 명령이
+  `Building with plugins requires symlink support` 오류로 끝난다.
+  - `flutter pub get`은 의존성 해석(`Got dependencies!`)을 마친 뒤 이 오류를 내고 종료 코드 1로 끝난다.
+    새 워크트리에서 1 → 0 → 0, `flutter clean` 뒤에 1 → 0이었다. (실측)
+  - Android·Chrome을 고른 F5도 마찬가지다. F5가 실행한 `flutter run`의 자동 pub get(`Resolving dependencies...`) 직후 이 오류가
+    Debug Console에 `Exited (1)`과 함께 나온다. 기기마다 첫 F5가 실패하고 두 번째 F5에서 앱이 시작됐다. (실측)
+  - 확장이 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (package:...)` 채널에 기록된다.
+    작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 봤다. (#52 실측) 루트 체크아웃이 #66이 들어간 브랜치이면
+    그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고.
+  - 플러그인 의존성을 바꾼 뒤에도 같다. (소스)
+- 이 오류는 플러그인 심볼릭 링크를 만들 때 난다.
+  - pub get과 Android·Chrome의 `flutter run`은 목록의 플러그인 구성이 새로 생기거나 바뀔 때만 링크를 만든다. (소스)
+    Windows 빌드는 예외다(아래).
+  - 링크는 고른 기기와 상관없이 만든다. Android와 Chrome 모두 첫 F5가 실패했다. (실측)
+  - Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면 Windows용 링크를 만든다.
+    Linux 데스크톱 기능은 Windows에서도 기본으로 켜져 있어, `linux/` 폴더가 있으면 Linux용 링크도 같은 때 만든다.
+    그래서 Windows 데스크톱 기능만 꺼서는 피하지 못한다. 그 플랫폼용 플러그인이 하나도 없으면 링크를 만들지 않아 오류도 나지 않는다. (소스)
+- 실패한 명령이 목록 파일을 먼저 써 두므로 그다음 명령은 지나간다.
+  - 같은 명령을 다시 실행하면 지나간다(위 종료 코드와 F5 결과). 링크 폴더(`windows/flutter/ephemeral/.plugin_symlinks`)는 빈 채로 남는다. (실측)
+  - 실패한 명령 다음에 다른 명령을 실행해도(예: 실패한 pub get 다음의 F5) 지나간다. 플러그인 구성이 바뀌지 않았으면 링크를 다시 만들지 않기 때문이다.
+    (소스 — 이 순서는 재지 않았다)
+- `package_config.json`은 오류 전에 기록된다(`flutterRoot` 포함, 실측). 그래서 SDK 탐지에는 지장이 없다.
+- 늘 실패하는 것은 Windows 데스크톱 실행뿐이다.
+  - Windows 빌드는 목록의 변화와 상관없이 빌드할 때마다 빠진 링크를 만든다. (소스)
+  - 목록 파일이 있는 상태에서도 두 번 다 같은 오류로 끝났다. (실측)
 
 ### 작업 영역 안의 git 워크트리
 
 병렬 작업용 git 워크트리는 **`.claude/worktrees/` 아래**(Claude Code의 기본 위치, `.gitignore` 대상)나 **저장소 밖**
 (`../altcalc-wt<번호>`)에 만든다. 저장소 폴더 안의 점으로 시작하지 않는 폴더(예: `worktrees/`)에는 만들지 않는다.
 확장이 다른 세션의 워크트리에 pub get을 돌리면 그 세션의 `pubspec.lock`이 다시 쓰일 수 있다. 그 세션의 test·pub과
-`.dart_tool`을 동시에 쓰게 되고, 개발자 모드가 꺼진 Windows에서는 실패 로그가 남는다.
+`.dart_tool`을 동시에 쓰게 되고, 개발자 모드가 꺼진 Windows에서는 그 워크트리에 목록 파일이 없거나 플러그인이 바뀐 경우
+실패 로그가 남는다([알아 둘 점](#알아-둘-점)).
 #67 이전에 체크아웃한 작업 트리에서는 생성 플러그인 파일도 `M`이 된다.
 
 [analysis_options.yaml](analysis_options.yaml)의 `analyzer.exclude`에 `.claude/worktrees/**`를 두어 확장이 워크트리를
