@@ -337,6 +337,7 @@ flutter build web -t preview/key_preview_main.dart --no-wasm-dry-run   # 미리�
 `android/app/src/main/kotlin`의 플랫폼 코드(플랫폼 채널, 고대비 텍스트 수신)는 JVM 단위 테스트로 검사한다 (#108).
 테스트는 `android/app/src/test/kotlin`에 있고, Robolectric이 API 수준별 Android 프레임워크를 JVM에서 돌리므로
 기기·에뮬레이터는 필요 없다(Android SDK는 앱 빌드와 같이 필요하다). Kotlin 코드나 `android/` Gradle 설정을 바꿨으면 커밋 전에 돌린다.
+병합·컴파일된 매니페스트 값(MainActivity `configChanges`, #96)도 여기서 검사하므로 `AndroidManifest.xml`을 바꿨을 때도 돌린다.
 
 ```bash
 flutter build apk --debug --config-only   # gradlew·android/local.properties를 만들고 지금 셸의 Flutter SDK 경로로 맞춘다 (몇 초)
