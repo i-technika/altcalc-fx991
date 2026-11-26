@@ -433,6 +433,111 @@ void main() {
     expect(greenAfter, greaterThan(redBefore ~/ 2));
   });
 
+  group('∑의 위아래 끝 칸 (#169 — Quick Start Guide 1쪽 제품 사진 대조)', () {
+    test('∑ 각인은 끝 칸을 위아래에 쌓는 LegendLimits이고, ∫ 각인은 오른쪽 첨자다', () {
+      final sum = keyDefOf(CalcKeyId.variableX).shiftLegend! as LegendRow;
+      expect(sum.children.first, isA<LegendLimits>());
+      expect(sum.plainText, '∑◻◻◼');
+      final integral = keyDefOf(CalcKeyId.integral).mainLegend as LegendRow;
+      expect(integral.children.first, isA<LegendScript>());
+      expect(integral.plainText, '∫◻◻◼');
+    });
+
+    test('쌓은 ∑ 각인은 가장 높은 각인(d/dx◼)보다 높지 않다 — 키패드 통일 각인 크기를 줄이지 않는다', () {
+      const style = CalcTheme.keyShiftLabelStyle;
+      final sum = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.variableX).shiftLegend!,
+        style,
+      );
+      final derivative = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.integral).shiftLegend!,
+        style,
+      );
+      expect(
+        derivative.size.height,
+        greaterThan(1.0),
+      ); // d/dx◼가 한 줄을 넘는 가장 높은 각인
+      expect(sum.size.height, lessThanOrEqualTo(derivative.size.height));
+      expect(sum.inkTop, lessThanOrEqualTo(derivative.inkTop + 1e-9));
+      expect(sum.inkBottom, greaterThanOrEqualTo(derivative.inkBottom - 1e-9));
+    });
+
+    testWidgets('그린 ∑ 각인: 빈 칸·∑·빈 칸이 세로로 떨어져 쌓이고 가로 가운데가 같다 (픽셀 검사)', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          RepaintBoundary(
+            key: key,
+            child: KeyLegendView(
+              legend: const LegendLimits(
+                LegendText('∑'),
+                over: LegendText('◻'),
+                under: LegendText('◻'),
+              ),
+              style: CalcTheme.keyShiftLabelStyle.copyWith(
+                fontSize: 120,
+                color: const Color(0xFFFF0000),
+              ),
+            ),
+          ),
+        ),
+      );
+      // 행마다 빨간 잉크의 가로 범위를 모아, 빈 행으로 갈라진 덩어리(위 칸·∑·아래 칸)를 찾는다.
+      final runs = (await tester.runAsync(() async {
+        final boundary =
+            key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!;
+        final runs = <({int top, int bottom, double center})>[];
+        int? start;
+        var minX = 1 << 30;
+        var maxX = -1;
+        void close(int y) {
+          runs.add((top: start!, bottom: y - 1, center: (minX + maxX) / 2));
+          start = null;
+          minX = 1 << 30;
+          maxX = -1;
+        }
+
+        for (var y = 0; y < image.height; y++) {
+          var inked = false;
+          for (var x = 0; x < image.width; x++) {
+            final p = (y * image.width + x) * 4;
+            final (r, g, a) = (
+              data.getUint8(p),
+              data.getUint8(p + 1),
+              data.getUint8(p + 3),
+            );
+            if (a > 128 && r > 160 && g < 100) {
+              inked = true;
+              minX = math.min(minX, x);
+              maxX = math.max(maxX, x);
+            }
+          }
+          if (inked) {
+            start ??= y;
+          } else if (start != null) {
+            close(y);
+          }
+        }
+        if (start != null) close(image.height);
+        image.dispose();
+        return runs;
+      }))!;
+      expect(runs, hasLength(3), reason: '$runs');
+      final [over, sigma, under] = runs;
+      // ∑가 가장 높고, 위아래 칸은 ∑보다 작다(사진 ≈ 2.2 : 1).
+      final sigmaHeight = sigma.bottom - sigma.top;
+      expect(sigmaHeight, greaterThan(1.8 * (over.bottom - over.top)));
+      expect(sigmaHeight, greaterThan(1.8 * (under.bottom - under.top)));
+      // 세 덩어리의 가로 가운데가 같다(오른쪽 첨자가 아니다).
+      expect(over.center, moreOrLessEquals(sigma.center, epsilon: 2));
+      expect(under.center, moreOrLessEquals(sigma.center, epsilon: 2));
+    });
+  });
+
   group('키 버튼에서 (#155 체크리스트)', () {
     testWidgets('이슈 표의 모든 각인이 2차원 각인 위젯으로 그려지고 한 줄 표기 Text는 없다', (
       tester,

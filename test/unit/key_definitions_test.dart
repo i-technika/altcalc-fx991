@@ -238,6 +238,10 @@ void main() {
               check(base, reason);
               if (superscript != null) check(superscript, reason);
               if (subscript != null) check(subscript, reason);
+            case LegendLimits(:final base, :final over, :final under):
+              check(base, reason);
+              check(over, reason);
+              check(under, reason);
             case LegendFraction(:final numerator, :final denominator):
               check(numerator, reason);
               check(denominator, reason);

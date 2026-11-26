@@ -513,6 +513,12 @@ class _Builder {
       subscript,
       fontSize,
     ),
+    LegendLimits(:final base, :final over, :final under) => _limits(
+      base,
+      over,
+      under,
+      fontSize,
+    ),
     LegendFraction(:final numerator, :final denominator) => fraction(
       numerator,
       denominator,
@@ -581,7 +587,7 @@ class _Builder {
     final x = basePiece.width + gap;
     if (superscript != null) {
       final sup = layout(superscript, scriptSize);
-      // 기본 높이에 두되, 바탕 잉크가 더 높으면(∫·∑·10) 위첨자 위끝을 바탕 위끝에 맞춘다.
+      // 기본 높이에 두되, 바탕 잉크가 더 높으면(∫·10) 위첨자 위끝을 바탕 위끝에 맞춘다.
       final raise = math.max(
         fontSize * CalcTheme.keyLegendSuperscriptRaise,
         basePiece.inkTop - sup.inkTop,
@@ -593,7 +599,7 @@ class _Builder {
     }
     if (subscript != null) {
       final sub = layout(subscript, scriptSize);
-      // 기본 깊이에 두되, 바탕 잉크가 더 깊으면(∫·∑·log의 g) 아래첨자 아래끝을 바탕 아래끝에 맞춘다.
+      // 기본 깊이에 두되, 바탕 잉크가 더 깊으면(∫·log의 g) 아래첨자 아래끝을 바탕 아래끝에 맞춘다.
       final drop = math.max(
         fontSize * CalcTheme.keyLegendSubscriptDrop,
         sub.inkBottom - basePiece.inkBottom,
@@ -604,6 +610,45 @@ class _Builder {
       scriptWidth = math.max(scriptWidth, sub.width);
     }
     return _Piece(x + scriptWidth, top, bottom, ops);
+  }
+
+  /// 위아래 끝 — 바탕을 [CalcTheme.keyLegendLimitBaseScale]배, 끝 칸을 [CalcTheme.keyLegendLimitScale]배로 줄여
+  /// 바탕 잉크 위·아래에 [CalcTheme.keyLegendLimitGap]만큼 띄워 가운데로 쌓는다(#169 — 실물 ∑ 각인).
+  /// 쌓은 전체 잉크의 가운데를 분수 가로줄 높이([CalcTheme.keyLegendFractionAxis])에 맞춘다 — 옆 칸(◼)과 분수
+  /// 각인처럼 같은 높이에 놓이고, 전체 높이가 가장 높은 각인(`d/dx◼`)을 넘지 않는다(테스트로 고정).
+  _Piece _limits(
+    KeyLegend base,
+    KeyLegend over,
+    KeyLegend under,
+    double fontSize,
+  ) {
+    final basePiece = layout(
+      base,
+      fontSize * CalcTheme.keyLegendLimitBaseScale,
+    );
+    final limitSize = fontSize * CalcTheme.keyLegendLimitScale;
+    final overPiece = layout(over, limitSize);
+    final underPiece = layout(under, limitSize);
+    final gap = fontSize * CalcTheme.keyLegendLimitGap;
+    final width = math.max(
+      basePiece.width,
+      math.max(overPiece.width, underPiece.width),
+    );
+    // 바탕 기준선을 0으로 놓고 쌓은 뒤, 전체 잉크 가운데가 분수 축에 오도록 옮긴다.
+    final overBaseline = basePiece.inkTop + gap - overPiece.inkBottom;
+    final underBaseline = basePiece.inkBottom - gap - underPiece.inkTop;
+    final top = overBaseline + overPiece.inkTop;
+    final bottom = underBaseline + underPiece.inkBottom;
+    final lift =
+        fontSize * CalcTheme.keyLegendFractionAxis - (top + bottom) / 2;
+    return _Piece(width, top + lift, bottom + lift, [
+      ...basePiece.shifted((width - basePiece.width) / 2, lift),
+      ...overPiece.shifted((width - overPiece.width) / 2, overBaseline + lift),
+      ...underPiece.shifted(
+        (width - underPiece.width) / 2,
+        underBaseline + lift,
+      ),
+    ]);
   }
 
   /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓는다.

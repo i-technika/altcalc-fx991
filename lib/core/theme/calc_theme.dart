@@ -529,20 +529,44 @@ abstract final class CalcTheme {
   // 분수·첨자를 넣어도 각인 높이가 한 줄(1em)을 크게 넘지 않도록 정했다 — 가장 높은 `d/dx◼`가 약 1.14em이다
   // (각인 띠는 글자 크기의 1.25em — 테스트로 고정).
   // 각인 높이는 키패드 통일 글자 크기 계산(`KeypadMetrics`)이 폭과 함께 잰다.
+  //
+  // 실물·화면 대조 (#169):
+  // - 모양·위치: Quick Start Guide 1쪽 제품 사진과 대조했다 — ∑의 끝 칸만 위아래에 쌓도록 고쳤고(`LegendLimits`,
+  //   아래 `keyLegendLimit*`), 나머지는 사진과 같다(`key_definitions.dart` "2차원 각인" 절).
+  // - 작은 쌓은 분수의 크기: Android 에뮬레이터(1080×2400, 420dpi = 2.625배, 본체 폭 약 396dp)에 실제 앱을 띄워 기기
+  //   픽셀로 쟀다. 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려진다. 크기(기기 픽셀, 1px ≈ 0.06mm):
+  //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px, ∑ 약 15px·
+  //     위아래 칸 약 6px
+  //   · 글자 배율 130%: 약 1.3배(분수 `d` 약 17px, `dx` 약 13px)
+  //   사람이 실제 화면에서 읽을 수 있는지는 에뮬레이터로 판단할 수 없어, [keyLegendFractionScale]은 그대로 두고 실기기
+  //   확인(#174)에서 정한다.
 
   /// 위첨자·아래첨자 글자 크기 비율
   static const double keyLegendScriptScale = 0.66;
 
   /// 위첨자 기준선 기본 올림 (`x²`·`x^◼`·`e^◼`·`sin⁻¹`·`cos⁻¹`·`tan⁻¹`은 이 높이 — −1이 같은 높이다).
-  /// 이 높이에서 위첨자 위끝이 바탕 잉크 위끝보다 낮으면 바탕 위끝까지 올린다(`10^◼`·`×10ˣ`·∫·∑의 위 끝 칸).
+  /// 이 높이에서 위첨자 위끝이 바탕 잉크 위끝보다 낮으면 바탕 위끝까지 올린다(`10^◼`·`×10ˣ`·∫의 위 끝 칸).
   static const double keyLegendSuperscriptRaise = 0.36;
 
   /// 아래첨자 기준선 기본 내림. 이 깊이에서 아래첨자 아래끝이 바탕 잉크 아래끝보다 높으면 바탕 아래끝까지
-  /// 내린다(`log`의 g 아래로 맞춘 밑 칸, ∫·∑의 아래 끝 칸).
+  /// 내린다(`log`의 g 아래로 맞춘 밑 칸, ∫의 아래 끝 칸).
   static const double keyLegendSubscriptDrop = 0.22;
 
   /// 바탕 글자와 첨자 사이 간격
   static const double keyLegendScriptGap = 0.03;
+
+  /// 위아래 끝 각인(`LegendLimits` — ∑)의 바탕(∑) 글자 크기 비율 (#169).
+  /// 실물은 ∑ 위·아래에 작은 칸을 쌓는다(Quick Start Guide 1쪽 제품 사진). 그대로 쌓으면 각인이 한 줄보다 크게
+  /// 높아지므로 ∑를 줄인다 — 쌓은 높이(∑ 잉크 0.954em × 0.62 + 칸 2개 + 간격 2개 ≈ 1.13em)가 가장 높은 각인
+  /// `d/dx◼`(약 1.14em)를 넘지 않아 키패드 통일 각인 크기가 작아지지 않는다(테스트로 고정). 사진의 ∑ : 칸 높이
+  /// ≈ 2.2 : 1에 가깝다(0.59 : 0.24 ≈ 2.45 : 1).
+  static const double keyLegendLimitBaseScale = 0.62;
+
+  /// 위아래 끝 칸(∑ 위·아래 ◻) 글자 크기 비율 (#169)
+  static const double keyLegendLimitScale = 0.5;
+
+  /// 위아래 끝 칸과 바탕(∑) 잉크 사이 간격 (#169)
+  static const double keyLegendLimitGap = 0.03;
 
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
   static const double keyLegendFractionScale = 0.65;

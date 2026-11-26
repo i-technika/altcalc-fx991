@@ -8,7 +8,7 @@ import 'package:meta/meta.dart';
 // `x^◼`는 x 오른쪽 위의 작은 칸). 한 줄 문자열로는 이 모양을 나타낼 수 없으므로 각인을 구조로 담는다.
 //
 // - 글자만 있는 각인은 [LegendText] 하나다(`sin`, `SOLVE` 등 — 화면에서는 지금처럼 `Text`로 그린다).
-// - 2차원 각인은 [LegendRow]·[LegendScript]·[LegendFraction]·[LegendRadical]을 조합한다.
+// - 2차원 각인은 [LegendRow]·[LegendScript]·[LegendLimits]·[LegendFraction]·[LegendRadical]을 조합한다.
 //   그리는 쪽은 `presentation/widgets/key_legend_view.dart`(`KeyLegendView`)다.
 // - 이 파일은 도메인 계층에서도 쓰도록 UI 패키지에 의존하지 않는다.
 //
@@ -30,7 +30,8 @@ sealed class KeyLegend {
   /// 테스트에서 키를 가리킬 때 쓴다. 규칙(#16의 표기를 그대로 잇는다):
   /// - 분수: `분자/분모`. 앞이 글자·숫자·칸으로 끝나면 대분수로 보고 한 칸 띄운다(`a b/c`).
   /// - 위첨자: 숫자·`−`·`x`만이면 유니코드 위첨자(`x²`, `sin⁻¹`, `×10ˣ`), 아니면 `^`를 앞에 붙인다(`x^◼`).
-  ///   아래첨자와 함께 있으면(∫·∑의 위아래 끝) 아래첨자 다음에 그대로 잇는다(`∫◻◻◼`).
+  ///   아래첨자와 함께 있으면(∫의 아래·위 끝) 아래첨자 다음에 그대로 잇는다(`∫◻◻◼`).
+  /// - 위아래 끝([LegendLimits], ∑): 바탕 다음에 아래 끝, 위 끝 순서로 잇는다(`∑◻◻◼`).
   /// - 아래첨자: 그대로 잇는다(`log◼◻`).
   /// - 근호: `√피개법수`, 지수가 `3`이면 `∛`, 그 밖의 지수는 앞에 둔다(`◼√◻`).
   String get plainText;
@@ -107,7 +108,7 @@ final class LegendRow extends KeyLegend {
   String toString() => 'LegendRow($children)';
 }
 
-/// 위첨자·아래첨자가 붙은 조각 (`x²`, `log◼`, `∫` 위아래 끝).
+/// 위첨자·아래첨자가 붙은 조각 (`x²`, `log◼`, `∫`의 아래·위 끝 — 기호 오른쪽).
 final class LegendScript extends KeyLegend {
   /// 첨자가 붙는 바탕 조각
   final KeyLegend base;
@@ -187,6 +188,47 @@ final class LegendScript extends KeyLegend {
   @override
   String toString() =>
       'LegendScript($base, sup: $superscript, sub: $subscript)';
+}
+
+/// 바탕 바로 위·아래에 작게 쌓은 끝 칸 (`∑`의 위아래 끝 — #169).
+///
+/// [LegendScript]의 첨자는 바탕 **오른쪽** 위·아래에 붙지만(∫의 끝 칸), 이 노드는 바탕 **위·아래 가운데**에 쌓는다.
+/// 실물 fx-991EX는 ∑ 각인의 끝 칸을 기호 위·아래에 둔다(Quick Start Guide 1쪽 제품 사진, #169에서 대조).
+final class LegendLimits extends KeyLegend {
+  /// 끝 칸이 붙는 바탕 조각 (∑)
+  final KeyLegend base;
+
+  /// 위 끝 (바탕 위 가운데)
+  final KeyLegend over;
+
+  /// 아래 끝 (바탕 아래 가운데)
+  final KeyLegend under;
+
+  const LegendLimits(this.base, {required this.over, required this.under});
+
+  @override
+  String get plainText =>
+      '${base.plainText}${under.plainText}${over.plainText}';
+
+  @override
+  Iterable<LegendText> get texts => [
+    ...base.texts,
+    ...over.texts,
+    ...under.texts,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegendLimits &&
+      other.base == base &&
+      other.over == over &&
+      other.under == under;
+
+  @override
+  int get hashCode => Object.hash(LegendLimits, base, over, under);
+
+  @override
+  String toString() => 'LegendLimits($base, over: $over, under: $under)';
 }
 
 /// 위아래로 쌓고 가로줄을 그은 분수 (`◼/◻`, `d/dx`).
