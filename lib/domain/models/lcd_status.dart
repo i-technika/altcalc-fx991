@@ -86,12 +86,30 @@ enum ComplexResultIndicator {
 ///     칸을 덮지 않는다.
 ///   - `▭`는 두 칸 폭이고, `✎`(U+270E)는 번들 글꼴에 없다(`assets/fonts/README.md`).
 ///   - [template]은 아이콘 슬롯에서도 표시 문자(식별자)로 쓰이고 화면에는 그려지지 않는다.
+/// - 모양(#160): 위 User's Guide 4쪽 표시기 표의 아이콘을 기준으로 삼았다.
+///   - S·A·D·R·G는 어두운 상자 안의 밝은 글자(반전 상자, [boxed])다. `‖`도 어두운 상자 안의 밝은 세로 두 획이다.
+///   - `→x`: 굵은 화살표(몸통 + 삼각형 머리)가 왼쪽 변 가운데가 열린 상자로 들어가고, 상자 안에 x가 있다.
+///   - `√▭✎`: 근호 윗선 아래에 칸이 떨어져 매달린다. 칸은 오른쪽이 열린 "⊏"이고, 연필 촉이 그 열린 곳에 들어간다.
+///   - 교차 확인: Commons 사진에서 켜진 D는 상자 안의 밝은 D이고, √▭✎는 "√E✎"처럼(윗선 + 칸의 위·아래 변) 보인다.
+///     스프라이트(`interface.png` 같은 줄)도 다섯 글자와 `‖`가 상자다.
+///   - 출처를 나눠 쓴 것:
+///     - 가로 비율(근호 : 틈 : 칸, 연필이 셋째 칸까지 뻗음)은 사진에서 쟀다. 가이드 아이콘은 인쇄용이라 LCD보다 좁다.
+///     - 연필 위 끝 높이는 가이드(대문자 윗선 아래 0.3)와 사진(윗선 가까이)의 사이(0.2)로, 굵기는 가이드(대문자 높이의
+///       0.21)로 정했다. 칸의 짧은 변·아랫변과 떨어지는 것을 우선했다. 가이드의 촉·몸통 사이 흰 구분선은 작은 크기에서
+///       뭉개지므로 넣지 않았다.
+///     - 선 굵기는 옆 글자 획(대문자 높이의 0.14 — 실물 1도트/7도트와 같다)이라 가이드(약 0.1)보다 굵다.
+///   - 한계:
+///     - 실물·가이드 상자는 정사각형에 가깝고(`‖`는 가로가 더 길고 모서리가 둥글다), 앱은 슬롯 폭(한 칸 0.6em)을
+///       지키느라 폭 0.6em × 대문자 높이 0.714em로, 모서리를 각지게 그린다(도트 LCD는 둥근 모서리가 없다).
+///     - S·A·R·G·`‖`·`→x`가 켜진 모습은 실기기·사진으로 보지 못했다(가이드 아이콘으로 정함).
+///     - 작은 물리 크기: 상자 높이가 약 12물리 픽셀(대략 상태 글자 6dp·2x) 아래로 내려가면 상자 안 글자의 획이 1픽셀
+///       안팎이라 글자를 알아보기 어렵다. 도트 격자에 맞추지(snap) 않으므로 상자 가장자리도 흐려진다.
 enum LcdIndicatorSlot {
-  /// S — SHIFT 1회성 대기
-  shift('S', columns: 1, dotCenter: 3.5),
+  /// S — SHIFT 1회성 대기 (반전 상자 글자)
+  shift('S', columns: 1, dotCenter: 3.5, boxed: true),
 
-  /// A — ALPHA 1회성 대기
-  alpha('A', columns: 1, dotCenter: 11.5),
+  /// A — ALPHA 1회성 대기 (반전 상자 글자)
+  alpha('A', columns: 1, dotCenter: 11.5, boxed: true),
 
   /// M — 독립 메모리에 값이 있음
   memory('M', columns: 1, dotCenter: 20.5),
@@ -102,14 +120,14 @@ enum LcdIndicatorSlot {
   /// √◻ — MathI 입출력. 실물 `√▭✎`(근호 + 칸 + 연필)를 아이콘으로 그린다(3칸).
   math('√◻', columns: 3, dotCenter: 47, icon: LcdIndicatorIcon.mathInput),
 
-  /// D — 각도 단위 도 (D/R/G 세 자리 중 하나만 켜짐)
-  angleDegree('D', columns: 1, dotCenter: 60.5),
+  /// D — 각도 단위 도 (D/R/G 세 자리 중 하나만 켜짐, 반전 상자 글자)
+  angleDegree('D', columns: 1, dotCenter: 60.5, boxed: true),
 
-  /// R — 각도 단위 라디안
-  angleRadian('R', columns: 1, dotCenter: 67.5),
+  /// R — 각도 단위 라디안 (반전 상자 글자)
+  angleRadian('R', columns: 1, dotCenter: 67.5, boxed: true),
 
-  /// G — 각도 단위 그라디안
-  angleGradian('G', columns: 1, dotCenter: 74.5),
+  /// G — 각도 단위 그라디안 (반전 상자 글자)
+  angleGradian('G', columns: 1, dotCenter: 74.5, boxed: true),
 
   /// FIX — 소수점 이하 자릿수 고정 (SCI와 다른 자리 — Norm이면 둘 다 꺼짐)
   fixFormat('FIX', columns: 3, dotCenter: 87),
@@ -152,11 +170,16 @@ enum LcdIndicatorSlot {
   /// 직접 그리는 아이콘. `null`이면 [template]·표시 문자를 글자로 그린다.
   final LcdIndicatorIcon? icon;
 
+  /// 반전 상자 글자 — 어두운 상자 안에 글자를 밝게(상자를 글자 모양으로 비워) 그린다(#160).
+  /// 실물 S·A·D·R·G가 이렇게 생겼다. 글자 하나짜리 1칸 글자 슬롯만 된다(테스트로 검증).
+  final bool boxed;
+
   const LcdIndicatorSlot(
     this.template, {
     required this.columns,
     required this.dotCenter,
     this.icon,
+    this.boxed = false,
   });
 
   /// 실물 ClassWiz LCD의 가로 도트 수 — [dotCenter]의 기준 폭
@@ -168,14 +191,13 @@ enum LcdIndicatorSlot {
 
 /// 상태 표시줄에서 글자 대신 직접 그리는 아이콘 (#57). 모양은 표현 계층(`LcdStatusIcon`)이 그린다.
 enum LcdIndicatorIcon {
-  /// `→x` — 오른쪽 화살표 + x (변수 지정 대기, 2칸)
+  /// `→x` — 굵은 화살표가 왼쪽이 열린 상자로 들어가고 상자 안에 x (변수 지정 대기, 2칸, #160)
   storeArrow,
 
-  /// `√▭✎` — 근호가 칸을 덮고 오른쪽에 연필 (MathI 입출력, 3칸)
+  /// `√▭✎` — 근호 윗선 아래에 매달린 칸(⊏)과, 칸의 열린 오른쪽에 촉을 넣은 연필 (MathI 입출력, 3칸, #160)
   mathInput,
 
-  /// `‖` — 대문자 높이의 세로 이중선 (다중 문장 중간 결과, 1칸).
-  /// 실물은 어두운 상자 안의 밝은 두 획으로 보인다(#58 대조). 모양 맞추기는 #160.
+  /// `‖` — 어두운 상자 안의 밝은 세로 두 획 (다중 문장 중간 결과, 1칸, #160)
   multiStatement,
 }
 

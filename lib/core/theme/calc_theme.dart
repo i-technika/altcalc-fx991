@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -427,7 +429,8 @@ abstract final class CalcTheme {
     height: 1.3,
   );
 
-  /// LCD 상태 표시줄 텍스트 스타일 (S, A, D/R/G, FIX 등 — 슬롯은 `LcdIndicatorSlot`, →x·√▭✎·‖는 `LcdStatusIcon`이 그림).
+  /// LCD 상태 표시줄 텍스트 스타일 (M, FIX 등 — 슬롯은 `LcdIndicatorSlot`. S·A·D/R/G는 `LcdStatusBoxedLetter`가,
+  /// →x·√▭✎·‖는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
   static const TextStyle lcdStatusStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -659,12 +662,22 @@ abstract final class CalcTheme {
   /// 직접 그리는 상태 아이콘(#57)이 글자와 같은 높이가 되도록 쓴다(테스트가 글꼴 파일 값과 대조).
   static const double lcdStatusCapHeightRatio = 0.714;
 
-  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 아이콘의 화살표를 x높이 가운데에 놓는다
+  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 상자 안 x의 잉크를 상자 가운데에 맞춘다
   static const double lcdStatusXHeightRatio = 0.542;
 
   /// 상태 아이콘 선 굵기 (글자 크기 대비) — SemiBold 글자 획 굵기와 비슷하게.
-  /// `‖`의 두 획(칸의 30%·70% 위치) 사이가 비어 보이도록 칸 폭의 40%보다 가늘어야 한다(테스트로 검증).
+  /// `‖`의 밝은 두 획(칸의 37%·63% 위치) 사이에 어두운 부분이 남도록 칸 폭의 26%보다 가늘어야 한다(테스트로 검증, #160).
   static const double lcdStatusIconStrokeRatio = 0.1;
+
+  /// 상자 안 글자 크기 (상자 높이 = 대문자 높이 대비) — 반전 상자 글자(S·A·D·R·G)와 `→x`의 x (#160).
+  /// 실물은 7도트 높이 상자 안에 위아래 1도트를 남긴 5도트 글자다(User's Guide 표시기 표·스프라이트·사진의 D).
+  static const double lcdStatusBoxedLetterRatio = 5 / 7;
+
+  /// `→x` 상자 안 x의 글자 크기 (옆 글자 크기 대비). 상자 안쪽 폭(한 칸 0.6em − 테두리 2×0.1em = 0.4em)에서
+  /// x 잉크 폭(약 0.52em × 이 값)이 양쪽 테두리와 떨어지도록 [lcdStatusBoxedLetterRatio]보다 작게 둔다 —
+  /// 5/7이면 작은 크기(10dp·3x)에서 x 팔 끝이 테두리에 붙어 ⊠처럼 보인다(#160 리뷰 R1). 같은 이유로 x는 굵은 글씨
+  /// 설정을 따르지 않는다(굵게 그리면 8dp×1.3에서 다시 붙는다, 리뷰 R2).
+  static const double lcdStatusStoreXRatio = 0.55;
 
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
@@ -841,8 +854,9 @@ abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 광고 없는 배치가 기준이다 (#141, 사용자 결정 — 과금 사용자가 가장 쾌적해야 한다). 화면 맨 아래 광고 슬롯은 없고,
   // 무과금 사용자의 광고는 이 배치에서 LCD 쪽 한 영역을 줄여 넣는다(화면 맨 위·기록 영역, #18).
-  // - 본체: 시스템 인셋(SafeArea) 안에서 화면 가장자리 여백([screenPadding])을 네 변 모두 뺀 영역이다. 위쪽 여백은
-  //   상단 띠가 함께 쓴다("상단 띠" 절). 본체를 LCD와 키패드가 나눈다.
+  // - 본체: 시스템 인셋(SafeArea) 안에서 화면 가장자리 여백([screenPadding])을 위·왼쪽·오른쪽에서, 아래 여백
+  //   ([screenBottomMargin] — 보통 같은 값, #63)을 아래에서 뺀 영역이다. 위쪽 여백은 상단 띠가 함께 쓴다("상단 띠" 절).
+  //   본체를 LCD와 키패드가 나눈다.
   // - 폭: LCD와 키패드 모두 본체 폭 전체다 (#141). 예전에는 둘 다 480dp에서 멈춰(#24·#92) 태블릿 세로에서 가운데에
   //   놓이고 양옆이 비었다. 키가 가로로 넓어지는 것은 받아들이고 각인 글자 크기에만 상한을 둔다
   //   ([keyMainLabelMaxFontSize], 사용자 결정).
@@ -873,7 +887,8 @@ abstract final class CalcTheme {
   //     (키 터치 53.8 → 49.1dp는 키캡이 48dp를 넘어 각인 띠를 터치 영역에서 빼기 시작한 탓이다 — 키 자체는 커진다)
   //   · 정사각형 창 768×768(본체 752×752): 키패드 524.8dp라 띠는 최소 높이 그대로다.
   //   태블릿 세로의 키는 폭 약 116~190dp(함수부~숫자부)까지 넓어지고, 메인 라벨·각인 글자는 상한(16.5·11dp)에서 멈춘다.
-  //   폰은 맨 아래 광고 슬롯(50dp + 안전 여백 10dp)이 빠지고 아래 화면 여백 8dp가 생겨 본체가 52dp 높아진다 — 대부분
+  //   폰은 맨 아래 광고 슬롯(50dp + 안전 여백 10dp)이 빠지고 아래 화면 여백 8dp가 생겨 본체가 52dp 높아진다(아래
+  //   제스처 영역이 깊은 기기는 아래 여백이 더 크다 — [screenBottomMargin], #63) — 대부분
   //   키패드가 폭 기준 최대 높이에 닿고
   //   나머지는 LCD(최대 높이까지)와 상단 띠가 받는다:
   //   · 320×568 상태바 20(iPhone SE 1세대): 키 터치 27.96 → 31.1dp(하한 [keyTouchHeightFloor] 28dp를 넘는다),
@@ -892,6 +907,39 @@ abstract final class CalcTheme {
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
+
+  /// 본체 아래 여백 (dp) — 본체 아래를 가리는 것(시스템 인셋·키보드) 위에 두는 여백 (#63).
+  ///
+  /// [bottomInset]은 본체 아래를 실제로 가리는 높이다 — `max(MediaQuery.viewPadding.bottom, MediaQuery.viewInsets.bottom)`.
+  /// 키보드가 없으면 아래 시스템 인셋이다. `padding.bottom`은 키보드가 뜨면 0이 되지만 그때 본체는 Scaffold가 키보드 위로
+  /// 줄이므로, 그 값을 쓰면 키보드가 떠 있는 동안 여백만 커진다(이 앱은 키보드를 띄우지 않지만 규칙의 뜻을 맞춘다).
+  ///
+  /// 보통은 [screenPadding]이다. 아래 시스템 제스처 영역([bottomGestureInset], `MediaQuery.systemGestureInsets.bottom`,
+  /// Android 홈 제스처)이 [bottomInset]보다 [screenPadding] 넘게 깊으면, 그 초과분만큼 넓혀 본체가 영역에 닿지 않게 한다.
+  /// - 이유: 맨 아래 광고 슬롯이 없어져(#141) 키패드 맨 아래 행이 본체 아래 끝까지 내려온다. 그 행이 제스처 영역에 걸리면
+  ///   `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때 확정해(#50) 맨 아래 행만 누름 감각이 달라진다.
+  ///   아래 영역을 보류 대상에서 빼면, 키 위에서 시작한 홈 스와이프가 키를 먼저 입력해 버린다.
+  /// - 좌우 뒤로가기 영역은 이렇게 피하지 않는다 — 폭(약 24~30dp)만큼 여백을 두면 모든 폰에서 키패드가 좁아진다
+  ///   (`CalculatorScreen` 문서). 아래는 차이가 작고(아래 실측) 대부분 0이다.
+  /// - 실측(#63, Android 에뮬레이터 Debug 빌드, dp — 인셋 / 제스처 영역 → 넓히는 양):
+  ///   · API 36 폰 411×914, 제스처 내비게이션(edge-to-edge 강제): 24 / 32 → 0 (본체 아래 끝 = 제스처 영역 윗변)
+  ///   · 같은 폰, 3버튼: 48 / 48 → 0
+  ///   · API 36 Pixel Fold 내부 841×701(임시 작업 표시줄): 32 / 32 → 0
+  ///   · API 33 폰, 제스처 내비게이션(edge-to-edge 아님 — 창이 내비게이션 바 위에서 끝난다): 0 / 8 → 0
+  ///   맨 아래 행 키캡 아래 끝은 본체 아래 끝보다 키패드 셀 안 세로 간격의 절반(키패드 높이의 0.75%)만큼 위다 —
+  ///   위 폰들에서 약 5dp이고, 키패드가 낮은 배치(테이블톱 아래 절반, 짧은 창)에서는 2~3dp로 줄어든다. 그래서 위 폰들의
+  ///   제스처 영역까지의 여유는 제스처 내비게이션(24/32, 0/8)에서 약 5dp, 3버튼·작업 표시줄(제스처 영역이 시스템 바 안)에서
+  ///   약 13dp다. 제스처 영역이 인셋보다 [screenPadding] 넘게 깊은 기기에서만 넓어진다. 그런 구성은 에뮬레이터에서
+  ///   안정된 상태로 만들 수 없어 **실측하지 못했다**(내비게이션 힌트를 숨긴 제스처 내비게이션 등으로 추정 — 실기기 확인은 #118).
+  /// - 넓어지면 본체가 그만큼 낮아져 짧은 창 판정(#38, 아래 "짧은 창")에도 그 높이로 들어간다. 상한은 두지 않는다 —
+  ///   넓어지는 구성은 실측하지 못해 그 양을 모르지만, 상한을 두면 맨 아래 행이 다시 제스처 영역에 걸린다.
+  ///   상한이 필요한지는 #118 실측 뒤에 다시 판단한다.
+  /// - 배치 종류와 무관하게 화면 전체 본체에 적용한다 — 키패드가 맨 아래에 오는 모든 배치(위아래·좌우 분할·접힘선·
+  ///   이후의 가로형 #142·접힘선 재정의 #143)가 같은 본체 안에 있다.
+  static double screenBottomMargin({
+    required double bottomInset,
+    required double bottomGestureInset,
+  }) => math.max(screenPadding, bottomGestureInset - bottomInset);
 
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/high_text_contrast.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
@@ -249,8 +250,14 @@ void main() {
       addTearDown(SystemHighTextContrast.instance.stop);
     }
 
+    /// 진단 로그(#158) 줄. `main()`은 진단 빌드에서만 켜므로 테스트가 직접 켜서 여기에 모은다(프레임 시각 보고는 끈다).
+    late List<String> printed;
+
     /// 물리 화면과 창을 [size](dp)로 맞춘다 (화면 배율 2).
     void setDevice(WidgetTester tester, Size size) {
+      printed = [];
+      LayoutLog.enable(sink: printed.add, frameTimings: false);
+      addTearDown(LayoutLog.disable);
       tester.view.display.devicePixelRatio = 2;
       tester.view.display.size = size * 2;
       tester.view.devicePixelRatio = 2;
@@ -262,7 +269,10 @@ void main() {
       // 응답이 오지 않아 main()이 끝나지 않는다.
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         FormFactor.deviceChannel,
-        (call) async => false,
+        (call) async => {
+          FormFactor.foldableKey: false,
+          FormFactor.foldKey: false,
+        },
       );
       addTearDown(
         () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -353,11 +363,18 @@ void main() {
       expect(keypad.right, lessThan(lcd.left));
     });
 
-    /// 폴더블 판정 조회 채널 응답을 [foldable]로 고정한다.
-    void mockFoldableDevice(WidgetTester tester, {required bool foldable}) {
+    /// 폴더블 판정 조회 채널 응답을 [foldable]·[fold](창 배치 첫 값의 접힘, #158)로 고정한다.
+    void mockFoldableDevice(
+      WidgetTester tester, {
+      required bool foldable,
+      bool? fold = false,
+    }) {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         FormFactor.deviceChannel,
-        (call) async => foldable,
+        (call) async => {
+          FormFactor.foldableKey: foldable,
+          FormFactor.foldKey: fold,
+        },
       );
       addTearDown(
         () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -405,6 +422,136 @@ void main() {
         expect(keypad.left, greaterThanOrEqualTo(420));
       },
     );
+
+    /// 진단 로그(#158)의 배치 줄에서 그린 배치 이름만 순서대로
+    List<String> loggedArrangements() => [
+      for (final line in printed)
+        if (line.startsWith('${LayoutLog.prefix} 배치: '))
+          line.substring('${LayoutLog.prefix} 배치: '.length).split(' ').first,
+    ];
+
+    testWidgets(
+      '폴더블 내부 화면 시작: Android 창 배치 첫 값에 접힘선이 있었으면 접힘 정보가 올 때까지 첫 화면을 미뤄 '
+      '처음부터 접힘선 기준 배치로 그린다 (#158)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        setDevice(tester, const Size(841, 701));
+        mockFoldableDevice(tester, foldable: true, fold: true);
+        recordPlatformCalls(tester);
+        final started = app.main();
+        // main()이 접힘 정보를 기다리는 동안에는 화면이 없다(시작 화면이 남는다)
+        await tester.pump();
+        expect(find.byType(CalculatorScreen), findsNothing);
+
+        tester.view.displayFeatures = const [_verticalFold];
+        addTearDown(tester.view.resetDisplayFeatures);
+        await started;
+        await tester.pump();
+
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        // 진단 로그: 위아래 배치를 한 번도 빌드하지 않았다 — 첫 배치가 접힘선 기준 배치다
+        expect(loggedArrangements(), ['hingeSplit']);
+        expect(
+          printed,
+          contains('${LayoutLog.prefix} 시작 판정 받음: 폴더블=true, 접힘=있음'),
+        );
+        expect(
+          printed.where(
+            (l) => l.startsWith('${LayoutLog.prefix} 접힘 정보 기다림: 도착'),
+          ),
+          hasLength(1),
+        );
+      },
+    );
+
+    testWidgets('접힘이 아닌 화면 특징(화면 구멍)만 오면 계속 기다린다 (#158)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      mockFoldableDevice(tester, foldable: true, fold: true);
+      recordPlatformCalls(tester);
+      final started = app.main();
+      await tester.pump();
+      tester.view.displayFeatures = const [
+        DisplayFeature(
+          bounds: Rect.fromLTWH(400, 0, 40, 30),
+          type: DisplayFeatureType.cutout,
+          state: DisplayFeatureState.unknown,
+        ),
+      ];
+      addTearDown(tester.view.resetDisplayFeatures);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(CalculatorScreen), findsNothing);
+
+      tester.view.displayFeatures = const [_verticalFold];
+      await started;
+      await tester.pump();
+      expect(loggedArrangements(), ['hingeSplit']);
+    });
+
+    testWidgets('Android가 첫 값을 받지 못했으면(접힘 모름) 기다리지 않고 바로 시작한다 (#158)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      mockFoldableDevice(tester, foldable: true, fold: null);
+      recordPlatformCalls(tester);
+      final started = app.main();
+      // 가짜 시간을 흘리지 않아도 시작이 끝난다 — 기다림(타이머)이 없다
+      await tester.pump();
+      await started;
+      await tester.pump();
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(
+        printed,
+        contains('${LayoutLog.prefix} 시작 판정 받음: 폴더블=true, 접힘=모름'),
+      );
+      expect(printed.where((l) => l.contains('접힘 정보 기다림')), isEmpty);
+      expect(loggedArrangements(), ['stacked']);
+    });
+
+    testWidgets('접힘 정보가 이미 와 있으면 기다리지 않는다 (#158)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      tester.view.displayFeatures = const [_verticalFold];
+      addTearDown(tester.view.resetDisplayFeatures);
+      mockFoldableDevice(tester, foldable: true, fold: true);
+      recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(loggedArrangements(), ['hingeSplit']);
+    });
+
+    testWidgets('접힘 정보가 제한 시간 안에 오지 않으면 그대로 시작한다 — 앱 시작이 멈추지 않는다 (#158)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      mockFoldableDevice(tester, foldable: true, fold: true);
+      recordPlatformCalls(tester);
+      final started = app.main();
+      await tester.pump();
+      expect(find.byType(CalculatorScreen), findsNothing);
+      await tester.pump(
+        DeviceOrientationLock.foldFeatureWait - const Duration(milliseconds: 1),
+      );
+      expect(find.byType(CalculatorScreen), findsNothing);
+      await tester.pump(const Duration(milliseconds: 1));
+      await started;
+      await tester.pump();
+
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(isStackedArrangement(tester), isTrue);
+      expect(
+        printed,
+        anyElement(startsWith('${LayoutLog.prefix} 접힘 정보 기다림: 제한 시간 초과')),
+      );
+      // 기다림이 끝나면 화면 정보 관찰도 끝난다 — 뒤에 온 접힘 정보는 방향 고정이 받는다
+      tester.view.displayFeatures = const [_verticalFold];
+      addTearDown(tester.view.resetDisplayFeatures);
+      await tester.pump();
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+    });
 
     testWidgets(
       '시작 시 판정이 놓친 폴더블: 접힘 정보가 오면 네 방향 허용으로 다시 요청하고, 같은 정책이면 다시 요청하지 않는다',
@@ -730,7 +877,29 @@ void main() {
               greaterThanOrEqualTo(cellArea * (vertical ? 1.0 : 1.1)),
               reason: '${sector.name} 넓이 ${pad.size}',
             );
+            // 스크린리더 시맨틱 영역(#166): 허브 고리까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
+            // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 측정은 568×320 창 약 18.7dp, 360×300 분할 화면 약 13.5dp)
+            // (측정 22.6~34.9dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
+            final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
+            expect(
+              semantic.shortestSide,
+              greaterThanOrEqualTo(22.0),
+              reason: '${sector.name} 시맨틱 영역 $semantic',
+            );
           }
+          // 셀 여백은 ▲·▼와 ◀·▶가 고르게 나눠 갖는다 — 두 영역 높이가 같다(#166 R2: 패드에만 묶으면
+          // 셀이 패드보다 조금 높은 390×844 등에서 ◀·▶가 2dp쯤 낮아진다).
+          expect(
+            CursorPad.semanticRect(CursorPadSector.up, pad.size, bounds).height,
+            moreOrLessEquals(
+              CursorPad.semanticRect(
+                CursorPadSector.left,
+                pad.size,
+                bounds,
+              ).height,
+              epsilon: 1e-6,
+            ),
+          );
         });
       }
     }

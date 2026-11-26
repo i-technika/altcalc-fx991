@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/layout/form_factor.dart';
+import '../../core/layout/layout_log.dart';
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/calc_state.dart';
 import '../../domain/models/handedness.dart';
@@ -599,9 +601,12 @@ class CalcTopStripLayout {
 /// - **짧은 창** (분할 화면·팝업 창·가로로 돈 폰, #38): 짧은 변 600dp 미만 창은 위아래 배치와 좌우 분할 중 키가
 ///   큰 쪽으로 그린다(세로 폰은 위아래 배치가 늘 크다). 어느 배치든 그린 키가
 ///   [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을 키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
-/// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 화면
-///   여백([CalcTheme.screenPadding])까지 쓴다. 무과금 사용자의 광고는 이 배치에서 LCD 쪽 한 영역을 줄여
-///   넣는다(화면 맨 위·기록 영역, #18).
+/// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 아래
+///   여백([CalcTheme.screenBottomMargin] — 보통 화면 여백, 아래 제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 초과분만큼,
+///   #63)까지 쓴다.
+///   그래서 맨 아래 키 행은 홈 제스처 영역 밖에 있어 누르는 순간 입력된다(양 끝 키 중 좌우 뒤로가기 영역에 든
+///   부분은 다음의 좌우 여백 항목대로 손을 뗄 때 입력된다). 무과금 사용자의 광고는 이 배치에서
+///   LCD 쪽 한 영역을 줄여 넣는다(화면 맨 위·기록 영역, #18).
 ///
 /// 위아래 배치 구성 (위 → 아래):
 /// ```
@@ -611,7 +616,7 @@ class CalcTopStripLayout {
 ///  │          LCD             │  ← [CalcScreenLayout.lcdHeight]
 ///  │        (간격)            │
 ///  │     50키 키패드          │  ← [CalcScreenLayout.keypadHeight]
-///  │       (화면 여백)        │
+///  │       (아래 여백)        │  ← [CalcTheme.screenBottomMargin] (#63)
 ///  └──────────────────────────┘  ← 하단 시스템 인셋 (SafeArea)
 /// ```
 ///
@@ -621,9 +626,12 @@ class CalcTopStripLayout {
 /// - 좌우 여백은 [CalcTheme.screenPadding]만 둔다. 가장자리 열의 바깥쪽 일부가 Android 제스처
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
+///   아래 제스처 영역은 반대로 여백으로 피한다(위 광고 슬롯 항목) — 깊이 차이가 작아 대부분 기기에서 비용이 없다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
-///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38).
+///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38). 앱 시작 때는
+///   Android가 창 배치 첫 값에 접힘선이 있다고 알리면 `main()`이 그 정보가 올 때까지(최대 300ms) 첫 화면을 미룬다(#158) —
+///   제때 오면 첫 프레임부터 접힘선 기준 배치다.
 /// - 접기·펼치기·회전으로 배치가 바뀌어도 상태는 [calcProvider]에 있고 LCD·키패드 element도 유지된다(`_Body`).
 class CalculatorScreen extends ConsumerWidget {
   const CalculatorScreen({super.key});
@@ -659,16 +667,25 @@ class CalculatorScreen extends ConsumerWidget {
       window,
       features,
     )?.bounds.shift(-bodyOrigin);
+    // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 본체 아래를 가리는 것(시스템 인셋·키보드)보다 화면 여백
+    // 넘게 깊으면 그 초과분만큼 넓혀 본체가 영역에 닿지 않게 한다 (#63).
+    final bottomMargin = CalcTheme.screenBottomMargin(
+      bottomInset: math.max(
+        MediaQuery.viewPaddingOf(context).bottom,
+        MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
+    );
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
-      // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 화면 여백까지 쓴다 (#141).
+      // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).
       body: SafeArea(
         child: Padding(
           // 위쪽 화면 여백은 `_Body`가 갖는다 — 상단 띠가 그 여백까지 쓴다 (#41).
-          padding: const EdgeInsets.only(
+          padding: EdgeInsets.only(
             left: CalcTheme.screenPadding,
             right: CalcTheme.screenPadding,
-            bottom: CalcTheme.screenPadding,
+            bottom: bottomMargin,
           ),
           child: LayoutBuilder(
             builder: (context, constraints) => _BodyOriginCheck(
@@ -683,6 +700,14 @@ class CalculatorScreen extends ConsumerWidget {
                 smallWindow:
                     window.shortestSide < FormFactor.largeScreenMinShortestSide,
                 hinge: hinge,
+                // 진단 로그용 (#158) — 켜져 있을 때만 넘긴다
+                diagnostics: LayoutLog.enabled
+                    ? (
+                        window: window,
+                        features: features,
+                        foldableDevice: foldableDevice,
+                      )
+                    : null,
               ),
             ),
           ),
@@ -914,11 +939,17 @@ class _Body extends ConsumerWidget {
   /// 창의 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인지 — 짧은 창 판정 (#38 R1)
   final bool smallWindow;
 
+  /// 진단 로그([LayoutLog], #158)에 적을 창 크기·화면 특징·폴더블 여부. 로그가 꺼져 있으면 `null`이다 — 부모가 이미
+  /// 읽은 값을 받으므로 이 위젯은 로그 때문에 따로 의존을 걸지 않는다.
+  final ({Size window, List<DisplayFeature> features, bool foldableDevice})?
+  diagnostics;
+
   const _Body({
     required this.body,
     required this.arrangement,
     required this.smallWindow,
     this.hinge,
+    this.diagnostics,
   });
 
   @override
@@ -1053,6 +1084,18 @@ class _Body extends ConsumerWidget {
     final tooSmall =
         KeypadMetrics.minKeyTouchHeightOf(keypad.size, keypadArrangement) <
         CalcTheme.keyTouchHeightUsableMin;
+    // 진단 로그 (#158, 진단 빌드에서만 켜진다): 배치가 바뀐 프레임마다 한 줄 — 첫 프레임 깜빡임을 logcat으로 본다.
+    final diagnostics = this.diagnostics;
+    if (diagnostics != null) {
+      LayoutLog.layout(
+        chosen: arrangement,
+        drawn: drawn,
+        tooSmall: tooSmall,
+        window: diagnostics.window,
+        features: diagnostics.features,
+        foldableDevice: diagnostics.foldableDevice,
+      );
+    }
     // 손잡이를 바꾸면 배치가 달라지는지 (#41 R2): 위아래 배치로 그렸어도, 반대 손잡이로는 접힘선 기준 배치가
     // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
     // 접힘선 기준 배치는 반대 손잡이로도 같은 배치이고 키패드 자리가 같으면 키패드가 옮겨 가지 않는다 — 넓은
