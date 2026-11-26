@@ -408,8 +408,8 @@ void main() {
     group('글자 크기 상한 (#141)', () {
       test('태블릿처럼 큰 키패드는 키가 아무리 커져도 상한에서 멈춘다 (가로로 넓어져도 커지지 않는다)', () {
         for (final area in const [
-          Size(784, 842), // 10인치 800×1280 세로
-          Size(1008, 924), // 12.9인치 iPad 세로
+          Size(784, 813.6), // 10인치 800×1280 세로
+          Size(1008, 895.68), // 12.9인치 iPad 세로
           Size(2000, 2000),
           Size(3000, 900), // 아주 넓은 키
         ]) {
@@ -515,9 +515,9 @@ void main() {
       );
       expect(huge.extendFunctionHitArea, isTrue);
 
-      // 태블릿 세로 키패드(10인치 800×1280의 784×842, #141): 함수부 키캡도 48dp 이상이라 어느 쪽도 넓히지 않는다.
+      // 태블릿 세로 키패드(10인치 800×1280의 784×813.6, #141): 함수부 키캡도 48dp 이상이라 어느 쪽도 넓히지 않는다.
       final tablet = KeypadMetrics.compute(
-        const Size(784, 842),
+        const Size(784, 813.6),
         TextScaler.noScaling,
       );
       expect(
@@ -582,6 +582,16 @@ void main() {
             now[sector],
             greaterThanOrEqualTo(old[sector]! - 1e-6),
             reason: '${sector.name} $area (전 $before)',
+          );
+        }
+        // 함수 키 셀과 견준 ▲·▼ 비율은 #64 기준(1.2배)보다 낮아진다(#159). 지금 값(가장 낮은 1600×300에서 약 0.74배)보다
+        // 나빠지지 않게 아래 한계를 고정한다 — #159에서 기준을 정하면 이 값을 바꾼다.
+        final sin = tester.getSize(_button(CalcKeyId.sin));
+        for (final sector in [CursorPadSector.up, CursorPadSector.down]) {
+          expect(
+            now[sector]! / (sin.width * sin.height),
+            greaterThanOrEqualTo(0.7),
+            reason: '${sector.name} $area',
           );
         }
       },
@@ -1793,7 +1803,7 @@ void _cursorPadShapeTests() {
           final cell = tester.getRect(find.byType(CursorPad));
           // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
           // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 1.2배 아래로 내려간다
-          // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 후속 이슈). 그 크기([_wideCellAreas])는
+          // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 #159). 그 크기([_wideCellAreas])는
           // 아래 "가로로 넓어져도" 테스트가 절대 넓이로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
           if (cell.width / cell.height > 2.2) {
             expect(_wideCellAreas, contains(area));

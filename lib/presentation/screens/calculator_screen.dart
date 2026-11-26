@@ -26,9 +26,9 @@ import '../widgets/top_strip.dart';
 /// - 폭: LCD와 키패드 모두 본체 폭 전체를 쓴다 (#141 — 폭 상한 없음, 태블릿 세로에서도 양옆이 비지 않는다).
 /// - 상단 띠 최소 높이: [CalcTheme.screenTopStripMinHeight]를 먼저 떼어 둔다 (#41 — 설정 아이콘 줄).
 ///   아래 LCD·키패드 규칙의 "본체 높이"는 이것을 뺀 높이다.
-/// - 큰 세로 창의 띠 (#141 R1): 키패드가 [CalcTheme.screenTopStripFullRowKeypadMinHeight](실물 크기 키패드 높이)보다
-///   높으면, 그 높이 아래로 내려가지 않는 만큼 띠를 내용 줄 전체 높이(화면 여백 포함 [CalcTheme.topStripRowMaxHeight])까지
-///   늘린다. 태블릿 세로에서 설정 아이콘·태양전지가 다 들어가고 터치 영역이 LCD에 겹치지 않는다. 폰은 키패드가 그
+/// - 큰 세로 창의 띠 (#141 R1·R2): 위 규칙으로 정한 키패드가 [CalcTheme.screenTopStripFullRowKeypadMinHeight](실물 크기
+///   키패드 높이)보다 높으면, 그 높이 아래로 내려가지 않는 만큼 키패드에서 떼어 띠를 내용 줄 전체 높이(화면 여백 포함
+///   [CalcTheme.topStripRowMaxHeight])까지 늘린다(LCD는 그대로). 태블릿 세로에서 설정 아이콘·태양전지가 다 들어가고 터치 영역이 LCD에 겹치지 않는다. 폰은 키패드가 그
 ///   높이에 닿지 않아 그대로이고, 창이 커지면 띠가 늘어나는 동안 키패드는 그 높이에 머물러 키가 줄지 않는다.
 /// - LCD 높이: [CalcTheme.screenLcdHeightRatio] 목표, [CalcTheme.screenLcdMinHeight] ~
 ///   (본체 폭 / [CalcTheme.screenLcdMinAspectRatio]) 범위.
@@ -75,24 +75,19 @@ class CalcScreenLayout {
       CalcTheme.screenTopStripMinHeight,
     );
     // 큰 세로 창은 키패드를 실물 크기 아래로 줄이지 않는 만큼 띠를 내용 줄 전체 높이까지 늘린다 (#141 R1).
+    // 늘린 몫은 키패드에서만 뺀다 — LCD까지 다시 나누면 키패드가 폭에 묶인 창(폭 약 480~570dp)에서 폭이 늘 때
+    // LCD가 한 번에 13dp 줄어드는 불연속이 생긴다(#141 R2). 이 식은 창 폭·높이에 대해 연속이다.
     const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
-    const floor = CalcTheme.screenTopStripFullRowKeypadMinHeight;
-    if (base.top >= fullRow || base.keypadHeight <= floor) return base;
-    final full = _withStrip(width, bodyHeight, fullRow);
-    if (full.keypadHeight >= floor) return full;
-    // 그 사이: 키패드가 정확히 [floor]가 되는 띠 높이 — 키패드 높이는 띠 높이에 대해 연속이고 줄어들기만 하므로
-    // 이분 탐색으로 찾는다(LCD 최소·최대 높이 경계를 따로 풀지 않으려고).
-    var lo = CalcTheme.screenTopStripMinHeight;
-    var hi = fullRow;
-    for (var i = 0; i < 40; i++) {
-      final mid = (lo + hi) / 2;
-      if (_withStrip(width, bodyHeight, mid).keypadHeight >= floor) {
-        lo = mid;
-      } else {
-        hi = mid;
-      }
-    }
-    return _withStrip(width, bodyHeight, lo);
+    final grow =
+        (base.keypadHeight - CalcTheme.screenTopStripFullRowKeypadMinHeight)
+            .clamp(0.0, math.max(0.0, fullRow - base.top));
+    if (grow <= 0) return base;
+    return CalcScreenLayout._(
+      top: base.top + grow,
+      lcdHeight: base.lcdHeight,
+      gap: base.gap,
+      keypadHeight: base.keypadHeight - grow,
+    );
   }
 
   /// 띠 최소 높이를 [minStrip]으로 떼어 둔 배치 (본체 폭 [width]·높이 [bodyHeight]는 유한한 0 이상 값).

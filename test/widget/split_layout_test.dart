@@ -243,7 +243,7 @@ void main() {
   group('위아래 배치: LCD·키패드가 본체 폭 전체를 쓴다 (#141)', () {
     // (창, 인셋, LCD 높이, 상단 띠) — 폭 상한(#92의 480dp)이 없어 태블릿 세로도 남는 높이 없이 LCD는 목표 비율,
     // 키패드는 나머지 전부다. 키패드가 실물 크기(640dp)보다 높은 태블릿 세로는 띠를 줄 전체 높이(본체 안 40dp)까지
-    // 늘린다(#141 R1, [CalcTheme] "화면 배치" 절).
+    // 늘린다 — 늘린 몫은 키패드만 낸다(#141 R1·R2, [CalcTheme] "화면 배치" 절).
     const strip = CalcTheme.screenTopStripMinHeight;
     const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
     const windows = [
@@ -251,14 +251,14 @@ void main() {
       (
         Size(1024, 1366),
         EdgeInsets.only(top: 24, bottom: 20),
-        (1306 - fullRow) * 0.28,
+        (1306 - strip) * 0.28,
         fullRow,
       ),
       // 10인치 Android 세로: 본체 784×1192 (1280 − 24 − 48 − 16)
       (
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
-        (1192 - fullRow) * 0.28,
+        (1192 - strip) * 0.28,
         fullRow,
       ),
       // 정사각형 창: 본체 752×752 — 키패드가 640dp보다 낮아 띠는 최소 높이
@@ -382,7 +382,7 @@ void main() {
   testWidgets(
     '12.9인치 iPad를 돌려도 LCD 줄 글자 크기는 크게 바뀌지 않는다 (#71 — #141 뒤로는 LCD 폭이 회전마다 바뀐다)',
     (tester) async {
-      // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×354, 가로는
+      // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×362, 가로는
       // 667×381이다. 줄 글자는 높이에 묶여 회전해도 10% 안에서 움직인다.
       const padding = EdgeInsets.only(top: 24, bottom: 20);
       double lineFont() => DefaultTextStyle.of(
