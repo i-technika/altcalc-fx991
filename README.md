@@ -181,7 +181,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
    명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다([Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서) 아래 알림 설명).
-   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
+   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome·Android 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
    `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트의 `Workspaces: Manage Workspace Trust`를 쓴다.
@@ -194,6 +194,91 @@ flutter run -d chrome -t preview/key_preview_main.dart
    ```
 
 4. 실행 및 디버그(Ctrl+Shift+D)에서 구성을 고르고 F5를 누른다.
+
+### Android 기기에서 실행
+
+`AltCalc (앱)`은 기기를 지정하지 않는다. F5 전에 상태 표시줄 오른쪽의 기기 이름을 눌러 Android 기기를 고른다.
+아래 표기의 뜻은 다음과 같다(자세한 방법은 [확인 방법](#확인-방법-68)).
+
+- **(실측)**: #68에서 실제 VS Code 창으로 본 것
+- **(DAP 실측)**: VS Code 없이 디버그 어댑터에 직접 붙여 본 것
+- **(소스)**: 확장(Dart-Code 3.146) 소스로만 확인한 것
+
+#### 기기 고르기
+
+- 기기 목록의 "Available Devices"에는 이 프로젝트가 지원하는 플랫폼의 연결된 기기가 모두 나온다.
+  실기기, 켜져 있는 에뮬레이터, Windows·Chrome·Edge가 여기에 든다.
+  항목 설명에는 기기 ID가 붙는다(예: `emulator-5560 - mobile`) (소스).
+- 꺼진 에뮬레이터는 `Start <AVD 표시 이름>` 항목으로 켤 수 있다.
+  이미 켜져 있는 AVD는 이 목록에서 빠지므로, 같은 AVD를 하나 더 띄울 수는 없다 (소스).
+- 에뮬레이터는 AVD 표시 이름으로 나온다.
+  - 실행 세션 이름은 `AltCalc (앱) (Medium Phone API 36.1)`처럼 나왔다 (실측).
+  - 상태 표시줄은 `<AVD 표시 이름> (android-x64 emulator)` 형태다 (소스).
+  - 같은 AVD를 두 개 띄우면 이름이 똑같으므로 목록 설명의 기기 ID로 가린다.
+- 확장은 모바일 기기를 자동으로 고른다(`dart.flutterSelectDeviceWhenConnected`, 기본값 켜짐).
+  - 창을 켤 때 이미 연결돼 있던 에뮬레이터도 고른다 (실측). 실행 중에 새로 연결된 기기도 고른다 (소스).
+  - 예외가 있다. 어떤 기기가 이미 선택된 상태에서 새 기기가 붙을 때, 선택된 기기가 이 프로젝트에서 전에 목록으로 직접 고른 기기이면 바꾸지 않는다
+    (`dart.flutterRememberSelectedDevice`, 기본값 켜짐) (소스).
+  - 목록에서 직접 고른 기기는 기억된다(확장 로그 `Saving chrome as preferred device`) (실측).
+- 창을 켤 때 기기를 하나도 고르지 못할 수 있다. 창을 두 번 켜서 한 번 이랬다 (실측).
+  - 확장은 기기를 고르기 전에 그 기기가 지원 플랫폼인지 Flutter 데몬에 묻는다. 5초 안에 답이 없으면 지원 플랫폼이 없는 것으로 본다(소스).
+  - 실패한 쪽은 답이 5초 넘게 걸려 상태 표시줄이 `No Device`로 남았다. 성공한 쪽은 4초 걸렸다.
+  - `No Device`에서 F5를 누르면 기기 목록이 떠서 고를 때까지 기다린다.
+- 그러니 F5 전에 상태 표시줄의 기기를 확인한다. `No Device`이거나 다른 기기이면 직접 고른다.
+
+#### 실행
+
+- Debug Console에는 `Launching lib\main.dart on <기기 모델명> in debug mode...`가 먼저 나온다 (실측).
+  - 이어서 `√ Built build\app\outputs\flutter-apk\app-debug.apk`, `Connecting to VM Service at ws://…`, `Connected to the VM Service.`가 나온다.
+  - 그 사이의 `Running Gradle task 'assembleDebug'...`, `Installing …app-debug.apk...`, `Syncing files to device ...`는 콘솔이 아니라 진행 알림으로 나온다.
+  - 경로 구분자와 `√`는 Windows 표기다. macOS·Linux에서는 `/`와 `✓`로 나온다.
+- 디버그 시작부터 앱이 뜰 때(`appStarted`)까지 걸린 시간은 다음과 같다. 이 PC에는 다른 작업 트리가 남긴 Gradle 캐시가 있었다.
+  Gradle 배포판과 의존성을 처음 내려받는 PC에서는 더 오래 걸린다.
+  - `build/`가 빈 작업 트리의 첫 실행: 105초, 그중 Gradle 빌드 91초 (DAP 실측)
+  - 같은 작업 트리에서 다시 실행: 44초, 그중 Gradle 빌드 27초 (실측)
+
+#### 핫 리로드·리스타트
+
+- 파일을 직접 저장하면(Ctrl+S 등) 핫 리로드가 된다 (실측).
+  - 탐침은 `TextDocument.save()`로 저장했다. 이 저장은 Ctrl+S와 같은 저장 사유(Manual)로 처리된다.
+  - 화면에 보이는 글자를 바꾸고 저장하자 Debug Console에 `Reloaded … in 1,074~1,494ms`가 찍혔다. 화면에 반영된 것은 캡처로 확인했다.
+- 설정 기본값이 `dart.flutterHotReloadOnSave: manual`이라 자동 저장(지연·포커스 이동)으로는 리로드하지 않는다.
+  저장한 파일에 Dart 오류가 있어도 하지 않는다 (소스).
+- 명령 팔레트의 `Flutter: Hot Reload`로도 리로드한다 (실측).
+- 디버그 중에는 단추와 단축키로도 리로드한다 (소스).
+  - 디버그 도구 모음의 번개 단추는 저장한 뒤 리로드한다.
+  - Ctrl+F5는 저장하지 않고 리로드한다. 이 단축키는 macOS에서도 Control+F5다.
+  - 디버그 중이 아닐 때 Ctrl+F5는 VS Code 기본 동작인 "Run Without Debugging"이다.
+- 핫 리스타트는 도구 모음의 다시 시작(Ctrl+Shift+F5, macOS는 Cmd+Shift+F5)이다 (소스).
+  다시 시작 명령을 실행하자 Debug Console에 `Restarted application in 2,875ms`가 찍혔다 (실측).
+- 디버그를 멈추면 `Application finished.`가 찍힌다. 이어서 Windows에서는 `Exited (-1).`이 찍힌다(종료 코드는 OS마다 다르다) (실측).
+
+#### 병렬 작업
+
+- 앱 ID(`android/app/build.gradle.kts`의 `applicationId`)는 모든 작업 트리에서 같다.
+  다른 작업 트리나 병렬 작업이 쓰는 기기에 실행하면 그 설치를 덮어쓴다.
+- 병렬 작업 중에는 자기 에뮬레이터를 따로 띄운다. 상태 표시줄에서 가릴 수 있도록 표시 이름이 다른 AVD를 쓰는 편이 낫다.
+- 같은 AVD를 하나 더 띄울 때는 SDK의 `emulator/emulator`(Windows는 `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe`)로 직접 띄운다.
+  예: `emulator -avd <AVD ID> -port 5560 -read-only`.
+  - AVD ID는 `emulator -list-avds`로 본다. 표시 이름과 다르다(예: ID `AltCalc_Phone_API33`, 표시 이름 `AltCalc Phone API33`).
+  - `-port`는 5554~5682 사이 짝수다. 기기 ID가 `emulator-<포트>`가 된다.
+  - `-read-only` 인스턴스는 끄면 바뀐 상태가 남지 않는다.
+
+#### 확인 방법 (#68)
+
+- **(실측)**: 같은 버전(1.147, 커밋 `8a14f0cc1b`)의 VS Code zip 배포본을 사용자 설정과 분리해 띄웠다(`--user-data-dir`·`--extensions-dir`).
+  - 창은 설치본이 업데이트를 기다리는 동안에는 새로 뜨지 않아 zip 배포본을 썼다.
+  - 확장은 Dart-Code 3.146, 에뮬레이터는 Android 16(API 36)이다.
+  - 분리한 사용자 설정에는 작업 영역 신뢰 끄기(`security.workspace.trust.enabled: false`)와 확장 로그 파일만 넣었다.
+  - 탐침 확장이 F5와 같은 API(`vscode.debug.startDebugging`)로 `AltCalc (앱)`을 실행했다. 이어서 저장, `flutter.hotReload` 명령, 디버그 다시 시작을 차례로 했다.
+  - 결과는 Debug Console 출력(DAP 메시지)과 에뮬레이터 화면 캡처로 봤다.
+  - 확장은 `-d <기기 ID>`와 `--devtools-server-address`를 붙여 실행했다.
+- 창은 두 번 켰다.
+  - 1차는 위 `No Device` 경우였다. F5가 기기 목록에서 기다리던 중 Chrome이 골라져 Chrome으로 실행됐다.
+  - 2차는 기억된 기기를 지우려고 `workspaceStorage`를 지운 뒤 켰다.
+  - 2차 탐침은 F5 전에 `adb reconnect`를 했지만 데몬 로그에 기기 제거·추가가 없었다. 결과에 영향이 없었으므로, 2차의 자동 선택은 창을 켤 때 일어난 것이다.
+- **(DAP 실측)**: 확장이 F5에서 만드는 `launch` 인자를 `flutter debug_adapter`에 직접 보냈다. 이 방식으로는 첫 실행의 시간만 잰다.
+- 키를 직접 누르지 않았으므로 단축키와 도구 모음 단추는 소스로만 확인했다.
 
 ### Flutter SDK를 찾는 순서
 
@@ -260,13 +345,18 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 ### 알아 둘 점
 
-- **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
+- **개발자 모드가 꺼진 Windows**에서는 플러그인 목록 파일이 없거나 플러그인이 바뀐 뒤 처음 도는 `flutter pub get`이 종료 코드 1로 끝난다(아래).
   - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
   - 확장이 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (package:...)` 채널에 기록된다
     (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측했다. 루트 체크아웃이 #66이 들어간 브랜치이면
     그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
-  - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
-  - 실패하는 것은 Windows 데스크톱 실행뿐이다.
+  - 이 오류는 Windows용 플러그인 심볼릭 링크를 만들 때 난다. 링크는 플러그인 목록 파일(`.flutter-plugins-dependencies`)이
+    새로 생기거나 플러그인 구성이 바뀔 때만 만든다(Flutter 도구 소스 기준). Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면, 고른 기기와 상관없이 만든다.
+    - 그래서 목록 파일이 없을 때(새 클론, `flutter clean` 뒤)와 플러그인 의존성을 바꾼 뒤에는 처음 도는 Flutter 명령이 이 오류로 끝난다.
+      pub get도, Android·Chrome을 고른 F5도 마찬가지다.
+    - 그 명령이 목록 파일을 먼저 써 두므로, 같은 명령을 다시 실행하면 지나간다(소스 기준, 개발자 모드를 끄고 다시 재지는 않음).
+  - `package_config.json`은 오류 전에 기록된다. 그래서 SDK 탐지에는 지장이 없다.
+  - 늘 실패하는 것은 Windows 데스크톱 실행뿐이다.
 
 ### 작업 영역 안의 git 워크트리
 
@@ -277,11 +367,31 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 #67 이전에 체크아웃한 작업 트리에서는 생성 플러그인 파일도 `M`이 된다.
 
 [analysis_options.yaml](analysis_options.yaml)의 `analyzer.exclude`에 `.claude/worktrees/**`를 두어 확장이 워크트리를
-프로젝트로 보지 않게 한다(#66). 아래에서 **(소스)** 는 확장(Dart-Code 3.146) 소스로 확인한 것이다. **(실측)** 은
-사용자 설정과 분리한 VS Code(`--user-data-dir`·`--extensions-dir`)를 저장소 루트로 띄우고 확장 로그(`dart.extensionLogFile`)로 본 것이다(#66).
-**(실사용)** 은 평소 쓰는 VS Code 1.147 창(사용자 설정·다른 확장 그대로)이 남긴 확장 로그로 본 것이다(#89).
-사용자 설정에 Dart 설정이 없어 SDK는 `.dart_tool`의 `flutterRoot`로 찾는 창이다. 창을 켤 때는 기기가 없었고,
-켜져 있는 동안 에뮬레이터가 연결됐다. 2026-11-22 오전(#66 머지 전)과 같은 날 밤(#66 머지 뒤)에 켠 창의 로그를 비교했다.
+프로젝트로 보지 않게 한다(#66). 아래 라벨은 근거의 종류다.
+
+- **(소스)**: 확장(Dart-Code 3.146) 소스로 확인한 것.
+- **(실측)**: `--user-data-dir`·`--extensions-dir`로 띄운 별도 VS Code 인스턴스를 저장소 루트로 열고 확장 로그(`dart.extensionLogFile`)로 본 것.
+  - #66: 빈 사용자 설정으로 띄웠다.
+  - #149: 사용자 `settings.json`과 Dart·Flutter 확장 3.146만 복사해 띄웠다. 작업 영역 신뢰 확인은 껐다.
+    Flutter 데몬 로그(`dart.flutterDaemonLogFile`)도 켜서 확장이 받은 기기 목록(`device.added`)을 함께 봤다.
+    VS Code 1.148 업데이트가 설치를 기다리던 중이라 설치본이 뜨지 않았다(아래 주의). 그래서 1.147 설치본을 복사하고,
+    그 사본의 메인 프로세스 코드에서 설치 중 뮤텍스 확인(`checkInnoSetupMutex`)만 막은 채 띄웠다.
+- **(실사용)**: 평소 쓰는 VS Code 창(사용자 설정·다른 확장 그대로, #89·#149 당시 1.147)이 남긴 확장 로그와,
+  그 시각의 파일·프로세스 기록(`.dart_tool` 폴더를 만든 시각, 에뮬레이터 프로세스 시작 시각 등)으로 본 것(#89·#149).
+  - 사용자 설정에 Dart 설정이 없어 SDK는 `.dart_tool`의 `flutterRoot`로 찾는 창이다.
+  - 2026-11-22 오전(#66 머지 전)과 같은 날 22:28(#66 머지 뒤), 2026-11-26 20:23에 켠 창의 로그를 봤다.
+  - 켤 때 기기 상태: Chrome·Edge·Windows는 Flutter 데몬이 늘 기기로 알린다. 그래서 "기기를 연결한 채 켠다"는 조건은
+    창을 켤 때마다 이미 갖춰진다. 아래에서는 에뮬레이터만 따진다.
+    - 11-26 창: 에뮬레이터 없이 켜졌다. 에뮬레이터 프로세스가 창보다 늦은 20:29에 시작됐다.
+    - 11-22의 두 창: 켤 때 에뮬레이터가 연결돼 있었는지 로그로는 가릴 수 없다. 로그 머리말의 `(No device)`는 근거가 되지 못한다
+      (아래 "켜질 때"). 오전 창은 AVD 파일 시각(`%USERPROFILE%\.android\avd`)으로 보면 에뮬레이터가 떠 있는 채 켜졌을 수 있다.
+  - **#66 머지 뒤의 평소 창을 `.dart_tool` 없는 워크트리가 있거나 에뮬레이터를 연결한 채 켠 경우는 아직 관측하지 못했다.**
+    평소 창을 다시 켜면 그 안에서 돌던 Claude Code 세션이 끝난다. 11-26 20:23에 다시 켰을 때는 두 조건이 갖춰져 있지 않았다.
+    그래서 #149는 이 경우를 (실측)으로 대신했다. 다음에 평소 창을 다시 켤 때 위 방법으로 로그를 보고 덧붙인다.
+
+주의: VS Code 업데이트가 설치를 기다리는 동안에는 별도 인스턴스도 `Code is currently being updated`로 뜨지 않는다.
+설치 프로그램이 `<뮤텍스 이름>-updating` 뮤텍스를 잡고 있기 때문이다(설치 폴더에 `updating_version`이 있으면 이 상태다).
+평소 창을 다시 켜 업데이트를 끝낸 뒤 실측한다.
 
 확장 로그는 설정 없이도 남는다 (소스·실사용). `dart.extensionLogFile`이 비어 있으면 Dart 확장이 켜진 창마다
 임시 폴더(Windows는 `%TEMP%`)의 `dart-code-startup-log-<16진수>.txt`에 로그를 쓴다. 일반(General) 범주 전부와 다른 범주의 경고·오류가 들어간다.
@@ -303,8 +413,12 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     [test/unit/analysis_options_test.dart](test/unit/analysis_options_test.dart)가 지킨다. 확장 쪽 규칙이 바뀌는 것은 테스트가 잡지 못한다.
   - analyzer는 원래 점 폴더를 건너뛰므로 `flutter analyze` 결과는 달라지지 않는다.
   - 목록은 5분 동안 캐시된다. 작업 영역 안 어디서든 `.dart_tool/package_config.json`이 바뀌면(pub get) 캐시가 바로 비워진다.
-  - (실사용) 창이 켜진 채 에뮬레이터가 연결되자 플랫폼 조회(`Checking 1 projects for supported platforms`)가 돌았다.
-    이때 찾은 워크트리 폴더 3개는 `.dart_tool` 유무와 무관하게 모두 빠져 `1 projects remain.`이었다.
+  - (실사용) 창이 켜진 채 에뮬레이터가 연결된 뒤 목록을 다시 찾을 때도 워크트리는 빠졌다.
+    - 11-22 22:28에 켠 창, 나흘 뒤 11-26 16:25:31: 워크트리 폴더 3개가 `.dart_tool` 유무와 무관하게 모두 빠져 `1 projects remain.`이었다.
+    - 11-26 20:23에 켠 창, 20:29에 에뮬레이터를 연결한 뒤 20:30:01: 워크트리 폴더 5개가 모두 빠졌다.
+      그중 `issue-70`은 `.dart_tool`이 20:36에야 생겨, 그때는 `.dart_tool`이 없었다.
+    - 플랫폼 조회(`Checking 1 projects for supported platforms`)는 기기 변화 때만이 아니라 창을 켤 때도 돈다.
+      그래서 이 줄만으로는 기기가 연결됐는지 알 수 없다.
 - **켜질 때**
   - (소스) 패키지가 없거나 오래된 프로젝트를 모아 "Some packages are missing or out of sync…" 알림으로 pub get을 묻는다.
     마지막 pub get 때보다 Dart SDK 메이저·마이너가 올라간 프로젝트가 하나라도 있으면, 그 알림 대신 upgrade 알림 하나로
@@ -312,11 +426,28 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     이 단계에는 묻지 않고 돌리는 경로가 없다.
   - (실측) 새 워크트리를 `.claude/worktrees/`에 만들고 창을 열면, 수정 전에는 그 워크트리가 `package_config.json` 없음으로
     알림 대상이 된다. 수정 후에는 프로젝트 목록에서 빠져 알림이 없다.
-  - (실사용) 평소 창에서도 같다.
+  - (실사용) 평소 창에서도 수정 전·후 결과는 위 (실측)과 같다(켤 때 기기 상태는 위 라벨 설명 참고).
     - #66 머지 전에 켠 창: 워크트리 2개가 `package_config.json` 없음으로 `Found pub status for 2 folders`에 들어 알림 대상이 됐다.
     - #66 머지 뒤에 켠 창: 워크트리 1개가 루트와 함께 잡혔지만 `1 projects remain.`으로 빠졌고, `Found pub status for 0 folders`로 알림이 없었다.
-      이때 빠진 워크트리에 `.dart_tool`이 있었는지는 기록되지 않았다.
+      이때 빠진 워크트리에 `.dart_tool`이 있었는지는 기록되지 않았다. `.dart_tool`이 없는 경우는 아래 #149 (실측)을 본다.
+    - 2026-11-26 20:23에 켠 창: 워크트리 4개가 잡혔지만 모두 빠져 `1 projects remain.`이었다.
+      `Found pub status for 0 folders`로 알림도 없었다.
+      4개 중 3개는 그때 `.dart_tool`이 있었다. 2개는 `.dart_tool` 폴더를 만든 시각으로, 1개(#96 작업 트리)는 그 작업에서
+      오후 4시대에 빌드한 기록으로 확인했다. 나머지 1개는 이미 지워져 확인하지 못했다.
+  - (실측) 수정 후 `.dart_tool` 없는 워크트리와 에뮬레이터 연결이 겹쳐도 알림이 없다(#149).
+    - 프로젝트로 잡힌 워크트리 폴더는 7개였고, 그중 적어도 2개는 `.dart_tool`이 없었다(이번에 새로 만든 것).
+    - 에뮬레이터를 연결한 채 창을 켜자 7개 모두 빠져 `1 projects remain.`이 됐다.
+      `Found pub status for 0 folders`로 알림도 없었다.
+    - 창을 닫은 직후에도 두 워크트리에는 `.dart_tool`이 생기지 않았다.
+    - 다만 판정 시점에 확장은 아직 기기를 몰랐다.
+      기기 목록(Flutter 데몬 `device.added`: 에뮬레이터·Chrome·Edge·Windows)은 pub 상태 확인보다 2~3초 뒤에 들어왔다.
+      기기와 무관하다는 근거는 맨 아래 (소스) "판정의 입력에 기기 정보는 없다"이다.
+  - (소스) 로그 머리말의 `Flutter (…) (No device)`는 머리말을 만들 때 **선택돼 있던 기기**(`currentDevice`)다.
+    시작 로그에는 사실상 늘 `No device`가 찍히므로, 이 값으로 기기 연결 여부를 판단하지 않는다.
   - (소스) 알림 대상은 걸러진 목록에서만 고른다. 그래서 빠진 워크트리는 `.dart_tool`이 있든 없든 알림에 나오지 않는다.
+    판정의 입력에 기기 정보는 없다. 목록 캐시는 플랫폼 조회 등 다른 호출과 공유된다. 그러나 `analyzer.exclude` 제외는
+    캐시에 넣기 전에 적용되므로, 이 방식에서는 어느 호출이 먼저 목록을 만들어도 워크트리가 빠진다.
+    사용자 설정만 쓸 때의 빈틈은 아래 "루트 체크아웃의 브랜치에 달려 있다"를 본다.
 - **켜져 있는 동안 `pubspec.yaml`·`pubspec_overrides.yaml`이 생기거나 바뀌면** (소스, `dart.runPubGetOnPubspecChanges` 기본값 `always`)
   - 바뀐 파일의 절대경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 이 동작은 브랜치와 무관하다.
     - 그래서 `.claude/worktrees/`에서 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다(실측. 대조군이라 수정 전에도 같다).
@@ -345,8 +476,8 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     그런 브랜치에서 작업할 때는 먼저 마일스톤 브랜치를 머지한다.
   - 보조로 **사용자** 설정에 `"dart.analysisExcludedFolders": [".claude/worktrees"]`를 둘 수 있다
     (상대경로는 연 폴더 기준으로 풀린다. 선택 사항이며 저장소에는 넣지 않는다).
-    다만 이 설정에는 빈틈이 있다. 기기 연결 때 도는 플랫폼 조회가 이 설정 없이 목록을 만든다. 목록 캐시가 제외 설정과
-    무관하게 공유되므로, 그 뒤 최대 5분 동안은 다른 호출도 워크트리가 든 목록을 받을 수 있다.
+    다만 이 설정에는 빈틈이 있다. 창을 켤 때와 기기가 바뀔 때 도는 플랫폼 조회는 이 설정 없이 목록을 만든다. 목록 캐시가 제외 설정과
+    무관하게 공유되므로, 그 뒤 최대 5분 동안은 다른 호출(시작 알림 포함)도 워크트리가 든 목록을 받을 수 있다.
 
 방법 비교
 - 사용자 설정: 브랜치와 무관하다. 그러나 기기마다 따로 해야 하고, 저장소가 지키거나 테스트할 수 없다. 위의 빈틈도 있다.

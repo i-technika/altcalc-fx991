@@ -588,12 +588,14 @@ class _KeypadBody extends StatelessWidget {
     Path Function(Size size)? shape,
     Path Function(Size size)? hitShape,
     EdgeInsets hitOutset = EdgeInsets.zero,
+    EdgeInsets labelInsets = EdgeInsets.zero,
   }) {
     return CalcKeyButton(
       keyDef: def,
       shape: shape,
       hitShape: hitShape,
       hitOutset: hitOutset,
+      labelInsets: labelInsets,
       onPressed: onKeyPressed,
       onRepeat: autoRepeatKeys.contains(def.id) ? onKeyRepeat : null,
       enableHaptics: enableHaptics,
@@ -694,6 +696,7 @@ class _KeypadBody extends StatelessWidget {
                   shape: keyShape.shape,
                   hitShape: keyShape.hitShape,
                   hitOutset: keyShape.hitOutset,
+                  labelInsets: keyShape.labelInsets,
                 ),
                 onKeyPressed: onKeyPressed,
                 enableHaptics: enableHaptics,
@@ -712,11 +715,12 @@ class _KeypadBody extends StatelessWidget {
 /// 커서 패드 방향
 enum CursorPadSector { up, down, left, right }
 
-/// 커서 패드 방향 키 하나의 그림 모양·터치 모양·터치 여백 (`CalcKeyButton`의 같은 이름 인자로 넘긴다)
+/// 커서 패드 방향 키 하나의 그림 모양·터치 모양·터치 여백·라벨 여백 (`CalcKeyButton`의 같은 이름 인자로 넘긴다)
 typedef CursorPadKeyShape = ({
   Path Function(Size size) shape,
   Path Function(Size size) hitShape,
   EdgeInsets hitOutset,
+  EdgeInsets labelInsets,
 });
 
 /// 커서 패드 모양 계산기 — 패드 상자([size]) 로컬 좌표의 외곽·X자 홈·허브와 방향 판정.
@@ -803,7 +807,7 @@ class CursorPadGeometry {
     return u < 0 ? CursorPadSector.left : CursorPadSector.right;
   }
 
-  /// 정규화 좌표에서 홈이 가로축과 이루는 각 (k > 1이면 45°보다 작다)
+  /// 정규화 좌표에서 홈이 가로축과 이루는 각 (k < 1이면 45°보다 크다 — 실측 k ≈ 0.9, #65)
   static final double _grooveAngle = math.atan2(1, _k);
 
   /// [sector]가 차지하는 정규화 각도 범위 (y 아래 방향, 시계 방향으로 증가)
@@ -890,22 +894,24 @@ class CursorPadGeometry {
     ];
   }
 
-  /// 시맨틱 영역을 나누는 기준 — ◀·▶ 영역 반높이를 외곽 반높이의 이 비율(허브보다 작으면 허브 반지름)로 둔다.
-  static const double _semanticSplitRatio = 0.3;
-
   /// [sector]의 시맨틱(스크린리더 터치 탐색) 영역 (패드 로컬 좌표).
   ///
   /// 네 영역은 서로 겹치지 않고, 각 영역은 자기 구역 또는 외곽 밖에만 걸친다(허브는 덮지 않는다).
   /// 화면 좌표에서 홈은 |dx| = m·|dy| (m = k·[radiusX]/[radiusY])이므로, ◀·▶ 영역을 |dx| ≥ X, |dy| ≤ Y,
   /// ▲·▼ 영역을 |dx| ≤ X, |dy| ≥ Y로 두고 X ≥ m·Y를 지키면 각 영역이 홈을 넘지 않는다.
+  /// X = max(m·허브 반지름, 허브 반지름), Y = X / m이다. m ≥ 1이면(지금 k와 패드 비율 1.4 이상에서 m ≥ 1.26)
+  /// ◀·▶ 영역 반높이 Y가 허브 반지름과 같다. #43의 하한(반높이의 0.3배)은 허브가 그보다 커서 뺐다.
+  /// 허브 비를 0.3 아래로 줄이면 ◀·▶ 시맨틱 높이도 함께 줄어드니 그때 하한을 되살린다.
+  /// 실측 허브(#65)가 커서 ▲·▼ 영역은 낮고 넓다. 320×568·상태바 20dp에서 ▲·▼ 43.1×17.5dp,
+  /// ◀·▶ 27.3×32.9dp(실측 전 ▲·▼ 43.1×24.0, ◀·▶ 27.3×19.7)이다. 허브 고리는 누르면 입력되지만
+  /// 시맨틱 영역에는 넣지 않는다 — 영역이 그려진 허브를 덮지 않게 한 #43 규칙을 지킨다.
   ///
   /// [bounds](셀)를 주면 바깥쪽 변을 셀 변까지 넓힌다 — 터치 영역(#64)과 같게, 셀 여백을 손가락으로
   /// 훑어도 그쪽 방향이 읽힌다. 넓힌 부분도 그 방향의 터치 영역([hitSectorAt]) 안이다.
   Rect semanticRect(CursorPadSector sector, [Rect? bounds]) {
     if (_isEmpty) return Rect.zero;
     final m = _k * radiusX / radiusY;
-    final y0 = math.max(hubRadius, _semanticSplitRatio * radiusY);
-    final x = math.max(m * y0, hubRadius);
+    final x = math.max(m * hubRadius, hubRadius);
     final y = x / m;
     final c = center;
     return switch (sector) {
@@ -1058,30 +1064,34 @@ class CursorPadGeometry {
 }
 
 /// 실물 fx-991EX 리플레이 패드처럼 가로로 긴 둥근 마름모를 X자 홈으로 4분할한 방향 키 묶음
-/// (각인 띠 없음, 모양은 [CursorPadGeometry]).
+/// (각인 띠 없음, 모양은 [CursorPadGeometry], 치수는 실측 — [CalcTheme.cursorPadGrooveSlope] 등, #65).
 ///
 /// ```
-///   ◀  ╲    ▲    ╱  ▶     ▲·▼: 넓은 사다리꼴, ◀·▶: 좁은 삼각형에 가깝다
-///         ╲ ● ╱           ●: 검은 허브 (한가운데 작은 원만 데드존)
-///         ╱   ╲           외곽: 가로로 긴 둥근 마름모 (밖도 가까운 방향의 터치 영역)
+///      ╲    ▲    ╱       ▲·▼: 위·아래 호를 따라 휜 띠
+///   ◀    ╲  ●  ╱    ▶    ◀·▶: 옆으로 뭉툭한 넓은 구역
+///        ╱     ╲         ●: 검은 허브 (지름 = 패드 높이의 약 1/2, 한가운데 작은 원만 데드존)
 ///      ╱    ▼    ╲
 /// ```
+/// 외곽은 가로로 긴 둥근 마름모이고, 외곽 밖도 가까운 방향의 터치 영역이다.
 /// 각 방향 키캡은 [sectorBox](패드를 반으로 나눈 사각형)에 그리고 [CalcKeyButton.shape]로 구역 경로를
 /// 넘겨 그림을 구역 안으로 제한한다.
 ///
 /// ## 터치 영역은 셀 전체로 넓힌다 (#64)
-/// 실물 모양을 따른 ◀·▶ 구역은 좁고(세로 폰에서 함수 키 셀의 약 0.55배), 패드 상자의 약 30%는 외곽 밖이다.
+/// 패드 상자의 약 30%는 외곽 밖이다. #64 당시 모양(홈 기울기 실측 #65 전)에서는 ◀·▶ 구역이 좁았다
+/// (세로 폰에서 함수 키 셀의 약 0.55배).
 /// 그래서 그림은 그대로 두고, 버튼 상자를 셀의 반쪽([sectorBox]에 셀 크기를 넣은 것)으로 넓혀
 /// [CalcKeyButton.hitShape]·[CalcKeyButton.hitOutset]으로 터치 영역을 [CursorPadGeometry.hitPolygon]으로 준다.
 /// - 외곽 안은 그림과 같이 X자 홈으로 나눈다(그린 구역 = 누르는 구역).
 /// - 외곽 밖·셀 여백은 **홈이 외곽과 만나는 점에서 셀 모서리로 이은 선**으로 나눈다. 셀의 네 변이 각각
 ///   그쪽 방향 하나의 것이 되어, 이웃 키(ALPHA·MENU)와 맞닿은 옆 변은 전부 ◀·▶이고 위·아래 변은 ▲·▼다.
-///   - 홈을 그대로 연장하는 방식은 되찾은 넓이의 약 80%를 이미 넓은 ▲·▼에 주고, 옆 변의 위·아래 끝까지
-///     ▲·▼로 만들었다(왼쪽 가장자리를 눌렀는데 ▲ — 리뷰 R1). 모서리로 꺾으면 ◀·▶ 터치 넓이가
-///     함수 키 셀의 0.69~0.74배 → 0.81~0.84배(가로로 긴 셀 0.89 → 0.98)로 커지고, ▲·▼는 세로 폰 약
-///     1.41~1.44배, 가로로 긴 셀 약 1.27배가 남는다.
-///   - ◀·▶에 들어가는 가장 큰 원(내접원)은 거의 그대로다(세로 폰 약 +1dp). 홈 사이의 좁은 쐐기, 즉 그린 구역이
-///     정하기 때문이며, 그 부분은 실물 모양이라 바꾸지 않았다(가로로 긴 셀만 약 24 → 31dp).
+///   - 홈을 그대로 연장하는 방식은 (#64 당시 모양에서) 되찾은 넓이의 약 80%를 이미 넓던 ▲·▼에 주고,
+///     옆 변의 위·아래 끝까지 ▲·▼로 만들었다(왼쪽 가장자리를 눌렀는데 ▲ — 리뷰 R1).
+///   - 홈 기울기 실측(#65) 뒤 터치 넓이는 함수 키 셀 대비 ◀·▶ 약 1.14~1.20배, ▲·▼ 약 1.05~1.11배다.
+///     셀이 패드 비율 상한보다 넓은 키패드(#159)에서는 ▲·▼가 약 0.54~0.66배까지 낮아진다.
+///   - 방향 키에 들어가는 가장 큰 원(내접원)은 셀이 패드와 비슷하면 셀까지 넓혀도 조금만 는다(▲·▼ 약 +1~4dp).
+///     홈 사이 쐐기와 셀 변이 정하기 때문이며, 쐐기는 실물 모양이라 바꾸지 않는다. 지금은 실물처럼 ▲·▼ 쪽이
+///     좁다(세로 폰 ▲·▼ 약 30~46dp, ◀·▶ 약 36~52dp). 셀이 패드보다 가로로 긴 배치(분할 화면 등)에서는
+///     옆 여백을 받는 ◀·▶ 내접원이 약 +12dp 커진다.
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
 /// - 셀 밖(셀 여백 `_cellPadding`)은 넓히지 않는다 — 이웃 키와의 간격은 다른 키 사이와 같다.
 /// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
@@ -1093,14 +1103,15 @@ class CursorPadGeometry {
 /// 의도와 다른 방향으로 커서가 움직이는 오입력이 생기고(되돌리기 어렵다), 무시하면 다시 누르기만 하면 된다.
 /// 그래서 한가운데([CursorPadGeometry.deadZoneRadius])는 누를 수 없게 두고, 누른 채 그리로 미끄러지면
 /// 반복 입력도 멈춘다. 다만 그려진 허브 전체를 데드존으로 두면 작은 폰에서 ▲·▼ 터치 깊이가 28dp 아래로
-/// 줄어들어, 허브 바깥 고리는 홈으로 나뉜 방향 키에 준다(실물보다 누를 수 있는 곳이 조금 넓다).
+/// 줄어들어, 허브 바깥 고리는 홈으로 나뉜 방향 키에 준다(실물보다 누를 수 있는 곳이 넓다 — 실측 허브는
+/// 지름이 패드 높이의 약 1/2이라 고리가 넓다, #65).
 ///
 /// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분도 위 규칙의 터치 영역).
 ///
 /// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
 /// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
 class CursorPad extends StatelessWidget {
-  /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 세 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`에
+  /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 네 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`·`labelInsets`에
   /// 넘겨야 한다(보통 `showLegendBand: false`인 [CalcKeyButton]).
   final Widget Function(CalcKeyDef def, CursorPadKeyShape shape) buttonBuilder;
 
@@ -1173,6 +1184,27 @@ class CursorPad extends StatelessWidget {
       side(outer.right - inner.right),
       side(outer.bottom - inner.bottom),
     );
+  }
+
+  /// [sector] 키캡(패드의 반쪽, 패드 크기 [size])에서 라벨 자리를 뺄 여백 (`CalcKeyButton.labelInsets`, #65).
+  ///
+  /// - 가운데 쪽 변: 허브 반지름 + 둘레선 반 두께를 뺀다.
+  /// - 바깥쪽 변: 외곽선 두께를 뺀다. 반쪽 상자 변에서 외곽선 안쪽 가장자리까지의 거리다.
+  ///
+  /// 그러면 라벨이 허브 둘레선과 외곽선 사이 가운데쯤에 놓인다. 키캡 아래 눌림 여유 1dp 때문에 ±1dp
+  /// 어긋나고, ▲는 눌리면 1dp 허브 쪽으로 내려간다. 눌린 상태에서도 허브에 닿지 않는지는 키패드 테스트가 확인한다.
+  /// 그 사이가 라벨보다 좁으면 라벨을 줄여 그린다. 예: 가로로 긴 800×300 키패드, 글자 배율 1.3의 ▲·▼.
+  /// 실측 허브는 지름이 패드 높이의 약 1/2이다. 반쪽 상자 가운데(허브 가장자리)에 두면 라벨 절반이 허브에 덮인다.
+  static EdgeInsets labelInsetsOf(CursorPadSector sector, Size size) {
+    final inner =
+        CursorPadGeometry(size).hubRadius + CalcTheme.cursorPadDividerWidth / 2;
+    const outer = CalcTheme.cursorPadDividerWidth;
+    return switch (sector) {
+      CursorPadSector.up => EdgeInsets.only(top: outer, bottom: inner),
+      CursorPadSector.down => EdgeInsets.only(top: inner, bottom: outer),
+      CursorPadSector.left => EdgeInsets.only(left: outer, right: inner),
+      CursorPadSector.right => EdgeInsets.only(left: inner, right: outer),
+    };
   }
 
   /// [sector] 버튼 상자(셀의 반쪽, 크기 [boxSize]) 로컬 좌표의 터치 경로 — 상자 크기만으로 셀·패드 크기를
@@ -1269,6 +1301,7 @@ class CursorPad extends StatelessWidget {
                       shape: shapeOf(sector),
                       hitShape: hitShapeOf(sector),
                       hitOutset: hitOutsetOf(sector, cell),
+                      labelInsets: labelInsetsOf(sector, size),
                     )),
                   ),
                 ),

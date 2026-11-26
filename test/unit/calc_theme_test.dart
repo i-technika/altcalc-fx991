@@ -910,7 +910,7 @@ void main() {
       expect(CalcTheme.keyLegendPriorityMaxRunes, inInclusiveRange(1, 3));
     });
 
-    test('커서 패드 모양 상수: 가로로 긴 둥근 마름모·▲▼ 쪽으로 기운 홈·작은 허브 (#43)', () {
+    test('커서 패드 모양 상수: 가로로 긴 둥근 마름모·대각선보다 가파른 홈·데드존보다 큰 허브 (#43·#65)', () {
       // 가로로 긴 패드: 비율 하한이 1보다 크고 하한 < 상한
       expect(CalcTheme.cursorPadMinAspectRatio, greaterThan(1.0));
       expect(
@@ -919,11 +919,12 @@ void main() {
       );
       // 2이면 타원, 무한대면 뾰족한 마름모 — 2보다 크고 너무 크지 않아야 꼭짓점이 둥근 마름모다.
       expect(CalcTheme.cursorPadOutlineExponent, inExclusiveRange(2.0, 6.0));
-      // 1보다 커야 홈이 ◀·▶ 쪽을 좁힌다. 너무 크면 ◀·▶가 누르기 어렵게 좁아진다.
-      expect(CalcTheme.cursorPadGrooveSlope, inExclusiveRange(1.0, 2.0));
-      // 허브는 반높이(짧은 쪽)의 절반 미만이고, 데드존은 허브보다 작은 양수다.
-      // 실제 터치 깊이·라벨 위치는 위젯·화면 테스트가 화면 크기별로 확인한다.
-      expect(CalcTheme.cursorPadHubRadiusRatio, inExclusiveRange(0.0, 0.5));
+      // 실물처럼 1보다 작아야 홈이 상자 대각선보다 가팔라 ▲·▼가 위·아래 띠, ◀·▶가 넓은 구역이 된다(실측 0.9, #65).
+      // 너무 작으면 ▲·▼가 누르기 어렵게 좁아진다.
+      expect(CalcTheme.cursorPadGrooveSlope, inExclusiveRange(0.5, 1.0));
+      // 허브는 반높이(짧은 쪽)의 3/4 미만이고(넘으면 그린 ▲·▼가 외곽 쪽 얇은 띠만 남는다, 실측 0.5),
+      // 데드존은 허브보다 작은 양수다. 실제 터치 깊이·라벨 위치는 위젯·화면 테스트가 화면 크기별로 확인한다.
+      expect(CalcTheme.cursorPadHubRadiusRatio, inExclusiveRange(0.0, 0.75));
       expect(CalcTheme.cursorPadDeadZoneRadiusRatio, greaterThan(0));
       expect(
         CalcTheme.cursorPadDeadZoneRadiusRatio,
