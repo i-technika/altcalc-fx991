@@ -211,9 +211,12 @@ flutter run -d chrome -t preview/key_preview_main.dart
 확장 호스트의 PATH를 기록해 본 것이고(#69), **(소스)** 는 VS Code 본체 소스로만 확인한 것이다.
 
 - 터미널에서 `code .`로 새 창을 열면 그 터미널의 환경을 쓴다. VS Code가 이미 실행 중이어도 같다. (실측)
-- VS Code 안에서 새 창으로 연 폴더(파일 > 폴더 열기 등)는 VS Code를 처음 켰을 때의 환경을 쓴다. (실측)
+- VS Code 안에서 새 창을 만들어 연 폴더(파일 > 새 창에서 폴더 열기 등)는 VS Code를 처음 켰을 때의 환경을 쓴다.
+  (실측: 확장 API로 새 창에 폴더를 열어 확인)
   - 이미 실행 중일 때 시작 메뉴·Dock으로 연 창도 같다(터미널의 `code`가 아니면 그 환경을 넘기지 않는다). (소스)
   - 터미널의 `code`가 아닌 방법(시작 메뉴·Dock)으로 처음 켤 때, macOS·Linux는 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다. (소스)
+- 지금 창에서 파일 > 폴더 열기를 하면 기본 설정에서는 새 창 없이 그 창을 다시 쓰고, 그 창이 받은 환경을 이어 쓴다
+  (`code .`로 연 창이면 그 터미널의 환경). (소스)
 - 이미 열린 폴더에 `code .`를 하면 새 창 없이 기존 창으로 옮겨 가고(실측), 그 창은 자신이 열릴 때 받은 환경을 그대로 쓴다.
   새 터미널의 환경은 넘어가지 않는다. (소스)
 - 그래서 터미널 세션에서만 `export PATH=...`를 한 뒤 시작 메뉴로 연 창은 그 PATH를 보지 못한다.
@@ -223,27 +226,30 @@ flutter run -d chrome -t preview/key_preview_main.dart
 
 > Could not find a Flutter SDK. Please download, or, if already downloaded, click 'Locate SDK'.
 
-버튼은 `Download SDK`·`Locate SDK`·`Show Log`다. `Download SDK`는 최신 stable을 `git clone`하므로 이 프로젝트에는 쓰지 않는다 —
-SDK 버전이 `pubspec.yaml`에 정확히 고정되어 있어 다른 버전으로는 `pub get`이 실패한다([개발 환경](#개발-환경)).
+버튼은 `Download SDK`·`Locate SDK`·`Show Log`다. `Download SDK`는 이 프로젝트에서 쓰지 않는다. Flutter `stable` 브랜치를
+새로 `git clone`한 뒤 **사용자** 설정 `dart.flutterSdkPath`를 그 폴더로 덮어쓰고 PATH에 넣을지도 묻는다(Dart-Code 소스).
+그 시점의 stable이 `pubspec.yaml`의 고정 버전과 다르면 이 PC의 모든 클론·워크트리에서 `pub get`이 실패한다([개발 환경](#개발-환경)).
 푸는 방법은 아래 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
 이 알림과 두 방법은 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)로 열어 실측했다
-(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows에서 확장의 `pub get` 결과는 확인하지 않았다 — [알아 둘 점](#알아-둘-점)).
+(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows는 이번에 확인하지 않았다 — #52의 실측 결과는 [알아 둘 점](#알아-둘-점)).
 
-- **터미널에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
+- **SDK를 PATH에 넣은 셸에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
+  - VS Code 통합 터미널도 그 창의 PATH를 물려받으므로, 셸 프로필이 SDK를 PATH에 넣지 않으면 `flutter`를 전체 경로로 실행한다.
   - `pub get`만 하고 다시 불러오지 않으면 SDK를 계속 찾지 못한다(30초 기다려도 그대로였다).
   - 다시 불러오면 `package_config.json`의 `flutterRoot`로 찾는다. 설정을 남기지 않으므로 그 클론에만 해당한다.
 - **`Locate SDK`** — 폴더 선택 창(확인 버튼 이름 `Set Flutter SDK folder`)에서 SDK 폴더(`bin`이 들어 있는 폴더)를 고른다.
-  - 확장이 **사용자** 설정에 `dart.flutterSdkPath`를 절대경로로 저장하고(예: `"C:\\Users\\<이름>\\develop\\flutter"`),
+  - 확장이 **사용자** 설정에 `dart.flutterSdkPath`를 절대경로로 저장하고(예: `"C:\Users\<이름>\develop\flutter"`),
     묻지 않고 확장을 다시 시작해 그 SDK를 쓴다.
   - 이 설정은 탐지 순서 1번이라 이 PC의 모든 클론·워크트리에서 `flutterRoot`보다 앞선다. SDK 버전을 별도 폴더로 올리는 동안에는
     [Flutter SDK 버전 올리기](#flutter-sdk-버전-올리기)의 `Flutter: Change SDK` 안내를 따른다.
   - 이어서 "Some packages are missing or out of sync … would you like to fetch them now?" 알림이 뜬다. `Run 'pub get'`을 누른다.
-  - 패키지를 받기 전이나, 받은 직후 분석이 끝나기 전에 F5를 누르면 분석 오류가 남아 있어 "Errors exist in your project." 창
-    (`Run Anyway`·`Show Errors`·`Cancel`)이 뜬다. `Run 'pub get'`이 끝나고 약 15초 뒤에 눌렀을 때도 떴다.
-    상태 표시줄의 오류 수가 사라진 뒤 누르거나, 그냥 `Run Anyway`를 고른다. 어느 경우든 `flutter run`이 패키지를 받은 뒤 실행됐다.
+  - 패키지를 받기 전에 F5를 누르면 분석 오류가 남아 있어 "Errors exist in your project." 창(`Run Anyway`·`Show Errors`·`Cancel`)이 뜬다.
+    `pub get`이 끝나고 약 15초 뒤에 눌렀을 때도 아직 분석이 끝나지 않아 같은 창이 떴다. `Run Anyway`를 고르면 된다 —
+    패키지를 받기 전이었으면 `flutter run`이 받은 뒤 실행했고, 어느 경우든 앱이 시작됐다.
 
-알림을 닫았거나 다른 SDK로 바꾸려면 **사용자** 설정에 직접 지정한다. SDK를 찾지 못한 채 켜진 확장은 설정 변경을 다시 읽지 않으므로,
-지정한 뒤 `Developer: Reload Window`를 실행한다(소스. 닫은 알림도 다시 불러오면 다시 뜬다).
+알림을 닫았으면 위 권장 방법(`pub get` → `Developer: Reload Window`)을 쓴다. 다시 불러오면 알림도 다시 뜬다(Dart-Code 소스).
+다른 SDK를 쓰려면 **사용자** 설정에 직접 지정한다. SDK를 찾지 못한 채 켜진 확장은 설정 변경을 다시 읽지 않으므로,
+지정한 뒤 `Developer: Reload Window`를 실행한다(Dart-Code 소스).
 사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다(Windows에서도 `~\`가 아니라 `~/`로 쓴다).
 
 ```jsonc
