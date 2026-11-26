@@ -724,7 +724,7 @@ void main() {
     setUpAll(loadBundledFonts);
 
     testWidgets(
-      '창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (CalcTheme "짧은 창" 절의 실측 하한 4.9·3.2dp)',
+      '창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (#38 R1에서 정한 하한 — 가로형 뒤에도 유지)',
       (tester) async {
         var nearThreshold = false;
         for (var w = 220.0; w <= 900; w += 40) {

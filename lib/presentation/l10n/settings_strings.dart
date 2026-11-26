@@ -36,7 +36,10 @@ abstract class SettingsStrings {
   /// 키패드가 그대로인 이유를 알린다. 위아래 배치(키패드 가운데)와, 키패드가 아래 절반 폭을 다 쓰는 테이블톱(#80 —
   /// 그때도 설정 버튼, 폭 상한에 걸린 LCD는 좌우로 옮겨 간다)에서 보인다. 기기 종류가 아니라 숫자 키를 한쪽 가장자리에
   /// 두는지로 말한다: 같은 폴더블도 펼친 방향·접은 정도에 따라 배치가 다르다. 적용되는 화면의 예는 가로형(#142 — 숫자부와
-  /// 활성 LCD가 손 쪽으로 옮겨 간다)이다.
+  /// 활성 LCD가 손 쪽으로 옮겨 간다)이다. "키패드 위치" 대신 "키 배치"로 말한다(#142 R1) — 넓은 배열 테이블톱(#80)은 숫자
+  /// 키가 이미 오른쪽 가장자리에 있어 "가장자리에 두는 화면에서 적용"이라고 하면 화면과 어긋난다.
+  /// 선택지 설명("숫자 키를 왼쪽에 둡니다")은 블록 폭 상한에 걸린 넓은 테이블톱(아래 절반 폭 약 990dp 초과)에서 맞지 않는다 —
+  /// 키패드만 왼쪽으로 가고 숫자부는 키패드 오른쪽에 남는다. 테이블톱의 숫자부 위치는 #143에서 손잡이를 따르게 한다.
   String get handednessNote;
 
   /// 손잡이 선택지 이름
@@ -64,8 +67,8 @@ class KoSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessNote =>
-      '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-      '가로로 넓은 화면처럼 숫자 키를 한쪽 가장자리에 두는 화면에서 적용됩니다.';
+      '지금 화면에서는 손잡이를 바꿔도 키 배치가 바뀌지 않습니다. '
+      '가로로 넓은 화면 등에서 숫자 키를 고른 손 쪽으로 옮깁니다.';
 
   @override
   String handedness(Handedness value) => switch (value) {
@@ -98,9 +101,9 @@ class EnSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessNote =>
-      'The keypad position does not change on this screen. '
-      'It applies on screens that put the number keys against one side, '
-      'such as wide screens.';
+      'Changing this does not move the keys on this screen. '
+      'On wide screens and similar layouts, '
+      'the number keys move to the side you choose.';
 
   @override
   String handedness(Handedness value) => switch (value) {

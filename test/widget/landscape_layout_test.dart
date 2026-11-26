@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,9 +37,12 @@ Future<ProviderContainer> _pump(
   EdgeInsets padding = EdgeInsets.zero,
   double textScale = 1.0,
   Handedness handedness = Handedness.right,
+  List<DisplayFeature> displayFeatures = const [],
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
+  tester.view.displayFeatures = displayFeatures;
+  addTearDown(tester.view.resetDisplayFeatures);
   SharedPreferences.setMockInitialValues({
     HandednessNotifier.storageKey: handedness.storageValue,
   });
@@ -55,6 +61,7 @@ Future<ProviderContainer> _pump(
             padding: padding,
             viewPadding: padding,
             textScaler: TextScaler.linear(textScale),
+            displayFeatures: displayFeatures,
           ),
           child: const CalculatorScreen(),
         ),
@@ -172,7 +179,7 @@ void main() {
               expect(
                 lcd.height,
                 lessThanOrEqualTo(
-                  block / CalcTheme.screenLcdMinAspectRatio + 0.01,
+                  body.width / CalcTheme.screenLcdMinAspectRatio + 0.01,
                 ),
               );
               expect(
@@ -266,6 +273,38 @@ void main() {
     handle.dispose();
   });
 
+  /// 의미 트리를 읽는 순서대로 훑은 노드 id 목록
+  List<int> traversalOrder(WidgetTester tester) {
+    final order = <int>[];
+    void visit(SemanticsNode node) {
+      order.add(node.id);
+      for (final child in node.debugListChildrenInOrder(
+        DebugSemanticsDumpOrder.traversalOrder,
+      )) {
+        visit(child);
+      }
+    }
+
+    visit(
+      tester
+          .binding
+          .renderViews
+          .first
+          .owner!
+          .semanticsOwner!
+          .rootSemanticsNode!,
+    );
+    return order;
+  }
+
+  int indexIn(WidgetTester tester, List<int> order, Finder f) {
+    final i = order.indexOf(tester.getSemantics(f).id);
+    expect(i, isNonNegative, reason: '$f');
+    return i;
+  }
+
+  Finder keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
+
   for (final handedness in Handedness.values) {
     testWidgets(
       '스크린리더 읽기 순서: 활성 LCD → 기록 → 키패드(함수부 → 숫자부) → 설정 버튼 (${handedness.name})',
@@ -276,39 +315,12 @@ void main() {
           size: const Size(1280, 800),
           handedness: handedness,
         );
-        final order = <int>[];
-        void visit(SemanticsNode node) {
-          order.add(node.id);
-          for (final child in node.debugListChildrenInOrder(
-            DebugSemanticsDumpOrder.traversalOrder,
-          )) {
-            visit(child);
-          }
-        }
-
-        final root = tester
-            .binding
-            .renderViews
-            .first
-            .owner!
-            .semanticsOwner!
-            .rootSemanticsNode!;
-        visit(root);
-        int indexOf(Finder f) {
-          final i = order.indexOf(tester.getSemantics(f).id);
-          expect(i, isNonNegative, reason: '$f');
-          return i;
-        }
-
-        final lcd = indexOf(_lcd);
-        final history = indexOf(_history);
-        final function = indexOf(
-          find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.sin)),
-        );
-        final number = indexOf(
-          find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.num7)),
-        );
-        final settings = indexOf(_settings);
+        final order = traversalOrder(tester);
+        final lcd = indexIn(tester, order, _lcd);
+        final history = indexIn(tester, order, _history);
+        final function = indexIn(tester, order, keycap(CalcKeyId.sin));
+        final number = indexIn(tester, order, keycap(CalcKeyId.num7));
+        final settings = indexIn(tester, order, _settings);
         expect(lcd, lessThan(history));
         expect(history, lessThan(function));
         expect(function, lessThan(number));
@@ -317,6 +329,71 @@ void main() {
       },
     );
   }
+
+  // 순서 키는 모든 배치에 붙는다 — 설정 버튼은 화면 위치와 무관하게 맨 끝이다(세로형은 예전에 띠의 버튼을 LCD보다 먼저
+  // 읽었다). 계산기를 연 사용자가 먼저 듣는 것이 LCD이고, 드물게 쓰는 설정은 키 뒤에 둔다(#142).
+  for (final (name, size, features) in [
+    ('세로형 390×844', const Size(390, 844), const <DisplayFeature>[]),
+    (
+      '세로 접힘선 841×701',
+      const Size(841, 701),
+      const [
+        DisplayFeature(
+          bounds: Rect.fromLTWH(420.5, 0, 0, 701),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        ),
+      ],
+    ),
+  ]) {
+    testWidgets('스크린리더 읽기 순서 ($name): LCD → 키패드 → 설정 버튼', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, size: size, displayFeatures: features);
+      final order = traversalOrder(tester);
+      final lcd = indexIn(tester, order, _lcd);
+      final key = indexIn(tester, order, keycap(CalcKeyId.shift));
+      final settings = indexIn(tester, order, _settings);
+      expect(lcd, lessThan(key));
+      expect(key, lessThan(settings));
+      handle.dispose();
+    });
+  }
+
+  group('기록 없는 작은 가로형 창의 큰 글자 배율', () {
+    for (final (size, padding) in const [
+      (Size(411, 400), EdgeInsets.only(top: 24)),
+      (Size(640, 360), EdgeInsets.only(top: 24)),
+      (Size(568, 320), EdgeInsets.zero),
+      (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21)),
+      (Size(700, 420), EdgeInsets.zero),
+    ]) {
+      for (final scale in const [2.0, 3.0]) {
+        for (final handedness in Handedness.values) {
+          testWidgets(
+            '${size.width}×${size.height}·배율 $scale·${handedness.name}: 넘치지 않고 대화상자도 열린다',
+            (tester) async {
+              tester.platformDispatcher.textScaleFactorTestValue = scale;
+              addTearDown(
+                tester.platformDispatcher.clearTextScaleFactorTestValue,
+              );
+              await _pump(
+                tester,
+                size: size,
+                padding: padding,
+                textScale: scale,
+                handedness: handedness,
+              );
+              expect(tester.takeException(), isNull);
+              expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+              await tester.tap(_settings);
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull);
+            },
+          );
+        }
+      }
+    }
+  });
 
   group('CalcLandscapeLayout', () {
     test('10인치 Android 가로(본체 1264×712) 오른손잡이 배치 고정값', () {
@@ -453,37 +530,81 @@ void main() {
       }
     });
 
-    test('기록 영역 문턱: 위 띠가 문턱 이상이면 기록이 있고, 블록이 좁아 위 띠가 문턱에 닿지 않는 창에는 없다', () {
-      for (var height = 150.0; height <= 1000; height += 7) {
-        for (final width in const [1264.0, 984.0, 640.0, 461.0, 395.0]) {
-          final l = CalcLandscapeLayout.of(
-            Size(width, height),
-            Handedness.right,
-          );
-          if (l.history != null) {
+    test(
+      '본체 폭을 늘릴 때도 위 띠·키 높이가 연속이고, 기록 영역이 생기는 경계에서 활성 LCD 높이가 튀지 않는다 (#142 R1)',
+      () {
+        // R1 재현: 본체 높이 426(창 442)·폭 461 → 461.5에서 활성 LCD가 228.8 → 128dp로 줄었다.
+        for (final height in const [330.0, 380.0, 426.0, 450.0, 584.0, 712.0]) {
+          CalcLandscapeLayout? previous;
+          for (var width = 300.0; width <= 1400; width += 0.5) {
+            final l = CalcLandscapeLayout.of(
+              Size(width, height),
+              Handedness.right,
+            );
+            final p = previous;
+            if (p != null) {
+              final reason = '$width×$height $p → $l';
+              expect(
+                l.keypad.height,
+                greaterThanOrEqualTo(p.keypad.height - 1e-6),
+                reason: reason,
+              );
+              expect(
+                (l.lcd.height - p.lcd.height).abs(),
+                lessThanOrEqualTo(0.5 + 1e-6),
+                reason: reason,
+              );
+              expect(
+                (l.top - p.top).abs(),
+                lessThanOrEqualTo(0.5 + 1e-6),
+                reason: reason,
+              );
+            }
+            previous = l;
+          }
+        }
+      },
+    );
+
+    test(
+      '기록 영역 문턱: 위 띠가 문턱 이상이고 블록이 최소 폭 이상일 때만 기록이 있고, 위 띠 높이는 기록 유무와 무관하다',
+      () {
+        for (var height = 150.0; height <= 1000; height += 7) {
+          for (final width in const [
+            1264.0,
+            984.0,
+            640.0,
+            626.0,
+            461.0,
+            395.0,
+          ]) {
+            final l = CalcLandscapeLayout.of(
+              Size(width, height),
+              Handedness.right,
+            );
+            final block = KeypadMetrics.wideBlockWidthOf(width);
             expect(
-              l.lcd.height,
-              greaterThanOrEqualTo(CalcTheme.screenLandscapeHistoryMinHeight),
+              l.history != null,
+              l.lcd.height >= CalcTheme.screenLandscapeHistoryMinHeight &&
+                  block >= CalcTheme.screenLandscapeHistoryMinLcdWidth,
               reason: '$width×$height $l',
             );
-          } else if (width >= 462) {
-            // 블록이 224dp 이상이면 기록이 없을 때 LCD가 최대 높이에 걸리지 않아, 블록 폭으로 나눈 값과 같고 문턱 아래다.
+            // 위 띠 높이는 세로형과 같은 규칙을 본체 폭으로 쓴 값이다(기록 영역과 무관 — 최대 높이는 본체 폭 기준).
             expect(
               l.lcd.height,
-              lessThan(CalcTheme.screenLandscapeHistoryMinHeight),
+              lessThanOrEqualTo(
+                math.max(
+                      CalcTheme.screenLcdMinHeight,
+                      width / CalcTheme.screenLcdMinAspectRatio,
+                    ) +
+                    1e-6,
+              ),
               reason: '$width×$height $l',
             );
           }
         }
-      }
-      // 블록 224dp 미만(본체 폭 약 461dp 미만)은 LCD 최대 높이가 문턱 아래라 어떤 높이에서도 기록이 없다.
-      for (var height = 150.0; height <= 2000; height += 10) {
-        expect(
-          CalcLandscapeLayout.of(Size(440, height), Handedness.right).history,
-          isNull,
-        );
-      }
-    });
+      },
+    );
 
     test('음수·비유한 크기는 0으로 본다', () {
       for (final body in const [

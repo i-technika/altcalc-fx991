@@ -693,9 +693,9 @@ void main() {
       // 테스트 기본 로캘(en_US)
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        'The keypad position does not change on this screen. '
-        'It applies on screens that put the number keys against one side, '
-        'such as wide screens.',
+        'Changing this does not move the keys on this screen. '
+        'On wide screens and similar layouts, '
+        'the number keys move to the side you choose.',
       );
       // 안내 글은 선택지 아래에 있고, 라디오 그룹 밖에 있다.
       final note = tester.getRect(find.byKey(HandednessDialog.noteKey));
@@ -731,8 +731,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-        '가로로 넓은 화면처럼 숫자 키를 한쪽 가장자리에 두는 화면에서 적용됩니다.',
+        '지금 화면에서는 손잡이를 바꿔도 키 배치가 바뀌지 않습니다. '
+        '가로로 넓은 화면 등에서 숫자 키를 고른 손 쪽으로 옮깁니다.',
       );
     });
 

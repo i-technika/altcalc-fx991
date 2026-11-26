@@ -146,7 +146,7 @@ _divideBodyHeight(
   );
 }
 
-//// 접힘선 없는 가로로 넓은 창의 "가로형" 배치 (#142, [ScreenArrangement.landscape]). 기준은 [CalcTheme]의 "가로형 배치"
+/// 접힘선 없는 가로로 넓은 창의 "가로형" 배치 (#142, [ScreenArrangement.landscape]). 기준은 [CalcTheme]의 "가로형 배치"
 /// 절을 따른다.
 ///
 /// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭 — 숫자부와 활성 LCD가 왼쪽):
@@ -163,20 +163,21 @@ _divideBodyHeight(
 /// ```
 /// - 키패드: 넓은 배열([KeypadArrangement.wide])로 본체 폭 전체를 쓰고 본체 아래에 붙인다. 높이는 넓은 배열의 세로 한계
 ///   ([KeypadMetrics.fitSize])까지다. 숫자부는 주로 쓰는 손 쪽 블록이다([numbersOnLeft]).
-/// - 높이 나누기: 세로형([CalcScreenLayout])과 같은 규칙이다 — 상단 띠 최소 높이를 먼저 떼고, LCD 목표 비율
-///   ([CalcTheme.screenLcdHeightRatio]) · 최소 높이 · 최대 높이(블록 폭 / [CalcTheme.screenLcdMinAspectRatio]) 안에서 LCD,
-///   나머지는 키패드가 세로 한계까지 받고, 그래도 남으면 띠가 받는다. 위 띠의 높이는 기록 영역 유무와 무관하게 블록 폭으로
-///   정하고, 기록 영역이 없으면 띠 폭 전체로 정한다(기록 영역이 생기고 없어지는 경계에서는 LCD가 최대 높이에 걸리지 않아
-///   두 값이 같다 — 키·LCD 높이가 튀지 않는다).
+/// - 높이 나누기: 세로형([CalcScreenLayout])과 같은 규칙을 위 띠 폭 전체(본체 폭)로 쓴다 — 상단 띠 최소 높이를 먼저 떼고,
+///   LCD 목표 비율([CalcTheme.screenLcdHeightRatio]) · 최소 높이 · 최대 높이(본체 폭 / [CalcTheme.screenLcdMinAspectRatio]) 안에서
+///   위 띠, 나머지는 키패드가 세로 한계까지 받는다. 위 띠의 높이는 기록 영역 유무와 무관하다 — 그래서 기록 영역이 생기고
+///   없어지는 경계(창 높이·폭 어느 쪽으로 넘어도)에서 키·LCD 높이가 튀지 않는다(#142 R1: 블록 폭으로 최대 높이를 정하면
+///   폭 방향 경계에서 LCD가 228.8 → 128dp로 줄었다). 기록 영역이 있으면 활성 LCD는 블록 폭이라 실물 비율보다 높을 수 있다
+///   (12.9인치 iPad 가로 655×478.8) — 남는 높이를 빈 상단 띠로 두지 않고 활성 LCD와 기록 영역이 나눠 쓴다(화면을 다 채운다).
 /// - 띠를 내용 줄 전체 높이까지 늘리기: LCD가 목표 높이(와 최소 높이)보다 높아진 몫(키패드가 세로 한계에 닿아 남는 높이)
 ///   에서 띠를 [CalcTheme.topStripRowMaxHeight](화면 여백 포함)까지 늘린다. 키패드에서는 떼지 않는다 — 태블릿 가로는 키패드가
 ///   세로 한계에 닿고 LCD가 남는 높이를 받아, 띠가 최소 높이(줄 20dp)로 남으면 설정 아이콘이 줄고 태양전지가 숨는다
 ///   (세로형 큰 창의 띠 #141 R1과 같은 이유).
 /// - 위 띠: 키패드 블록에 맞춰 둘로 나눈다. 숫자부 위가 활성 LCD, 함수부 위가 계산 기록 영역(`HistoryPanel`, 내용은 #145)이고
 ///   둘 사이는 키패드의 블록 사이 간격과 같다. LCD 하나를 전체 폭으로 늘이면 식은 왼쪽 끝, 답은 오른쪽 끝으로 멀어진다
-///   (사용자 결정). 블록 폭 LCD로 나눈 위 띠가 [CalcTheme.screenLandscapeHistoryMinHeight]보다 낮으면 기록 영역을 두지
-///   않고([history]가 `null`) 활성 LCD가 띠 폭 전체를 쓴다(가로 폰 등 — 띠가 LCD 최소 높이에 묶인 창과, 블록이 좁아
-///   LCD 최대 높이가 문턱에 못 미치는 창).
+///   (사용자 결정). 위 띠가 [CalcTheme.screenLandscapeHistoryMinHeight]보다 낮거나 블록이
+///   [CalcTheme.screenLandscapeHistoryMinLcdWidth]보다 좁으면 기록 영역을 두지 않고([history]가 `null`) 활성 LCD가 띠 폭
+///   전체를 쓴다(가로 폰 등 — 띠가 LCD 최소 높이에 묶인 창과, 좁은 창).
 /// - 설정 버튼·장식: 상단 띠의 내용 줄([CalcTopStripLayout])이 위 띠 폭 전체를 쓴다 — 세로형과 같이 워드마크는 왼쪽 끝,
 ///   설정 버튼은 오른쪽 끝, 태양전지는 그 왼쪽이다. 손잡이와 무관하다.
 /// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
@@ -222,44 +223,30 @@ class CalcLandscapeLayout {
       Size(width, double.infinity),
       KeypadArrangement.wide,
     ).height;
-    // 위 띠의 높이 (띠, LCD, 간격, 키패드). LCD 최대 높이는 LCD 폭으로 정한다.
-    ({double top, double lcd, double gap, double keypad}) divide(
-      double lcdWidth,
-    ) {
-      final base = _divideBodyHeight(
-        height,
-        lcdWidth: lcdWidth,
-        keypadMaxHeight: keypadMaxHeight,
-      );
-      // LCD가 목표 높이(와 최소 높이)보다 높아진 몫에서만 띠를 줄 전체 높이까지 늘린다 — 키는 그대로다.
-      // 늘린 뒤 LCD = max(하한, LCD − 늘릴 수 있는 최대)라 창 크기에 대해 연속이고, 창이 높아질 때 줄지 않는다.
-      const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
-      final lcdFloor = math.max(
-        base.lcdTarget,
-        math.min(CalcTheme.screenLcdMinHeight, base.lcd),
-      );
-      final grow = (base.lcd - lcdFloor).clamp(
-        0.0,
-        math.max(0.0, fullRow - base.top),
-      );
-      return (
-        top: base.top + grow,
-        lcd: base.lcd - grow,
-        gap: base.gap,
-        keypad: base.keypad,
-      );
-    }
-
-    // 기록 영역은 블록 폭 LCD로 나눈 위 띠가 충분히 높을 때만 둔다. 없으면 활성 LCD가 띠 폭 전체이고, LCD 최대 높이도
-    // 그 폭으로 다시 정한다 — 경계(위 띠 = 문턱)에서는 LCD가 최대 높이에 걸리지 않아(문턱 > 최소 높이) 두 계산이 같다.
-    var heights = divide(block);
+    // 위 띠의 높이는 띠 폭 전체로 정한다 — 기록 영역 유무와 무관하다.
+    final base = _divideBodyHeight(
+      height,
+      lcdWidth: width,
+      keypadMaxHeight: keypadMaxHeight,
+    );
+    // LCD가 목표 높이(와 최소 높이)보다 높아진 몫에서만 띠를 줄 전체 높이까지 늘린다 — 키는 그대로다.
+    // 늘린 뒤 LCD = max(하한, LCD − 늘릴 수 있는 최대)라 창 크기에 대해 연속이고, 창이 높아질 때 줄지 않는다.
+    const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
+    final lcdFloor = math.max(
+      base.lcdTarget,
+      math.min(CalcTheme.screenLcdMinHeight, base.lcd),
+    );
+    final grow = (base.lcd - lcdFloor).clamp(
+      0.0,
+      math.max(0.0, fullRow - base.top),
+    );
+    final top = base.top + grow;
+    final lcdHeight = base.lcd - grow;
     final withHistory =
-        heights.lcd >= CalcTheme.screenLandscapeHistoryMinHeight;
-    if (!withHistory) heights = divide(width);
-    final top = heights.top;
-    final lcdHeight = heights.lcd;
+        lcdHeight >= CalcTheme.screenLandscapeHistoryMinHeight &&
+        block >= CalcTheme.screenLandscapeHistoryMinLcdWidth;
     // 남는 높이(반올림 오차 등)는 키패드가 받는다 (세로형 `_Body._stackedRects`와 같다).
-    final keypadTop = math.min(top + lcdHeight + heights.gap, height);
+    final keypadTop = math.min(top + lcdHeight + base.gap, height);
     final keypad = Rect.fromLTRB(0, keypadTop, width, height);
 
     final Rect lcd;
@@ -594,7 +581,7 @@ class CalcTabletopLayout {
 /// - 내용 줄: 높이는 띠 높이와 [CalcTheme.topStripRowMaxHeight] 중 작은 쪽.
 /// - 설정 버튼([settingsButton]): 줄 오른쪽 끝의 [CalcTheme.settingsButtonSize] 정사각형 터치 영역.
 ///   줄이 그보다 낮으면 줄 윗변에서 아래로 LCD 위에 겹치고, 아이콘은 위쪽 [settingsVisualHeight](= 줄 높이)
-///   구간 가운데에 그린다. 위아래 배치에서만 띠에 둔다 — 버튼이 다른 곳에 있는 배치는 그 영역을
+///   구간 가운데에 그린다. 위아래 배치·가로형은 띠에 둔다 — 버튼이 다른 곳에 있는 배치는 그 영역을
 ///   `settingsButton` 인자로 넘기고, 이때 [settingsButton]은 `null`이다.
 /// - 워드마크([wordmark])·태양전지 장식([solarPanel]): 줄 높이·폭이 모자라면 `null`(그리지 않음).
 ///   다른 곳의 설정 버튼과 겹치면 둘 다 `null`이다.
@@ -1407,7 +1394,7 @@ class _Body extends ConsumerWidget {
   }
 }
 
-// 창이 너무 작아 키패드를 쓸 수 없다는 안내 (#38) — 본체(위쪽 화면 여백 포함) 전체를 덮는다.
+/// 창이 너무 작아 키패드를 쓸 수 없다는 안내 (#38) — 본체(위쪽 화면 여백 포함) 전체를 덮는다.
 ///
 /// 그린 배치의 키가 [CalcTheme.keyTouchHeightUsableMin]보다 낮을 때 [CalculatorScreen]이 계산기 대신 띄운다.
 /// 아이콘과 문구는 본체 폭에서 줄을 바꾸고 본체 가운데에 둔다. 높이가 모자라면 줄이지 않고 스크롤한다 — 줄이면

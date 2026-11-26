@@ -467,6 +467,7 @@ void main() {
           (w) => w is CalcKeyButton && w.keyDef.id == id,
         );
         final num7State = tester.state(button(CalcKeyId.num7));
+        final lcdElement = tester.element(_lcd);
         expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
         expect(key(CalcKeyId.num7).left, greaterThan(key(CalcKeyId.sin).right));
         final keypadBefore = tester.getRect(_keypad);
@@ -493,6 +494,7 @@ void main() {
           identical(tester.state(button(CalcKeyId.num7)), num7State),
           isTrue,
         );
+        expect(identical(tester.element(_lcd), lcdElement), isTrue);
 
         // 닫기 버튼으로 닫는다.
         await tester.tap(find.byKey(HandednessDialog.closeKey));
@@ -707,6 +709,7 @@ void main() {
     // 다시 가로로 (가로형, #142)
     await _pump(tester, size: const Size(1280, 800), container: container);
     expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+    expect(identical(tester.element(_lcd), lcdElement), isTrue);
     expect(
       identical(tester.element(find.byType(CalcKeypad)), keypadElement),
       isTrue,
