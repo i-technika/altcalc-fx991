@@ -837,6 +837,13 @@ class CalculatorScreen extends ConsumerWidget {
       ),
       bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
     );
+    // 진단 로그 (#118) — 기기별 시스템 인셋·제스처 영역을 실기기 logcat으로 잰다
+    LayoutLog.systemInsets(
+      window: window,
+      padding: padding,
+      viewPadding: MediaQuery.viewPaddingOf(context),
+      gestures: MediaQuery.systemGestureInsetsOf(context),
+    );
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).

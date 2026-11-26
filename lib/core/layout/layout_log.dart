@@ -1,7 +1,9 @@
 import 'dart:developer' show Timeline;
-import 'dart:ui' show DisplayFeature, FramePhase, FrameTiming, Rect, Size;
+import 'dart:ui'
+    show DisplayFeature, FramePhase, FrameTiming, Offset, Rect, Size;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show EdgeInsets;
 import 'package:flutter/scheduler.dart';
 
 import 'form_factor.dart';
@@ -32,7 +34,13 @@ import 'form_factor.dart';
 /// - 배치 줄 시각([Timeline.now])과 프레임 시각([FrameTiming])은 같은 단조 시계라고 본다 — Pixel Fold 에뮬레이터에서
 ///   배치 줄 시각이 늘 그 배치를 그린 프레임의 빌드 시작 뒤 수 ms 안에 들어 맞았다(#158).
 ///
-/// 개인 정보는 없다(창·화면 크기, 접힘선 위치, 판정 결과, 프레임 시각뿐).
+/// ## 시스템 영역·키 입력 시점 (#118)
+/// 시스템 인셋·제스처 영역이 바뀔 때마다 "시스템 영역" 줄([systemInsets])을 남기고, 키 터치마다 누르는 순간 입력됐는지,
+/// 제스처 영역에서 시작해 손을 뗄 때로 미뤘는지, 미룬 누름이 시스템에 가로채여(취소) 버려졌는지([keyInput])를 남긴다.
+/// 기기별 뒤로가기·작업 표시줄 영역과 가장자리 키 동작을 실기기 logcat으로 재려는 것이다(#177).
+///
+/// 개인 정보는 없다(창·화면 크기, 접힘선 위치, 시스템 영역 크기, 판정 결과, 프레임 시각, 누른 키와 그 화면 좌표뿐 —
+/// 계산기 키 입력이라 계산 내용이 드러날 수 있지만 진단 빌드에서만 켜진다).
 abstract final class LayoutLog {
   /// 로그 줄 머리말 — `flutter` 태그의 다른 로그와 구분한다.
   static const String prefix = 'AltCalc';
@@ -53,6 +61,7 @@ abstract final class LayoutLog {
   static int Function() _clock = _timelineNow;
   static int _origin = 0;
   static String? _lastLayout;
+  static String? _lastInsets;
   static bool _watchFrameTimings = false;
   static bool _timingsAdded = false;
 
@@ -91,6 +100,7 @@ abstract final class LayoutLog {
     _clock = clock ?? _timelineNow;
     _origin = _clock();
     _lastLayout = null;
+    _lastInsets = null;
     _watchFrameTimings = frameTimings;
     _stopWatchingFrames();
   }
@@ -100,6 +110,7 @@ abstract final class LayoutLog {
   static void disable() {
     _sink = null;
     _lastLayout = null;
+    _lastInsets = null;
     _stopWatchingFrames();
   }
 
@@ -194,6 +205,32 @@ abstract final class LayoutLog {
     if (_watchFrameTimings) _watchFrames(now);
   }
 
+  /// 시스템 영역 — 지난번과 달라졌을 때만 남긴다(빌드마다 불러도 된다). 값은 dp, 왼/위/오른/아래 순서다.
+  /// - [padding]: `MediaQuery.padding` (키보드 등에 가려진 부분을 뺀 시스템 인셋)
+  /// - [viewPadding]: `MediaQuery.viewPadding` (시스템 바 인셋 그대로 — 본체 아래 여백 계산에 쓴다, #63)
+  /// - [gestures]: `MediaQuery.systemGestureInsets` (Android 시스템 제스처 영역 — 키 입력을 뗄 때로 미루는 판정, #50)
+  static void systemInsets({
+    required Size window,
+    required EdgeInsets padding,
+    required EdgeInsets viewPadding,
+    required EdgeInsets gestures,
+  }) {
+    if (!enabled) return;
+    final line =
+        '시스템 영역: 창 ${_size(window)}, 인셋 ${_insets(padding)}, '
+        '시스템 바 ${_insets(viewPadding)}, 제스처 영역 ${_insets(gestures)}';
+    if (line == _lastInsets) return;
+    _lastInsets = line;
+    _write('$line @${_since(_clock())}');
+  }
+
+  /// 키 터치 하나의 처리 ([KeyInputEvent]) — [key]는 키 이름, [at]은 누른 곳의 화면 좌표(dp)다.
+  static void keyInput(KeyInputEvent event, {required String key, Offset? at}) {
+    if (!enabled) return;
+    final where = at == null ? '' : ' (${_n(at.dx)},${_n(at.dy)})';
+    _write('키 ${event.label}: $key$where @${_since(_clock())}');
+  }
+
   static void _watchFrames(int now) {
     _windows.add((now - frameMarginMicros, now + frameWatchMicros));
     if (_windows.length > maxFrameWindows) _windows.removeAt(0);
@@ -234,6 +271,9 @@ abstract final class LayoutLog {
   static String _feature(DisplayFeature f) =>
       '${f.type.name} ${f.state.name} ${_rect(f.bounds)}';
 
+  static String _insets(EdgeInsets e) =>
+      '${_n(e.left)}/${_n(e.top)}/${_n(e.right)}/${_n(e.bottom)}';
+
   static String _size(Size s) => '${_n(s.width)}x${_n(s.height)}';
 
   static String _rect(Rect r) =>
@@ -246,4 +286,27 @@ abstract final class LayoutLog {
         ? rounded.toInt().toString()
         : rounded.toStringAsFixed(1);
   }
+}
+
+/// 키 터치 처리 단계 ([LayoutLog.keyInput], #118)
+enum KeyInputEvent {
+  /// 누르는 순간 입력했다 (제스처 영역 밖에서 시작)
+  pressed('입력(누를 때)'),
+
+  /// 시스템 제스처 영역에서 시작해 손을 뗄 때로 미뤘다
+  deferred('보류(제스처 영역)'),
+
+  /// 미룬 누름을 손을 뗄 때 입력했다
+  committedOnRelease('입력(뗄 때)'),
+
+  /// 미룬 누름이 키 밖으로 벗어나 버렸다
+  discardedMovedOut('버림(벗어남)'),
+
+  /// 누름이 취소됐다 (시스템 제스처가 가로챈 경우 등 — 미룬 누름이면 입력하지 않는다)
+  cancelled('취소');
+
+  /// 로그 표기
+  final String label;
+
+  const KeyInputEvent(this.label);
 }

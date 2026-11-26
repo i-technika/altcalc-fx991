@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/key_definitions.dart';
+import '../../core/layout/layout_log.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
 import 'key_legend_view.dart';
@@ -255,6 +256,16 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         p.dy > screen.height - insets.bottom;
   }
 
+  /// 진단 로그 (#118) — 진단 빌드에서만 남는다([LayoutLog.keyInput]). [at]은 전역 좌표다.
+  void _log(KeyInputEvent event, {required Offset at}) {
+    if (!LayoutLog.enabled) return;
+    LayoutLog.keyInput(
+      event,
+      key: widget.keyDef.id.name,
+      at: ScreenCoordinateRoot.globalToScreen(context, at),
+    );
+  }
+
   void _handlePointerDown(PointerDownEvent event) {
     // 비활성, 이미 다른 손가락이 누르는 중, 입력으로 취급하지 않는 포인터는 무시한다.
     if (!_enabled || _pressed || _isIgnoredPointer(event)) return;
@@ -263,6 +274,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       _activePointer = event.pointer;
       _deferred = deferred;
     });
+    _log(
+      deferred ? KeyInputEvent.deferred : KeyInputEvent.pressed,
+      at: event.position,
+    );
     if (deferred) return; // 손을 뗄 때 확정
     _commitPress();
     _startRepeat();
@@ -273,6 +288,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (_hitAreaContains(event.localPosition)) return;
     if (_deferred) {
       // 시스템 제스처일 가능성이 높으므로 확정하지 않고 버린다.
+      _log(KeyInputEvent.discardedMovedOut, at: event.position);
       setState(_release);
     } else {
       _cancelRepeat();
@@ -284,11 +300,15 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (!mounted || event.pointer != _activePointer) return;
     final commit = _deferred;
     setState(_release);
-    if (commit) _commitPress();
+    if (commit) {
+      _log(KeyInputEvent.committedOnRelease, at: event.position);
+      _commitPress();
+    }
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
     if (!mounted || event.pointer != _activePointer) return;
+    _log(KeyInputEvent.cancelled, at: event.position);
     setState(_release);
   }
 

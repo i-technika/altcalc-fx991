@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show TargetPlatform;
+import 'package:flutter/painting.dart' show EdgeInsets;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
@@ -48,6 +49,18 @@ void main() {
     window: window,
     features: features,
     foldableDevice: foldableDevice,
+  );
+
+  void insets({
+    Size window = const Size(841.1, 701),
+    EdgeInsets padding = const EdgeInsets.only(top: 28.2, bottom: 32),
+    EdgeInsets viewPadding = const EdgeInsets.only(top: 28.2, bottom: 32),
+    EdgeInsets gestures = const EdgeInsets.fromLTRB(29.7, 28.2, 29.7, 32),
+  }) => LayoutLog.systemInsets(
+    window: window,
+    padding: padding,
+    viewPadding: viewPadding,
+    gestures: gestures,
   );
 
   /// [enable]부터 잰 ms로 빌드 시작·래스터 끝을 준 프레임
@@ -107,7 +120,50 @@ void main() {
     );
     layout();
     LayoutLog.onFrameTimings([frame(1, 0, 10)]);
+    insets();
+    LayoutLog.keyInput(KeyInputEvent.pressed, key: 'ac');
     expect(lines, isEmpty);
+  });
+
+  group('시스템 영역·키 입력 줄 (#118)', () {
+    test('시스템 영역 줄은 창·인셋·시스템 바·제스처 영역을 왼/위/오른/아래로 적고, 바뀔 때만 남긴다', () {
+      insets();
+      insets(); // 같은 값 — 남기지 않는다
+      now += 5000;
+      insets(
+        padding: const EdgeInsets.only(top: 24, bottom: 56),
+        viewPadding: const EdgeInsets.only(top: 24, bottom: 56),
+        gestures: const EdgeInsets.fromLTRB(30, 24, 30, 56),
+      );
+      expect(lines, [
+        'AltCalc 시스템 영역: 창 841.1x701, 인셋 0/28.2/0/32, 시스템 바 0/28.2/0/32, '
+            '제스처 영역 29.7/28.2/29.7/32 @0.0ms',
+        'AltCalc 시스템 영역: 창 841.1x701, 인셋 0/24/0/56, 시스템 바 0/24/0/56, '
+            '제스처 영역 30/24/30/56 @5.0ms',
+      ]);
+    });
+
+    test('다시 켜면 같은 시스템 영역도 다시 남긴다', () {
+      insets();
+      enable();
+      insets();
+      expect(lines, hasLength(2));
+    });
+
+    test('키 입력 줄은 단계·키 이름·화면 좌표를 적고, 매번 남긴다', () {
+      for (final event in KeyInputEvent.values) {
+        LayoutLog.keyInput(event, key: 'ac', at: const Offset(1262, 517.25));
+      }
+      LayoutLog.keyInput(KeyInputEvent.pressed, key: 'num7');
+      expect(lines, [
+        'AltCalc 키 입력(누를 때): ac (1262,517.3) @0.0ms',
+        'AltCalc 키 보류(제스처 영역): ac (1262,517.3) @0.0ms',
+        'AltCalc 키 입력(뗄 때): ac (1262,517.3) @0.0ms',
+        'AltCalc 키 버림(벗어남): ac (1262,517.3) @0.0ms',
+        'AltCalc 키 취소: ac (1262,517.3) @0.0ms',
+        'AltCalc 키 입력(누를 때): num7 @0.0ms',
+      ]);
+    });
   });
 
   test('모든 줄은 머리말로 시작한다 (logcat flutter 태그에서 골라 읽는다)', () {
