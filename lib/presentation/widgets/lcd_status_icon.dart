@@ -16,8 +16,8 @@ import '../../domain/models/lcd_status.dart';
 /// - 잉크는 대문자 높이 띠(대문자 윗선 ~ 기준선) 안, 슬롯 폭 안에 그린다. 좌표를 그 안에서 계산하고,
 ///   세로 띠 클립은 반올림 오차에 대한 안전장치로만 둔다(가로는 클립하지 않아 테스트가 픽셀로 검증한다).
 /// - `→x`의 x는 글꼴 글자를 줄여 상자 안에 그린다(직접 그린 대각선은 곱셈 기호 ×처럼 읽힌다).
-/// - 굵은 글씨 접근성 설정(`MediaQuery.boldText`)에서는 옆 `Text` 글자처럼 `→x`의 x도 굵게 그린다. 반전 상자
-///   글자(S·A·D·R·G)는 늘 굵게 그린다. 한계: 직접 그린 획은 그대로다(기준선·높이는 영향 없음). 고대비(#54)와 함께 다룬다.
+/// - 굵은 글씨 접근성 설정(`MediaQuery.boldText`): 반전 상자 글자(S·A·D·R·G)는 늘 굵게(w700) 그려 설정과 같다.
+///   한계: 직접 그린 획과 `→x`의 x는 그대로다 — x를 굵게 그리면 작은 크기에서 팔이 테두리에 붙는다(#160 리뷰 R2).
 ///
 /// 상태 표시줄 안에서는 `LcdStatusBar`가 치수를 한 번 계산해 [metrics]로 넘긴다. 단독으로 쓰면 이 위젯이
 /// 자기 크기에서 계산한다(이때 [style]에 글자 크기가 없으면 [CalcTheme.lcdStatusStyle]의 크기를 쓰고,
@@ -53,12 +53,7 @@ class LcdStatusIcon extends StatelessWidget {
     style,
     textScaler,
     metrics,
-    (m) => _LcdStatusIconPainter(
-      icon: icon,
-      color: color,
-      metrics: m,
-      bold: MediaQuery.maybeBoldTextOf(context) ?? false,
-    ),
+    (m) => _LcdStatusIconPainter(icon: icon, color: color, metrics: m),
   );
 }
 
@@ -295,14 +290,10 @@ class _LcdStatusIconPainter extends CustomPainter {
   final Color color;
   final LcdStatusIconMetrics metrics;
 
-  /// 굵은 글씨 접근성 설정 — `→x`의 x 글자만 굵어진다(직접 그린 획은 그대로)
-  final bool bold;
-
   const _LcdStatusIconPainter({
     required this.icon,
     required this.color,
     required this.metrics,
-    required this.bold,
   });
 
   @override
@@ -354,10 +345,12 @@ class _LcdStatusIconPainter extends CustomPainter {
         );
       case LcdIndicatorIcon.storeArrow:
         // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 둘째 칸 상자의 왼쪽 열린 곳으로 들어간다.
+        // 가이드 실측(대문자 높이 대비): 몸통 굵기 0.26, 머리 높이 0.53·길이 0.27, 열린 곳 0.59 — 머리가 열린 곳보다
+        // 작아 그 안으로 들어간다.
         final mid = (ct + bl) / 2;
         final shaft = cap * 0.13;
-        final head = cap * 0.32;
-        final neck = x(0, 0.62);
+        final head = cap * 0.265;
+        final neck = x(0, 0.8);
         canvas.drawPath(
           Path()
             ..moveTo(x(0, 0.12), mid - shaft)
@@ -373,7 +366,8 @@ class _LcdStatusIconPainter extends CustomPainter {
         // 둘째 칸: 왼쪽 변 가운데가 열린 상자(위아래 짧은 변만 남는다) 안의 x
         final box = Rect.fromLTRB(x(1, 0), ct, x(1, 1), bl);
         final inner = box.deflate(half);
-        final stub = cap * 0.22;
+        // 위아래 짧은 변: 바깥 테두리에서 대문자 높이의 0.2 (선 중심 기준으로 반 획 뺀다)
+        final stub = cap * 0.2 - half;
         canvas.drawPath(
           Path()
             ..moveTo(inner.left, inner.top + stub)
@@ -392,13 +386,14 @@ class _LcdStatusIconPainter extends CustomPainter {
           CalcTheme.lcdStatusStoreXRatio,
           CalcTheme.lcdStatusXHeightRatio,
           Paint()..color = color,
-          bold: bold,
+          // 굵은 글씨 설정을 따르지 않는다 — 굵게 그리면 작은 크기에서 x 팔이 테두리에 붙는다(#160 리뷰 R2).
+          bold: false,
         );
       case LcdIndicatorIcon.mathInput:
         // √▭ — 근호 오른쪽 획이 대문자 윗선까지 오르고 윗선이 칸 위를 덮는다. 칸은 윗선 아래에 띄워 매달린
         // "⊏" 모양(위·왼쪽·아래 변, 오른쪽은 위에 짧은 변만 남기고 열림)이고, 연필 촉이 열린 곳으로 들어간다.
         // 가이드 표시기 표의 아이콘 구조를 따랐다(실물 사진의 "√E✎"처럼 보이는 모양과도 맞다).
-        // 근호 왼쪽 획은 짧은 꺾임 없이 대문자 높이의 절반쯤에서 시작한다.
+        // 근호 왼쪽 획은 짧은 꺾임 없이 대문자 높이의 절반쯤에서 시작한다. 윗선 끝과 칸 오른쪽 끝은 같은 x다(가이드).
         final boxLeft = x(1, 0.1);
         final boxRight = x(1, 0.9);
         final boxTop = ct + cap * 0.3;
@@ -409,49 +404,52 @@ class _LcdStatusIconPainter extends CustomPainter {
               ..moveTo(x(0, 0) + half, bl - cap * 0.52)
               ..lineTo(x(0, 0.4), bl - half)
               ..lineTo(x(0, 0.85), ct + half)
-              ..lineTo(x(1, 0.75), ct + half),
-            // 둥근 결합: 뾰족한 V 꼭짓점(miter)은 기준선 아래로 나가 띠 클립에 잘린다(#160 리뷰 R1).
-            stroke(StrokeJoin.round),
+              ..lineTo(boxRight, ct + half),
+            // 뾰족한 V 꼭짓점은 miter 비율(약 2.2)이 한계 1.5를 넘어 잘린 모서리(bevel)로 그려진다 — 기준선 아래로
+            // 나가 띠 클립에 잘리지 않는다. 윗선 모서리(둔각)는 한계 안이라 각진 채로 남는다(#160 리뷰 R1·R2).
+            stroke(StrokeJoin.miter)..strokeMiterLimit = 1.5,
           )
           ..drawPath(
             Path()
-              ..moveTo(boxRight - half, boxTop + cap * 0.18)
+              // 오른쪽 위 짧은 변: 바깥 윗변에서 대문자 높이의 0.21까지 (연필과 떨어지도록 가이드의 0.2쯤)
+              ..moveTo(boxRight - half, boxTop + cap * 0.21)
               ..lineTo(boxRight - half, boxTop + half)
               ..lineTo(boxLeft + half, boxTop + half)
               ..lineTo(boxLeft + half, bl - half)
-              ..lineTo(boxRight - half, bl - half),
+              ..lineTo(boxRight, bl - half),
             stroke(StrokeJoin.miter),
           );
+        // 연필: 촉은 칸 안 오른쪽 아래(기준선 위 0.25), 위 끝은 셋째 칸 오른쪽·대문자 윗선 아래 0.2(가이드 0.3과 사진의
+        // 윗선 사이), 굵기는 대문자 높이의 0.22(가이드 0.21). 짧은 변·아랫변과 대문자 높이의 약 0.09씩 떨어진다.
         _paintPencil(
           canvas,
           fill,
-          ct,
-          Offset(x(1, 0.72), bl - cap * 0.24),
-          x(2, 1.0),
+          Offset(x(1, 0.72), bl - cap * 0.25),
+          Offset(x(2, 1.0), ct + cap * 0.2),
+          cap * 0.11,
         );
     }
     canvas.restore();
   }
 
-  /// ✎ — 촉을 [point](칸의 열린 오른쪽 아래)에 두고 오른쪽 위 모서리([right], 대문자 윗선)로 뻗은 연필
-  /// (몸통 + 뾰족한 촉). 몸통 윗변 꼭짓점이 대문자 윗선 아래·[right] 안쪽에 들도록 축 위쪽 끝을 안쪽으로 옮긴다.
+  /// ✎ — 촉을 [point]에 두고 [corner](위 끝의 오른쪽·위 한계) 쪽으로 뻗은 연필 (몸통 + 뾰족한 촉, 몸통 반폭
+  /// [halfWidth]). 몸통 윗변 꼭짓점이 [corner]의 위·오른쪽 안에 들도록 축 위쪽 끝을 안쪽으로 옮긴다.
   void _paintPencil(
     Canvas canvas,
     Paint fill,
-    double ct,
     Offset point,
-    double right,
+    Offset corner,
+    double halfWidth,
   ) {
-    final halfWidth = metrics.cell * metrics.shrink * 0.18;
-    var top = Offset(right, ct);
+    var top = corner;
     var normal = Offset.zero;
     for (var i = 0; i < 3; i++) {
       final axis = point - top;
       final unit = axis / axis.distance;
       normal = Offset(-unit.dy, unit.dx);
       top = Offset(
-        right - normal.dx.abs() * halfWidth,
-        ct + normal.dy.abs() * halfWidth,
+        corner.dx - normal.dx.abs() * halfWidth,
+        corner.dy + normal.dy.abs() * halfWidth,
       );
     }
     final body = top + (point - top) * 0.66;
@@ -474,7 +472,6 @@ class _LcdStatusIconPainter extends CustomPainter {
   @override
   bool shouldRepaint(_LcdStatusIconPainter oldDelegate) =>
       oldDelegate.icon != icon ||
-      oldDelegate.bold != bold ||
       oldDelegate.color != color ||
       oldDelegate.metrics != metrics;
 }

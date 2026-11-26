@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
@@ -177,6 +178,44 @@ void main() {
         );
       }
     });
+
+    testWidgets(
+      '상태가 같으면 키 입력으로 줄 내용이 바뀌어도 아이콘·상자 글자를 다시 칠하지 않는다 (#160 리뷰 R2)',
+      (tester) async {
+        const status = LcdStatus(shift: true, store: true);
+        await _pump(tester, const LcdDisplay(status: status, input: Text('1')));
+        // 다시 칠하면 경계 레이어 아래의 그림 레이어가 새로 만들어진다 — 같은 객체면 다시 칠하지 않고 재사용한 것이다.
+        // (debug 칠하기 횟수는 부모만 칠하고 이 경계를 재사용한 경우도 센다.)
+        Layer? picture(Finder drawing) => tester
+            .renderObject<RenderRepaintBoundary>(
+              find
+                  .ancestor(of: drawing, matching: find.byType(RepaintBoundary))
+                  .first,
+            )
+            .debugLayer!
+            .firstChild;
+
+        final drawings = [
+          _slotDrawing(LcdIndicatorSlot.shift),
+          _slotDrawing(LcdIndicatorSlot.store),
+          _slotDrawing(LcdIndicatorSlot.math),
+        ];
+        final before = [for (final d in drawings) picture(d)];
+        expect(before, everyElement(isNotNull));
+        for (final input in ['12', '123', '1234']) {
+          await _pump(tester, LcdDisplay(status: status, input: Text(input)));
+        }
+        for (final (i, d) in drawings.indexed) {
+          expect(identical(picture(d), before[i]), isTrue, reason: '$i');
+        }
+        // 상태가 바뀌면 그 슬롯은 다시 칠한다.
+        await _pump(
+          tester,
+          const LcdDisplay(status: LcdStatus(store: true), input: Text('1234')),
+        );
+        expect(identical(picture(drawings[0]), before[0]), isFalse);
+      },
+    );
 
     testWidgets('showInactiveIndicators가 false면 꺼진 표시기를 그리지 않는다', (
       tester,

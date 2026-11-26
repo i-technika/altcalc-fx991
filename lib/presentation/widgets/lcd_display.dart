@@ -370,17 +370,13 @@ class LcdDisplay extends StatelessWidget {
                     children: [
                       SizedBox(
                         height: statusBarHeight,
-                        // 상태 표시줄은 입력·결과 줄보다 드물게 바뀐다. 키를 누를 때마다 상자 글자(saveLayer)와
-                        // 아이콘을 다시 그리지 않도록 따로 칠한다(#160 리뷰 R1).
-                        child: RepaintBoundary(
-                          child: LcdStatusBar(
-                            status: status,
-                            style: CalcTheme.lcdStatusStyle.copyWith(
-                              fontSize: statusFont,
-                            ),
-                            textScaler: textScaler,
-                            showInactive: showInactiveIndicators,
+                        child: LcdStatusBar(
+                          status: status,
+                          style: CalcTheme.lcdStatusStyle.copyWith(
+                            fontSize: statusFont,
                           ),
+                          textScaler: textScaler,
+                          showInactive: showInactiveIndicators,
                         ),
                       ),
                       Expanded(
@@ -643,6 +639,10 @@ List<double>? lcdStatusSlotLefts({
 }
 
 /// 상태 표시줄의 고정 너비 슬롯 하나.
+///
+/// 직접 그리는 아이콘과 반전 상자 글자는 슬롯마다 `RepaintBoundary`로 따로 칠한다. 키를 누르면 LCD 전체가 다시
+/// 빌드·배치되지만, 슬롯 크기·치수·색이 같으면 이 경계는 다시 칠하지 않는다(상자 글자의 saveLayer와 글자 배치를
+/// 키마다 되풀이하지 않는다, #160 리뷰 R2).
 class _IndicatorSlot extends StatelessWidget {
   final LcdIndicatorSlot slot;
 
@@ -684,11 +684,13 @@ class _IndicatorSlot extends StatelessWidget {
         width: width,
         height: height,
         child: isOn || showInactive
-            ? LcdStatusIcon(
-                key: ValueKey(icon),
-                icon: icon,
-                color: color,
-                metrics: iconMetrics,
+            ? RepaintBoundary(
+                child: LcdStatusIcon(
+                  key: ValueKey(icon),
+                  icon: icon,
+                  color: color,
+                  metrics: iconMetrics,
+                ),
               )
             : null,
       );
@@ -699,11 +701,13 @@ class _IndicatorSlot extends StatelessWidget {
         width: width,
         height: height,
         child: isOn || showInactive
-            ? LcdStatusBoxedLetter(
-                key: ValueKey('boxed-${slot.name}'),
-                letter: slot.template,
-                color: color,
-                metrics: iconMetrics,
+            ? RepaintBoundary(
+                child: LcdStatusBoxedLetter(
+                  key: ValueKey('boxed-${slot.name}'),
+                  letter: slot.template,
+                  color: color,
+                  metrics: iconMetrics,
+                ),
               )
             : null,
       );
