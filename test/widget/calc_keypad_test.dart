@@ -857,7 +857,7 @@ void _cursorPadR2Tests() {
       }
     });
 
-    test('시맨틱 영역은 허브 고리까지 들어가고, ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
+    test('시맨틱 영역은 허브 고리까지 들어가고, 셀 여백이 없으면 ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
       for (final size in const [
         Size(90, 64),
         Size(97.7, 67.8), // 320×568·상태바 20dp 화면의 패드
@@ -867,9 +867,10 @@ void _cursorPadR2Tests() {
       ]) {
         final g = CursorPadGeometry(size);
         final c = g.center;
+        // 셀 = 패드 상자 (앱에서 셀 여백이 없을 때와 같다)
         final rects = {
           for (final s in CursorPadSector.values)
-            s: CursorPad.semanticRect(s, size),
+            s: CursorPad.semanticRect(s, size, Offset.zero & size),
         };
         final up = rects[CursorPadSector.up]!;
         final left = rects[CursorPadSector.left]!;
@@ -887,7 +888,7 @@ void _cursorPadR2Tests() {
           reason: '$size',
         );
         // 고리의 일부를 덮는다. 사각형 네 개라 가운데 십자 사이(|dx| < X, |dy| < Y)는 비어
-        // 약 23~50%다. #43 규칙(허브를 덮지 않음)에서는 0%였다.
+        // 약 22~50%다(비율 상한 1.8의 200×111이 22.7%로 가장 낮다). #43 규칙(허브를 덮지 않음)에서는 0%였다.
         var ringPoints = 0;
         var covered = 0;
         for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
@@ -1051,6 +1052,9 @@ void _cursorPadHitTests() {
       '셀 = 패드': Offset.zero & padSize,
       '가로 여백': const Rect.fromLTRB(-20, 0, 134, 66),
       '세로 여백': const Rect.fromLTRB(0, -9, 114, 75),
+      // 셀이 패드보다 위아래로 크게 높은 경우 (#166 R1 — 시맨틱 영역이 셀 높이에 묶이지 않는지)
+      '세로 여백 큼(셀 = 패드 높이 × 2)': const Rect.fromLTRB(0, -33, 114, 99),
+      '세로 여백 매우 큼(× 3)': const Rect.fromLTRB(0, -66, 114, 132),
     };
     final g = CursorPadGeometry(padSize);
 

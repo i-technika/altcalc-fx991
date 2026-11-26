@@ -863,8 +863,14 @@ class CursorPadGeometry {
   ///
   /// 화면 좌표에서 홈은 |dx| = m·|dy| (m = k·[radiusX]/[radiusY])이다. ◀·▶ 영역을 |dx| ≥ X, |dy| ≤ Y,
   /// ▲·▼ 영역을 |dx| ≤ X, |dy| ≥ Y로 두고 X = m·Y로 맞추면 각 영역이 홈을 넘지 않는다.
-  /// - Y는 ▲·▼ 영역 높이(H − Y)와 ◀·▶ 영역 높이(2Y)가 같아지는 H / 3이다. H는 중심에서 위쪽 변(셀 또는 외곽)까지의 거리다.
-  /// - 데드존을 피하도록 Y와 X는 데드존 반지름 이상으로 둔다.
+  /// - Y는 패드 상자 반높이(외곽 반높이 + 선 두께 절반)의 1/3이다. 셀 여백이 없으면 ▲·▼ 영역 높이(반높이 − Y)와
+  ///   ◀·▶ 영역 높이(2Y)가 같다.
+  ///   Y는 패드 크기로만 정하고 셀([bounds])과는 무관하다. 셀이 위아래로 크면 ▲·▼ 영역만 그만큼 높아진다.
+  ///   Y를 셀 높이에 묶으면 셀이 패드보다 크게 높을 때 X = m·Y가 홈 끝을 넘는다. 그러면 ▲·▼ 영역이 외곽 밖
+  ///   ◀·▶ 터치 영역을 덮고, 더 높으면 ◀·▶ 사각형이 뒤집힌다(리뷰 R1).
+  ///   Y = 반높이/3은 홈이 외곽과 만나는 높이(지금 k에서 외곽 반높이의 약 0.66)보다 낮아 X가 홈 끝 안쪽에 있다.
+  /// - 데드존을 피하도록 Y와 X는 데드존 반지름 이상으로 둔다. 지금 상수(데드존 0.1)에서는 반높이/3이 항상 더
+  ///   커서 걸리지 않는 안전장치다.
   /// - 측정(320×568·상태바 20dp, 패드 97.7×67.8dp): ▲·▼ 43.1×17.4 → 29.6×22.6dp, ◀·▶ 27.3×32.9 → 34.1×22.6dp.
   ///   짧은 변이 17.4dp에서 22.6dp가 된다.
   /// - m < 1이면(지금 k와 패드 비율 1.4 이상에서는 m ≥ 1.26) ▲·▼ 폭 2·m·Y가 가장 짧은 변이 될 수 있다.
@@ -874,9 +880,8 @@ class CursorPadGeometry {
   Rect semanticRect(CursorPadSector sector, [Rect? bounds]) {
     if (_isEmpty) return Rect.zero;
     final m = _k * radiusX / radiusY;
-    final top = bounds?.top ?? center.dy - radiusY;
     final y = math.max(
-      (center.dy - top) / 3,
+      size.height / 6,
       math.max(deadZoneRadius, deadZoneRadius / m),
     );
     final x = m * y;
