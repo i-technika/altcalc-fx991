@@ -798,7 +798,7 @@ void _cursorPadR2Tests() {
       await tester.pump();
     });
 
-    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
+    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(허브 고리 포함, 또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
       // 패드 비율 하한·상한 근처와 정사각형(비율 제한 밖 극단)까지
       for (final size in const [
         Size(90, 64),
@@ -828,7 +828,8 @@ void _cursorPadR2Tests() {
               reason: '$size ${a.name} × ${b.name}',
             );
           }
-          // 영역 안 표본 점은 모두 자기 구역이거나 외곽 밖이다 (다른 구역·허브 위가 없다).
+          // 영역 안 표본 점은 모두 자기 구역이거나 외곽 밖이다 (다른 구역·데드존 위가 없다).
+          // 그려진 허브의 고리는 누르면 그쪽 방향이라 자기 구역에 든다(#166).
           var own = 0;
           final inner = rect.deflate(0.01);
           for (var x = inner.left; x <= inner.right; x += 0.5) {
@@ -842,8 +843,8 @@ void _cursorPadR2Tests() {
               expect(at, isNull, reason: '$size ${a.name} $p → ${at?.name}');
               expect(
                 (p - geometry.center).distance,
-                greaterThan(geometry.hubRadius),
-                reason: '$size ${a.name} $p 허브 위',
+                greaterThan(geometry.deadZoneRadius),
+                reason: '$size ${a.name} $p 데드존 위',
               );
             }
           }
@@ -854,6 +855,55 @@ void _cursorPadR2Tests() {
             reason: '$size ${a.name}',
           );
         }
+      }
+    });
+
+    test('시맨틱 영역은 허브 고리까지 들어가고, 셀 여백이 없으면 ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
+      for (final size in const [
+        Size(90, 64),
+        Size(97.7, 67.8), // 320×568·상태바 20dp 화면의 패드
+        Size(136.2, 97.3), // 412×915 화면의 패드
+        Size(200, 111),
+        Size(100, 100),
+      ]) {
+        final g = CursorPadGeometry(size);
+        final c = g.center;
+        // 셀 = 패드 상자 (앱에서 셀 여백이 없을 때와 같다)
+        final rects = {
+          for (final s in CursorPadSector.values)
+            s: CursorPad.semanticRect(s, size, Offset.zero & size),
+        };
+        final up = rects[CursorPadSector.up]!;
+        final left = rects[CursorPadSector.left]!;
+        // ▲·▼ 영역은 그려진 허브 안(허브 가장자리보다 가운데 쪽)까지 내려오고, 데드존 앞에서 멈춘다.
+        expect(up.bottom, greaterThan(c.dy - g.hubRadius), reason: '$size ▲');
+        expect(
+          up.bottom,
+          lessThanOrEqualTo(c.dy - g.deadZoneRadius),
+          reason: '$size ▲',
+        );
+        // ▲·▼ 영역 높이 = ◀·▶ 영역 높이 (짧은 변을 고르게 나눈다)
+        expect(
+          up.height,
+          moreOrLessEquals(left.height, epsilon: 1e-9),
+          reason: '$size',
+        );
+        // 고리의 일부를 덮는다. 사각형 네 개라 가운데 십자 사이(|dx| < X, |dy| < Y)는 비어
+        // 약 21~48%다(0.05dp 격자 측정, 200×111이 21.6%로 가장 낮다 — 이 테스트의 0.25dp 격자로는 22.7%).
+        // #43 규칙(허브를 덮지 않음)에서는 0%였다.
+        var ringPoints = 0;
+        var covered = 0;
+        for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
+          for (var y = -g.hubRadius; y <= g.hubRadius; y += 0.25) {
+            final d = Offset(x, y).distance;
+            if (d <= g.deadZoneRadius || d > g.hubRadius) continue;
+            ringPoints++;
+            if (rects.values.any((r) => r.contains(c + Offset(x, y)))) {
+              covered++;
+            }
+          }
+        }
+        expect(covered / ringPoints, greaterThan(0.18), reason: '$size');
       }
     });
 
@@ -1005,6 +1055,9 @@ void _cursorPadHitTests() {
       '셀 = 패드': Offset.zero & padSize,
       '가로 여백': const Rect.fromLTRB(-20, 0, 134, 66),
       '세로 여백': const Rect.fromLTRB(0, -9, 114, 75),
+      // 셀이 패드보다 위아래로 크게 높은 경우 (#166 R1 — 시맨틱 영역이 셀 높이에 묶이지 않는지)
+      '세로 여백 큼(셀 = 패드 높이 × 2)': const Rect.fromLTRB(0, -33, 114, 99),
+      '세로 여백 매우 큼(× 3)': const Rect.fromLTRB(0, -66, 114, 132),
     };
     final g = CursorPadGeometry(padSize);
 
@@ -1180,6 +1233,52 @@ void _cursorPadHitTests() {
             CursorPadSector.down,
             reason: '$name 아랫변 $x',
           );
+        }
+      }
+    });
+
+    test('아주 작은 패드·높은 셀에서도 시맨틱 영역은 뒤집히지 않고 자기 방향의 터치 영역 안이다 (#166 R2)', () {
+      for (final size in const [
+        Size(4, 3),
+        Size(3, 2.5),
+        Size(2.5, 2.2),
+        Size(60, 40),
+      ]) {
+        final small = CursorPadGeometry(size);
+        for (final tall in [1.0, 2.0, 6.0]) {
+          final extra = size.height * (tall - 1) / 2;
+          final cell = Rect.fromLTRB(
+            0,
+            -extra,
+            size.width,
+            size.height + extra,
+          );
+          for (final s in CursorPadSector.values) {
+            for (final r in [
+              small.semanticRect(s),
+              small.semanticRect(s, cell),
+            ]) {
+              final name = '$size ×$tall ${s.name} $r';
+              expect(r.left, lessThanOrEqualTo(r.right), reason: name);
+              expect(r.top, lessThanOrEqualTo(r.bottom), reason: name);
+            }
+            final r = small.semanticRect(s, cell);
+            if (r.isEmpty) continue;
+            final inner = r.deflate(math.min(r.shortestSide / 4, 0.05));
+            for (var i = 0; i <= 6; i++) {
+              for (var j = 0; j <= 6; j++) {
+                final p = Offset(
+                  inner.left + inner.width * i / 6,
+                  inner.top + inner.height * j / 6,
+                );
+                expect(
+                  small.hitSectorAt(p, cell),
+                  s,
+                  reason: '$size ×$tall ${s.name} $p',
+                );
+              }
+            }
+          }
         }
       }
     });
