@@ -433,6 +433,185 @@ void main() {
     expect(greenAfter, greaterThan(redBefore ~/ 2));
   });
 
+  group('∑·log 각인 (#169 — Quick Start Guide 1쪽 제품 사진 대조)', () {
+    test('∑ 각인은 끝 칸을 위아래에 쌓는 LegendLimits(직접 그리는 칸)이고, ∫ 각인은 오른쪽 첨자다', () {
+      final sum = keyDefOf(CalcKeyId.variableX).shiftLegend! as LegendRow;
+      final limits = sum.children.first as LegendLimits;
+      expect(limits.over, isA<LegendBox>());
+      expect(limits.under, isA<LegendBox>());
+      expect(sum.children.last, isA<LegendBox>());
+      expect(sum.plainText, '∑◻◻◼');
+      final integral = keyDefOf(CalcKeyId.integral).mainLegend as LegendRow;
+      expect(integral.children.first, isA<LegendScript>());
+      expect(integral.plainText, '∫◻◻◼');
+    });
+
+    test('쌓은 ∑ 각인은 가장 높은 각인(d/dx◼)보다 높지 않다 — 키패드 통일 각인 크기를 줄이지 않는다', () {
+      const style = CalcTheme.keyShiftLabelStyle;
+      final sum = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.variableX).shiftLegend!,
+        style,
+      );
+      final derivative = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.integral).shiftLegend!,
+        style,
+      );
+      expect(
+        derivative.size.height,
+        greaterThan(1.0),
+      ); // d/dx◼가 한 줄을 넘는 가장 높은 각인
+      expect(sum.size.height, lessThanOrEqualTo(derivative.size.height));
+      expect(sum.inkTop, lessThanOrEqualTo(derivative.inkTop + 1e-9));
+      expect(sum.inkBottom, greaterThanOrEqualTo(derivative.inkBottom - 1e-9));
+    });
+
+    /// [legend]를 글자 크기 [fontSize]·빨간색으로 그려 잉크 픽셀을 `(x, y)` 목록으로 돌려준다.
+    Future<List<(int, int)>> inkPixels(
+      WidgetTester tester,
+      KeyLegend legend,
+      double fontSize,
+    ) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          RepaintBoundary(
+            key: key,
+            child: KeyLegendView(
+              legend: legend,
+              style: CalcTheme.keyShiftLabelStyle.copyWith(
+                fontSize: fontSize,
+                color: const Color(0xFFFF0000),
+              ),
+            ),
+          ),
+        ),
+      );
+      return (await tester.runAsync(() async {
+        final boundary =
+            key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!;
+        final ink = <(int, int)>[];
+        for (var y = 0; y < image.height; y++) {
+          for (var x = 0; x < image.width; x++) {
+            final p = (y * image.width + x) * 4;
+            if (data.getUint8(p + 3) > 128 &&
+                data.getUint8(p) > 160 &&
+                data.getUint8(p + 1) < 100) {
+              ink.add((x, y));
+            }
+          }
+        }
+        image.dispose();
+        return ink;
+      }))!;
+    }
+
+    /// [xs]가 빈 칸으로 갈라진 연속 구간들 (정렬된 서로 다른 값)
+    List<(int, int)> runsOf(Iterable<int> values) {
+      final sorted = values.toSet().toList()..sort();
+      final runs = <(int, int)>[];
+      for (final v in sorted) {
+        if (runs.isNotEmpty && runs.last.$2 == v - 1) {
+          runs[runs.length - 1] = (runs.last.$1, v);
+        } else {
+          runs.add((v, v));
+        }
+      }
+      return runs;
+    }
+
+    testWidgets(
+      '그린 ∑ 각인: 납작한 빈 칸·∑·납작한 빈 칸이 세로로 쌓이고, 채운 칸은 ∑와 세로 가운데가 같다 (사진 비율)',
+      (tester) async {
+        final ink = await inkPixels(
+          tester,
+          keyDefOf(CalcKeyId.variableX).shiftLegend!,
+          140,
+        );
+        // 가로로 왼쪽 덩어리(쌓은 ∑)와 오른쪽 덩어리(채운 본문 칸)로 갈린다.
+        final columns = runsOf(ink.map((p) => p.$1));
+        expect(columns, hasLength(2), reason: '$columns');
+        final (stackLeft, stackRight) = columns.first;
+        final (boxLeft, boxRight) = columns.last;
+        final stack = ink.where((p) => p.$1 <= stackRight).toList();
+        final body = ink.where((p) => p.$1 >= boxLeft).toList();
+        // 쌓은 덩어리는 세로로 셋(위 칸·∑·아래 칸)으로 갈린다.
+        final rows = runsOf(stack.map((p) => p.$2));
+        expect(rows, hasLength(3), reason: '$rows');
+        final [over, sigma, under] = rows;
+        (int, int) widthOf((int, int) run) {
+          final xs = stack
+              .where((p) => p.$2 >= run.$1 && p.$2 <= run.$2)
+              .map((p) => p.$1);
+          return (xs.reduce(math.min), xs.reduce(math.max));
+        }
+
+        final sigmaHeight = sigma.$2 - sigma.$1 + 1;
+        final (sigmaL, sigmaR) = widthOf(sigma);
+        for (final limit in [over, under]) {
+          // 사진: 끝 칸 9×4px · ∑ 7×7px — 칸은 ∑보다 넓고 높이는 ∑의 약 4/7이다.
+          final (l, r) = widthOf(limit);
+          expect(r - l, greaterThan(sigmaR - sigmaL), reason: '$limit');
+          expect(
+            sigmaHeight / (limit.$2 - limit.$1 + 1),
+            inInclusiveRange(1.5, 2.1),
+            reason: '$limit',
+          );
+          expect(
+            (l + r) / 2,
+            moreOrLessEquals((sigmaL + sigmaR) / 2, epsilon: 2),
+          );
+        }
+        // 끝 칸은 빈 칸(가운데가 비었다), 본문 칸은 채운 칸(가운데가 칠해졌다).
+        final inkSet = ink.toSet();
+        for (final limit in [over, under]) {
+          final (l, r) = widthOf(limit);
+          final centre = ((l + r) ~/ 2, (limit.$1 + limit.$2) ~/ 2);
+          expect(inkSet.contains(centre), isFalse, reason: '빈 끝 칸 $limit');
+        }
+        // 본문 칸: 사진 8×4px — 납작하고, 세로 가운데가 ∑ 가운데와 같다.
+        final bodyRows = runsOf(body.map((p) => p.$2));
+        expect(bodyRows, hasLength(1));
+        final (bodyTop, bodyBottom) = bodyRows.single;
+        expect(boxRight - boxLeft, greaterThan(bodyBottom - bodyTop));
+        expect(
+          inkSet.contains((
+            (boxLeft + boxRight) ~/ 2,
+            (bodyTop + bodyBottom) ~/ 2,
+          )),
+          isTrue,
+          reason: '채운 본문 칸',
+        );
+        expect(
+          (bodyTop + bodyBottom) / 2,
+          moreOrLessEquals((sigma.$1 + sigma.$2) / 2, epsilon: 2),
+        );
+        expect(stackLeft, lessThan(boxLeft));
+      },
+    );
+
+    testWidgets('그린 log 각인: 밑 칸 아래끝이 기준선(l의 아래끝)이고 g의 내림 획까지 내려가지 않는다 (사진)', (
+      tester,
+    ) async {
+      final logBase =
+          (keyDefOf(CalcKeyId.logBase).mainLegend as LegendRow).children.first;
+      final ink = await inkPixels(tester, logBase, 140);
+      final columns = runsOf(ink.map((p) => p.$1));
+      // l · o · g · 밑 칸 — 맨 왼쪽(l)과 맨 오른쪽(밑 칸)의 아래끝을 비교한다.
+      expect(columns.length, greaterThanOrEqualTo(3), reason: '$columns');
+      int bottomOf((int, int) col) => ink
+          .where((p) => p.$1 >= col.$1 && p.$1 <= col.$2)
+          .map((p) => p.$2)
+          .reduce(math.max);
+      final lBottom = bottomOf(columns.first);
+      final boxBottom = bottomOf(columns.last);
+      final deepest = ink.map((p) => p.$2).reduce(math.max); // g의 내림 획
+      expect(boxBottom, moreOrLessEquals(lBottom.toDouble(), epsilon: 2));
+      expect(deepest - boxBottom, greaterThan(140 * 0.15));
+    });
+  });
+
   group('키 버튼에서 (#155 체크리스트)', () {
     testWidgets('이슈 표의 모든 각인이 2차원 각인 위젯으로 그려지고 한 줄 표기 Text는 없다', (
       tester,
