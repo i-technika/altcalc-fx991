@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
@@ -204,44 +206,75 @@ void main() {
     });
 
     // 실제 화면처럼 LCD 크기에서 글자 크기를 산출하고(fitFontsToSize), 큰 글자 배율까지 본다.
-    for (final (w, h) in [(200.0, 130.0), (300.0, 200.0), (360.0, 200.0)]) {
-      for (final scale in [1.0, 1.3]) {
-        testWidgets('LCD $w×$h·배율 $scale: 슬롯이 겹치지 않고 실물 위치 가까이에 있다', (
-          tester,
-        ) async {
-          await _pump(
-            tester,
-            const LcdDisplay(fitFontsToSize: true),
-            width: w,
-            height: h,
-            textScale: scale,
-          );
-          final bar = tester.getRect(find.byType(LcdStatusBar));
-          final rects = [
-            for (final slot in LcdIndicatorSlot.values)
-              tester.getRect(find.byKey(ValueKey(slot))),
-          ];
-          for (final r in rects) {
-            expect(_containsRect(bar, r), isTrue);
-          }
-          for (var i = 1; i < rects.length; i++) {
-            expect(rects[i].left, greaterThan(rects[i - 1].right));
-          }
-          // 실물에서 붙어 있는 세그먼트(D·R·G, FIX·SCI 등)는 글자가 넓어 밀리지만, 실물 위치에서 표시줄 폭의
-          // 4%(약 8도트)를 넘게 벗어나지 않는다. 실측 최대 3.0%(300×200·배율 1.3, E).
-          // 슬롯 최소 간격이 크면 줄 전체를 붙여 축소하는 쪽으로 넘어가 15% 안팎까지 벌어진다.
-          for (final (i, slot) in LcdIndicatorSlot.values.indexed) {
-            expect(
-              (rects[i].center.dx -
-                      (bar.left + slot.centerFraction * bar.width))
-                  .abs(),
-              lessThan(bar.width * 0.04),
-              reason: slot.name,
+    // 480은 화면이 주는 최대 LCD 폭이다.
+    // 허용치(실물 위치에서 벗어나도 되는 도트 수, 192도트 기준)는 배율마다 둔다.
+    // - 배율 1.0: 실측 최대 0.4도트 → 1도트
+    // - 배율 1.3: 실측 최대 3.8도트(480×300) → 4.5도트. 글자가 실물 세그먼트보다 넓어 붙어 있는 D·R·G,
+    //   SCI·E·i·∠가 서로 밀어낸다. 슬롯 최소 간격이 크면 줄 전체를 붙여 축소하는 쪽으로 넘어가 30도트 안팎까지 벌어진다.
+    for (final (w, h) in [
+      (200.0, 130.0),
+      (300.0, 200.0),
+      (360.0, 200.0),
+      (480.0, 300.0),
+    ]) {
+      for (final (scale, maxDots) in [(1.0, 1.0), (1.3, 4.5)]) {
+        testWidgets(
+          'LCD $w×$h·배율 $scale: 슬롯이 겹치지 않고 실물 위치에서 $maxDots도트 안에 있다',
+          (tester) async {
+            await _pump(
+              tester,
+              const LcdDisplay(fitFontsToSize: true),
+              width: w,
+              height: h,
+              textScale: scale,
             );
-          }
-        });
+            final bar = tester.getRect(find.byType(LcdStatusBar));
+            final rects = [
+              for (final slot in LcdIndicatorSlot.values)
+                tester.getRect(find.byKey(ValueKey(slot))),
+            ];
+            for (final r in rects) {
+              expect(_containsRect(bar, r), isTrue);
+            }
+            for (var i = 1; i < rects.length; i++) {
+              expect(rects[i].left, greaterThan(rects[i - 1].right));
+            }
+            final dot = bar.width / LcdIndicatorSlot.dotColumns;
+            for (final (i, slot) in LcdIndicatorSlot.values.indexed) {
+              expect(
+                (rects[i].center.dx -
+                            (bar.left + slot.centerFraction * bar.width))
+                        .abs() /
+                    dot,
+                lessThan(maxDots),
+                reason: slot.name,
+              );
+            }
+          },
+        );
       }
     }
+
+    testWidgets('폭 제약이 없으면 슬롯을 최소 간격으로 붙여 그린다', (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: UnconstrainedBox(
+            child: LcdStatusBar(status: LcdStatus.initial),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final rects = [
+        for (final slot in LcdIndicatorSlot.values)
+          tester.getRect(find.byKey(ValueKey(slot))),
+      ];
+      final gap =
+          CalcTheme.lcdStatusStyle.fontSize! * CalcTheme.lcdStatusSlotGapRatio;
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].left - rects[i - 1].right, closeTo(gap, 0.01));
+      }
+    });
 
     testWidgets('글리프 폭보다 큰 음수 자간을 넘겨도 예외 없이 그린다 (#44 리뷰 R2)', (tester) async {
       await tester.pumpWidget(
@@ -1045,15 +1078,15 @@ void main() {
       expect(lefts, [5, 40, 85]);
     });
 
-    test('겹치는 슬롯만 순서를 지키며 최소 간격까지 민다', () {
-      // 가운데 두 슬롯이 겹친다(40~50, 45~55) — 뒤 슬롯을 오른쪽으로 민다.
+    test('겹치는 슬롯만 순서를 지키며 최소 간격까지 양쪽으로 고르게 민다', () {
+      // 가운데 두 슬롯이 겹친다(40~50, 45~55). 12 떨어져야 하므로 모자란 7을 둘이 3.5씩 나눠 움직인다.
       final lefts = lcdStatusSlotLefts(
         centers: const [0.1, 0.45, 0.5, 0.9],
         widths: const [10, 10, 10, 10],
         barWidth: 100,
         minGap: 2,
       )!;
-      expect(lefts, [5, 40, 52, 85]);
+      expect(lefts, [5, 36.5, 48.5, 85]);
     });
 
     test('표시줄 밖으로 나가는 슬롯은 안으로 들이고, 이웃도 따라 민다', () {
@@ -1066,6 +1099,68 @@ void main() {
       expect(lefts.first, 0);
       expect(lefts.last, 90);
       expect(lefts[1], 78); // 90 - 2 - 10
+    });
+
+    test('무작위 입력에서 제약을 지키고, 목표와의 차이 제곱합이 앞→뒤 탐욕 밀기보다 크지 않다', () {
+      final random = math.Random(58);
+      for (var trial = 0; trial < 500; trial++) {
+        final n = 1 + random.nextInt(16);
+        final centers = [for (var i = 0; i < n; i++) random.nextDouble()]
+          ..sort();
+        final widths = [
+          for (var i = 0; i < n; i++) 1 + random.nextDouble() * 20,
+        ];
+        final minGap = random.nextDouble() * 3;
+        final barWidth = 50 + random.nextDouble() * 400;
+        final lefts = lcdStatusSlotLefts(
+          centers: centers,
+          widths: widths,
+          barWidth: barWidth,
+          minGap: minGap,
+        );
+        final need = widths.fold(0.0, (a, b) => a + b) + minGap * (n - 1);
+        if (lefts == null) {
+          expect(need, greaterThan(barWidth), reason: 'trial $trial');
+          continue;
+        }
+        expect(lefts.first, greaterThanOrEqualTo(0), reason: 'trial $trial');
+        expect(
+          lefts.last + widths.last,
+          lessThanOrEqualTo(barWidth + 1e-6),
+          reason: 'trial $trial',
+        );
+        for (var i = 1; i < n; i++) {
+          expect(
+            lefts[i] - (lefts[i - 1] + widths[i - 1]),
+            greaterThanOrEqualTo(minGap - 1e-6),
+            reason: 'trial $trial',
+          );
+        }
+        // 비교 대상: 앞→뒤로 밀고 오른쪽 끝에서 되미는 단순 배치(R1 이전 구현)
+        final targets = [
+          for (var i = 0; i < n; i++) centers[i] * barWidth - widths[i] / 2,
+        ];
+        final greedy = [...targets];
+        greedy[0] = math.max(greedy[0], 0);
+        for (var i = 1; i < n; i++) {
+          greedy[i] = math.max(
+            greedy[i],
+            greedy[i - 1] + widths[i - 1] + minGap,
+          );
+        }
+        greedy[n - 1] = math.min(greedy[n - 1], barWidth - widths[n - 1]);
+        for (var i = n - 2; i >= 0; i--) {
+          greedy[i] = math.min(greedy[i], greedy[i + 1] - minGap - widths[i]);
+        }
+        double cost(List<double> xs) =>
+            [for (var i = 0; i < n; i++) math.pow(xs[i] - targets[i], 2)]
+                .fold(0.0, (a, b) => a + b);
+        expect(
+          cost(lefts),
+          lessThanOrEqualTo(cost(greedy) + 1e-6),
+          reason: 'trial $trial',
+        );
+      }
     });
 
     test('슬롯 폭과 최소 간격의 합이 폭과 같으면 꽉 붙이고, 넘으면 null', () {

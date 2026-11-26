@@ -49,17 +49,66 @@ void main() {
       ]);
     });
 
-    test('세그먼트 가운데 위치는 실물 좌표다 (192도트 기준, 사진으로 대조한 값)', () {
-      // 사진(Wikimedia Commons "Casio fx-991EX Scientific Calculator.jpg")에서 켜진 세 표시기의 위치를
-      // 표시줄 폭 대비 비율로 잰 값과 1도트 안쪽으로 맞는다(☀는 슬롯이 없어 제외).
+    test('세그먼트 가운데 위치는 출처 스프라이트의 잉크 범위 가운데다 (#58)', () {
+      // 출처: CasioEmu models/fx991cnx/model.lua의 rsd_* 사각형(LCD 왼쪽 x=47 기준으로 뺀 값)과,
+      // interface.png y=603~610에서 회색값 < 200인 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶·☀도 적어 둔다.
+      const sprites = <String, (int, int, int, int)>{
+        // 이름: (x, 폭, 잉크 lo, 잉크 hi)
+        'S': (0, 8, 0, 7),
+        'A': (8, 8, 8, 15),
+        'M': (16, 10, 18, 23),
+        '→x': (26, 13, 28, 36),
+        '√◻': (39, 17, 40, 54),
+        'D': (56, 8, 57, 64),
+        'R': (64, 7, 64, 71),
+        'G': (71, 9, 71, 78),
+        'FIX': (80, 14, 81, 93),
+        'SCI': (94, 15, 95, 106),
+        'E': (109, 9, 110, 116),
+        'i': (118, 6, 119, 123),
+        '∠': (124, 7, 126, 131),
+        '⇩': (131, 11, 133, 138),
+        '◀': (142, 7, 143, 148),
+        '▼': (149, 7, 150, 155),
+        '▲': (156, 6, 157, 162),
+        '▶': (162, 9, 164, 169),
+        '‖': (171, 12, 173, 180),
+        '☀': (183, 9, 184, 191),
+      };
+      // 사각형은 192도트를 빈틈없이 덮고, 잉크는 자기 사각형 안에 있으며 이웃 잉크와 겹치지 않는다.
+      var next = 0;
+      var prevInkEnd = 0;
+      for (final MapEntry(key: name, value: (x, w, lo, hi))
+          in sprites.entries) {
+        expect(x, next, reason: name);
+        next = x + w;
+        expect(lo, inInclusiveRange(x, hi), reason: name);
+        expect(hi, lessThanOrEqualTo(x + w), reason: name);
+        expect(lo, greaterThanOrEqualTo(prevInkEnd), reason: name);
+        prevInkEnd = hi;
+      }
+      expect(next, LcdIndicatorSlot.dotColumns);
+      for (final slot in LcdIndicatorSlot.values) {
+        final (_, _, lo, hi) = sprites[slot.template]!;
+        expect(slot.dotCenter, (lo + hi) / 2, reason: slot.name);
+      }
+      // 슬롯 순서는 스프라이트 순서에서 슬롯이 없는 세그먼트를 뺀 것과 같다.
+      expect(
+        LcdIndicatorSlot.values.map((s) => s.template),
+        sprites.keys.where((k) => !{'⇩', '◀', '▶', '☀'}.contains(k)),
+      );
+    });
+
+    test('사진 대조: 켜진 표시기의 실측 위치와 1도트 안쪽으로 맞는다', () {
+      // 사진(Wikimedia Commons "Casio fx-991EX Scientific Calculator.jpg", 1920×2560)의 상태줄(y 535~560)에서
+      // 켜진 표시기의 가로 범위를 재고, D와 ☀의 가운데를 스프라이트 값(60.5, 187)에 맞춰 사진 x를 도트로 바꿨다
+      // (1도트 ≈ 4.27px, 회색값 < 95인 열). 그 환산으로 잰 나머지 표시기 위치다. ☀는 슬롯이 없어 환산 기준으로만 쓴다.
       for (final (slot, measured) in [
-        (LcdIndicatorSlot.math, 46.6),
-        (LcdIndicatorSlot.angleDegree, 60.0),
-        (LcdIndicatorSlot.historyUp, 158.6),
+        (LcdIndicatorSlot.math, 46.8),
+        (LcdIndicatorSlot.historyUp, 158.8),
       ]) {
         expect(slot.dotCenter, closeTo(measured, 1.0), reason: slot.name);
       }
-      expect(LcdIndicatorSlot.dotColumns, 192);
     });
 
     test('세그먼트 위치는 선언 순서대로 커지고 표시줄 안에 있다', () {
@@ -155,10 +204,11 @@ void main() {
       }
     });
 
-    test('대표 문자는 그 슬롯이 실제로 표시할 수 있는 문자다', () {
+    test('모든 슬롯은 켜지면 대표 문자 하나만 표시한다 (슬롯 = 실물 세그먼트 하나, #58)', () {
+      // 꺼졌을 때 흐리게 그리는 글자와 켜졌을 때의 글자가 같아야 자리가 고정된 의미가 산다.
       for (final MapEntry(key: slot, value: labels)
           in _possibleIndicators().entries) {
-        expect(labels, contains(slot.template), reason: slot.name);
+        expect(labels, {slot.template}, reason: slot.name);
       }
     });
 

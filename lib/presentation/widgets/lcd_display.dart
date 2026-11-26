@@ -171,7 +171,7 @@ class LcdFontSizes {
 /// 구성 (위 → 아래):
 /// ```
 ///  ╔══════════════════════════════════╗  ← 은색 베젤 (CalcTheme.lcdFrame)
-///  ║ S  A  M  STO  D  FIX  E  Math ... ║  ← 상태 표시줄 (고정 슬롯을 폭 전체에 분포)
+///  ║ S A M →x √▭✎ D R G FIX SCI E i ∠ ▼▲ ‖ ║  ← 상태 표시줄 (실물 세그먼트 위치의 고정 슬롯)
 ///  ║◄ 2+3×                           ►║  ← 입력 줄 (왼쪽 정렬)
 ///  ║                                5 ║  ← 결과 줄 (오른쪽 정렬)
 ///  ╚══════════════════════════════════╝
@@ -185,8 +185,8 @@ class LcdFontSizes {
 ///   테마 기본 크기다.
 /// - 상태 표시줄 높이는 상태 글자 크기 × [CalcTheme.lcdStatusBarHeightRatio]이고,
 ///   남은 높이를 입력 줄과 결과 줄이 [CalcTheme.lcdInputLineFlex] : [CalcTheme.lcdResultLineFlex]행으로 나눈다.
-/// - 상태 표시줄은 폭이 남으면 슬롯을 고르게 펼치고, 모자라면 통째로 축소한다.
-///   슬롯 위치는 표시 상태와 무관하게 LCD 크기로만 정해진다.
+/// - 상태 표시줄은 슬롯 가운데를 실물 세그먼트의 비율 위치에 두고, 겹치는 슬롯은 민다. 밀어도 들어가지
+///   않으면 슬롯을 붙여 통째로 축소한다([LcdStatusBar]). 슬롯 위치는 표시 상태와 무관하게 LCD 크기로만 정해진다.
 /// - 시스템 글자 배율은 LCD 전체에 [CalcTheme.lcdMaxTextScaleFactor]까지만 반영한다.
 ///   줄 글자([DefaultTextStyle])는 배율을 반영한 높이가 줄 높이를 넘지 않도록 줄어든다.
 ///   [fitFontsToSize]이면 줄 글자는 LCD를 채우는 크기라 배율로 커지지 않고 상태 표시만 커진다
@@ -442,8 +442,8 @@ class LcdDisplay extends StatelessWidget {
 /// 다른 표시기의 위치가 바뀌지 않는다.
 ///
 /// 앱의 글자는 실물 세그먼트보다 넓을 수 있다. 그래서 이웃과 겹치거나 표시줄 밖으로 나가는 슬롯은
-/// 실물 위치에서 가장 가까운 자리로 민다([lcdStatusSlotLefts]). 밀어도 들어가지 않을 만큼 좁으면,
-/// 슬롯을 최소 간격으로 붙인 줄 전체를 축소한다.
+/// 실물 위치에서 벗어나는 양(제곱합)이 가장 작도록 함께 민다([lcdStatusSlotLefts]). 밀어도 들어가지 않을
+/// 만큼 좁으면, 슬롯을 최소 간격으로 붙인 줄 전체를 축소한다.
 ///
 /// 스크린리더에는 켜진 표시기의 의미만 화면 순서대로 읽힌다
 /// (예: "시프트, 메모리, 수학 입출력, 각도 단위 도" — [CalcSemanticStrings.statusBar]).
@@ -557,23 +557,15 @@ class LcdStatusBar extends StatelessWidget {
           return FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: bar(
-              packed,
-              lcdStatusSlotLefts(
-                    centers: centers,
-                    widths: widths,
-                    barWidth: packed,
-                    minGap: minGap,
-                  ) ??
-                  _packedLefts(widths, minGap),
-            ),
+            // 붙인 폭에서 가능한 배치는 왼쪽부터 꽉 붙이는 것 하나뿐이다.
+            child: bar(packed, _packedLefts(widths, minGap)),
           );
         },
       ),
     );
   }
 
-  /// 슬롯을 왼쪽부터 [minGap] 간격으로 붙인 왼쪽 위치 (부동소수 오차로 [lcdStatusSlotLefts]가 실패할 때의 대비)
+  /// 슬롯을 왼쪽부터 [minGap] 간격으로 붙인 왼쪽 위치
   static List<double> _packedLefts(List<double> widths, double minGap) {
     final lefts = <double>[];
     var x = 0.0;
@@ -587,11 +579,16 @@ class LcdStatusBar extends StatelessWidget {
 
 /// 상태 표시줄 슬롯의 왼쪽 위치를 정한다 (#58). 들어가지 않으면 `null`.
 ///
-/// 각 슬롯은 가운데가 실물 위치([centers] — 0~1 비율 × [barWidth])에 오도록 놓는다. 이웃과 [minGap]보다
-/// 가깝거나 표시줄 밖으로 나가는 슬롯은 순서를 지키면서 가장 덜 움직이는 쪽으로 민다.
-/// - 앞→뒤로 한 번 훑어 왼쪽 경계·앞 슬롯과 겹치는 슬롯을 오른쪽으로 민다.
-/// - 뒤→앞으로 한 번 훑어 오른쪽 경계·뒤 슬롯과 겹치는 슬롯을 왼쪽으로 민다.
-/// 그 뒤에도 첫 슬롯이 왼쪽 경계를 넘으면, 슬롯 폭과 최소 간격의 합이 [barWidth]보다 큰 것이다.
+/// 목표는 각 슬롯의 가운데를 실물 위치([centers] — 0~1 비율 × [barWidth])에 두는 것이다. 제약은 셋이다.
+/// - 이웃 슬롯 사이는 [minGap] 이상 띄운다(순서 유지).
+/// - 첫 슬롯은 왼쪽 경계, 마지막 슬롯은 오른쪽 경계 안에 둔다.
+/// - 이 제약 안에서 목표 위치와의 차이 제곱합이 가장 작은 배치를 고른다.
+///   겹치는 무리는 한쪽만 밀리지 않고 양쪽으로 고르게 벌어진다.
+///
+/// 풀이: 슬롯 i의 왼쪽에서 앞 슬롯들의 폭·간격 합 o_i를 빼면(y_i = x_i − o_i) 간격 제약이 y의 단조 증가로 바뀐다.
+/// 그래서 y의 목표값에 단조 회귀(PAVA — 거꾸로 된 이웃 무리를 평균으로 합친다)를 하고, 경계 [0, U]로
+/// 자른다(U = [barWidth] − 마지막 슬롯 폭 − o_마지막). 단조 회귀를 상수 구간으로 자른 값이 구간 제약이 있는
+/// 단조 회귀의 해다. U < 0이면 폭 합과 최소 간격 합이 [barWidth]보다 커서 들어가지 않는다.
 @visibleForTesting
 List<double>? lcdStatusSlotLefts({
   required List<double> centers,
@@ -602,20 +599,34 @@ List<double>? lcdStatusSlotLefts({
   assert(centers.length == widths.length);
   final n = widths.length;
   if (n == 0) return const [];
-  final lefts = [
-    for (var i = 0; i < n; i++) centers[i] * barWidth - widths[i] / 2,
-  ];
-  lefts[0] = math.max(lefts[0], 0);
+  // o_i: 앞 슬롯들의 폭 + 최소 간격 합
+  final offsets = List<double>.filled(n, 0);
   for (var i = 1; i < n; i++) {
-    lefts[i] = math.max(lefts[i], lefts[i - 1] + widths[i - 1] + minGap);
+    offsets[i] = offsets[i - 1] + widths[i - 1] + minGap;
   }
-  lefts[n - 1] = math.min(lefts[n - 1], barWidth - widths[n - 1]);
-  for (var i = n - 2; i >= 0; i--) {
-    lefts[i] = math.min(lefts[i], lefts[i + 1] - minGap - widths[i]);
-  }
+  final upper = barWidth - widths[n - 1] - offsets[n - 1];
   // 부동소수 오차만큼은 허용한다(꽉 차게 붙인 경우).
-  if (lefts[0] < -1e-6 * math.max(1, barWidth)) return null;
-  lefts[0] = math.max(lefts[0], 0);
+  if (upper < -1e-6 * math.max(1, barWidth)) return null;
+  // PAVA: 무리마다 (합, 개수)를 쌓고, 앞 무리 평균이 더 크면 합친다.
+  final sums = <double>[];
+  final counts = <int>[];
+  for (var i = 0; i < n; i++) {
+    var sum = centers[i] * barWidth - widths[i] / 2 - offsets[i];
+    var count = 1;
+    while (sums.isNotEmpty && sums.last / counts.last > sum / count) {
+      sum += sums.removeLast();
+      count += counts.removeLast();
+    }
+    sums.add(sum);
+    counts.add(count);
+  }
+  final lefts = <double>[];
+  for (final (b, sum) in sums.indexed) {
+    final y = (sum / counts[b]).clamp(0.0, math.max(0.0, upper));
+    for (var k = 0; k < counts[b]; k++) {
+      lefts.add(y + offsets[lefts.length]);
+    }
+  }
   return lefts;
 }
 
