@@ -180,8 +180,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
    이때 생기는 `.dart_tool/package_config.json`의 `flutterRoot`로 확장이 SDK를 찾으므로,
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
-   명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다
-   (실측 #69: `pub get`만으로는 알림 상태 그대로이고, 다시 불러오면 찾는다 — [Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서)).
+   명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다([Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서) 아래 알림 설명).
    개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
@@ -212,31 +211,39 @@ flutter run -d chrome -t preview/key_preview_main.dart
 확장 호스트의 PATH를 기록해 본 것이고(#69), **(소스)** 는 VS Code 본체 소스로만 확인한 것이다.
 
 - 터미널에서 `code .`로 새 창을 열면 그 터미널의 환경을 쓴다. VS Code가 이미 실행 중이어도 같다. (실측)
-- VS Code 안에서 연 창(파일 > 폴더 열기 등), 이미 열린 폴더에 `code .`를 해서 기존 창으로 옮겨 간 경우에는
-  VS Code를 처음 켰을 때의 환경을 쓴다. (실측)
+- VS Code 안에서 새 창으로 연 폴더(파일 > 폴더 열기 등)는 VS Code를 처음 켰을 때의 환경을 쓴다. (실측)
   - 이미 실행 중일 때 시작 메뉴·Dock으로 연 창도 같다(터미널의 `code`가 아니면 그 환경을 넘기지 않는다). (소스)
-  - macOS·Linux는 처음 켤 때 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다. (소스)
+  - 터미널의 `code`가 아닌 방법(시작 메뉴·Dock)으로 처음 켤 때, macOS·Linux는 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다. (소스)
+- 이미 열린 폴더에 `code .`를 하면 새 창 없이 기존 창으로 옮겨 가고(실측), 그 창은 자신이 열릴 때 받은 환경을 그대로 쓴다.
+  새 터미널의 환경은 넘어가지 않는다. (소스)
 - 그래서 터미널 세션에서만 `export PATH=...`를 한 뒤 시작 메뉴로 연 창은 그 PATH를 보지 못한다.
 
 `~/develop/flutter`처럼 고정 위치 목록에 없는 곳에 SDK가 있고 PATH에도 없으면, `flutter pub get` 전의 새 클론이나
 `.dart_tool`을 지운 뒤에는 확장이 SDK를 찾지 못하고 오른쪽 아래에 다음 오류 알림을 띄운다.
-아래 내용은 이 상태의 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146, Windows)로 열어 실측했다(#69).
 
 > Could not find a Flutter SDK. Please download, or, if already downloaded, click 'Locate SDK'.
-> — 버튼 `Download SDK` · `Locate SDK` · `Show Log`
 
-푸는 방법은 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
+버튼은 `Download SDK`·`Locate SDK`·`Show Log`다. `Download SDK`는 최신 stable을 `git clone`하므로 이 프로젝트에는 쓰지 않는다 —
+SDK 버전이 `pubspec.yaml`에 정확히 고정되어 있어 다른 버전으로는 `pub get`이 실패한다([개발 환경](#개발-환경)).
+푸는 방법은 아래 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
+이 알림과 두 방법은 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)로 열어 실측했다
+(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows에서 확장의 `pub get` 결과는 확인하지 않았다 — [알아 둘 점](#알아-둘-점)).
 
+- **터미널에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
+  - `pub get`만 하고 다시 불러오지 않으면 SDK를 계속 찾지 못한다(30초 기다려도 그대로였다).
+  - 다시 불러오면 `package_config.json`의 `flutterRoot`로 찾는다. 설정을 남기지 않으므로 그 클론에만 해당한다.
 - **`Locate SDK`** — 폴더 선택 창(확인 버튼 이름 `Set Flutter SDK folder`)에서 SDK 폴더(`bin`이 들어 있는 폴더)를 고른다.
   - 확장이 **사용자** 설정에 `dart.flutterSdkPath`를 절대경로로 저장하고(예: `"C:\\Users\\<이름>\\develop\\flutter"`),
-    묻지 않고 확장을 다시 시작해 그 SDK를 쓴다. 사용자 설정이므로 이 PC의 다른 클론·워크트리에도 적용된다.
+    묻지 않고 확장을 다시 시작해 그 SDK를 쓴다.
+  - 이 설정은 탐지 순서 1번이라 이 PC의 모든 클론·워크트리에서 `flutterRoot`보다 앞선다. SDK 버전을 별도 폴더로 올리는 동안에는
+    [Flutter SDK 버전 올리기](#flutter-sdk-버전-올리기)의 `Flutter: Change SDK` 안내를 따른다.
   - 이어서 "Some packages are missing or out of sync … would you like to fetch them now?" 알림이 뜬다. `Run 'pub get'`을 누른다.
-  - 그 전에 F5를 누르면 패키지가 없어 분석 오류가 쌓인 상태라 "Errors exist in your project." 창(`Run Anyway`·`Show Errors`·`Cancel`)이 뜬다.
-    `Run Anyway`를 고르면 `flutter run`이 패키지를 받은 뒤 실행된다.
-- **터미널에서 `flutter pub get` → `Developer: Reload Window`** — 다시 불러오기 전에는 알림 상태 그대로이고,
-  다시 불러오면 `package_config.json`의 `flutterRoot`로 찾는다. 설정은 생기지 않으므로 그 클론에만 해당한다.
+  - 패키지를 받기 전이나, 받은 직후 분석이 끝나기 전에 F5를 누르면 분석 오류가 남아 있어 "Errors exist in your project." 창
+    (`Run Anyway`·`Show Errors`·`Cancel`)이 뜬다. `Run 'pub get'`이 끝나고 약 15초 뒤에 눌렀을 때도 떴다.
+    상태 표시줄의 오류 수가 사라진 뒤 누르거나, 그냥 `Run Anyway`를 고른다. 어느 경우든 `flutter run`이 패키지를 받은 뒤 실행됐다.
 
-알림을 닫았거나 다른 SDK로 바꾸려면 **사용자** 설정에 직접 지정한다.
+알림을 닫았거나 다른 SDK로 바꾸려면 **사용자** 설정에 직접 지정한다. SDK를 찾지 못한 채 켜진 확장은 설정 변경을 다시 읽지 않으므로,
+지정한 뒤 `Developer: Reload Window`를 실행한다(소스. 닫은 알림도 다시 불러오면 다시 뜬다).
 사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다(Windows에서도 `~\`가 아니라 `~/`로 쓴다).
 
 ```jsonc
