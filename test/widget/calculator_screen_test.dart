@@ -908,6 +908,67 @@ void main() {
     }
   });
 
+  group('넓은 키패드 셀의 커서 패드 (#159)', () {
+    // 커서 패드 셀이 패드 비율 상한([CalcTheme.cursorPadMaxAspectRatio])보다 넓어지는 실제 창이다. 패드는 그 비율에서
+    // 멈추고 남는 폭은 ◀·▶가 받는다. #159에서 패드 모양과 터치 경계를 그대로 두기로 정했고, 아래 기준을 고정한다.
+    // - 내접원(손가락이 들어가는 크기)은 함수 키(sin) 터치 높이 대비 보통 셀과 같은 하한이다. ▲·▼ 0.94배, ◀·▶ 1.0배.
+    //   측정 ▲·▼ 0.973~0.980배, ◀·▶ 1.56~1.86배. 세로 폰은 ▲·▼ 0.947~0.980배다.
+    // - 넓이는 함수 키 셀 대비 ▲·▼ 0.75배, ◀·▶ 1.1배 이상이다. 함수 키가 옆으로만 넓어져 ▲·▼ 넓이 비율은 세로 폰
+    //   하한(1.0배)보다 낮다. 측정 ▲·▼: 412×450 0.92, 600×610 0.88, 768×768 0.87, 1280×400 0.96, 2000×400 0.76배.
+    //   패드를 비율 2.5까지 넓히면 비율은 1.06배로 돌아오지만 내접원은 거의 그대로다(600×610 34.0 → 34.4dp).
+    for (final (size, arrangement) in const [
+      (Size(412, 450), DrawnArrangement.stacked),
+      (Size(600, 610), DrawnArrangement.stacked),
+      (Size(768, 768), DrawnArrangement.stacked),
+      (Size(1280, 400), DrawnArrangement.landscape),
+      (Size(2000, 400), DrawnArrangement.landscape),
+    ]) {
+      testWidgets('${size.width}×${size.height} (${arrangement.name})', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await _pumpScreen(tester, size: size);
+        expect(drawnArrangementOf(tester), arrangement);
+        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+        final cell = tester.getRect(find.byType(CursorPad));
+        // 이 창들이 넓은 셀(패드가 비율 상한에서 멈춘 경우)이어야 검사가 뜻이 있다.
+        expect(cell.width, greaterThan(pad.width + 1));
+        expect(
+          pad.width / pad.height,
+          moreOrLessEquals(CalcTheme.cursorPadMaxAspectRatio, epsilon: 1e-6),
+        );
+        final sin = tester.widget<CalcKeyButton>(
+          find.byWidgetPredicate(
+            (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+          ),
+        );
+        final sinCell = tester.getSize(find.byWidget(sin));
+        final touch = sin.extendHitAreaToLegend
+            ? sinCell.height
+            : sinCell.height * (1 - CalcTheme.keyLegendHeightRatio);
+        final g = CursorPadGeometry(pad.size);
+        final bounds = cell.shift(-pad.topLeft);
+        for (final sector in CursorPadSector.values) {
+          final vertical =
+              sector == CursorPadSector.up || sector == CursorPadSector.down;
+          expect(
+            hitInscribedDiameter(g, sector, bounds),
+            greaterThanOrEqualTo(touch * (vertical ? 0.94 : 1.0)),
+            reason: '${sector.name} 내접원 (sin 터치 높이 $touch)',
+          );
+          expect(
+            g.hitArea(sector, bounds),
+            greaterThanOrEqualTo(
+              sinCell.width * sinCell.height * (vertical ? 0.75 : 1.1),
+            ),
+            reason: '${sector.name} 넓이 (sin $sinCell)',
+          );
+        }
+      });
+    }
+  });
+
   group('화면 배치 기준 (CalcScreenLayout)', () {
     void expectSumsToBody(Size body, CalcScreenLayout l) {
       for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
