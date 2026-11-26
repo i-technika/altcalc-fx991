@@ -18,15 +18,19 @@ import 'form_factor.dart';
 /// 일반 빌드(스토어 배포 포함)에는 이 로그가 없다. `main()`이 [enableForBuild]로 켜고, 테스트는 [enable]로 직접 켠다.
 /// 진단 빌드는 릴리스로 만든다(디버그 빌드는 시작이 느려 첫 프레임 시점이 실제와 다르다):
 /// `flutter build apk --release --dart-define=ALTCALC_LAYOUT_LOG=true`
+/// (Android 판정 로그 `AltCalc`는 #70부터 모든 빌드에 남는다 — 판정마다 몇 줄뿐이다.)
 ///
 /// ## 어느 배치가 화면에 나갔는지 읽는 법
-/// "배치" 줄은 그 배치를 **빌드**한 때(`@` 뒤, [enable]부터 잰 ms)를 적는다. 배치가 바뀌면 그 앞 [frameMarginMicros]부터
-/// 뒤 [frameWatchMicros]까지 빌드를 시작한 프레임마다 "프레임" 줄(빌드 시작·래스터 끝 시각)을 남긴다. 어떤 배치 줄의
-/// 시각이 한 프레임의 빌드 시작 ~ 래스터 끝 사이에 들면 그 배치가 그 프레임으로 화면에 나간 것이다. 빌드하고도 어떤
-/// 프레임에도 들지 않으면(래스터 전에 다음 배치로 다시 빌드) 사용자는 그 배치를 보지 못했다. 프레임 줄은 엔진이 모아서
-/// 보내므로(릴리스는 약 1초마다) 배치 줄보다 늦게 찍힌다.
-/// 배치 줄 시각([Timeline.now])과 프레임 시각([FrameTiming])은 같은 단조 시계라고 본다 — Pixel Fold 에뮬레이터에서
-/// 배치 줄 시각이 늘 그 배치를 그린 프레임의 빌드 시작 뒤 수 ms 안에 들어 맞았다(#158).
+/// "배치" 줄은 그 배치를 **빌드**한 때(`@` 뒤, [enable]부터 잰 ms)를 적는다. 배치가 바뀔 때마다 그 앞
+/// [frameMarginMicros]부터 뒤 [frameWatchMicros]까지를 감시 구간으로 두고, 어느 구간에든 빌드를 시작한 프레임마다
+/// "프레임" 줄(빌드 시작·래스터 끝 시각)을 남긴다(구간 사이의 프레임은 남기지 않는다). 어떤 배치 줄의 시각이 한 프레임의
+/// 빌드 시작 ~ 래스터 끝 사이에 들면 그 배치가 그 프레임으로 화면에 나간 것이다. 빌드하고도 어떤 프레임에도 들지 않으면
+/// (래스터 전에 다음 배치로 다시 빌드) 사용자는 그 배치를 보지 못했다. 프레임 줄은 엔진이 모아서 보내므로(릴리스는 약
+/// 1초마다) 배치 줄보다 늦게 찍힌다.
+/// - 프레임 시각 보고는 처음 배치가 바뀔 때 붙여 끌 때까지 둔다. 릴리스에서는 이 보고가 유일한 받는 곳이라, 떼면 엔진이
+///   시각 수집을 멈춰 다시 붙이기 전 프레임을 잃는다. 진단 빌드에서만 켜지므로 그 비용은 받아들인다.
+/// - 배치 줄 시각([Timeline.now])과 프레임 시각([FrameTiming])은 같은 단조 시계라고 본다 — Pixel Fold 에뮬레이터에서
+///   배치 줄 시각이 늘 그 배치를 그린 프레임의 빌드 시작 뒤 수 ms 안에 들어 맞았다(#158).
 ///
 /// 개인 정보는 없다(창·화면 크기, 접힘선 위치, 판정 결과, 프레임 시각뿐).
 abstract final class LayoutLog {
@@ -42,6 +46,9 @@ abstract final class LayoutLog {
   /// 배치가 바뀌기 전 프레임도 남기는 여유 (µs) — 배치 줄은 그 프레임의 빌드 시작 **뒤**에 찍히므로, 그 프레임까지 담는다.
   static const int frameMarginMicros = 100000;
 
+  /// 감시 구간을 최근 몇 개까지 둘지 (창 크기를 끌어 바꾸는 동안처럼 배치가 계속 바뀔 때 목록이 끝없이 늘지 않게)
+  static const int maxFrameWindows = 32;
+
   static void Function(String line)? _sink;
   static int Function() _clock = _timelineNow;
   static int _origin = 0;
@@ -49,18 +56,24 @@ abstract final class LayoutLog {
   static bool _watchFrameTimings = false;
   static bool _timingsAdded = false;
 
-  /// 프레임 시각을 남길 빌드 시작 구간 (µs, [_clock] 기준). `null`이면 남기지 않는다.
-  static int? _watchFrom;
-  static int? _watchUntil;
+  /// 프레임 시각을 남길 빌드 시작 구간들 (µs, [_clock] 기준) — 배치가 바뀔 때마다 하나씩
+  static final List<(int from, int until)> _windows = [];
 
   /// [FrameTiming]과 같은 시계(단조 시계, µs)
   static int _timelineNow() => Timeline.now;
 
-  /// 진단 빌드([buildFlag])의 Android 앱이면 켠다 — `main()`이 부른다.
-  static void enableForBuild() {
-    if (buildFlag &&
-        !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.android) {
+  /// 진단 빌드([flag], 기본 [buildFlag])의 Android 앱이면 켠다 — `main()`이 부른다. 인자는 판정을 테스트하려는 것이다.
+  ///
+  /// 테스트를 `--dart-define=ALTCALC_LAYOUT_LOG=true`로 돌리면 `main()`이 로그를 다시 켜, 위젯 테스트가 끼운 줄 받는
+  /// 곳이 바뀐다 — 테스트는 이 정의 없이 돌린다.
+  static void enableForBuild({
+    bool flag = buildFlag,
+    bool web = kIsWeb,
+    TargetPlatform? platform,
+  }) {
+    if (flag &&
+        !web &&
+        (platform ?? defaultTargetPlatform) == TargetPlatform.android) {
       enable();
     }
   }
@@ -93,42 +106,53 @@ abstract final class LayoutLog {
   /// 켜져 있는지
   static bool get enabled => _sink != null;
 
-  /// 프레임 시각 보고를 받고 있는지 (테스트용) — 감시 구간이 끝나면 떼어 엔진이 시각을 모으지 않게 한다.
+  /// 프레임 시각 보고를 받고 있는지 (테스트용)
   @visibleForTesting
   static bool get watchingFrames => _timingsAdded;
 
   static void _write(String message) => _sink?.call('$prefix $message');
 
   /// Dart가 받은 시작 시 폴더블 판정 결과 ([FormFactor.queryFoldableDevice] — 조회 실패·제한 시간 초과도 폴더블 아님).
-  /// 창 배치 첫 값 접힘은 Android가 보낸 그대로 적는다 — `null`은 첫 값을 받지 못한 것(제한 시간 초과 등)이다.
-  static void foldableQuery(FoldableStartup startup) => _write(
-    '시작 판정 받음: 폴더블=${startup.foldable}, '
-    '창 배치 첫 값 접힘=${startup.fold ?? '모름'}',
-  );
+  /// 접힘은 Android가 보낸 창 배치 첫 값 그대로 적는다 — 표기는 Android 판정 로그와 같다(있음/없음/모름, 모름은 첫 값을
+  /// 받지 못한 것).
+  static void foldableQuery(FoldableStartup startup) {
+    if (!enabled) return;
+    final fold = switch (startup.fold) {
+      true => '있음',
+      false => '없음',
+      null => '모름',
+    };
+    _write('시작 판정 받음: 폴더블=${startup.foldable}, 접힘=$fold');
+  }
 
   /// 첫 화면을 띄우기 전 접힘 정보 기다림 결과 (`DeviceOrientationLock.waitForFoldFeature`) — [arrived]가 거짓이면 제한 시간 초과
   static void foldFeatureWait({
     required bool arrived,
     required Duration waited,
-  }) => _write(
-    '접힘 정보 기다림: ${arrived ? '도착' : '제한 시간 초과'} '
-    '(${(waited.inMicroseconds / 1000).toStringAsFixed(1)}ms)',
-  );
+  }) {
+    if (!enabled) return;
+    _write(
+      '접힘 정보 기다림: ${arrived ? '도착' : '제한 시간 초과'} '
+      '(${(waited.inMicroseconds / 1000).toStringAsFixed(1)}ms)',
+    );
+  }
 
   /// 첫 프레임 래스터가 끝났다는 것을 Dart가 알게 됐다 (`waitUntilFirstFrameRasterized`). 시각은 알게 된 때다 — 래스터가
   /// 끝난 실제 시각은 같은 프레임의 "프레임" 줄(래스터 끝)이 더 정확하다. 이때쯤 Android 시작 화면이 걷힌다.
-  static void firstFrame() => _write('첫 프레임 그림 @${_since(_clock())}');
+  static void firstFrame() {
+    if (!enabled) return;
+    _write('첫 프레임 그림 @${_since(_clock())}');
+  }
 
   /// 시작 판정이 놓친 폴더블을 화면 정보로 알아봤다 (`DeviceOrientationLock` "폴더블 기억").
   /// [reason]은 접힘 정보 보고·물리 화면 변경 중 무엇인지, [from]·[to]는 물리 화면 변경일 때 앞·뒤 물리 화면 크기(dp)다.
-  static void foldableRemembered(
-    String reason, {
-    Size? from,
-    Size? to,
-  }) => _write(
-    '폴더블 기억: $reason'
-    '${from != null && to != null ? ' (${_size(from)} → ${_size(to)})' : ''}',
-  );
+  static void foldableRemembered(String reason, {Size? from, Size? to}) {
+    if (!enabled) return;
+    _write(
+      '폴더블 기억: $reason'
+      '${from != null && to != null ? ' (${_size(from)} → ${_size(to)})' : ''}',
+    );
+  }
 
   /// 방향 요청 — [kind]·[display](물리 화면, dp)로 고른 [policy]를 보냈다. 실패하면 [error]가 있다.
   static void orientationRequest(
@@ -136,10 +160,13 @@ abstract final class LayoutLog {
     required DeviceKind kind,
     required Size display,
     Object? error,
-  }) => _write(
-    '방향 요청: ${policy.name} (기기 ${kind.name}, 화면 ${_size(display)})'
-    '${error == null ? '' : ' 실패: $error'}',
-  );
+  }) {
+    if (!enabled) return;
+    _write(
+      '방향 요청: ${policy.name} (기기 ${kind.name}, 화면 ${_size(display)})'
+      '${error == null ? '' : ' 실패: $error'}',
+    );
+  }
 
   /// 화면 배치 — 지난번과 달라졌을 때만 남긴다(빌드마다 불러도 된다).
   /// - [chosen]: 창 크기·접힘선으로 고른 배치 ([FormFactor.arrangementOf])
@@ -168,44 +195,36 @@ abstract final class LayoutLog {
   }
 
   static void _watchFrames(int now) {
-    // 이어서 바뀌면 구간을 늘린다(시작은 처음 바뀐 때 그대로)
-    _watchFrom ??= now - frameMarginMicros;
-    _watchUntil = now + frameWatchMicros;
+    _windows.add((now - frameMarginMicros, now + frameWatchMicros));
+    if (_windows.length > maxFrameWindows) _windows.removeAt(0);
     if (_timingsAdded) return;
     SchedulerBinding.instance.addTimingsCallback(onFrameTimings);
     _timingsAdded = true;
   }
 
   static void _stopWatchingFrames() {
-    _watchFrom = null;
-    _watchUntil = null;
+    _windows.clear();
     if (_timingsAdded) {
       SchedulerBinding.instance.removeTimingsCallback(onFrameTimings);
       _timingsAdded = false;
     }
   }
 
-  /// 엔진이 보낸 프레임 시각 — 감시 구간(배치가 바뀌기 [frameMarginMicros] 전 ~ 바뀐 뒤 [frameWatchMicros]) 안에서
-  /// 빌드를 시작한 프레임만 남긴다. 구간이 지난 프레임이 오면 보고를 뗀다(다음 배치 변화 때 다시 붙인다).
+  /// 엔진이 보낸 프레임 시각 — 어느 감시 구간(배치가 바뀌기 [frameMarginMicros] 전 ~ 바뀐 뒤 [frameWatchMicros])에든
+  /// 빌드를 시작한 프레임만 남긴다.
   @visibleForTesting
   static void onFrameTimings(List<FrameTiming> timings) {
-    final from = _watchFrom;
-    final until = _watchUntil;
-    if (!enabled || from == null || until == null) return;
-    var past = false;
+    if (!enabled || _windows.isEmpty) return;
     for (final t in timings) {
       final buildStart = t.timestampInMicroseconds(FramePhase.buildStart);
-      if (buildStart > until) {
-        past = true;
+      if (!_windows.any((w) => w.$1 <= buildStart && buildStart <= w.$2)) {
         continue;
       }
-      if (buildStart < from) continue;
       _write(
         '프레임 #${t.frameNumber}: 빌드 @${_since(buildStart)} ~ '
         '래스터 끝 @${_since(t.timestampInMicroseconds(FramePhase.rasterFinish))}',
       );
     }
-    if (past) _stopWatchingFrames();
   }
 
   /// [enable]부터 [micros]까지 (ms, 소수 첫째 자리)

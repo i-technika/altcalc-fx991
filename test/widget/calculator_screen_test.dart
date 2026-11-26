@@ -367,7 +367,7 @@ void main() {
     void mockFoldableDevice(
       WidgetTester tester, {
       required bool foldable,
-      bool fold = false,
+      bool? fold = false,
     }) {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         FormFactor.deviceChannel,
@@ -453,7 +453,7 @@ void main() {
         expect(loggedArrangements(), ['hingeSplit']);
         expect(
           printed,
-          contains('${LayoutLog.prefix} 시작 판정 받음: 폴더블=true, 창 배치 첫 값 접힘=true'),
+          contains('${LayoutLog.prefix} 시작 판정 받음: 폴더블=true, 접힘=있음'),
         );
         expect(
           printed.where(
@@ -486,6 +486,27 @@ void main() {
       await started;
       await tester.pump();
       expect(loggedArrangements(), ['hingeSplit']);
+    });
+
+    testWidgets('Android가 첫 값을 받지 못했으면(접힘 모름) 기다리지 않고 바로 시작한다 (#158)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      mockFoldableDevice(tester, foldable: true, fold: null);
+      recordPlatformCalls(tester);
+      final started = app.main();
+      // 가짜 시간을 흘리지 않아도 시작이 끝난다 — 기다림(타이머)이 없다
+      await tester.pump();
+      await started;
+      await tester.pump();
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(
+        printed,
+        contains('${LayoutLog.prefix} 시작 판정 받음: 폴더블=true, 접힘=모름'),
+      );
+      expect(printed.where((l) => l.contains('접힘 정보 기다림')), isEmpty);
+      expect(loggedArrangements(), ['stacked']);
     });
 
     testWidgets('접힘 정보가 이미 와 있으면 기다리지 않는다 (#158)', (tester) async {

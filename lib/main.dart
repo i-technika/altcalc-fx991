@@ -157,8 +157,8 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   /// 접힘 정보를 기다리는 최대 시간 (#158). Flutter 엔진도 같은 출처(Jetpack WindowManager)를 따로 구독해 화면 정보로
-  /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Android 판정이 첫 값을
-  /// 받은 뒤 0~15ms 안에 왔다(7번). 오지 않으면 그냥 시작한다 — 그때는 위아래 배치가 먼저 보일 수 있다.
+  /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Dart가 판정 답을 받은 뒤
+  /// 0~15ms 안에 왔다(7번). 오지 않으면 그냥 시작한다 — 그때는 위아래 배치가 먼저 보일 수 있다.
   ///
   /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간이다.
   static const Duration foldFeatureWait = Duration(milliseconds: 300);

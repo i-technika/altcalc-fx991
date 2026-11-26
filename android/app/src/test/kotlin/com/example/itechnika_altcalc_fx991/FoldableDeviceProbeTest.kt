@@ -24,6 +24,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowSensor
+import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
 /**
@@ -222,6 +223,20 @@ class FoldableDeviceProbeTest {
         assertTrue(logs().toString(), logs().any { it.startsWith("폴더블 판정 뒤 창 배치 첫 값 접힘=접힘") })
         idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
         assertEquals(0, layout.activeCount)
+    }
+
+    @Test
+    fun `제한 시간은 구독을 마친 때가 아니라 판정 시작부터 잰다 (#158 R2)`() {
+        // 구독에 100ms가 걸린다(첫 호출은 확장을 읽느라 느릴 수 있다)
+        layout.onSubscribe = { ShadowSystemClock.advanceBy(Duration.ofMillis(100)) }
+        probe().query { replies += it }
+
+        idleFor(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS - 100 - 1)
+        assertTrue(replies.isEmpty())
+        idleFor(1)
+
+        assertEquals(listOf(answer(false, null)), replies)
+        assertTrue(logs().toString(), logs().any { it.contains("제한 시간 초과 (${FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS}ms)") })
     }
 
     @Test
@@ -430,8 +445,12 @@ internal class FakeFoldingLayoutSource : FoldingLayoutSource {
     /** 있으면 구독할 때 이 오류를 던진다 */
     var failure: Throwable? = null
 
+    /** 있으면 구독하는 중에 부른다 (구독에 시간이 걸리는 것을 흉내 낸다) */
+    var onSubscribe: (() -> Unit)? = null
+
     override fun subscribe(onLayout: (hasFold: Boolean) -> Unit): () -> Unit {
         failure?.let { throw it }
+        onSubscribe?.invoke()
         subscribeCount++
         listeners += onLayout
         if (emitOnSubscribe) onLayout(true)

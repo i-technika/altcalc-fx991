@@ -40,7 +40,8 @@ import java.util.concurrent.Executor
  * 에뮬레이터, Android 16 — 5번 중 4번, 첫 프레임부터 약 90~140ms). 첫 값에 접히는 부분이 있었다는 것([Answer.fold])을
  * 함께 알리면 Dart가 그 정보가 화면에 올 때까지 시작 화면을 유지한다(Dart `DeviceOrientationLock.waitForFoldFeature`).
  * 그 대가로 폴더블은 첫 값이 올 때까지 시작 화면이 더 남는다 — 접은 커버 화면처럼 첫 값이 "없음"으로 끝나는 시작도
- * 마찬가지다(아래 기록: 펼친 화면 13~504ms, 커버 화면 21~257ms). 폴더블이 아닌 기기·ChromeOS는 예전에도 첫 값을 기다렸다.
+ * 마찬가지다(아래 기록: 고친 뒤 실측 펼친 화면 13~504ms(7번), 커버 화면 21~27ms(2번) — 커버 화면 첫 값은 고치기 전
+ * 기록에서 257ms까지 걸린 적이 있다). 폴더블이 아닌 기기·ChromeOS는 예전에도 첫 값을 기다렸다.
  *
  * ChromeOS(`FEATURE_PC`)에서는 1·2를 쓰지 않는다 — 컨버터블 노트북이 힌지 센서를 알릴 수 있고, 폴더블로 오판하면
  * 접힘선 없는 대화면 가로 창이 계속 위아래 배치가 된다(Dart `FormFactor.arrangementOf`).
@@ -50,8 +51,10 @@ import java.util.concurrent.Executor
  * - Pixel Fold(Android 16): 기능 선언·센서 모두 있음. 첫 값은 내부 화면 "접힘", 커버 화면 "없음"이었고 뒤에 바뀌지 않았다.
  *   - 고치기 전(1·2로 바로 답함): 첫 값이 구독 뒤 24~273ms(내부)·71~257ms(커버)에 왔고, 펼친 내부 화면 시작 5번 중
  *     4번은 첫 프레임이 위아래 배치였다가 90~140ms 뒤 접힘선 기준 배치로 바뀌었다.
- *   - 고친 뒤: 첫 값이 13~504ms(내부, 504ms는 제한 시간 직후 도착 — 제한 시간보다 먼저 처리돼 첫 값으로 답했다)·
- *     21~27ms(커버)에 왔고, 펼친 내부 화면 시작 7번 모두 첫 배치가 접힘선 기준 배치였다(Dart가 기다린 시간 0~15ms).
+ *   - 고친 뒤: 첫 값이 13~504ms(내부 7번)·21~27ms(커버 2번)에 왔고, 펼친 내부 화면 시작 7번 모두 첫 배치가 접힘선
+ *     기준 배치였다(Dart가 판정 답을 받은 뒤 접힘 정보를 기다린 시간 0~15ms). 504ms는 제한 시간을 넘긴 것이 아니다 — 그때는
+ *     제한 시간을 구독을 마친 뒤부터 쟀고(걸린 시간은 판정 시작부터), 구독에 몇 ms가 걸려 마감 전에 첫 값이 왔다.
+ *     지금은 제한 시간도 판정 시작부터 잰다([layoutTimeoutMillis]).
  * - 7.6" Fold-in·6.7" Flip 에뮬레이터(Android 14): 기능 선언 없이 **센서만** 있다 — 2가 없으면 놓친다.
  *
  * 한계:
@@ -153,7 +156,9 @@ internal class FoldableDeviceProbe(
         fun start(unsubscribe: () -> Unit) {
             this.unsubscribe = unsubscribe
             queries += this
-            handler.postDelayed(timeout, layoutTimeoutMillis)
+            // 제한 시간은 판정 시작부터 잰다 — 로그의 걸린 시간과 기준이 같고, 구독(첫 호출은 확장을 읽느라 수 ms 이상)에
+            // 걸린 시간만큼 마감이 늦어지지 않는다 (#158 R2)
+            handler.postDelayed(timeout, (layoutTimeoutMillis - elapsed).coerceAtLeast(0))
         }
 
         fun failSubscribe(error: Throwable) {

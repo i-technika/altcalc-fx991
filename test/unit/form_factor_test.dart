@@ -210,6 +210,17 @@ void main() {
             fold: null,
           ));
           expect(methods, List.filled(4, FormFactor.foldableDeviceMethod));
+          // 키가 없거나 bool이 아닌 값은 폴더블 아님·접힘 모름으로 읽는다
+          reply = <String, Object?>{};
+          expect(await FormFactor.queryFoldableDevice(), (
+            foldable: false,
+            fold: null,
+          ));
+          reply = {FormFactor.foldableKey: 'yes', FormFactor.foldKey: 1};
+          expect(await FormFactor.queryFoldableDevice(), (
+            foldable: false,
+            fold: null,
+          ));
         },
       );
 
