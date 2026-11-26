@@ -588,7 +588,11 @@ class LcdStatusBar extends StatelessWidget {
 /// 풀이: 슬롯 i의 왼쪽에서 앞 슬롯들의 폭·간격 합 o_i를 빼면(y_i = x_i − o_i) 간격 제약이 y의 단조 증가로 바뀐다.
 /// 그래서 y의 목표값에 단조 회귀(PAVA — 거꾸로 된 이웃 무리를 평균으로 합친다)를 하고, 경계 [0, U]로
 /// 자른다(U = [barWidth] − 마지막 슬롯 폭 − o_마지막). 단조 회귀를 상수 구간으로 자른 값이 구간 제약이 있는
-/// 단조 회귀의 해다. U < 0이면 폭 합과 최소 간격 합이 [barWidth]보다 커서 들어가지 않는다.
+/// 단조 회귀의 해다. U < 0이면 폭 합과 최소 간격 합이 [barWidth]보다 커서 들어가지 않는다. 다만 부동소수
+/// 오차를 위해 U가 −[barWidth]×1e-6 이상이면 꽉 붙인 배치를 돌려준다(오른쪽 끝이 그만큼 넘을 수 있다).
+///
+/// [centers]는 정렬되지 않아도 되지만 유한해야 하고, [widths]·[minGap]은 0 이상의 유한값이어야 한다.
+/// NaN이 섞이면 평균 비교가 거짓이 되어 순서가 뒤집힌 배치가 나오므로 assert로 막는다.
 @visibleForTesting
 List<double>? lcdStatusSlotLefts({
   required List<double> centers,
@@ -597,6 +601,10 @@ List<double>? lcdStatusSlotLefts({
   required double minGap,
 }) {
   assert(centers.length == widths.length);
+  assert(centers.every((c) => c.isFinite), 'centers는 유한해야 한다');
+  assert(widths.every((w) => w.isFinite && w >= 0), 'widths는 0 이상의 유한값이어야 한다');
+  assert(minGap.isFinite && minGap >= 0, 'minGap은 0 이상의 유한값이어야 한다');
+  assert(barWidth.isFinite, 'barWidth는 유한해야 한다');
   final n = widths.length;
   if (n == 0) return const [];
   // o_i: 앞 슬롯들의 폭 + 최소 간격 합

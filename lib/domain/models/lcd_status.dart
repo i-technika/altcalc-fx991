@@ -68,7 +68,7 @@ enum ComplexResultIndicator {
 /// - 좌→우 순서와 가로 위치(#58): ClassWiz LCD 세그먼트 좌표와 실물 사진을 대조해 확정했다.
 ///   - 좌표: CasioEmu(user202729/CasioEmu, `models/fx991cnx/model.lua`의 `rsd_*` 스프라이트, fx-991EX와 같은
 ///     ClassWiz 하드웨어)를 썼다. 사각형은 LCD 왼쪽(x=47)부터 192도트를 빈틈없이 덮는다. `interface.png`
-///     y=603~610에서 회색값 < 200인 열을 잉크 범위 [lo, hi)로 읽고, 그 가운데를 [dotCenter]로 삼았다
+///     y=603~610을 흰 배경에 알파 합성한 회색값 < 200인 열을 잉크 범위 [lo, hi)로 읽고, 그 가운데를 [dotCenter]로 삼았다
 ///     (표는 `test/unit/lcd_status_test.dart`).
 ///   - 대조: Wikimedia Commons "Casio fx-991EX Scientific Calculator.jpg"를 썼다. 사진 x를 도트로 바꿀 때는
 ///     켜진 D와 ☀의 가운데를 이 좌표에 맞췄다. 그렇게 잰 나머지 켜진 √▭✎·▲의 위치가 1도트 안쪽으로 맞았다.

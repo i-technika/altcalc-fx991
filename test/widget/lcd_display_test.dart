@@ -194,7 +194,8 @@ void main() {
     });
 
     testWidgets('폭이 넉넉하면 슬롯 가운데가 실물 세그먼트 위치에 온다 (#58)', (tester) async {
-      await _pump(tester, const LcdDisplay(), width: 1000);
+      // 테스트 화면(800×600) 안에 들어가는 폭이어야 실제로 그 폭에서 돈다.
+      await _pump(tester, const LcdDisplay(), width: 760);
       final bar = tester.getRect(find.byType(LcdStatusBar));
       for (final slot in LcdIndicatorSlot.values) {
         expect(
@@ -206,16 +207,19 @@ void main() {
     });
 
     // 실제 화면처럼 LCD 크기에서 글자 크기를 산출하고(fitFontsToSize), 큰 글자 배율까지 본다.
-    // 480은 화면이 주는 최대 LCD 폭이다.
+    // 크기는 화면이 실제로 만드는 LCD(높이 ≤ 폭 / CalcTheme.screenLcdMinAspectRatio)다.
+    // 480은 화면이 주는 최대 LCD 폭(CalcTheme.screenLcdMaxWidth)이다. 이 상한이 풀리거나(#141~#144)
+    // 슬롯 폭(columns)이 바뀌면(#160) 배율 1.3 허용치를 다시 잰다 — LCD가 넓을수록 어긋남이 조금 커진다
+    // (실측: 폭 800에서 3.8, 2000에서 4.0도트).
     // 허용치(실물 위치에서 벗어나도 되는 도트 수, 192도트 기준)는 배율마다 둔다.
     // - 배율 1.0: 실측 최대 0.4도트 → 1도트
-    // - 배율 1.3: 실측 최대 3.8도트(480×300) → 4.5도트. 글자가 실물 세그먼트보다 넓어 붙어 있는 D·R·G,
+    // - 배율 1.3: 실측 최대 3.6도트(480×274) → 4.5도트. 글자가 실물 세그먼트보다 넓어 붙어 있는 D·R·G,
     //   SCI·E·i·∠가 서로 밀어낸다. 슬롯 최소 간격이 크면 줄 전체를 붙여 축소하는 쪽으로 넘어가 30도트 안팎까지 벌어진다.
     for (final (w, h) in [
-      (200.0, 130.0),
-      (300.0, 200.0),
-      (360.0, 200.0),
-      (480.0, 300.0),
+      (200.0, 114.0),
+      (300.0, 171.0),
+      (360.0, 205.0),
+      (480.0, 274.0),
     ]) {
       for (final (scale, maxDots) in [(1.0, 1.0), (1.3, 4.5)]) {
         testWidgets(
@@ -1101,15 +1105,20 @@ void main() {
       expect(lefts[1], 78); // 90 - 2 - 10
     });
 
-    test('무작위 입력에서 제약을 지키고, 목표와의 차이 제곱합이 앞→뒤 탐욕 밀기보다 크지 않다', () {
+    test('무작위 입력(정렬 안 된 중심 포함)에서 결과가 최적해다 — KKT 조건 확인', () {
+      // 목적 Σ(x_i − t_i)², 제약: x_0 ≥ 0, x_{i+1} − x_i ≥ w_i + g, x_{n−1} ≤ W − w_{n−1}. 볼록 이차 계획이라
+      // KKT 조건을 만족하는 실현 가능한 점이 곧 최적해다. 기울기 g_i = 2(x_i − t_i)의 앞쪽 합을 P_i라 하면
+      // 간격 제약 승수는 λ_i = μ_L − P_i, 오른쪽 경계 승수는 μ_R = μ_L − P_{n−1}이다(μ_L: 왼쪽 경계 승수).
+      // 모든 승수가 0 이상이고, 느슨한 제약의 승수는 0이어야 한다.
       final random = math.Random(58);
-      for (var trial = 0; trial < 500; trial++) {
+      const eps = 1e-6;
+      for (var trial = 0; trial < 2000; trial++) {
         final n = 1 + random.nextInt(16);
-        final centers = [for (var i = 0; i < n; i++) random.nextDouble()]
-          ..sort();
-        final widths = [
-          for (var i = 0; i < n; i++) 1 + random.nextDouble() * 20,
+        final centers = [
+          for (var i = 0; i < n; i++) random.nextDouble() * 1.4 - 0.2,
         ];
+        if (trial.isEven) centers.sort();
+        final widths = [for (var i = 0; i < n; i++) random.nextDouble() * 20];
         final minGap = random.nextDouble() * 3;
         final barWidth = 50 + random.nextDouble() * 400;
         final lefts = lcdStatusSlotLefts(
@@ -1119,47 +1128,58 @@ void main() {
           minGap: minGap,
         );
         final need = widths.fold(0.0, (a, b) => a + b) + minGap * (n - 1);
+        final why = 'trial $trial';
         if (lefts == null) {
-          expect(need, greaterThan(barWidth), reason: 'trial $trial');
+          expect(need, greaterThan(barWidth), reason: why);
           continue;
         }
-        expect(lefts.first, greaterThanOrEqualTo(0), reason: 'trial $trial');
+        // 실현 가능성
+        expect(lefts.first, greaterThanOrEqualTo(-eps), reason: why);
         expect(
           lefts.last + widths.last,
-          lessThanOrEqualTo(barWidth + 1e-6),
-          reason: 'trial $trial',
+          lessThanOrEqualTo(barWidth + eps),
+          reason: why,
         );
-        for (var i = 1; i < n; i++) {
-          expect(
-            lefts[i] - (lefts[i - 1] + widths[i - 1]),
-            greaterThanOrEqualTo(minGap - 1e-6),
-            reason: 'trial $trial',
-          );
+        final gapTight = <bool>[];
+        for (var i = 0; i + 1 < n; i++) {
+          final slack = lefts[i + 1] - lefts[i] - widths[i] - minGap;
+          expect(slack, greaterThanOrEqualTo(-eps), reason: why);
+          gapTight.add(slack < 1e-6);
         }
-        // 비교 대상: 앞→뒤로 밀고 오른쪽 끝에서 되미는 단순 배치(R1 이전 구현)
-        final targets = [
-          for (var i = 0; i < n; i++) centers[i] * barWidth - widths[i] / 2,
-        ];
-        final greedy = [...targets];
-        greedy[0] = math.max(greedy[0], 0);
-        for (var i = 1; i < n; i++) {
-          greedy[i] = math.max(
-            greedy[i],
-            greedy[i - 1] + widths[i - 1] + minGap,
-          );
+        final leftTight = lefts.first < 1e-6;
+        final rightTight = barWidth - widths.last - lefts.last < 1e-6;
+        // 앞쪽 합 P_i
+        final prefix = <double>[];
+        var sum = 0.0;
+        for (var i = 0; i < n; i++) {
+          sum += 2 * (lefts[i] - (centers[i] * barWidth - widths[i] / 2));
+          prefix.add(sum);
         }
-        greedy[n - 1] = math.min(greedy[n - 1], barWidth - widths[n - 1]);
-        for (var i = n - 2; i >= 0; i--) {
-          greedy[i] = math.min(greedy[i], greedy[i + 1] - minGap - widths[i]);
+        // μ_L 고르기: 느슨한 간격 제약이 있으면 그 P_i로 정해지고, 없으면 조건을 만족하는 가장 작은 값
+        double muL;
+        final slackIndex = gapTight.indexWhere((t) => !t);
+        if (slackIndex >= 0) {
+          muL = prefix[slackIndex];
+        } else if (!leftTight) {
+          muL = 0;
+        } else if (!rightTight) {
+          muL = prefix[n - 1];
+        } else {
+          muL = [0.0, ...prefix].reduce(math.max);
         }
-        double cost(List<double> xs) =>
-            [for (var i = 0; i < n; i++) math.pow(xs[i] - targets[i], 2)]
-                .fold(0.0, (a, b) => a + b);
-        expect(
-          cost(lefts),
-          lessThanOrEqualTo(cost(greedy) + 1e-6),
-          reason: 'trial $trial',
-        );
+        final tol = 1e-5 * math.max(1, barWidth);
+        expect(muL, greaterThanOrEqualTo(-tol), reason: '$why μ_L');
+        if (!leftTight) expect(muL.abs(), lessThan(tol), reason: '$why μ_L');
+        for (var i = 0; i + 1 < n; i++) {
+          final lambda = muL - prefix[i];
+          expect(lambda, greaterThanOrEqualTo(-tol), reason: '$why λ_$i');
+          if (!gapTight[i]) {
+            expect(lambda.abs(), lessThan(tol), reason: '$why λ_$i');
+          }
+        }
+        final muR = muL - prefix[n - 1];
+        expect(muR, greaterThanOrEqualTo(-tol), reason: '$why μ_R');
+        if (!rightTight) expect(muR.abs(), lessThan(tol), reason: '$why μ_R');
       }
     });
 
