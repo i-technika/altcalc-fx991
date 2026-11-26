@@ -1678,10 +1678,10 @@ void _shapeAndLegendTests() {
       final centered = labelOf(tester);
 
       await tester.pumpWidget(button(const EdgeInsets.only(bottom: 30)));
-      await tester.pumpAndSettle(); // 키캡 여백 변화는 AnimatedContainer가 애니메이션한다
       expect(tester.getRect(_keycap(CalcKeyId.cursorUp)), keycap);
       final shifted = labelOf(tester);
-      // 아래 30dp를 빼면 라벨 중심이 15dp 올라간다. 크기는 그대로다(남은 자리에 들어간다).
+      // 아래 30dp를 빼면 라벨 중심이 다음 프레임 없이 바로 15dp 올라간다(키캡 여백과 달리 애니메이션하지 않는다).
+      // 크기는 그대로다(남은 자리에 들어간다).
       expect(shifted.size, centered.size);
       expect(shifted.center.dx, moreOrLessEquals(centered.center.dx));
       expect(shifted.center.dy, moreOrLessEquals(centered.center.dy - 15));

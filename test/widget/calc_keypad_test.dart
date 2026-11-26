@@ -1064,7 +1064,8 @@ void _cursorPadShapeTests() {
       // 대각선 (0.68, 0.68): 타원이면 안(0.92 < 1)이지만 둥근 마름모는 밖이다.
       expect(g.sectorAt(at(g, 0.68, 0.68)), isNull);
       // 대각선 (0.55, 0.55): 뾰족한 마름모면 밖(|u|+|v| = 1.1)이지만 변이 부풀어 안이다.
-      expect(g.sectorAt(at(g, 0.55, 0.55)), isNotNull);
+      // (k < 1이라 이 점은 ◀·▶ 쪽이다 — |u| = 0.55 > k·|v|)
+      expect(g.sectorAt(at(g, 0.55, 0.55)), CursorPadSector.right);
     });
 
     test('외곽 꼭짓점은 뾰족하지 않고 둥글다 (꼭짓점에서 2차로 물러난다)', () {
@@ -1440,7 +1441,7 @@ void _cursorPadShapeTests() {
     for (final area in _areas) {
       for (final scale in [1.0, 1.3]) {
         testWidgets(
-          '${area.width}×${area.height}, 글자 배율 $scale: 방향 라벨은 통째로 자기 구역 안, 허브 밖에 그려진다',
+          '${area.width}×${area.height}, 글자 배율 $scale: 방향 라벨은 줄지 않고 통째로 자기 구역 안, 허브 밖에 그려진다',
           (tester) async {
             await tester.pumpWidget(
               _host(const CalcKeypad(), size: area, textScale: scale),
@@ -1480,6 +1481,16 @@ void _cursorPadShapeTests() {
                   g.hubRadius + CalcTheme.cursorPadDividerWidth / 2,
                 ),
                 reason: '${sector.name} 라벨 $label이 허브에 덮인다',
+              );
+              // 허브만큼 뺀 라벨 자리(labelInsets)에서도 라벨이 줄지 않는다 (FittedBox 축소 없음).
+              final text = find.descendant(
+                of: _keycap(CursorPad.defOf(sector).id),
+                matching: find.byType(Text),
+              );
+              expect(
+                tester.getRect(text).height,
+                moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+                reason: '${sector.name} 라벨이 줄었다',
               );
             }
           },

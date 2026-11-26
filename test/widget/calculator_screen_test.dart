@@ -477,7 +477,8 @@ void main() {
     // [CalcTheme] "상단 띠" 절):
     // - 인셋 0: 각인 5.03 → 4.90dp
     // - 상태바 20dp(iPhone SE 1세대): 키 터치 28.70 → 27.96dp로 기본 하한 28dp **미만**, 커서 패드 ▲·▼ 내접원
-    //   27.0dp(홈 기울기 실측 #65 전 27.65dp — 아래 커서 패드 검사의 95% 규칙), 각인 4.82 → 4.70dp(각인은 이 변경 전에도 5.0dp 미만이었다 — 이 크기는 #41 전까지 인셋 0으로만
+    //   27.0dp(홈 기울기 실측 #65 전 27.65dp — 아래 커서 패드 검사의 95% 규칙),
+    //   각인 4.82 → 4.70dp(각인은 이 변경 전에도 5.0dp 미만이었다 — 이 크기는 #41 전까지 인셋 0으로만
     //   검사했다)
     const floor = CalcTheme.keyTouchHeightFloor;
     for (final (size, padding, minTouchHeight, minLegendFont) in const [

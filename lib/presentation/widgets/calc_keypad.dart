@@ -854,22 +854,22 @@ class CursorPadGeometry {
     ];
   }
 
-  /// 시맨틱 영역을 나누는 기준 — ◀·▶ 영역 반높이를 외곽 반높이의 이 비율(허브보다 작으면 허브 반지름)로 둔다.
-  static const double _semanticSplitRatio = 0.3;
-
   /// [sector]의 시맨틱(스크린리더 터치 탐색) 영역 (패드 로컬 좌표).
   ///
   /// 네 영역은 서로 겹치지 않고, 각 영역은 자기 구역 또는 외곽 밖에만 걸친다(허브는 덮지 않는다).
   /// 화면 좌표에서 홈은 |dx| = m·|dy| (m = k·[radiusX]/[radiusY])이므로, ◀·▶ 영역을 |dx| ≥ X, |dy| ≤ Y,
   /// ▲·▼ 영역을 |dx| ≤ X, |dy| ≥ Y로 두고 X ≥ m·Y를 지키면 각 영역이 홈을 넘지 않는다.
+  /// Y는 허브 반지름에서 시작한다(◀·▶ 영역 반높이 = 허브 반지름, X가 허브보다 작으면 X = 허브 반지름).
+  /// 실측 허브(#65)가 커서 ▲·▼ 영역은 낮고 넓다. 320×568·상태바 20dp에서 ▲·▼ 43.1×15.7dp,
+  /// ◀·▶ 27.3×29.5dp(실측 전 ▲·▼ 43.1×21.6, ◀·▶ 27.3×17.7)이다. 허브 고리는 누르면 입력되지만
+  /// 시맨틱 영역에는 넣지 않는다 — 영역이 그려진 허브를 덮지 않게 한 #43 규칙을 지킨다.
   ///
   /// [bounds](셀)를 주면 바깥쪽 변을 셀 변까지 넓힌다 — 터치 영역(#64)과 같게, 셀 여백을 손가락으로
   /// 훑어도 그쪽 방향이 읽힌다. 넓힌 부분도 그 방향의 터치 영역([hitSectorAt]) 안이다.
   Rect semanticRect(CursorPadSector sector, [Rect? bounds]) {
     if (_isEmpty) return Rect.zero;
     final m = _k * radiusX / radiusY;
-    final y0 = math.max(hubRadius, _semanticSplitRatio * radiusY);
-    final x = math.max(m * y0, hubRadius);
+    final x = math.max(m * hubRadius, hubRadius);
     final y = x / m;
     final c = center;
     return switch (sector) {

@@ -672,26 +672,29 @@ class _Keycap extends StatelessWidget {
                   ),
                 ],
         ),
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding)
-            .add(labelInsets),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         alignment: Alignment.center,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
-          child: TweenAnimationBuilder<Color?>(
-            tween: ColorTween(end: labelColor),
-            duration: duration,
-            builder: (context, color, _) => Text(
-              keyDef.mainLabel,
-              maxLines: 1,
-              softWrap: false,
-              textScaler: textScaler,
-              style: CalcTheme.keyMainLabelStyle.copyWith(
-                fontSize: fontSize,
-                color: color,
-              ),
-              strutStyle: _labelStrut(
-                CalcTheme.keyMainLabelStyle.copyWith(fontSize: fontSize),
+        // 라벨 여백은 애니메이션하지 않는다 — 창 크기가 바뀔 때 라벨이 즉시 그린 허브 등과 함께 움직이게 한다.
+        child: Padding(
+          padding: labelInsets,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: labelColor),
+              duration: duration,
+              builder: (context, color, _) => Text(
+                keyDef.mainLabel,
+                maxLines: 1,
+                softWrap: false,
+                textScaler: textScaler,
+                style: CalcTheme.keyMainLabelStyle.copyWith(
+                  fontSize: fontSize,
+                  color: color,
+                ),
+                strutStyle: _labelStrut(
+                  CalcTheme.keyMainLabelStyle.copyWith(fontSize: fontSize),
+                ),
               ),
             ),
           ),
