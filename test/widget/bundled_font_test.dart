@@ -294,7 +294,7 @@ void main() {
               );
           expect(
             tester.getSize(findLegend(integral)).height,
-            moreOrLessEquals(expected, epsilon: 1.0),
+            moreOrLessEquals(expected, epsilon: 0.1),
           );
         },
       );

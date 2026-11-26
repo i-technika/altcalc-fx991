@@ -17,6 +17,9 @@ import 'package:meta/meta.dart';
 // 겹치므로, M2에서 같은 배치 규칙(첨자 크기·분수 막대 높이 등)을 공유할지 정한다.
 
 /// 키캡 각인(메인·SHIFT·ALPHA 한 층)의 구조.
+///
+/// 값 객체다 — 구조가 같으면 같다(`==`·`hashCode`). 크기 측정 캐시(`KeyLegendView.emSize`)가 이 동등성으로
+/// 항목을 찾으므로, 상수가 아닌 각인을 만들어도 캐시가 늘어나지 않는다.
 @immutable
 sealed class KeyLegend {
   const KeyLegend();
@@ -53,6 +56,12 @@ final class LegendText extends KeyLegend {
   Iterable<LegendText> get texts => [this];
 
   @override
+  bool operator ==(Object other) => other is LegendText && other.text == text;
+
+  @override
+  int get hashCode => Object.hash(LegendText, text);
+
+  @override
   String toString() => 'LegendText($text)';
 }
 
@@ -83,6 +92,16 @@ final class LegendRow extends KeyLegend {
 
   @override
   Iterable<LegendText> get texts => children.expand((c) => c.texts);
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegendRow &&
+      other.children.length == children.length &&
+      Iterable<int>.generate(children.length)
+          .every((i) => other.children[i] == children[i]);
+
+  @override
+  int get hashCode => Object.hash(LegendRow, Object.hashAll(children));
 
   @override
   String toString() => 'LegendRow($children)';
@@ -156,6 +175,16 @@ final class LegendScript extends KeyLegend {
   ];
 
   @override
+  bool operator ==(Object other) =>
+      other is LegendScript &&
+      other.base == base &&
+      other.superscript == superscript &&
+      other.subscript == subscript;
+
+  @override
+  int get hashCode => Object.hash(LegendScript, base, superscript, subscript);
+
+  @override
   String toString() =>
       'LegendScript($base, sup: $superscript, sub: $subscript)';
 }
@@ -175,6 +204,15 @@ final class LegendFraction extends KeyLegend {
 
   @override
   Iterable<LegendText> get texts => [...numerator.texts, ...denominator.texts];
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegendFraction &&
+      other.numerator == numerator &&
+      other.denominator == denominator;
+
+  @override
+  int get hashCode => Object.hash(LegendFraction, numerator, denominator);
 
   @override
   String toString() => 'LegendFraction($numerator, $denominator)';
@@ -203,6 +241,15 @@ final class LegendRadical extends KeyLegend {
 
   @override
   Iterable<LegendText> get texts => [...?index?.texts, ...radicand.texts];
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegendRadical &&
+      other.radicand == radicand &&
+      other.index == index;
+
+  @override
+  int get hashCode => Object.hash(LegendRadical, radicand, index);
 
   @override
   String toString() => 'LegendRadical($radicand, index: $index)';

@@ -815,6 +815,46 @@ void main() {
       );
     });
 
+    test('2차원 각인 배치 상수 (#155)', () {
+      // 크기 비율은 바탕 글자보다 작다(첨자·분자·분모·근호 지수). 각인 전체가 분수 하나일 때만 더 크게 그린다.
+      for (final scale in [
+        CalcTheme.keyLegendScriptScale,
+        CalcTheme.keyLegendFractionScale,
+        CalcTheme.keyLegendRadicalIndexScale,
+      ]) {
+        expect(scale, inExclusiveRange(0.4, 1));
+      }
+      expect(
+        CalcTheme.keyLegendFractionScale,
+        lessThan(CalcTheme.keyLegendDisplayFractionScale),
+      );
+      expect(CalcTheme.keyLegendDisplayFractionScale, lessThanOrEqualTo(1));
+      // 위치·두께·간격 비율은 글자 크기보다 작은 양수다.
+      for (final ratio in [
+        CalcTheme.keyLegendSuperscriptRaise,
+        CalcTheme.keyLegendSubscriptDrop,
+        CalcTheme.keyLegendScriptGap,
+        CalcTheme.keyLegendFractionAxis,
+        CalcTheme.keyLegendFractionBarThickness,
+        CalcTheme.keyLegendFractionGap,
+        CalcTheme.keyLegendFractionOverhang,
+        CalcTheme.keyLegendRadicalStroke,
+        CalcTheme.keyLegendRadicalGap,
+        CalcTheme.keyLegendRadicalSignWidth,
+      ]) {
+        expect(ratio, inExclusiveRange(0, 1));
+      }
+      // 분수 가로줄 아래 가장자리와 간격을 빼도 기준선 위다 — 분모가 바탕 글자보다 지나치게 내려가지 않는다.
+      expect(
+        CalcTheme.keyLegendFractionAxis -
+            CalcTheme.keyLegendFractionBarThickness / 2 -
+            CalcTheme.keyLegendFractionGap,
+        greaterThan(0),
+      );
+      // 선은 아무리 작은 각인에서도 보인다(1dp 미만의 얇은 선은 화면에 따라 흐려진다 — 1dp를 넘지 않게 둔다).
+      expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
+    });
+
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));

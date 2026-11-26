@@ -127,6 +127,22 @@ void main() {
       expect(missing, isEmpty);
     });
 
+    test('M1 LCD 임시 표시가 그리는 한 줄 표기(plainText) 글자도 모두 번들 글꼴에 있다', () {
+      // 마지막 입력 기능의 각인을 LCD에 한 줄 표기로 그린다(`_LcdPanel`, M2에서 수식 렌더링으로 대체).
+      // 키캡에서는 그림으로 바꾼 `√`·`∛`·위첨자도 여기서는 글자로 그린다.
+      final missing = <String>{};
+      for (final key in allKeys) {
+        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+          for (final code in (label ?? '').runes) {
+            if (!mono.contains(code) && !fallback.contains(code)) {
+              missing.add('${key.id.name}: ${_describe(code)}');
+            }
+          }
+        }
+      }
+      expect(missing, isEmpty);
+    });
+
     test('대체 글꼴이 필요한 각인 글자는 ∑·∫뿐이다', () {
       // 대체 글꼴(Noto Sans Math)은 고정폭이 아니고 Regular뿐이다. 대체 글꼴로 그리는 글자가 늘면
       // 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 근호를 그림으로 그려 쓰지 않는다.)

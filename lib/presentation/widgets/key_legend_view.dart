@@ -14,9 +14,12 @@ import '../../core/theme/calc_theme.dart';
 ///
 /// ## 크기·기준선
 /// - 크기는 [textScaler]를 반영한 글자 크기로 배치한 각인의 폭과, **한 줄 상자**(같은 글자 크기의
-///   strut 한 줄)와 모든 잉크(첨자·분수 포함)를 합친 높이다. 글자만 있는 각인은 같은 스타일의 `Text`
-///   (strut 고정)와 크기·기준선이 같다. 키 버튼은 둘을 같은 방식(`FittedBox`)으로 줄인다.
-/// - 기준선은 한 줄 상자의 기준선이다 — 분수가 아래로 더 나가면 그만큼 상자가 아래로 커진다.
+///   strut 한 줄)와 모든 잉크(첨자·분수·근호 선 포함)를 합친 높이다. 그래서 잉크가 상자 밖에 그려지지 않는다.
+///   키 버튼은 `Text`와 같은 방식(`FittedBox`)으로 줄인다.
+/// - 글자만 있는 각인([LegendText])은 한 줄 상자만 쓴다 — 같은 스타일의 `Text`(strut 고정)와 크기·기준선이 같다
+///   (`g` 같은 내림 글자도 `Text`처럼 상자 밖으로 조금 나가 그려진다).
+/// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
+///   각인 띠에서는 기준선이 그만큼(가장 많은 `d/dx◼`도 0.08em 미만, 테스트로 고정) 이웃 각인보다 올라간다.
 ///
 /// [KeypadMetrics] 같은 측정 쪽은 그리지 않고 [emSize]로 크기를 잰다.
 class KeyLegendView extends LeafRenderObjectWidget {
@@ -71,26 +74,35 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// 측정 기준 글자 크기 — 크기는 글자 크기에 비례한다고 보고 1dp당 크기(em 크기)를 구한다.
   static const double _probeFontSize = 100;
 
-  /// em 크기 캐시. 화면 크기와 무관하므로 각인·스타일별로 한 번만 잰다. 시스템 글꼴이 바뀌면 비운다.
-  static final Map<(KeyLegend, TextStyle), Size> _emSizeCache = {};
+  /// em 치수 캐시. 화면 크기와 무관하므로 각인·스타일별로 한 번만 잰다. 시스템 글꼴이 바뀌면 비운다.
+  /// 키는 글자 크기·색을 지운 스타일과 각인(구조 동등성)이다 — 크기·색만 다른 스타일로 재도 늘어나지 않는다.
+  static final Map<(KeyLegend, TextStyle), KeyLegendEmMetrics> _emCache = {};
   static bool _listeningSystemFonts = false;
 
   /// [legend]를 [style]로 그렸을 때의 크기를 글자 크기 1dp당 값(em)으로 잰다 (배율 반영 전).
   ///
   /// 키패드 통일 글자 크기 계산(`KeypadMetrics`)과 각인 띠 폭 배분이 쓴다. [style]의 `fontSize`·`color`는 무시한다.
-  static Size emSize(KeyLegend legend, TextStyle style) {
+  static Size emSize(KeyLegend legend, TextStyle style) =>
+      emMetrics(legend, style).size;
+
+  /// [emSize]와 함께, 위에서 기준선까지 거리(em)를 잰다.
+  static KeyLegendEmMetrics emMetrics(KeyLegend legend, TextStyle style) {
     if (!_listeningSystemFonts) {
       _listeningSystemFonts = true;
-      PaintingBinding.instance.systemFonts.addListener(_emSizeCache.clear);
+      PaintingBinding.instance.systemFonts.addListener(_emCache.clear);
     }
-    return _emSizeCache.putIfAbsent((legend, style), () {
-      final layout = _LegendLayout.build(
-        legend,
-        style.copyWith(fontSize: _probeFontSize),
+    final key = style.copyWith(
+      fontSize: _probeFontSize,
+      color: const Color(0xFF000000),
+    );
+    return _emCache.putIfAbsent((legend, key), () {
+      final layout = _LegendLayout.build(legend, key);
+      final metrics = (
+        size: layout.size / _probeFontSize,
+        baseline: layout.baseline / _probeFontSize,
       );
-      final size = layout.size / _probeFontSize;
       layout.dispose();
-      return size;
+      return metrics;
     });
   }
 
@@ -113,8 +125,14 @@ class KeyLegendView extends LeafRenderObjectWidget {
   }
 }
 
+/// 각인의 em 치수: 크기와 위에서 기준선까지 거리 (글자 크기 1dp당 값)
+typedef KeyLegendEmMetrics = ({Size size, double baseline});
+
 /// [KeyLegendView]의 렌더 객체.
-class RenderKeyLegend extends RenderBox {
+///
+/// 시스템 글꼴이 바뀌면(글꼴 지연 로드 등) `Text`(`RenderParagraph`)처럼 다시 배치한다.
+class RenderKeyLegend extends RenderBox
+    with RelayoutWhenSystemFontsChangeMixin {
   /// 그릴 각인 [_legend], 바탕 글자 스타일 [_style], 글자 배율 [_textScaler]로 만든다.
   RenderKeyLegend(this._legend, this._style, this._textScaler);
 
@@ -125,41 +143,57 @@ class RenderKeyLegend extends RenderBox {
 
   KeyLegend get legend => _legend;
   set legend(KeyLegend value) {
-    if (identical(value, _legend)) return;
+    if (value == _legend) return;
     _legend = value;
-    _invalidate(layout: true);
+    _invalidate();
   }
 
   TextStyle get style => _style;
   set style(TextStyle value) {
     if (value == _style) return;
-    // 색만 바뀌면(눌림 애니메이션) 크기는 그대로다 — 다시 그리기만 한다.
     final layoutChanged = value.copyWith(color: _style.color) != _style;
     _style = value;
-    _invalidate(layout: layoutChanged);
+    if (layoutChanged) {
+      _invalidate();
+    } else {
+      // 색만 바뀌면(눌림 애니메이션) 배치는 그대로 두고 글자·선 색만 바꿔 다시 그린다.
+      _layout?.recolor(value.color);
+      markNeedsPaint();
+    }
   }
 
   TextScaler get textScaler => _textScaler;
   set textScaler(TextScaler value) {
     if (value == _textScaler) return;
     _textScaler = value;
-    _invalidate(layout: true);
+    _invalidate();
   }
 
-  void _invalidate({required bool layout}) {
+  void _invalidate() {
     _layout?.dispose();
     _layout = null;
-    if (layout) {
-      markNeedsLayout();
-    } else {
-      markNeedsPaint();
-    }
+    markNeedsLayout();
   }
 
-  _LegendLayout get _resolved => _layout ??= _LegendLayout.build(
-    _legend,
-    _style.copyWith(fontSize: _textScaler.scale(_style.fontSize ?? 14)),
-  );
+  @override
+  void systemFontsDidChange() {
+    _layout?.dispose();
+    _layout = null;
+    super.systemFontsDidChange();
+  }
+
+  /// 각인을 배치(글자 조각 `TextPainter` 생성·배치)한 횟수 — 색만 바뀔 때 다시 배치하지 않는지 테스트가 본다.
+  @visibleForTesting
+  int get debugLayoutBuildCount => _layoutBuildCount;
+  int _layoutBuildCount = 0;
+
+  _LegendLayout get _resolved => _layout ??= () {
+    _layoutBuildCount++;
+    return _LegendLayout.build(
+      _legend,
+      _style.copyWith(fontSize: _textScaler.scale(_style.fontSize ?? 14)),
+    );
+  }();
 
   @override
   double computeMinIntrinsicWidth(double height) => _resolved.size.width;
@@ -254,9 +288,23 @@ class _LegendLayout {
   final double baseline;
 
   final List<(Offset, _Op)> _ops;
-  final Color color;
+  Color color;
 
   _LegendLayout._(this.size, this.baseline, this._ops, this.color);
+
+  /// 배치는 그대로 두고 색만 바꾼다. 글자 스타일의 색만 바뀌면 `TextPainter`는 다시 배치하지 않는다.
+  void recolor(Color? value) {
+    color = value ?? const Color(0xFF000000);
+    for (final (_, op) in _ops) {
+      if (op is _TextOp) {
+        final span = op.painter.text! as TextSpan;
+        op.painter.text = TextSpan(
+          text: span.text,
+          style: span.style!.copyWith(color: color),
+        );
+      }
+    }
+  }
 
   /// [style]의 글자 크기(배율 반영 후)로 [legend]를 배치한다.
   factory _LegendLayout.build(KeyLegend legend, TextStyle style) {
@@ -272,10 +320,14 @@ class _LegendLayout {
             partScale: CalcTheme.keyLegendDisplayFractionScale,
           )
         : builder.layout(legend, fontSize);
-    // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자)
+    // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자).
+    // 글자만 있는 각인은 `Text`와 같게 한 줄 상자만 쓴다.
     final (lineAscent, lineDescent) = builder.lineMetrics(fontSize);
-    final top = math.max(lineAscent, piece.inkTop);
-    final bottom = math.max(lineDescent, -piece.inkBottom);
+    final plain = legend is LegendText;
+    final top = plain ? lineAscent : math.max(lineAscent, piece.inkTop);
+    final bottom = plain
+        ? lineDescent
+        : math.max(lineDescent, -piece.inkBottom);
     return _LegendLayout._(
       Size(piece.width, top + bottom),
       top,
@@ -331,11 +383,34 @@ class _LegendLayout {
   }
 }
 
-/// 각인 조각을 재귀로 배치한다. 크기 비율은 [CalcTheme]의 "2차원 각인 배치" 상수다.
+/// 각인 조각을 재귀로 배치한다. 크기 비율은 [CalcTheme]의 "2차원 각인 배치" 상수이고,
+/// 근호 모양의 세부 비율(꺾은선 꼭짓점 위치)만 아래 `_radical*` 상수로 둔다.
 class _Builder {
   final TextStyle style;
 
   _Builder(this.style);
+
+  // ── 근호 모양 (글자 크기 대비, 근호 왼쪽 부분 폭은 [CalcTheme.keyLegendRadicalSignWidth]) ──
+
+  /// 근호 아래 끝이 피개법수 잉크 아래끝(또는 기준선)보다 더 내려가는 길이
+  static const double _radicalBottomDrop = 0.03;
+
+  /// 머리(왼쪽 시작점) 높이 — 근호 아래 끝에서 위끝까지의 비율
+  static const double _radicalHookHeight = 0.42;
+
+  /// 머리가 짧게 올라가는 끝점: 왼쪽 부분 폭 대비 가로 위치, 글자 크기 대비 올라가는 높이
+  static const double _radicalHookPeakX = 0.2;
+  static const double _radicalHookRise = 0.06;
+
+  /// 근호가 내려가 닿는 아래 꼭짓점의 가로 위치 (왼쪽 부분 폭 대비)
+  static const double _radicalTickX = 0.48;
+
+  /// 근호 선과 피개법수 사이, 피개법수와 가로줄 오른쪽 끝 사이 여백
+  static const double _radicalPadding = 0.04;
+
+  /// 지수 오른쪽 끝과 아래 꼭짓점 사이 여백, 지수 잉크 아래끝을 머리 위로 띄우는 높이
+  static const double _radicalIndexGap = 0.04;
+  static const double _radicalIndexLift = 0.10;
 
   StrutStyle _strut(double fontSize) => StrutStyle.fromTextStyle(
     style.copyWith(fontSize: fontSize),
@@ -447,7 +522,11 @@ class _Builder {
     final x = basePiece.width + gap;
     if (superscript != null) {
       final sup = layout(superscript, scriptSize);
-      final raise = fontSize * CalcTheme.keyLegendSuperscriptRaise;
+      // 기본 높이에 두되, 바탕 잉크가 더 높으면(∫·∑·10) 위첨자 위끝을 바탕 위끝에 맞춘다.
+      final raise = math.max(
+        fontSize * CalcTheme.keyLegendSuperscriptRaise,
+        basePiece.inkTop - sup.inkTop,
+      );
       ops.addAll(sup.shifted(x, raise));
       top = math.max(top, raise + sup.inkTop);
       bottom = math.min(bottom, raise + sup.inkBottom);
@@ -455,7 +534,11 @@ class _Builder {
     }
     if (subscript != null) {
       final sub = layout(subscript, scriptSize);
-      final drop = fontSize * CalcTheme.keyLegendSubscriptDrop;
+      // 기본 깊이에 두되, 바탕 잉크가 더 깊으면(∫·∑·log의 g) 아래첨자 아래끝을 바탕 아래끝에 맞춘다.
+      final drop = math.max(
+        fontSize * CalcTheme.keyLegendSubscriptDrop,
+        sub.inkBottom - basePiece.inkBottom,
+      );
       ops.addAll(sub.shifted(x, -drop));
       top = math.max(top, sub.inkTop - drop);
       bottom = math.min(bottom, sub.inkBottom - drop);
@@ -503,41 +586,50 @@ class _Builder {
   _Piece _radical(KeyLegend radicand, KeyLegend? index, double fontSize) {
     final rad = layout(radicand, fontSize);
     final stroke = fontSize * CalcTheme.keyLegendRadicalStroke;
-    // 근호의 위(가로줄)·아래 끝 — 선 가운데 기준
+    final paintStroke = _paintStroke(stroke);
+    // 최소 두께로 굵게 칠하는 만큼(extra)은 선을 안쪽으로 옮겨, 칠한 잉크가 배치한 잉크 범위를 넘지 않게 한다.
+    final extra = (paintStroke - stroke) / 2;
+    // 근호의 위(가로줄)·아래 끝 — 배치 두께 선 가운데 기준
     final top =
         rad.inkTop + fontSize * CalcTheme.keyLegendRadicalGap + stroke / 2;
-    final bottom = math.min(rad.inkBottom, 0.0) - fontSize * 0.03;
+    final bottom = math.min(rad.inkBottom, 0.0) - fontSize * _radicalBottomDrop;
     final signWidth = fontSize * CalcTheme.keyLegendRadicalSignWidth;
-    final hookY = bottom + (top - bottom) * 0.42;
+    final hookY = bottom + (top - bottom) * _radicalHookHeight;
+    // 선 끝(butt)이 왼쪽으로 나가지 않도록 반 두께만큼 오른쪽에서 시작한다.
+    final left = stroke / 2;
+    final tickX = left + signWidth * _radicalTickX;
     final ops = <(Offset, _Op)>[];
     var shift = 0.0;
     var inkTop = top + stroke / 2;
-    var inkBottom = bottom - stroke / 2;
-    // 근호 모양: 짧게 올라가는 머리 → 아래로 → 길게 위로 → 가로줄
-    final tickX = signWidth * 0.48;
+    final inkBottom = bottom - stroke / 2;
     if (index != null) {
       final idx = layout(
         index,
         fontSize * CalcTheme.keyLegendRadicalIndexScale,
       );
       // 지수는 머리 위에 두고 오른쪽 끝을 근호가 내려가는 지점 앞에 맞춘다. 넓으면 근호를 오른쪽으로 민다.
-      final right = tickX - fontSize * 0.04;
+      final right = tickX - fontSize * _radicalIndexGap;
       shift = math.max(0.0, idx.width - right);
-      final idxBaseline = hookY + fontSize * 0.10 - idx.inkBottom;
+      final idxBaseline = hookY + fontSize * _radicalIndexLift - idx.inkBottom;
       ops.addAll(idx.shifted(shift + right - idx.width, idxBaseline));
       inkTop = math.max(inkTop, idxBaseline + idx.inkTop);
     }
-    final radX = shift + signWidth + fontSize * 0.04;
-    final end = radX + rad.width + fontSize * 0.04;
+    final signRight = left + signWidth;
+    final radX = shift + signRight + fontSize * _radicalPadding;
+    final end = radX + rad.width + fontSize * _radicalPadding;
+    // 근호 모양: 짧게 올라가는 머리 → 아래로 → 길게 위로 → 가로줄
     ops.add((
       Offset(shift, 0),
       _PathOp([
-        Offset(0, hookY),
-        Offset(signWidth * 0.2, hookY + fontSize * 0.06),
-        Offset(tickX, bottom),
-        Offset(signWidth, top),
-        Offset(end - shift, top),
-      ], _paintStroke(stroke)),
+        Offset(left + extra, hookY),
+        Offset(
+          left + signWidth * _radicalHookPeakX,
+          hookY + fontSize * _radicalHookRise,
+        ),
+        Offset(tickX, bottom + extra),
+        Offset(signRight, top - extra),
+        Offset(end - shift, top - extra),
+      ], paintStroke),
     ));
     ops.addAll(rad.shifted(radX, 0));
     return _Piece(end, inkTop, math.min(inkBottom, rad.inkBottom), ops);

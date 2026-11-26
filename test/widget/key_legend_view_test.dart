@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -6,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/text_fit.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
@@ -97,7 +100,8 @@ void main() {
       tester,
     ) async {
       const style = CalcTheme.keyShiftLabelStyle;
-      for (final text in ['SOLVE', 'A', '⇔']) {
+      // `log`는 내림 글자 g가 한 줄 아래로 나가지만 Text처럼 한 줄 상자만 쓴다.
+      for (final text in ['SOLVE', 'A', '⇔', 'log']) {
         await tester.pumpWidget(
           _host(
             Text(
@@ -122,37 +126,78 @@ void main() {
       }
     });
 
-    test('2차원 각인은 한 줄보다 크게 높아지지 않는다 — 가장 높아도 1.15em, 아래로는 0.07em까지', () {
+    test('2차원 각인은 한 줄보다 크게 높아지지 않는다 — 가장 높아도 1.15em, 한 줄 아래로는 0.08em 미만', () {
       // 각인 띠는 글자 크기의 1/0.8 = 1.25em 높이다(keyLegendFontRatio). 첨자·분수가 한 줄을 크게 넘으면
-      // 통일 글자 크기 계산이 모든 각인을 그만큼 줄이므로, 넘는 폭을 상한으로 묶어 둔다.
-      // 아래로 넘는 만큼 기준선이 올라가므로(아래 정렬) 이웃 각인과 기준선 차이도 함께 묶는다.
+      // 배율을 키웠을 때 통일 글자 크기 계산이 모든 각인을 그만큼 줄이므로, 넘는 폭을 상한으로 묶어 둔다.
+      // 한 줄 아래로 넘는 만큼 기준선이 올라가므로(각인 띠는 아래 정렬) 이웃 각인과의 기준선 차이도 묶는다.
       for (final (k, legend, style) in _twoDimensional()) {
-        final em = KeyLegendView.emSize(legend, style);
-        expect(
-          em.height,
-          lessThanOrEqualTo(1.15),
-          reason: '${k.id.name} ${legend.plainText}',
-        );
-        final plain = KeyLegendView.emSize(const LegendText('x'), style);
-        expect(em.height, greaterThanOrEqualTo(plain.height - 1e-9));
+        final em = KeyLegendView.emMetrics(legend, style);
+        final line = KeyLegendView.emMetrics(const LegendText('x'), style);
+        final reason = '${k.id.name} ${legend.plainText}';
+        expect(em.size.height, lessThanOrEqualTo(1.15), reason: reason);
+        expect(em.baseline, greaterThanOrEqualTo(line.baseline - 1e-9));
+        final below =
+            (em.size.height - em.baseline) - (line.size.height - line.baseline);
+        expect(below, inInclusiveRange(-1e-9, 0.08), reason: reason);
       }
     });
 
-    test('글자 배율 100%에서는 2차원 각인의 높이가 통일 글자 크기를 줄이지 않는다', () {
-      // 높이 기준 글자 크기는 띠(키캡) 높이 × 비율이다. 가장 높은 각인 × 비율이 1을 넘지 않으면
-      // 그 각인도 띠(키캡) 안에 들어가므로, 높이 측정(#155)이 다른 키 글자를 줄이는 일은 배율을 키웠을 때만 생긴다.
+    test('높이 측정은 2차원 각인이 실제로 넘지 않는 한 통일 글자 크기를 줄이지 않는다 (배율 100%)', () {
+      // KeypadMetrics의 높이 기준 계산을 각인 띠·키캡 높이 격자에서 그대로 재현해, 가장 높은 각인의 잉크 높이를
+      // 넣었을 때와 뺐을 때(#155 이전과 같은 한 줄 높이만)를 비교한다. 잉크 높이는 정수로 올림하지 않는다 —
+      // 올림하면 띠 높이의 소수부 때문에 한 줄은 들어가는데도 글자가 줄어든다(R1에서 실측한 회귀).
       double tallest(TextStyle style, Iterable<KeyLegend> legends) => legends
           .map((l) => KeyLegendView.emSize(l, style).height)
           .reduce((a, b) => a > b ? a : b);
-      final legends = tallest(CalcTheme.keyShiftLabelStyle, [
+      final legendInk = tallest(CalcTheme.keyShiftLabelStyle, [
         for (final k in allKeys) ...[?k.shiftLegend, ?k.alphaLegend],
       ]);
-      final mains = tallest(CalcTheme.keyMainLabelStyle, [
+      final mainInk = tallest(CalcTheme.keyMainLabelStyle, [
         for (final k in allKeys) k.mainLegend,
       ]);
-      expect(legends * CalcTheme.keyLegendFontRatio, lessThan(1));
-      // 키캡 안쪽 높이는 눌림 여유·테두리(3dp)만큼 작다 — 비율에 여유를 둔다.
-      expect(mains * CalcTheme.keyMainLabelFontRatio, lessThan(0.8));
+      const scaler = TextScaler.noScaling;
+      for (var band = 3.0; band <= 40; band += 0.01) {
+        final start = math.max(
+          minFittedFontSize,
+          math.min(
+            band * CalcTheme.keyLegendFontRatio,
+            CalcTheme.keyLegendMaxFontSize,
+          ),
+        );
+        expect(
+          fitFontSizeToHeight(
+            start,
+            maxHeight: band,
+            textScaler: scaler,
+            inkHeightFactor: legendInk,
+          ),
+          fitFontSizeToHeight(start, maxHeight: band, textScaler: scaler),
+          reason: '각인 띠 $band',
+        );
+      }
+      for (var cap = 8.0; cap <= 120; cap += 0.01) {
+        final inner =
+            cap -
+            math.min(CalcTheme.keyPressedOffset, cap) -
+            2 * CalcTheme.keyBorderWidth;
+        final start = math.max(
+          minFittedFontSize,
+          math.min(
+            cap * CalcTheme.keyMainLabelFontRatio,
+            CalcTheme.keyMainLabelMaxFontSize,
+          ),
+        );
+        expect(
+          fitFontSizeToHeight(
+            start,
+            maxHeight: inner,
+            textScaler: scaler,
+            inkHeightFactor: mainInk,
+          ),
+          fitFontSizeToHeight(start, maxHeight: inner, textScaler: scaler),
+          reason: '키캡 $cap',
+        );
+      }
     });
 
     testWidgets('기준선은 같은 글자 크기의 Text 기준선과 같고(아래로 넘치지 않는 각인), 글자 배율을 따른다', (
@@ -273,10 +318,30 @@ void main() {
       final render = tester.renderObject<RenderKeyLegend>(
         find.byType(KeyLegendView),
       );
-      final size = render.size;
+      final built = render.debugLayoutBuildCount;
       await tester.pumpWidget(view(const Color(0xFFFFFFFF)));
-      expect(render.size, size);
-      expect(render, paints..rect(color: const Color(0xFFFFFFFF)));
+      expect(
+        render.debugLayoutBuildCount,
+        built,
+        reason: '색만 바뀌면 배치를 다시 만들지 않는다',
+      );
+      expect(
+        render,
+        paints
+          ..paragraph()
+          ..rect(color: const Color(0xFFFFFFFF))
+          ..paragraph(),
+      );
+      // 글자 크기가 바뀌면 다시 배치한다.
+      await tester.pumpWidget(
+        _host(
+          KeyLegendView(
+            legend: legend,
+            style: CalcTheme.keyMainLabelStyle.copyWith(fontSize: 40),
+          ),
+        ),
+      );
+      expect(render.debugLayoutBuildCount, built + 1);
     });
   });
 
@@ -334,7 +399,7 @@ void main() {
         Size(600, 700),
       ]) {
         testWidgets(
-          '${size.width}×${size.height} 글자 배율 $scale: 2차원 각인이 키 버튼 밖으로 나가지 않는다',
+          '${size.width}×${size.height} 글자 배율 $scale: 2차원 각인이 키캡·각인 띠 밖으로 나가지 않는다',
           (tester) async {
             await tester.pumpWidget(
               _host(
@@ -342,6 +407,8 @@ void main() {
                 textScale: scale,
               ),
             );
+            // 2차원 각인의 상자는 모든 잉크(첨자·분수·근호 선)를 품는다. 메인 각인은 키캡, SHIFT·ALPHA 각인은
+            // 키캡 위 각인 띠(버튼 위끝 ~ 키캡 위끝) 안에 있어야 한다.
             for (final (k, legend, _) in _twoDimensional()) {
               final button = find.byWidgetPredicate(
                 (w) => w is CalcKeyButton && w.keyDef.id == k.id,
@@ -349,7 +416,20 @@ void main() {
               final rect = tester.getRect(
                 find.descendant(of: button, matching: findLegend(legend)),
               );
-              final bounds = tester.getRect(button).inflate(0.01);
+              final cap = tester.getRect(
+                find.byKey(CalcKeyButton.keycapKeyOf(k.id)),
+              );
+              final buttonRect = tester.getRect(button);
+              final bounds =
+                  (identical(legend, k.mainLegend)
+                          ? cap
+                          : Rect.fromLTRB(
+                              buttonRect.left,
+                              buttonRect.top,
+                              buttonRect.right,
+                              cap.top,
+                            ))
+                      .inflate(0.01);
               expect(
                 bounds.contains(rect.topLeft) &&
                     bounds.contains(rect.bottomRight),

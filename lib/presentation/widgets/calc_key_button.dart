@@ -703,7 +703,7 @@ Widget _legendLabel(KeyLegend legend, TextStyle style, TextScaler textScaler) {
       softWrap: false,
       textScaler: textScaler,
       style: style,
-      strutStyle: _labelStrut(style.copyWith(color: null)),
+      strutStyle: _labelStrut(style),
     );
   }
   return KeyLegendView(legend: legend, style: style, textScaler: textScaler);

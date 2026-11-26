@@ -291,7 +291,8 @@ class KeypadMetrics {
       ),
       maxHeight: legendHeight,
       textScaler: scaler,
-      heightFactor: limits.legendEmHeight,
+      heightFactor: CalcTheme.keyShiftLabelStyle.height ?? 1.0,
+      inkHeightFactor: limits.legendEmHeight,
     );
     // 키캡 안쪽 높이: 눌림 이동 여유와 테두리를 뺀다.
     final capInnerHeight =
@@ -308,7 +309,8 @@ class KeypadMetrics {
       ),
       maxHeight: capInnerHeight,
       textScaler: scaler,
-      heightFactor: limits.mainEmHeight,
+      heightFactor: CalcTheme.keyMainLabelStyle.height ?? 1.0,
+      inkHeightFactor: limits.mainEmHeight,
     );
 
     // 2·3. 폭 기준 + 하한
