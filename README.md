@@ -117,13 +117,15 @@ flutter run            # 연결된 기기·에뮬레이터
 TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인은 그 과제가 속한 마일스톤에서 하고,
 실기기가 있어야 하는 확인만 M6로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
 
-- **TalkBack**: 시스템 앱으로 들어 있어 아무 AVD에서나 켤 수 있다.
+- **TalkBack**: 시스템 앱으로 들어 있다(설치 확인 2대, 켜서 읽혀 본 기록은 아직 없다).
   - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
     `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
+    `AltCalc_Pixel_Fold_API36`(폴더블)은 `Medium_Phone_API_36.1`과 같은 시스템 이미지(`android-36.1/google_apis_playstore`)다.
   - `google_apis` API 33·Play 이미지 API 37.0은 띄워 보지 않았고, 시스템 이미지(`system.img`)에 같은 패키지 이름이 있는 것만 봤다.
 - **Accessibility Scanner**(`com.google.android.apps.accessibility.auditor`): 미리 들어 있지 않아 Play 스토어로 설치한다.
   - `Medium_Phone_API_36.1`(Play 이미지, `PlayStore.enabled=true`)을 쓴다. 이 AVD에는 Play 스토어(`com.android.vending`)가 있고
-    Scanner는 없었다 (실측). Google 계정으로 로그인해 설치한다.
+    Scanner는 없었다 (실측). Google 계정 로그인은 사용자가 한다(세션은 로그인할 수 없다 — 필요하면 사용자에게 요청한다).
+    아래의 `-read-only`로 띄우면 끌 때 로그인·설치가 사라지므로, Scanner를 쓸 때는 `-read-only` 없이 띄운다(그 AVD를 쓰는 다른 세션이 없을 때).
   - `google_apis` 이미지에는 Play 스토어가 없다(`AltCalc_Phone_API34`의 `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이었다, 실측).
   - Play 이미지이지만 `PlayStore.enabled=no`인 `Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)에서 설치되는지는 확인하지 않았다.
 - **한국어 음성**: Play 이미지 36.1에는 Google 음성 엔진(`com.google.android.tts`)이 설치돼 있다 (실측).
