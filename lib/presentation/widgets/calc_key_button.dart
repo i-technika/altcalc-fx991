@@ -105,7 +105,7 @@ class CalcKeyButton extends StatefulWidget {
   final EdgeInsets hitOutset;
 
   /// 메인 라벨 자리에서 뺄 여백 — 키캡(그림 상자) 안에서 이만큼 뺀 나머지의 가운데에 라벨을 놓는다.
-  /// 라벨이 그 나머지보다 크면 줄여 그린다. 키캡 일부가 다른 그림에 덮이는 키에 쓴다.
+  /// 라벨이 그 나머지보다 크면 줄여 그리고, 남는 자리가 없으면 그리지 않는다. 키캡 일부가 다른 그림에 덮이는 키에 쓴다.
   /// 예: 커서 패드 방향 키는 가운데 쪽 허브만큼 뺀다(#65). 음수일 수 없다.
   final EdgeInsets labelInsets;
 

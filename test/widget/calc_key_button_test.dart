@@ -1687,6 +1687,28 @@ void _shapeAndLegendTests() {
       expect(shifted.center.dy, moreOrLessEquals(centered.center.dy - 15));
     });
 
+    testWidgets('왼쪽 여백은 라벨을 오른쪽으로 옮긴다', (tester) async {
+      await tester.pumpWidget(button(EdgeInsets.zero));
+      final centered = labelOf(tester);
+      await tester.pumpWidget(button(const EdgeInsets.only(left: 40)));
+      final shifted = labelOf(tester);
+      expect(shifted.size, centered.size);
+      expect(shifted.center.dx, moreOrLessEquals(centered.center.dx + 20));
+      expect(shifted.center.dy, moreOrLessEquals(centered.center.dy));
+    });
+
+    testWidgets('남은 자리가 라벨보다 작으면 줄여 그린다', (tester) async {
+      await tester.pumpWidget(button(EdgeInsets.zero));
+      final full = labelOf(tester);
+      // 남은 높이를 라벨 높이의 절반으로 만든다.
+      final keycap = tester.getRect(_keycap(CalcKeyId.cursorUp));
+      final cut = keycap.height - full.height / 2;
+      await tester.pumpWidget(button(EdgeInsets.only(bottom: cut)));
+      final shrunk = labelOf(tester);
+      expect(shrunk.height, lessThan(full.height * 0.6));
+      expect(shrunk.bottom, lessThanOrEqualTo(keycap.bottom - cut + 0.01));
+    });
+
     testWidgets('labelInsets가 음수면 디버그 assert로 알린다', (tester) async {
       await tester.pumpWidget(button(const EdgeInsets.only(top: -1)));
       final error = tester.takeException();

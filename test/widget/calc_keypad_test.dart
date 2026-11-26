@@ -9,6 +9,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/cursor_pad_labels.dart';
 import '../support/korean_locale.dart';
 
 /// 지정한 크기 영역에 키패드를 배치한다.
@@ -1469,29 +1470,22 @@ void _cursorPadShapeTests() {
               ]) {
                 expect(g.sectorAt(p), sector, reason: '${sector.name} $p');
               }
-              // 라벨 상자는 허브(둘레선 포함)에 덮이지 않는다 (#65 — 허브 지름이 패드 높이의 약 1/2).
-              // 구역은 데드존까지라 위 검사만으로는 허브 위의 라벨을 걸러내지 못한다.
-              final nearest = Offset(
-                g.center.dx.clamp(label.left, label.right),
-                g.center.dy.clamp(label.top, label.bottom),
+            }
+            // 라벨은 허브(둘레선 포함)에 덮이지 않고 줄지도 않는다 (#65).
+            expectCursorPadLabelsClearOfHub(tester, context: '떼어 둠');
+            // 눌러서 키캡이 내려가도(▲는 허브 쪽으로 1dp) 마찬가지다.
+            for (final sector in CursorPadSector.values) {
+              final gesture = await tester.startGesture(
+                tester.getCenter(cursorPadLabel(sector)),
               );
-              expect(
-                (nearest - g.center).distance,
-                greaterThanOrEqualTo(
-                  g.hubRadius + CalcTheme.cursorPadDividerWidth / 2,
-                ),
-                reason: '${sector.name} 라벨 $label이 허브에 덮인다',
+              await tester.pump();
+              expectCursorPadLabelsClearOfHub(
+                tester,
+                sectors: [sector],
+                context: '누름',
               );
-              // 허브만큼 뺀 라벨 자리(labelInsets)에서도 라벨이 줄지 않는다 (FittedBox 축소 없음).
-              final text = find.descendant(
-                of: _keycap(CursorPad.defOf(sector).id),
-                matching: find.byType(Text),
-              );
-              expect(
-                tester.getRect(text).height,
-                moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
-                reason: '${sector.name} 라벨이 줄었다',
-              );
+              await gesture.up();
+              await tester.pumpAndSettle();
             }
           },
         );

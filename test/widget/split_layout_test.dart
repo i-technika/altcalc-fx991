@@ -21,6 +21,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/bundled_fonts.dart';
+import '../support/cursor_pad_labels.dart';
 import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
@@ -1197,6 +1198,8 @@ void _expectTouchTargets(
       reason: sector.name,
     );
   }
+  // 방향 라벨은 허브에 덮이지 않고 줄지 않는다(넓은 배열·분할 배치 포함, #65).
+  expectCursorPadLabelsClearOfHub(tester);
 }
 
 /// [rect]가 접힘선 [hinge]와 그 양쪽 간격([CalcTheme.screenHingeMargin]) 띠에 걸치지 않는지 (화면 좌표)
