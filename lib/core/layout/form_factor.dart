@@ -43,8 +43,9 @@ enum ScreenArrangement {
 
 /// 앱 시작 시 폴더블 판정 결과 ([FormFactor.queryFoldableDevice], #158).
 /// - `foldable`: 폴더블 기기인지
-/// - `fold`: Android 창 배치 정보 첫 값에 접히는 부분이 있었는지 — 참이면 접힘 정보가 곧 화면 정보로 온다
-typedef FoldableStartup = ({bool foldable, bool fold});
+/// - `fold`: Android 창 배치 정보 첫 값에 접히는 부분이 있었는지 — 참이면 접힘 정보가 곧 화면 정보로 온다.
+///   `null`은 모름(첫 값을 받지 못함·조회 실패·Android 아님) — 진단 로그가 "없음"과 구분해 적는다.
+typedef FoldableStartup = ({bool foldable, bool? fold});
 
 /// 기기 종류·화면 크기별로 요청할 화면 방향 정책 (#24, 폴더블은 #25)
 enum OrientationPolicy {
@@ -112,14 +113,14 @@ abstract final class FormFactor {
   /// `main()`이 그것이 올 때까지 첫 화면을 미룬다(`DeviceOrientationLock.waitForFoldFeature`). 미루지 않으면 펼친
   /// 내부 화면에서 시작할 때 첫 프레임이 위아래 배치였다가 접힘선 기준 배치로 바뀐다(#158, Pixel Fold 에뮬레이터).
   ///
-  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 둘 다 `false` — 앱 시작(`main()`)이
-  /// 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 폴더블 아님·접힘 모름(`null`) —
+  /// 앱 시작(`main()`)이 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
   ///
   /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
   /// 펼치면 `DeviceOrientationLock`이 물리 화면이 바뀐 것([isOtherScreen])을 보고 폴더블로 기억한다.
   /// 에뮬레이터 기록은 Android `FoldableDeviceProbe` 주석에 있다. Samsung 실기기 기록은 #158에서 이어 한다.
   static Future<FoldableStartup> queryFoldableDevice() async {
-    const none = (foldable: false, fold: false);
+    const none = (foldable: false, fold: null);
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return none;
     }
@@ -128,9 +129,10 @@ abstract final class FormFactor {
           .invokeMapMethod<String, Object?>(foldableDeviceMethod)
           .timeout(foldableQueryTimeout);
       if (result == null) return none;
+      final fold = result[foldKey];
       return (
         foldable: result[foldableKey] == true,
-        fold: result[foldKey] == true,
+        fold: fold is bool ? fold : null,
       );
     } on MissingPluginException {
       return none;
@@ -145,12 +147,14 @@ abstract final class FormFactor {
   static const String foldableKey = 'foldable';
 
   /// [queryFoldableDevice] 응답의 "창 배치 첫 값에 접히는 부분 있음" 키 — Android `FoldableDeviceProbe.KEY_FOLD`와 같아야 한다.
-  /// 값이 `null`(첫 값을 받지 못함)이면 `false`로 읽는다.
+  /// 값이 `null`이면 첫 값을 받지 못한 것이다(제한 시간 초과·구독 실패·취소).
   @visibleForTesting
   static const String foldKey = 'fold';
 
   /// 폴더블 판정 조회 응답 제한 시간. Android 쪽이 창 배치 정보를 기다리는 최대 시간(`FoldableDeviceProbe`
   /// `LAYOUT_TIMEOUT_MILLIS`)보다 넉넉히 길어야 한다 — `test/unit/main_activity_source_test.dart`가 대조한다.
+  /// #158부터 힌지 신호가 있는 폴더블도 Android가 첫 값을 기다리므로, 메인 스레드 지연 여유는 이 시간 − 500ms다. 이 시간을
+  /// 넘기면 힌지 신호까지 잃고 폴더블 아님으로 시작한다(화면 정보가 오면 `DeviceOrientationLock`이 바로잡는다).
   static const Duration foldableQueryTimeout = Duration(seconds: 1);
 
   /// 기기 종류를 정한다.

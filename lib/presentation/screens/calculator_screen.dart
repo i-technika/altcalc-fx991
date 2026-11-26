@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -625,7 +626,8 @@ class CalcTopStripLayout {
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
 ///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38). 앱 시작 때는
-///   `main()`이 접힘 정보가 올 때까지 첫 화면을 미뤄(#158) 첫 프레임부터 접힘선 기준 배치다.
+///   Android가 창 배치 첫 값에 접힘선이 있다고 알리면 `main()`이 그 정보가 올 때까지(최대 300ms) 첫 화면을 미룬다(#158) —
+///   제때 오면 첫 프레임부터 접힘선 기준 배치다.
 /// - 접기·펼치기·회전으로 배치가 바뀌어도 상태는 [calcProvider]에 있고 LCD·키패드 element도 유지된다(`_Body`).
 class CalculatorScreen extends ConsumerWidget {
   const CalculatorScreen({super.key});
@@ -685,6 +687,14 @@ class CalculatorScreen extends ConsumerWidget {
                 smallWindow:
                     window.shortestSide < FormFactor.largeScreenMinShortestSide,
                 hinge: hinge,
+                // 진단 로그용 (#158) — 켜져 있을 때만 넘긴다
+                diagnostics: LayoutLog.enabled
+                    ? (
+                        window: window,
+                        features: features,
+                        foldableDevice: foldableDevice,
+                      )
+                    : null,
               ),
             ),
           ),
@@ -916,11 +926,17 @@ class _Body extends ConsumerWidget {
   /// 창의 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인지 — 짧은 창 판정 (#38 R1)
   final bool smallWindow;
 
+  /// 진단 로그([LayoutLog], #158)에 적을 창 크기·화면 특징·폴더블 여부. 로그가 꺼져 있으면 `null`이다 — 부모가 이미
+  /// 읽은 값을 받으므로 이 위젯은 로그 때문에 따로 의존을 걸지 않는다.
+  final ({Size window, List<DisplayFeature> features, bool foldableDevice})?
+  diagnostics;
+
   const _Body({
     required this.body,
     required this.arrangement,
     required this.smallWindow,
     this.hinge,
+    this.diagnostics,
   });
 
   @override
@@ -1055,17 +1071,16 @@ class _Body extends ConsumerWidget {
     final tooSmall =
         KeypadMetrics.minKeyTouchHeightOf(keypad.size, keypadArrangement) <
         CalcTheme.keyTouchHeightUsableMin;
-    // 진단 로그 (#158, 앱에서만 켜진다): 배치가 바뀐 프레임마다 한 줄 — 첫 프레임 깜빡임을 logcat으로 본다.
-    // 창 크기·화면 특징이 바뀌면 부모가 새 본체 크기·배치로 이 위젯을 다시 만드므로, 여기서 MediaQuery를 읽어도
-    // 다시 빌드되는 횟수는 늘지 않는다.
-    if (LayoutLog.enabled) {
+    // 진단 로그 (#158, 진단 빌드에서만 켜진다): 배치가 바뀐 프레임마다 한 줄 — 첫 프레임 깜빡임을 logcat으로 본다.
+    final diagnostics = this.diagnostics;
+    if (diagnostics != null) {
       LayoutLog.layout(
         chosen: arrangement,
         drawn: drawn,
         tooSmall: tooSmall,
-        window: MediaQuery.sizeOf(context),
-        features: MediaQuery.displayFeaturesOf(context),
-        foldableDevice: ref.read(foldableDeviceProvider).value,
+        window: diagnostics.window,
+        features: diagnostics.features,
+        foldableDevice: diagnostics.foldableDevice,
       );
     }
     // 손잡이를 바꾸면 배치가 달라지는지 (#41 R2): 위아래 배치로 그렸어도, 반대 손잡이로는 접힘선 기준 배치가

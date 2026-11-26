@@ -63,6 +63,13 @@ void main() {
     );
   }
 
+  test('일반 빌드에서는 main()이 켜지 않는다 (진단 빌드 플래그가 없으면)', () {
+    LayoutLog.disable();
+    expect(LayoutLog.buildFlag, isFalse);
+    LayoutLog.enableForBuild();
+    expect(LayoutLog.enabled, isFalse);
+  });
+
   test('켜지 않으면 아무것도 남기지 않는다 (테스트·미리보기)', () {
     LayoutLog.disable();
     expect(LayoutLog.enabled, isFalse);
@@ -74,7 +81,7 @@ void main() {
   });
 
   test('모든 줄은 머리말로 시작한다 (logcat flutter 태그에서 골라 읽는다)', () {
-    LayoutLog.foldableQuery((foldable: false, fold: false));
+    LayoutLog.foldableQuery((foldable: false, fold: null));
     LayoutLog.firstFrame();
     LayoutLog.foldableRemembered('접힘 정보');
     LayoutLog.orientationRequest(
@@ -91,6 +98,7 @@ void main() {
 
   test('판정·첫 프레임·기억·방향 요청 줄의 내용', () {
     LayoutLog.foldableQuery((foldable: true, fold: true));
+    LayoutLog.foldableQuery((foldable: true, fold: null));
     LayoutLog.foldFeatureWait(
       arrived: true,
       waited: const Duration(microseconds: 1260),
@@ -119,6 +127,7 @@ void main() {
     );
     expect(lines, [
       'AltCalc 시작 판정 받음: 폴더블=true, 창 배치 첫 값 접힘=true',
+      'AltCalc 시작 판정 받음: 폴더블=true, 창 배치 첫 값 접힘=모름',
       'AltCalc 접힘 정보 기다림: 도착 (1.3ms)',
       'AltCalc 접힘 정보 기다림: 제한 시간 초과 (300.0ms)',
       'AltCalc 첫 프레임 그림 @123.5ms',
@@ -171,20 +180,46 @@ void main() {
       expect(lines, isEmpty);
     });
 
-    test('배치가 바뀐 뒤 감시 시간 안에 빌드를 시작한 프레임만 남긴다', () {
+    test('배치가 바뀌기 100ms 전 ~ 바뀐 뒤 2초 안에 빌드를 시작한 프레임만 남긴다', () {
       enable(frameTimings: true);
-      now += 10000; // 10ms에 배치 빌드
+      now += 200000; // 200ms에 배치 빌드
       layout(drawn: ScreenArrangement.stacked);
       expect(LayoutLog.frameWatchMicros, 2000000);
+      expect(LayoutLog.frameMarginMicros, 100000);
       LayoutLog.onFrameTimings([
-        frame(1, 9.5, 150.25),
-        frame(2, 2010, 2026), // 감시 끝(10ms + 2초)에 시작 — 남긴다
-        frame(3, 2010.1, 2026),
+        frame(1, 99.9, 120), // 구간 앞 — 바뀌기 전 프레임
+        frame(2, 100, 120), // 구간 시작 — 남긴다
+        frame(3, 199.5, 350.25), // 이 배치를 빌드한 프레임
+        frame(4, 2200, 2216), // 감시 끝(200ms + 2초)에 시작 — 남긴다
       ]);
       expect(lines.skip(1), [
-        'AltCalc 프레임 #1: 빌드 @9.5ms ~ 래스터 끝 @150.3ms',
-        'AltCalc 프레임 #2: 빌드 @2010.0ms ~ 래스터 끝 @2026.0ms',
+        'AltCalc 프레임 #2: 빌드 @100.0ms ~ 래스터 끝 @120.0ms',
+        'AltCalc 프레임 #3: 빌드 @199.5ms ~ 래스터 끝 @350.3ms',
+        'AltCalc 프레임 #4: 빌드 @2200.0ms ~ 래스터 끝 @2216.0ms',
       ]);
+    });
+
+    test('감시 구간이 지난 프레임이 오면 시각 보고를 떼고, 다음 배치 변화 때 다시 붙인다', () {
+      enable(frameTimings: true);
+      expect(LayoutLog.watchingFrames, isFalse);
+      layout(drawn: ScreenArrangement.stacked);
+      expect(LayoutLog.watchingFrames, isTrue);
+
+      LayoutLog.onFrameTimings([frame(1, 10, 20)]);
+      expect(LayoutLog.watchingFrames, isTrue);
+      LayoutLog.onFrameTimings([frame(2, 1990, 2000), frame(3, 2000.1, 2010)]);
+      expect(LayoutLog.watchingFrames, isFalse);
+      expect(lines.last, startsWith('AltCalc 프레임 #2: '));
+
+      // 뗀 뒤 늦게 온 묶음은 남기지 않는다
+      LayoutLog.onFrameTimings([frame(4, 500, 510)]);
+      expect(lines.last, startsWith('AltCalc 프레임 #2: '));
+
+      now += 5000000;
+      layout();
+      expect(LayoutLog.watchingFrames, isTrue);
+      LayoutLog.onFrameTimings([frame(9, 5000, 5010)]);
+      expect(lines.last, startsWith('AltCalc 프레임 #9: '));
     });
 
     test('다음 배치 변화가 감시 시간을 늘린다', () {

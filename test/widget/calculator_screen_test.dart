@@ -250,15 +250,13 @@ void main() {
       addTearDown(SystemHighTextContrast.instance.stop);
     }
 
-    /// `main()`이 켠 진단 로그(#158)와 그 밖의 `debugPrint` 줄 — 테스트 출력에 섞이지 않게 여기에 모은다.
+    /// 진단 로그(#158) 줄. `main()`은 진단 빌드에서만 켜므로 테스트가 직접 켜서 여기에 모은다(프레임 시각 보고는 끈다).
     late List<String> printed;
 
     /// 물리 화면과 창을 [size](dp)로 맞춘다 (화면 배율 2).
     void setDevice(WidgetTester tester, Size size) {
       printed = [];
-      final savedPrint = debugPrint;
-      debugPrint = (message, {wrapWidth}) => printed.add(message ?? '');
-      addTearDown(() => debugPrint = savedPrint);
+      LayoutLog.enable(sink: printed.add, frameTimings: false);
       addTearDown(LayoutLog.disable);
       tester.view.display.devicePixelRatio = 2;
       tester.view.display.size = size * 2;
@@ -465,6 +463,30 @@ void main() {
         );
       },
     );
+
+    testWidgets('접힘이 아닌 화면 특징(화면 구멍)만 오면 계속 기다린다 (#158)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(841, 701));
+      mockFoldableDevice(tester, foldable: true, fold: true);
+      recordPlatformCalls(tester);
+      final started = app.main();
+      await tester.pump();
+      tester.view.displayFeatures = const [
+        DisplayFeature(
+          bounds: Rect.fromLTWH(400, 0, 40, 30),
+          type: DisplayFeatureType.cutout,
+          state: DisplayFeatureState.unknown,
+        ),
+      ];
+      addTearDown(tester.view.resetDisplayFeatures);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(CalculatorScreen), findsNothing);
+
+      tester.view.displayFeatures = const [_verticalFold];
+      await started;
+      await tester.pump();
+      expect(loggedArrangements(), ['hingeSplit']);
+    });
 
     testWidgets('접힘 정보가 이미 와 있으면 기다리지 않는다 (#158)', (tester) async {
       SharedPreferences.setMockInitialValues({});

@@ -173,7 +173,7 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       });
 
-      const none = (foldable: false, fold: false);
+      const none = (foldable: false, fold: null);
 
       void mockChannel(Future<Object?> Function(MethodCall) handler) =>
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -203,11 +203,11 @@ void main() {
               fold: fold,
             ));
           }
-          // 첫 값을 받지 못했으면(제한 시간 초과 등) Android는 fold에 null을 보낸다 — 접힘 없음으로 읽는다
+          // 첫 값을 받지 못했으면(제한 시간 초과 등) Android는 fold에 null을 보낸다 — 모름(null) 그대로 둔다
           reply = {FormFactor.foldableKey: true, FormFactor.foldKey: null};
           expect(await FormFactor.queryFoldableDevice(), (
             foldable: true,
-            fold: false,
+            fold: null,
           ));
           expect(methods, List.filled(4, FormFactor.foldableDeviceMethod));
         },

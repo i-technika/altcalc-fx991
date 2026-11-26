@@ -13,23 +13,34 @@ import 'form_factor.dart';
 /// Android 쪽 판정 로그(`FoldableDeviceProbe`, 태그 `AltCalc`)와 함께 본다:
 /// `adb logcat -v time -s AltCalc flutter` — 이 로그는 Flutter 로그(태그 `flutter`)로 나가며 줄 앞에 [prefix]가 붙는다.
 ///
-/// ## 어느 배치가 화면에 나갔는지 읽는 법
-/// "배치" 줄은 그 배치를 **빌드**한 때(`@` 뒤, [enable]부터 잰 ms)를 적는다. 배치가 바뀌면 그 뒤 [frameWatchMicros]
-/// 동안의 프레임마다 "프레임" 줄(빌드 시작·래스터 끝 시각, 같은 시계)을 남긴다. 어떤 배치 줄의 시각이 한 프레임의
-/// 빌드 시작 ~ 래스터 끝 사이에 들면 그 배치가 그 프레임으로 화면에 나간 것이다. 빌드하고도 어떤 프레임에도 들지 않으면
-/// (래스터 전에 다음 배치로 다시 빌드) 사용자는 그 배치를 보지 못했다. 프레임 줄은 엔진이 모아서 보내므로(릴리스는 약
-/// 1초마다) 배치 줄보다 늦게 찍힌다.
+/// ## 켜는 법
+/// 진단용으로 따로 빌드한 Android APK에서만 켜진다 — `--dart-define=ALTCALC_LAYOUT_LOG=true`([buildFlag]).
+/// 일반 빌드(스토어 배포 포함)에는 이 로그가 없다. `main()`이 [enableForBuild]로 켜고, 테스트는 [enable]로 직접 켠다.
+/// 진단 빌드는 릴리스로 만든다(디버그 빌드는 시작이 느려 첫 프레임 시점이 실제와 다르다):
+/// `flutter build apk --release --dart-define=ALTCALC_LAYOUT_LOG=true`
 ///
-/// - `main()`만 [enable]로 켠다. 테스트·개발용 미리보기는 켜지 않으므로 출력이 없다.
-/// - 릴리스 빌드에서도 남는다(`debugPrint`) — 원격 테스트 기기에는 릴리스 APK를 올린다(디버그 빌드는 시작이 느려
-///   첫 프레임 시점이 실제와 다르다). 값이 **바뀔 때만** 남겨 평소 사용에서는 몇 줄뿐이다.
-/// - 개인 정보는 없다(창·화면 크기, 접힘선 위치, 판정 결과, 프레임 시각뿐).
+/// ## 어느 배치가 화면에 나갔는지 읽는 법
+/// "배치" 줄은 그 배치를 **빌드**한 때(`@` 뒤, [enable]부터 잰 ms)를 적는다. 배치가 바뀌면 그 앞 [frameMarginMicros]부터
+/// 뒤 [frameWatchMicros]까지 빌드를 시작한 프레임마다 "프레임" 줄(빌드 시작·래스터 끝 시각)을 남긴다. 어떤 배치 줄의
+/// 시각이 한 프레임의 빌드 시작 ~ 래스터 끝 사이에 들면 그 배치가 그 프레임으로 화면에 나간 것이다. 빌드하고도 어떤
+/// 프레임에도 들지 않으면(래스터 전에 다음 배치로 다시 빌드) 사용자는 그 배치를 보지 못했다. 프레임 줄은 엔진이 모아서
+/// 보내므로(릴리스는 약 1초마다) 배치 줄보다 늦게 찍힌다.
+/// 배치 줄 시각([Timeline.now])과 프레임 시각([FrameTiming])은 같은 단조 시계라고 본다 — Pixel Fold 에뮬레이터에서
+/// 배치 줄 시각이 늘 그 배치를 그린 프레임의 빌드 시작 뒤 수 ms 안에 들어 맞았다(#158).
+///
+/// 개인 정보는 없다(창·화면 크기, 접힘선 위치, 판정 결과, 프레임 시각뿐).
 abstract final class LayoutLog {
   /// 로그 줄 머리말 — `flutter` 태그의 다른 로그와 구분한다.
   static const String prefix = 'AltCalc';
 
+  /// 이 빌드가 진단 빌드인지 (`--dart-define=ALTCALC_LAYOUT_LOG=true`)
+  static const bool buildFlag = bool.fromEnvironment('ALTCALC_LAYOUT_LOG');
+
   /// 배치가 바뀐 뒤 프레임 시각을 남기는 시간 (µs)
   static const int frameWatchMicros = 2000000;
+
+  /// 배치가 바뀌기 전 프레임도 남기는 여유 (µs) — 배치 줄은 그 프레임의 빌드 시작 **뒤**에 찍히므로, 그 프레임까지 담는다.
+  static const int frameMarginMicros = 100000;
 
   static void Function(String line)? _sink;
   static int Function() _clock = _timelineNow;
@@ -38,11 +49,21 @@ abstract final class LayoutLog {
   static bool _watchFrameTimings = false;
   static bool _timingsAdded = false;
 
-  /// 프레임 시각을 남길 마지막 빌드 시작 시각 (µs, [_clock] 기준). `null`이면 남기지 않는다.
+  /// 프레임 시각을 남길 빌드 시작 구간 (µs, [_clock] 기준). `null`이면 남기지 않는다.
+  static int? _watchFrom;
   static int? _watchUntil;
 
   /// [FrameTiming]과 같은 시계(단조 시계, µs)
   static int _timelineNow() => Timeline.now;
+
+  /// 진단 빌드([buildFlag])의 Android 앱이면 켠다 — `main()`이 부른다.
+  static void enableForBuild() {
+    if (buildFlag &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      enable();
+    }
+  }
 
   /// 로그를 켠다. 시각은 지금부터 잰다.
   /// - [sink]: 줄을 받을 곳 (기본 `debugPrint`, 테스트가 바꿔 끼운다)
@@ -58,7 +79,7 @@ abstract final class LayoutLog {
     _origin = _clock();
     _lastLayout = null;
     _watchFrameTimings = frameTimings;
-    _watchUntil = null;
+    _stopWatchingFrames();
   }
 
   /// 로그를 끈다 (테스트용).
@@ -66,21 +87,24 @@ abstract final class LayoutLog {
   static void disable() {
     _sink = null;
     _lastLayout = null;
-    _watchUntil = null;
-    if (_timingsAdded) {
-      SchedulerBinding.instance.removeTimingsCallback(onFrameTimings);
-      _timingsAdded = false;
-    }
+    _stopWatchingFrames();
   }
 
   /// 켜져 있는지
   static bool get enabled => _sink != null;
 
+  /// 프레임 시각 보고를 받고 있는지 (테스트용) — 감시 구간이 끝나면 떼어 엔진이 시각을 모으지 않게 한다.
+  @visibleForTesting
+  static bool get watchingFrames => _timingsAdded;
+
   static void _write(String message) => _sink?.call('$prefix $message');
 
-  /// Dart가 받은 시작 시 폴더블 판정 결과 ([FormFactor.queryFoldableDevice] — 조회 실패·제한 시간 초과도 `false`)
-  static void foldableQuery(FoldableStartup startup) =>
-      _write('시작 판정 받음: 폴더블=${startup.foldable}, 창 배치 첫 값 접힘=${startup.fold}');
+  /// Dart가 받은 시작 시 폴더블 판정 결과 ([FormFactor.queryFoldableDevice] — 조회 실패·제한 시간 초과도 폴더블 아님).
+  /// 창 배치 첫 값 접힘은 Android가 보낸 그대로 적는다 — `null`은 첫 값을 받지 못한 것(제한 시간 초과 등)이다.
+  static void foldableQuery(FoldableStartup startup) => _write(
+    '시작 판정 받음: 폴더블=${startup.foldable}, '
+    '창 배치 첫 값 접힘=${startup.fold ?? '모름'}',
+  );
 
   /// 첫 화면을 띄우기 전 접힘 정보 기다림 결과 (`DeviceOrientationLock.waitForFoldFeature`) — [arrived]가 거짓이면 제한 시간 초과
   static void foldFeatureWait({
@@ -91,7 +115,8 @@ abstract final class LayoutLog {
     '(${(waited.inMicroseconds / 1000).toStringAsFixed(1)}ms)',
   );
 
-  /// 첫 프레임을 화면에 그렸다(래스터 완료 — 이때 Android 시작 화면이 걷힌다).
+  /// 첫 프레임 래스터가 끝났다는 것을 Dart가 알게 됐다 (`waitUntilFirstFrameRasterized`). 시각은 알게 된 때다 — 래스터가
+  /// 끝난 실제 시각은 같은 프레임의 "프레임" 줄(래스터 끝)이 더 정확하다. 이때쯤 Android 시작 화면이 걷힌다.
   static void firstFrame() => _write('첫 프레임 그림 @${_since(_clock())}');
 
   /// 시작 판정이 놓친 폴더블을 화면 정보로 알아봤다 (`DeviceOrientationLock` "폴더블 기억").
@@ -143,25 +168,44 @@ abstract final class LayoutLog {
   }
 
   static void _watchFrames(int now) {
+    // 이어서 바뀌면 구간을 늘린다(시작은 처음 바뀐 때 그대로)
+    _watchFrom ??= now - frameMarginMicros;
     _watchUntil = now + frameWatchMicros;
     if (_timingsAdded) return;
     SchedulerBinding.instance.addTimingsCallback(onFrameTimings);
     _timingsAdded = true;
   }
 
-  /// 엔진이 보낸 프레임 시각 — 배치가 바뀐 뒤 [frameWatchMicros] 안에 빌드를 시작한 프레임만 남긴다.
+  static void _stopWatchingFrames() {
+    _watchFrom = null;
+    _watchUntil = null;
+    if (_timingsAdded) {
+      SchedulerBinding.instance.removeTimingsCallback(onFrameTimings);
+      _timingsAdded = false;
+    }
+  }
+
+  /// 엔진이 보낸 프레임 시각 — 감시 구간(배치가 바뀌기 [frameMarginMicros] 전 ~ 바뀐 뒤 [frameWatchMicros]) 안에서
+  /// 빌드를 시작한 프레임만 남긴다. 구간이 지난 프레임이 오면 보고를 뗀다(다음 배치 변화 때 다시 붙인다).
   @visibleForTesting
   static void onFrameTimings(List<FrameTiming> timings) {
+    final from = _watchFrom;
     final until = _watchUntil;
-    if (!enabled || until == null) return;
+    if (!enabled || from == null || until == null) return;
+    var past = false;
     for (final t in timings) {
       final buildStart = t.timestampInMicroseconds(FramePhase.buildStart);
-      if (buildStart > until) continue;
+      if (buildStart > until) {
+        past = true;
+        continue;
+      }
+      if (buildStart < from) continue;
       _write(
         '프레임 #${t.frameNumber}: 빌드 @${_since(buildStart)} ~ '
         '래스터 끝 @${_since(t.timestampInMicroseconds(FramePhase.rasterFinish))}',
       );
     }
+    if (past) _stopWatchingFrames();
   }
 
   /// [enable]부터 [micros]까지 (ms, 소수 첫째 자리)

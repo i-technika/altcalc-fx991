@@ -21,7 +21,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
   // 시작 판정·방향 요청·화면 배치 진단 로그 (#158, `adb logcat -s AltCalc flutter`)
-  LayoutLog.enable();
+  LayoutLog.enableForBuild();
   // 방향 요청과 설정 저장소 열기를 함께 진행한다. 손잡이 설정이 첫 화면부터 반영되도록 둘 다 기다린다 (#24).
   // Android "고대비 텍스트" 첫 값도 함께 기다려 첫 화면부터 맞는 팔레트로 그린다 (#95).
   final (_, settings, _) = await (
@@ -29,7 +29,9 @@ Future<void> main() async {
       LayoutLog.foldableQuery(startup);
       // 창 배치 첫 값에 접힘선이 있었으면 그 정보가 화면 정보로 올 때까지 첫 화면을 미룬다 (#158) — 미루지 않으면
       // 펼친 내부 화면의 첫 프레임이 위아래 배치였다가 접힘선 기준 배치로 바뀐다.
-      if (startup.fold) await DeviceOrientationLock.waitForFoldFeature();
+      if (startup.fold == true) {
+        await DeviceOrientationLock.waitForFoldFeature();
+      }
       return DeviceOrientationLock.instance.start(
         foldableDevice: startup.foldable,
       );
@@ -154,12 +156,17 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     );
   }
 
-  /// 접힘 정보를 기다리는 최대 시간 (#158). Android가 창 배치 정보 첫 값을 받은 뒤라, Flutter 엔진의 같은 출처
-  /// 구독(먼저 붙는다)도 이미 값을 받아 화면 정보로 보내는 중이다 — 보통 바로 온다. 오지 않으면(엔진 쪽 사정) 그냥 시작한다.
+  /// 접힘 정보를 기다리는 최대 시간 (#158). Flutter 엔진도 같은 출처(Jetpack WindowManager)를 따로 구독해 화면 정보로
+  /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Android 판정이 첫 값을
+  /// 받은 뒤 0~15ms 안에 왔다(7번). 오지 않으면 그냥 시작한다 — 그때는 위아래 배치가 먼저 보일 수 있다.
+  ///
+  /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간이다.
   static const Duration foldFeatureWait = Duration(milliseconds: 300);
 
   /// 화면 정보([FlutterView.displayFeatures])에 접히는 부분이 올 때까지(최대 [timeout]) 기다린다 (#158).
   /// 이미 있으면 바로 끝난다. 앱 시작(`main()`)이 Android 판정의 `fold`가 참일 때 첫 화면을 띄우기 전에 부른다.
+  /// 접히는 부분이 아닌 화면 특징(화면 구멍 등)만 오면 계속 기다린다. 기다린 시간 로그는 실제 시계로 잰다(테스트의 가짜
+  /// 시간과 다르다).
   static Future<void> waitForFoldFeature({
     Duration timeout = foldFeatureWait,
   }) async {
