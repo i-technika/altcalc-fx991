@@ -17,7 +17,7 @@
                  짧은 창은 앱이 좌우 분할로 그리거나 창을 키워 달라는 안내를 띄운다 — CalcTheme "짧은 창" 절. -->
             <!-- configChanges의 assetsPaths (#96): Android 14 이상에서 "색상 대비"(표준·중간·높음)를 바꾸면 시스템이
                  리소스 오버레이를 바꿔 CONFIG_ASSETS_PATHS 구성 변경이 난다. 선언하지 않으면 액티비티가 다시 만들어지면서
-                 Flutter 엔진도 새로 시작해 입력 중이던 수식이 사라지고 몇 초간 빈 화면이 보였다(에뮬레이터 API 36.1 확인).
+                 Flutter 엔진도 새로 시작해 입력 상태가 사라지고 몇 초간 빈 화면이 보였다(에뮬레이터 API 36.1 확인).
                  이 선언은 다시 만들지 않게 할 뿐이다. 대비 값 자체는 엔진이 구성 변경과 따로 UiModeManager 대비 변경
                  리스너(AccessibilityBridge, API 34+)로 받아 MediaQuery.highContrast를 바꾸므로, 다시 만들지만 않으면
                  고대비 팔레트가 바로 전환된다.
@@ -26,11 +26,7 @@
                  쓰지 않아 영향이 없다. 앱 안에 Android 뷰(광고 플랫폼 뷰 등)를 넣을 때는 이 전제를 다시 확인한다.
                  이 값은 compileSdk 36부터 공개 속성이고, API 34·35는 같은 비트(숨김 상수 CONFIG_ASSETS_PATHS)로 판단한다.
                  그 비트가 없던 옛 버전에서는 무시될 뿐이다. 에뮬레이터 API 34·35·36.1에서 다시 만들지 않는 것을 확인했다.
-                 API 35(#182, google_apis x86_64 r9, adb settings put으로 변경)에서는 표준→중간→높음→표준 모두
-                 화면 상태(LCD의 마지막 키 표시와 SHIFT 대기 — M1에는 수식 입력이 없어 대신 봤다)가 유지됐다.
-                 logcat events 버퍼에도 이 액티비티의 wm_relaunch_*·wm_on_create_called가 없었다(앱이 백그라운드일
-                 때 바꾼 경우도 같음). 같은 에뮬레이터에서 이 값을 뺀 빌드는 wm_relaunch_resume_activity(구성 비트
-                 80000000)와 wm_on_create_called가 찍히며 다시 만들어졌고 그 상태가 사라졌다.
+                 (방법·로그·assetsPaths를 뺀 대조 빌드는 #96·#182 — PR #147·#195.)
                  API 33에서는 설치·실행에 영향이 없다.
                  "굵은 텍스트"(fontWeightAdjustment)는 넣지 않았다 — 선언하면 엔진이 MediaQuery.boldText를 갱신하지 않는다
                  (엔진은 그 값을 AccessibilityBridge를 만들 때만 읽는다). 그래서 굵은 텍스트를 바꾸면 지금도 액티비티가
