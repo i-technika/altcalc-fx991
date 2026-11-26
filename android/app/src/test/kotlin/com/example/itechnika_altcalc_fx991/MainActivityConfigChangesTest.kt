@@ -16,7 +16,9 @@ import org.robolectric.annotation.Config
  * 정수값에 그 비트가 실제로 들어갔는지 본다(다른 매니페스트가 `tools:replace`로 덮어써도 여기서 걸린다).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [FIRST_PUBLIC_API_SDK])
+// 색상 대비가 있는 API 수준 가운데 Robolectric이 이미 받아 쓰는 두 수준(35·36)에서 본다. 값은 매니페스트에서 오므로
+// 수준마다 같아야 한다.
+@Config(sdk = [LAST_LEGACY_SDK, FIRST_PUBLIC_API_SDK])
 class MainActivityConfigChangesTest {
     private val configChanges: Int
         get() {
@@ -38,6 +40,12 @@ class MainActivityConfigChangesTest {
     @Test
     fun `굵은 텍스트 변경은 선언하지 않는다`() {
         // 선언하면 엔진이 MediaQuery.boldText를 갱신하지 않는다 — 매니페스트 주석, #148 참조
-        assertEquals(0, configChanges and ActivityInfo.CONFIG_FONT_WEIGHT_ADJUSTMENT)
+        val value = configChanges
+        // 값을 읽지 못해 0이 와도 아래 단언이 통과하지 않도록, 템플릿 기본값 비트가 있는지 먼저 본다
+        assertTrue(
+            "configChanges=0x${Integer.toHexString(value)}",
+            value and ActivityInfo.CONFIG_ORIENTATION != 0,
+        )
+        assertEquals(0, value and ActivityInfo.CONFIG_FONT_WEIGHT_ADJUSTMENT)
     }
 }
