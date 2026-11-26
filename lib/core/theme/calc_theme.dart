@@ -426,7 +426,8 @@ abstract final class CalcTheme {
     height: 1.3,
   );
 
-  /// LCD 상태 표시줄 텍스트 스타일 (S, A, D/R/G, FIX 등 — 슬롯은 `LcdIndicatorSlot`, →x·√▭✎·‖는 `LcdStatusIcon`이 그림).
+  /// LCD 상태 표시줄 텍스트 스타일 (M, FIX 등 — 슬롯은 `LcdIndicatorSlot`. S·A·D/R/G는 `LcdStatusBoxedLetter`가,
+  /// →x·√▭✎·‖는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
   static const TextStyle lcdStatusStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -563,16 +564,21 @@ abstract final class CalcTheme {
   /// 직접 그리는 상태 아이콘(#57)이 글자와 같은 높이가 되도록 쓴다(테스트가 글꼴 파일 값과 대조).
   static const double lcdStatusCapHeightRatio = 0.714;
 
-  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 아이콘의 화살표를 x높이 가운데에 놓는다
+  /// 상태 표시 글꼴의 x높이 (글자 크기 대비, OS/2 sxHeight 542/1000) — `→x` 상자 안 x의 잉크를 상자 가운데에 맞춘다
   static const double lcdStatusXHeightRatio = 0.542;
 
   /// 상태 아이콘 선 굵기 (글자 크기 대비) — SemiBold 글자 획 굵기와 비슷하게.
-  /// `‖`의 밝은 두 획(칸의 33%·67% 위치) 사이에 어두운 부분이 남도록 칸 폭의 34%보다 가늘어야 한다(테스트로 검증, #160).
+  /// `‖`의 밝은 두 획(칸의 37%·63% 위치) 사이에 어두운 부분이 남도록 칸 폭의 26%보다 가늘어야 한다(테스트로 검증, #160).
   static const double lcdStatusIconStrokeRatio = 0.1;
 
   /// 상자 안 글자 크기 (상자 높이 = 대문자 높이 대비) — 반전 상자 글자(S·A·D·R·G)와 `→x`의 x (#160).
-  /// 실물은 7도트 높이 상자 안에 위아래 1도트를 남긴 5도트 글자다(ClassWiz 스프라이트·Commons 사진의 D).
+  /// 실물은 7도트 높이 상자 안에 위아래 1도트를 남긴 5도트 글자다(User's Guide 표시기 표·스프라이트·사진의 D).
   static const double lcdStatusBoxedLetterRatio = 5 / 7;
+
+  /// `→x` 상자 안 x의 글자 크기 (옆 글자 크기 대비). 상자 안쪽 폭(한 칸 0.6em − 테두리 2×0.1em = 0.4em)에서
+  /// x 잉크 폭(약 0.52em × 이 값)이 양쪽 테두리와 떨어지도록 [lcdStatusBoxedLetterRatio]보다 작게 둔다 —
+  /// 5/7이면 작은 크기(10dp·3x)에서 x 팔 끝이 테두리에 붙어 ⊠처럼 보인다(#160 리뷰 R1).
+  static const double lcdStatusStoreXRatio = 0.55;
 
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —

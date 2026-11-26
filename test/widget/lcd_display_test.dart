@@ -81,12 +81,18 @@ Finder _slotDrawing(LcdIndicatorSlot slot) => switch (slot.icon) {
   null => _statusText(slot.template),
 };
 
+/// 반전 상자 글자 [slot]의 색. 상자 안 글자가 슬롯의 대표 문자인지도 확인한다(#160 리뷰 R1).
+Color _boxedColor(WidgetTester tester, LcdIndicatorSlot slot) {
+  final boxed = tester.widget<LcdStatusBoxedLetter>(_boxedLetter(slot));
+  expect(boxed.letter, slot.template, reason: slot.name);
+  return boxed.color;
+}
+
 /// [slot]이 그려진 색
 Color? _slotColor(WidgetTester tester, LcdIndicatorSlot slot) =>
     switch (slot.icon) {
       final icon? => tester.widget<LcdStatusIcon>(_statusIcon(icon)).color,
-      null when slot.boxed =>
-        tester.widget<LcdStatusBoxedLetter>(_boxedLetter(slot)).color,
+      null when slot.boxed => _boxedColor(tester, slot),
       null => _colorOf(tester, _statusText(slot.template)),
     };
 

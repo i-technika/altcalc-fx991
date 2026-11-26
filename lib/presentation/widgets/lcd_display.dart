@@ -370,13 +370,17 @@ class LcdDisplay extends StatelessWidget {
                     children: [
                       SizedBox(
                         height: statusBarHeight,
-                        child: LcdStatusBar(
-                          status: status,
-                          style: CalcTheme.lcdStatusStyle.copyWith(
-                            fontSize: statusFont,
+                        // 상태 표시줄은 입력·결과 줄보다 드물게 바뀐다. 키를 누를 때마다 상자 글자(saveLayer)와
+                        // 아이콘을 다시 그리지 않도록 따로 칠한다(#160 리뷰 R1).
+                        child: RepaintBoundary(
+                          child: LcdStatusBar(
+                            status: status,
+                            style: CalcTheme.lcdStatusStyle.copyWith(
+                              fontSize: statusFont,
+                            ),
+                            textScaler: textScaler,
+                            showInactive: showInactiveIndicators,
                           ),
-                          textScaler: textScaler,
-                          showInactive: showInactiveIndicators,
                         ),
                       ),
                       Expanded(

@@ -718,15 +718,21 @@ void main() {
       );
       expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
       expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
-      // ‖ 밝은 두 획 중심 간격 = 칸 폭(0.6em)의 34%(33%·67% 위치) — 획 굵기가 그보다 작아야 두 획 사이에
+      // ‖ 밝은 두 획 중심 간격 = 칸 폭(0.6em)의 26%(37%·63% 위치) — 획 굵기가 그보다 작아야 두 획 사이에
       // 어두운 부분이 남는다(#160).
       expect(
         CalcTheme.lcdStatusIconStrokeRatio,
-        lessThan(0.34 * CalcTheme.lcdStatusCharWidthRatio),
+        lessThan(0.26 * CalcTheme.lcdStatusCharWidthRatio),
       );
       // 상자 안 글자는 상자보다 작다(위아래에 상자가 남는다).
       expect(CalcTheme.lcdStatusBoxedLetterRatio, greaterThan(0));
       expect(CalcTheme.lcdStatusBoxedLetterRatio, lessThan(1));
+      // →x의 x는 테두리에 붙지 않도록 상자 글자보다 작다.
+      expect(CalcTheme.lcdStatusStoreXRatio, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusStoreXRatio,
+        lessThan(CalcTheme.lcdStatusBoxedLetterRatio),
+      );
     });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
