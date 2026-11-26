@@ -710,23 +710,30 @@ void main() {
   });
 
   group('치수', () {
-    test(
-      '상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘다 (#57)',
-      () {
-        expect(CalcTheme.lcdStatusXHeightRatio, greaterThan(0));
-        expect(
-          CalcTheme.lcdStatusXHeightRatio,
-          lessThan(CalcTheme.lcdStatusCapHeightRatio),
-        );
-        expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
-        expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
-        // ‖ 두 획 중심 간격 = 칸 폭(0.6em)의 40% — 획 굵기가 그보다 작아야 사이가 빈다.
-        expect(
-          CalcTheme.lcdStatusIconStrokeRatio,
-          lessThan(0.4 * CalcTheme.lcdStatusCharWidthRatio),
-        );
-      },
-    );
+    test('상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘고, 상자 안 글자는 상자보다 작다 (#57, #160)', () {
+      expect(CalcTheme.lcdStatusXHeightRatio, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusXHeightRatio,
+        lessThan(CalcTheme.lcdStatusCapHeightRatio),
+      );
+      expect(CalcTheme.lcdStatusCapHeightRatio, lessThan(1));
+      expect(CalcTheme.lcdStatusIconStrokeRatio, greaterThan(0));
+      // ‖ 밝은 두 획 중심 간격 = 칸 폭(0.6em)의 26%(37%·63% 위치) — 획 굵기가 그보다 작아야 두 획 사이에
+      // 어두운 부분이 남는다(#160).
+      expect(
+        CalcTheme.lcdStatusIconStrokeRatio,
+        lessThan(0.26 * CalcTheme.lcdStatusCharWidthRatio),
+      );
+      // 상자 안 글자는 상자보다 작다(위아래에 상자가 남는다).
+      expect(CalcTheme.lcdStatusBoxedLetterRatio, greaterThan(0));
+      expect(CalcTheme.lcdStatusBoxedLetterRatio, lessThan(1));
+      // →x의 x는 테두리에 붙지 않도록 상자 글자보다 작다.
+      expect(CalcTheme.lcdStatusStoreXRatio, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusStoreXRatio,
+        lessThan(CalcTheme.lcdStatusBoxedLetterRatio),
+      );
+    });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
       for (final v in [

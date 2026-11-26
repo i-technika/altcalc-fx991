@@ -481,7 +481,7 @@ class LcdStatusBar extends StatelessWidget {
     final resolvedStyle = DefaultTextStyle.of(context).style.merge(sized);
     final fontSize = textScaler.scale(resolvedStyle.fontSize!);
     final slotHeight = fontSize * CalcTheme.lcdStatusBarHeightRatio;
-    // 직접 그리는 아이콘(#57)의 치수 — 세 아이콘이 같은 값을 쓰므로 한 번만 계산한다.
+    // 직접 그리는 아이콘(#57)·반전 상자 글자(#160)의 치수 — 모두 같은 값을 쓰므로 한 번만 계산한다.
     final iconMetrics = LcdStatusIconMetrics.of(
       resolvedStyle,
       textScaler,
@@ -639,6 +639,10 @@ List<double>? lcdStatusSlotLefts({
 }
 
 /// 상태 표시줄의 고정 너비 슬롯 하나.
+///
+/// 직접 그리는 아이콘과 반전 상자 글자는 슬롯마다 `RepaintBoundary`로 따로 칠한다. 키를 누르면 LCD 전체가 다시
+/// 빌드·배치되지만, 슬롯 크기·치수·색이 같으면 이 경계는 다시 칠하지 않는다(상자 글자의 saveLayer와 글자 배치를
+/// 키마다 되풀이하지 않는다, #160 리뷰 R2).
 class _IndicatorSlot extends StatelessWidget {
   final LcdIndicatorSlot slot;
 
@@ -653,7 +657,7 @@ class _IndicatorSlot extends StatelessWidget {
   /// 꺼진 표시기 색 ([CalcPalette.lcdStatusInactive])
   final Color inactiveColor;
 
-  /// 아이콘 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
+  /// 아이콘·반전 상자 글자 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
   final LcdStatusIconMetrics iconMetrics;
 
   const _IndicatorSlot({
@@ -680,11 +684,30 @@ class _IndicatorSlot extends StatelessWidget {
         width: width,
         height: height,
         child: isOn || showInactive
-            ? LcdStatusIcon(
-                key: ValueKey(icon),
-                icon: icon,
-                color: color,
-                metrics: iconMetrics,
+            ? RepaintBoundary(
+                child: LcdStatusIcon(
+                  key: ValueKey(icon),
+                  icon: icon,
+                  color: color,
+                  metrics: iconMetrics,
+                ),
+              )
+            : null,
+      );
+    }
+    if (slot.boxed) {
+      // 반전 상자 글자 (#160) — 꺼져도 같은 모양을 꺼진 색으로 그린다.
+      return SizedBox(
+        width: width,
+        height: height,
+        child: isOn || showInactive
+            ? RepaintBoundary(
+                child: LcdStatusBoxedLetter(
+                  key: ValueKey('boxed-${slot.name}'),
+                  letter: slot.template,
+                  color: color,
+                  metrics: iconMetrics,
+                ),
               )
             : null,
       );
