@@ -195,6 +195,36 @@ flutter run -d chrome -t preview/key_preview_main.dart
 
 4. 실행 및 디버그(Ctrl+Shift+D)에서 구성을 고르고 F5를 누른다.
 
+### Android 기기에서 실행
+
+`AltCalc (앱)`은 기기를 지정하지 않으므로, F5 전에 상태 표시줄 오른쪽의 기기 이름을 눌러 Android 기기를 고른다.
+
+- 목록에는 연결된 실기기와 켜져 있는 에뮬레이터가 나온다. 꺼진 에뮬레이터는 `Start <이름>` 항목으로 바로 켤 수 있다.
+  새 기기가 연결되면 확장이 그 기기를 자동으로 고른다(`dart.flutterSelectDeviceWhenConnected`, 기본값 켜짐).
+  그래서 F5 전에 상태 표시줄이 원하는 기기인지 확인한다.
+- Debug Console에는 다음 순서로 나온다.
+  1. `Launching lib\main.dart on <기기> in debug mode...`
+  2. 진행 알림 `Running Gradle task 'assembleDebug'...`
+  3. `√ Built build\app\outputs\flutter-apk\app-debug.apk`
+  4. 설치
+  5. `Connected to the VM Service.`
+
+  `build/`가 빈 작업 트리의 첫 실행은 빌드에 1분 30초쯤 걸렸다.
+- 핫 리로드는 Ctrl+S로 저장하면 자동으로 된다. 기본값 `dart.flutterHotReloadOnSave: manual`이라 자동 저장(지연·포커스 이동)으로는 하지 않는다.
+  디버그 도구 모음의 번개 단추나 Ctrl+F5로도 한다. Debug Console에 `Reloaded 1 of … libraries`가 찍힌다.
+  핫 리스타트는 도구 모음의 다시 시작(Ctrl+Shift+F5)이며 `Restarted application`이 찍힌다.
+- 앱 ID(`com.example.itechnika_altcalc_fx991`)는 모든 작업 트리에서 같다. 다른 작업 트리나 병렬 작업이 쓰는 기기에 실행하면 그 설치를 덮어쓴다.
+  병렬로 작업할 때는 에뮬레이터를 따로 띄운다. 예: `emulator -avd <이름> -port 5560 -read-only`. `-read-only`는 같은 AVD를 동시에 여러 개 띄울 때 쓴다.
+
+이 절의 동작은 Android 16(API 36) 에뮬레이터로 확인했다(#68). VS Code에서 F5를 직접 누르지 않고, 확장이 F5에서 보내는 것과 같은 `launch` 인자를
+`flutter debug_adapter`에 보냈다(#52와 같은 방식). 그 결과는 다음과 같다.
+
+- `appStarted`까지 108초 걸렸다.
+- 저장 시와 같은 핫 리로드 요청은 0.6~0.8초, 핫 리스타트는 1.9초 걸렸다.
+- 종료 요청으로 정상 종료됐다.
+
+목록 항목·자동 선택·저장 시 리로드 규칙은 확장(Dart-Code 3.146) 소스로 확인했다.
+
 ### Flutter SDK를 찾는 순서
 
 확장(Dart-Code 3.146 소스 기준)은 위에서부터 처음 찾은 SDK를 쓴다.
