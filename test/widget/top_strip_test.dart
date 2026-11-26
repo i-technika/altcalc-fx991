@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/semantics.dart';
@@ -72,18 +73,13 @@ Future<ProviderContainer> _pump(
 /// 본체 크기 [body]의 위아래 배치에서 LCD 영역 (본체 좌표)
 Rect _stackedLcd(Size body) {
   final l = CalcScreenLayout.of(body);
-  return Rect.fromLTWH(l.lcdLeft, l.top, l.lcdWidth, l.lcdHeight);
+  return Rect.fromLTWH(0, l.top, body.width, l.lcdHeight);
 }
 
-/// 창 [size]·인셋(위 [top], 아래 [bottom])의 본체 크기 — 좌우 화면 여백, 위 화면 여백, 광고 슬롯·안전 여백 제외
+/// 창 [size]·인셋(위 [top], 아래 [bottom])의 본체 크기 — 시스템 인셋과 네 변의 화면 여백 제외 (#141)
 Size _bodyOf(Size size, {double top = 0, double bottom = 0}) => Size(
   size.width - 2 * CalcTheme.screenPadding,
-  size.height -
-      top -
-      bottom -
-      CalcTheme.screenPadding -
-      CalcTheme.adSlotHeight -
-      CalcTheme.adSlotSafetyMargin,
+  size.height - top - bottom - 2 * CalcTheme.screenPadding,
 );
 
 /// 시맨틱 트리의 모든 노드 (뿌리 제외)
@@ -125,8 +121,9 @@ void main() {
     test(
       '최소 띠(줄 20dp): 아이콘이 줄어들고, 터치 영역은 줄 윗변에서 48dp로 LCD 위에 겹치며, 워드마크만 그린다',
       () {
-        // iPhone 390×844 (인셋 47/34): 남는 높이가 없어 띠는 최소 높이 12dp
-        final body = _bodyOf(const Size(390, 844), top: 47, bottom: 34);
+        // 360×640 (인셋 24/48): 남는 높이가 없어 띠는 최소 높이 12dp (#141 전 예시 iPhone 390×844는 맨 아래 광고
+        // 슬롯이 빠져 남는 높이가 생겼다)
+        final body = _bodyOf(const Size(360, 640), top: 24, bottom: 48);
         final lcd = _stackedLcd(body);
         expect(lcd.top, CalcTheme.screenTopStripMinHeight);
         final s = CalcTopStripLayout.of(body, lcd);
@@ -147,8 +144,8 @@ void main() {
     );
 
     test('줄이 태양전지 최소 높이보다 낮으면 워드마크만 그리고, 아이콘은 기본 크기다', () {
-      // 360×800 (인셋 24/24): 남는 높이 약 20.8dp → 줄 약 28.8dp
-      final body = _bodyOf(const Size(360, 800), top: 24, bottom: 24);
+      // iPhone 16 Pro 402×874 (인셋 62/34): 남는 높이 약 18.7dp → 줄 약 26.7dp
+      final body = _bodyOf(const Size(402, 874), top: 62, bottom: 34);
       final lcd = _stackedLcd(body);
       final s = CalcTopStripLayout.of(body, lcd);
       expect(s.row.height, moreOrLessEquals(lcd.top + pad));
@@ -163,8 +160,8 @@ void main() {
     });
 
     test('줄이 태양전지 최소 높이 이상이면 설정 버튼 왼쪽에 태양전지를 그린다', () {
-      // 412×915 (인셋 24/24): 남는 높이 약 36.7dp → 줄 약 44.7dp (버튼보다 낮다)
-      final body = _bodyOf(const Size(412, 915), top: 24, bottom: 24);
+      // iPhone 390×844 (인셋 47/34): 남는 높이 약 26.6dp → 줄 약 34.6dp (버튼보다 낮다)
+      final body = _bodyOf(const Size(390, 844), top: 47, bottom: 34);
       final lcd = _stackedLcd(body);
       final s = CalcTopStripLayout.of(body, lcd);
       final row = s.row;
@@ -184,17 +181,26 @@ void main() {
         solar.left,
         greaterThanOrEqualTo(s.wordmark!.right + CalcTheme.topStripGap),
       );
-      expect(s.wordmarkFontSize, CalcTheme.topStripWordmarkMaxFontSize);
+      expect(
+        s.wordmarkFontSize,
+        moreOrLessEquals(
+          math.min(
+            row.height * CalcTheme.topStripWordmarkFontRatio,
+            CalcTheme.topStripWordmarkMaxFontSize,
+          ),
+        ),
+      );
       // 줄이 버튼보다 낮아 터치 영역은 아직 LCD 위에 겹친다.
       expect(s.settingsButton!.height, button);
       expect(s.settingsButton!.bottom, greaterThan(lcd.top));
     });
 
     test('높은 띠: 내용 줄은 48dp로 LCD 바로 위에 붙고, 설정 버튼은 줄 안에 있다', () {
-      // 10인치 태블릿 세로 800×1280 (인셋 24/48): 남는 높이 약 218dp, LCD는 폭 480으로 가운데
-      final body = _bodyOf(const Size(800, 1280), top: 24, bottom: 48);
+      // 412×915 (인셋 24/24): 남는 높이 약 88.7dp — 줄은 48dp에서 멈추고 그 위는 비워 둔다. (#141 전 예시
+      // 태블릿 세로는 폭 상한이 풀려 남는 높이가 없어졌다 — 아래 "화면비별 띠 내용" 표)
+      final body = _bodyOf(const Size(412, 915), top: 24, bottom: 24);
       final lcd = _stackedLcd(body);
-      expect(lcd.top, greaterThan(200));
+      expect(lcd.top, greaterThan(80));
       final s = CalcTopStripLayout.of(body, lcd);
       expect(
         s.row,
@@ -429,15 +435,33 @@ void main() {
   });
 
   group('위아래 배치: 화면비별 띠 내용', () {
-    // (이름, 창, 인셋, 워드마크, 태양전지, 터치 영역이 LCD 위에 겹치는지)
+    // (이름, 창, 인셋, 워드마크, 태양전지, 터치 영역이 LCD 위에 겹치는지) — #141(맨 아래 광고 슬롯 제거·폭 상한 해제)로
+    // 폰은 띠가 높아지고(iPhone 390×844·430×932는 태양전지가 보인다), 태블릿 세로는 키패드가 남는 높이를 다 써 띠가
+    // 최소 높이가 되었다(태양전지 숨김).
     const devices = [
       ('16:9 소형 320×568', Size(320, 568), EdgeInsets.zero, true, false, true),
+      (
+        '360×640',
+        Size(360, 640),
+        EdgeInsets.only(top: 24, bottom: 48),
+        true,
+        false,
+        true,
+      ),
+      (
+        'iPhone 16 Pro 402×874',
+        Size(402, 874),
+        EdgeInsets.only(top: 62, bottom: 34),
+        true,
+        false,
+        true,
+      ),
       (
         'iPhone 390×844',
         Size(390, 844),
         EdgeInsets.only(top: 47, bottom: 34),
         true,
-        false,
+        true,
         true,
       ),
       (
@@ -445,7 +469,7 @@ void main() {
         Size(430, 932),
         EdgeInsets.only(top: 59, bottom: 34),
         true,
-        false,
+        true,
         true,
       ),
       (
@@ -453,8 +477,8 @@ void main() {
         Size(360, 800),
         EdgeInsets.only(top: 24, bottom: 24),
         true,
-        false,
         true,
+        false,
       ),
       (
         '412×915',
@@ -462,7 +486,7 @@ void main() {
         EdgeInsets.only(top: 24, bottom: 24),
         true,
         true,
-        true,
+        false,
       ),
       (
         '21:9 411×960',
@@ -485,8 +509,8 @@ void main() {
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
         true,
-        true,
         false,
+        true,
       ),
     ];
 
@@ -602,11 +626,13 @@ void main() {
   });
 
   group('설정 진입', () {
-    const iphone = Size(390, 844);
-    const iphoneInsets = EdgeInsets.only(top: 47, bottom: 34);
+    // 남는 높이가 없어 띠가 최소 높이(줄 20dp)인 폰 — #141 전에는 iPhone 390×844(인셋 47/34)였으나 맨 아래 광고
+    // 슬롯이 빠져 그 화면은 줄 약 34.6dp가 되었다.
+    const phone = Size(360, 640);
+    const phoneInsets = EdgeInsets.only(top: 24, bottom: 48);
 
     testWidgets('낮은 띠: 보이는 아이콘을 눌러 설정을 연다', (tester) async {
-      await _pump(tester, size: iphone, padding: iphoneInsets);
+      await _pump(tester, size: phone, padding: phoneInsets);
       await tester.tap(_button);
       await tester.pumpAndSettle();
       expect(_dialog, findsOneWidget);
@@ -615,7 +641,7 @@ void main() {
     testWidgets('낮은 띠: LCD 위쪽에 겹친 터치 영역을 눌러도 설정이 열리고, 그 밖의 LCD는 열지 않는다', (
       tester,
     ) async {
-      await _pump(tester, size: iphone, padding: iphoneInsets);
+      await _pump(tester, size: phone, padding: phoneInsets);
       final lcd = tester.getRect(_lcd);
       final touch = tester.getRect(_touch);
       expect(touch.bottom, greaterThan(lcd.top + 20));
@@ -659,7 +685,7 @@ void main() {
     });
 
     testWidgets('위아래 배치: 대화상자는 지금 화면에서 키패드 위치가 바뀌지 않는다고 안내한다', (tester) async {
-      await _pump(tester, size: iphone, padding: iphoneInsets);
+      await _pump(tester, size: phone, padding: phoneInsets);
       await tester.tap(_button);
       await tester.pumpAndSettle();
       // 테스트 기본 로캘(en_US)
@@ -698,7 +724,7 @@ void main() {
 
     testWidgets('한국어 기기에서는 안내 글이 한국어다', (tester) async {
       useKoreanLocale(tester);
-      await _pump(tester, size: iphone, padding: iphoneInsets);
+      await _pump(tester, size: phone, padding: phoneInsets);
       await tester.tap(_button);
       await tester.pumpAndSettle();
       expect(
@@ -1060,7 +1086,7 @@ void main() {
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      await _pump(tester, size: iphone, padding: iphoneInsets);
+      await _pump(tester, size: phone, padding: phoneInsets);
       expect(
         tester.getSemantics(_button),
         isSemantics(tooltip: 'Settings', isButton: true, hasTapAction: true),
@@ -1072,7 +1098,10 @@ void main() {
         node.transform ?? Matrix4.identity(),
         node.rect,
       );
-      expect(nodeRect.height, lessThanOrEqualTo(lcd.top - 47 + _tolerance));
+      expect(
+        nodeRect.height,
+        lessThanOrEqualTo(lcd.top - phoneInsets.top + _tolerance),
+      );
       // 넓힌 터치 영역은 시맨틱 동작을 만들지 않는다: 터치 영역(48×48)과 겹치는 탭 동작 노드는 버튼 하나뿐이다.
       final touch = tester.getRect(_touch).deflate(1);
       final tappable = [

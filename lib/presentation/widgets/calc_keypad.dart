@@ -29,10 +29,8 @@ enum KeypadArrangement {
   /// [standard]보다 키가 클 때만 쓴다([KeypadMetrics.preferredArrangementFor]). 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것).
-  /// 대표 기기(Fold 가로·Pixel Fold 세로 반 접힘)에서는 이 배열이 아래 절반 폭을 다 써서 손잡이로 옮길 자리가 없다.
-  /// 블록 폭이 [CalcTheme.keypadMaxWidth]에 걸리는 더 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
-  /// 가장자리로 가므로, 왼손잡이면 숫자부가 화면 가운데 쪽에 온다 — 숫자부 위치가 손잡이마다 바뀌면 손에 익은
-  /// 위치가 설정에 따라 달라지므로 블록 순서는 바꾸지 않는다.
+  /// 키패드는 영역 폭을 다 쓰므로(#141 — 폭 상한 없음) 손잡이로 옮길 자리가 없다. 손잡이에 따라 블록을 좌우 대칭으로
+  /// 놓는 것은 가로형 배치(#142)에서 정한다.
   wide,
 }
 
@@ -138,43 +136,30 @@ class KeypadMetrics {
   /// 숫자부 키의 셀 높이 (간격 제외, dp)
   double get numberKeyHeight => math.max(0.0, numberRowHeight - verticalGap);
 
-  /// [available] 영역 안에서 [arrangement] 배열이 가로/세로 비 범위를 지키는 가장 큰 키패드 크기.
+  /// [available] 영역 안에서 [arrangement] 배열이 세로로 길어지지 않는 가장 큰 키패드 크기.
   ///
-  /// - [KeypadArrangement.standard]: 가로/세로 비 [CalcTheme.keypadMinAspectRatio]~[CalcTheme.keypadMaxAspectRatio],
-  ///   폭은 [CalcTheme.keypadMaxWidth] 이하.
-  /// - [KeypadArrangement.wide]: 블록 하나의 가로/세로 비가 위 범위 × [wideHeightFactor]이고(같은 행 높이의
-  ///   표준 키패드와 키 모양 범위가 같다), 블록 폭은 [CalcTheme.keypadMaxWidth] 이하, 블록 사이 간격은
-  ///   블록 폭 × [CalcTheme.keypadWideSectionGapRatio]다.
+  /// 폭은 언제나 영역 폭 전체다 — 가로 쪽 상한은 없다(#141, 사용자 결정 "가로로는 구역을 끝까지 채운다").
+  /// 높이만 영역 높이와 다음 상한 중 작은 쪽으로 줄인다. 그래서 키는 가로로 넓어질 수는 있어도 세로로 길어지지 않는다.
+  /// - [KeypadArrangement.standard]: 키패드 폭 / [CalcTheme.keypadMinAspectRatio].
+  /// - [KeypadArrangement.wide]: 블록 폭 / ([CalcTheme.keypadMinAspectRatio] × [wideHeightFactor]) — 같은 행 높이의
+  ///   표준 키패드와 키 모양의 세로 한계가 같다. 블록 폭은 영역 폭에서 블록 사이 간격
+  ///   (블록 폭 × [CalcTheme.keypadWideSectionGapRatio])을 뺀 절반이다.
   static Size fitSize(
     Size available, [
     KeypadArrangement arrangement = KeypadArrangement.standard,
   ]) {
-    final availableWidth = math.max(0.0, available.width);
+    final width = available.width.isFinite
+        ? math.max(0.0, available.width)
+        : 0.0;
     final availableHeight = math.max(0.0, available.height);
-    switch (arrangement) {
-      case KeypadArrangement.standard:
-        final width = math.min(
-          math.min(availableWidth, CalcTheme.keypadMaxWidth),
-          availableHeight * CalcTheme.keypadMaxAspectRatio,
-        );
-        final height = math.min(
-          availableHeight,
-          width / CalcTheme.keypadMinAspectRatio,
-        );
-        return Size(width, height);
-      case KeypadArrangement.wide:
-        final factor = wideHeightFactor;
-        final block = math.min(
-          math.min(availableWidth / _wideWidthUnits, CalcTheme.keypadMaxWidth),
-          availableHeight * CalcTheme.keypadMaxAspectRatio * factor,
-        );
-        final height = math.min(
-          availableHeight,
-          block / (CalcTheme.keypadMinAspectRatio * factor),
-        );
-        // 폭은 영역 폭을 넘지 않는다 (블록 폭 × 단위 수의 부동소수점 오차로 넘치지 않게).
-        return Size(math.min(block * _wideWidthUnits, availableWidth), height);
-    }
+    final maxHeight = switch (arrangement) {
+      KeypadArrangement.standard => width / CalcTheme.keypadMinAspectRatio,
+      KeypadArrangement.wide =>
+        width /
+            _wideWidthUnits /
+            (CalcTheme.keypadMinAspectRatio * wideHeightFactor),
+    };
+    return Size(width, math.min(availableHeight, maxHeight));
   }
 
   /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키가 [KeypadArrangement.standard]보다
@@ -245,7 +230,9 @@ class KeypadMetrics {
   /// 각인·메인 라벨 글자 크기를 각각 하나로 정해 모든 키에 주입한다. 배율은 [CalcKeyButton]과 같이
   /// [CalcTheme.keyMaxTextScaleFactor]까지 반영하며, 다음 순서로 정한다.
   /// 1. **높이 기준**: 함수부 셀 높이에서 [CalcKeyButton]과 같은 비율로 구한 크기를, 배율을 반영해도
-  ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다.
+  ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다. 큰 키(태블릿)에서는 [CalcTheme.keyMainLabelMaxFontSize]·
+  ///    [CalcTheme.keyLegendMaxFontSize]에서 멈춘다(#141). 폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는
+  ///    이 높이 기준보다 커지지 않는다.
   /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 모든 라벨이 자기 셀 폭에
   ///    들어가는 크기까지 줄인다. 그래서 대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
@@ -283,9 +270,15 @@ class KeypadMetrics {
       maxScaleFactor: CalcTheme.keyMaxTextScaleFactor,
     );
 
-    // 1. 높이 기준
+    // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141)
     final legendByHeight = fitFontSizeToHeight(
-      math.max(minFittedFontSize, legendHeight * CalcTheme.keyLegendFontRatio),
+      math.max(
+        minFittedFontSize,
+        math.min(
+          legendHeight * CalcTheme.keyLegendFontRatio,
+          CalcTheme.keyLegendMaxFontSize,
+        ),
+      ),
       maxHeight: legendHeight,
       textScaler: scaler,
       heightFactor: CalcTheme.keyShiftLabelStyle.height ?? 1.0,
@@ -296,7 +289,13 @@ class KeypadMetrics {
         math.min(CalcTheme.keyPressedOffset, capHeight) -
         2 * CalcTheme.keyBorderWidth;
     final mainByHeight = fitFontSizeToHeight(
-      math.max(minFittedFontSize, capHeight * CalcTheme.keyMainLabelFontRatio),
+      math.max(
+        minFittedFontSize,
+        math.min(
+          capHeight * CalcTheme.keyMainLabelFontRatio,
+          CalcTheme.keyMainLabelMaxFontSize,
+        ),
+      ),
       maxHeight: capInnerHeight,
       textScaler: scaler,
       heightFactor: CalcTheme.keyMainLabelStyle.height ?? 1.0,
