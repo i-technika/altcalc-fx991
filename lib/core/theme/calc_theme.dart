@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -772,6 +774,29 @@ abstract final class CalcTheme {
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
+
+  /// 본체 아래 여백 (dp) — 아래 시스템 인셋([bottomPadding], `MediaQuery.padding.bottom`) 위에 두는 여백 (#63).
+  ///
+  /// 보통은 [screenPadding]이다. 아래 시스템 제스처 영역([bottomGestureInset], `MediaQuery.systemGestureInsets.bottom`,
+  /// Android 홈 제스처)이 인셋보다 [screenPadding] 넘게 깊으면, 본체가 그 영역에 닿지 않을 만큼 넓힌다.
+  /// - 이유: 맨 아래 광고 슬롯이 없어져(#141) 키패드 맨 아래 행이 본체 아래 끝까지 내려온다. 그 행이 제스처 영역에 걸리면
+  ///   `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때 확정해(#50) 맨 아래 행만 누름 감각이 달라진다.
+  ///   아래 영역을 보류 대상에서 빼면, 키 위에서 시작한 홈 스와이프가 키를 먼저 입력해 버린다.
+  /// - 좌우 뒤로가기 영역은 이렇게 피하지 않는다 — 폭(약 24~30dp)만큼 여백을 두면 모든 폰에서 키패드가 좁아진다
+  ///   (`CalculatorScreen` 문서). 아래는 차이가 작고(아래 실측) 대부분 0이다.
+  /// - 실측(#63, Android 에뮬레이터 Debug 빌드, dp — 인셋 / 제스처 영역 → 넓히는 양):
+  ///   · API 36 폰 411×914, 제스처 내비게이션(edge-to-edge 강제): 24 / 32 → 0 (본체 아래 끝 = 제스처 영역 윗변)
+  ///   · 같은 폰, 3버튼: 48 / 48 → 0
+  ///   · API 36 Pixel Fold 내부 841×701(임시 작업 표시줄): 32 / 32 → 0
+  ///   · API 33 폰, 제스처 내비게이션(edge-to-edge 아님 — 창이 내비게이션 바 위에서 끝난다): 0 / 8 → 0
+  ///   위 모두에서 맨 아래 행 키캡 아래 끝은 제스처 영역보다 약 5dp 위다(키패드 셀 안 여백).
+  ///   인셋보다 제스처 영역이 더 깊은 기기(내비게이션 힌트를 숨긴 제스처 내비게이션 등)에서만 넓어진다.
+  /// - 배치 종류와 무관하게 화면 전체 본체에 적용한다 — 키패드가 맨 아래에 오는 모든 배치(위아래·좌우 분할·접힘선·
+  ///   이후의 가로형 #142·접힘선 재정의 #143)가 같은 본체 안에 있다.
+  static double screenBottomMargin({
+    required double bottomPadding,
+    required double bottomGestureInset,
+  }) => math.max(screenPadding, bottomGestureInset - bottomPadding);
 
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;

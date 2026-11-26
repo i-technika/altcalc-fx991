@@ -599,9 +599,10 @@ class CalcTopStripLayout {
 /// - **짧은 창** (분할 화면·팝업 창·가로로 돈 폰, #38): 짧은 변 600dp 미만 창은 위아래 배치와 좌우 분할 중 키가
 ///   큰 쪽으로 그린다(세로 폰은 위아래 배치가 늘 크다). 어느 배치든 그린 키가
 ///   [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을 키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
-/// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 화면
-///   여백([CalcTheme.screenPadding])까지 쓴다. 무과금 사용자의 광고는 이 배치에서 LCD 쪽 한 영역을 줄여
-///   넣는다(화면 맨 위·기록 영역, #18).
+/// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 아래
+///   여백([CalcTheme.screenBottomMargin] — 보통 화면 여백, 아래 제스처 영역이 더 깊으면 그만큼, #63)까지 쓴다.
+///   그래서 맨 아래 키 행은 홈 제스처 영역 밖에 있어 누르는 순간 입력된다. 무과금 사용자의 광고는 이 배치에서
+///   LCD 쪽 한 영역을 줄여 넣는다(화면 맨 위·기록 영역, #18).
 ///
 /// 위아래 배치 구성 (위 → 아래):
 /// ```
@@ -611,7 +612,7 @@ class CalcTopStripLayout {
 ///  │          LCD             │  ← [CalcScreenLayout.lcdHeight]
 ///  │        (간격)            │
 ///  │     50키 키패드          │  ← [CalcScreenLayout.keypadHeight]
-///  │       (화면 여백)        │
+///  │       (아래 여백)        │  ← [CalcTheme.screenBottomMargin] (#63)
 ///  └──────────────────────────┘  ← 하단 시스템 인셋 (SafeArea)
 /// ```
 ///
@@ -621,6 +622,7 @@ class CalcTopStripLayout {
 /// - 좌우 여백은 [CalcTheme.screenPadding]만 둔다. 가장자리 열의 바깥쪽 일부가 Android 제스처
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
+///   아래 제스처 영역은 반대로 여백으로 피한다(위 광고 슬롯 항목) — 깊이 차이가 작아 대부분 기기에서 비용이 없다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
 ///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38).
@@ -659,16 +661,21 @@ class CalculatorScreen extends ConsumerWidget {
       window,
       features,
     )?.bounds.shift(-bodyOrigin);
+    // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 더 깊으면 본체가 그 영역에 닿지 않게 넓힌다 (#63).
+    final bottomMargin = CalcTheme.screenBottomMargin(
+      bottomPadding: padding.bottom,
+      bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
+    );
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
-      // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 화면 여백까지 쓴다 (#141).
+      // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).
       body: SafeArea(
         child: Padding(
           // 위쪽 화면 여백은 `_Body`가 갖는다 — 상단 띠가 그 여백까지 쓴다 (#41).
-          padding: const EdgeInsets.only(
+          padding: EdgeInsets.only(
             left: CalcTheme.screenPadding,
             right: CalcTheme.screenPadding,
-            bottom: CalcTheme.screenPadding,
+            bottom: bottomMargin,
           ),
           child: LayoutBuilder(
             builder: (context, constraints) => _BodyOriginCheck(
