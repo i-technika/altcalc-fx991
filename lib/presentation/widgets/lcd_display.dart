@@ -481,7 +481,7 @@ class LcdStatusBar extends StatelessWidget {
     final resolvedStyle = DefaultTextStyle.of(context).style.merge(sized);
     final fontSize = textScaler.scale(resolvedStyle.fontSize!);
     final slotHeight = fontSize * CalcTheme.lcdStatusBarHeightRatio;
-    // 직접 그리는 아이콘(#57)의 치수 — 세 아이콘이 같은 값을 쓰므로 한 번만 계산한다.
+    // 직접 그리는 아이콘(#57)·반전 상자 글자(#160)의 치수 — 모두 같은 값을 쓰므로 한 번만 계산한다.
     final iconMetrics = LcdStatusIconMetrics.of(
       resolvedStyle,
       textScaler,
@@ -653,7 +653,7 @@ class _IndicatorSlot extends StatelessWidget {
   /// 꺼진 표시기 색 ([CalcPalette.lcdStatusInactive])
   final Color inactiveColor;
 
-  /// 아이콘 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
+  /// 아이콘·반전 상자 글자 슬롯의 치수 (상태 표시줄이 한 번 계산해 넘긴다)
   final LcdStatusIconMetrics iconMetrics;
 
   const _IndicatorSlot({
@@ -683,6 +683,21 @@ class _IndicatorSlot extends StatelessWidget {
             ? LcdStatusIcon(
                 key: ValueKey(icon),
                 icon: icon,
+                color: color,
+                metrics: iconMetrics,
+              )
+            : null,
+      );
+    }
+    if (slot.boxed) {
+      // 반전 상자 글자 (#160) — 꺼져도 같은 모양을 꺼진 색으로 그린다.
+      return SizedBox(
+        width: width,
+        height: height,
+        child: isOn || showInactive
+            ? LcdStatusBoxedLetter(
+                key: ValueKey('boxed-${slot.name}'),
+                letter: slot.template,
                 color: color,
                 metrics: iconMetrics,
               )

@@ -68,9 +68,16 @@ Finder _statusIcon(LcdIndicatorIcon icon) => find.descendant(
   matching: find.byKey(ValueKey(icon)),
 );
 
-/// [slot]이 그려진 위젯(글자 또는 아이콘)
+/// [slot]의 반전 상자 글자 위젯 (#160 — S·A·D·R·G)
+Finder _boxedLetter(LcdIndicatorSlot slot) => find.descendant(
+  of: find.byType(LcdStatusBar),
+  matching: find.byKey(ValueKey('boxed-${slot.name}')),
+);
+
+/// [slot]이 그려진 위젯(글자, 반전 상자 글자 또는 아이콘)
 Finder _slotDrawing(LcdIndicatorSlot slot) => switch (slot.icon) {
   final icon? => _statusIcon(icon),
+  null when slot.boxed => _boxedLetter(slot),
   null => _statusText(slot.template),
 };
 
@@ -78,6 +85,8 @@ Finder _slotDrawing(LcdIndicatorSlot slot) => switch (slot.icon) {
 Color? _slotColor(WidgetTester tester, LcdIndicatorSlot slot) =>
     switch (slot.icon) {
       final icon? => tester.widget<LcdStatusIcon>(_statusIcon(icon)).color,
+      null when slot.boxed =>
+        tester.widget<LcdStatusBoxedLetter>(_boxedLetter(slot)).color,
       null => _colorOf(tester, _statusText(slot.template)),
     };
 
@@ -122,11 +131,23 @@ void main() {
           ),
         ),
       );
-      expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusActive);
+      expect(
+        _slotColor(tester, LcdIndicatorSlot.shift),
+        CalcTheme.lcdStatusActive,
+      );
       // D/R/G는 자리가 따로 있다 — R만 켜지고 D·G는 꺼진 색으로 남는다 (#58).
-      expect(_colorOf(tester, _statusText('R')), CalcTheme.lcdStatusActive);
-      expect(_colorOf(tester, _statusText('D')), CalcTheme.lcdStatusInactive);
-      expect(_colorOf(tester, _statusText('G')), CalcTheme.lcdStatusInactive);
+      expect(
+        _slotColor(tester, LcdIndicatorSlot.angleRadian),
+        CalcTheme.lcdStatusActive,
+      );
+      expect(
+        _slotColor(tester, LcdIndicatorSlot.angleDegree),
+        CalcTheme.lcdStatusInactive,
+      );
+      expect(
+        _slotColor(tester, LcdIndicatorSlot.angleGradian),
+        CalcTheme.lcdStatusInactive,
+      );
       expect(_colorOf(tester, _statusText('SCI')), CalcTheme.lcdStatusActive);
       // FIX는 SCI와 다른 자리라 꺼진 색으로 남는다 (#44).
       expect(_colorOf(tester, _statusText('FIX')), CalcTheme.lcdStatusInactive);
@@ -155,9 +176,9 @@ void main() {
       tester,
     ) async {
       await _pump(tester, const LcdDisplay(showInactiveIndicators: false));
-      expect(_statusText('D'), findsOneWidget);
+      expect(_slotDrawing(LcdIndicatorSlot.angleDegree), findsOneWidget);
       expect(_slotDrawing(LcdIndicatorSlot.math), findsOneWidget);
-      expect(_statusText('S'), findsNothing);
+      expect(_slotDrawing(LcdIndicatorSlot.shift), findsNothing);
       expect(_slotDrawing(LcdIndicatorSlot.disp), findsNothing);
       expect(_slotDrawing(LcdIndicatorSlot.store), findsNothing);
     });
@@ -332,7 +353,7 @@ void main() {
 
     testWidgets('statusFontSize를 주입하면 상태 표시 글자 크기에 반영된다', (tester) async {
       await _pump(tester, const LcdDisplay(statusFontSize: 14));
-      expect(tester.widget<Text>(_statusText('D')).style?.fontSize, 14);
+      expect(tester.widget<Text>(_statusText('M')).style?.fontSize, 14);
     });
 
     testWidgets('LcdStatusBar에 글자 크기 없는 스타일을 넘겨도 기본 크기로 그린다', (tester) async {
@@ -346,7 +367,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        tester.widget<Text>(_statusText('D')).style?.fontSize,
+        tester.widget<Text>(_statusText('M')).style?.fontSize,
         CalcTheme.lcdStatusStyle.fontSize,
       );
     });
@@ -703,7 +724,7 @@ void main() {
         textScale: 3.0,
         height: 400,
       );
-      final status = tester.widget<Text>(_statusText('D'));
+      final status = tester.widget<Text>(_statusText('M'));
       expect(
         status.textScaler!.scale(10),
         closeTo(10 * CalcTheme.lcdMaxTextScaleFactor, 1e-9),
@@ -1021,7 +1042,7 @@ void main() {
           moreOrLessEquals(f.input, epsilon: 1e-3),
         );
         expect(
-          tester.widget<Text>(_statusText('D')).style?.fontSize,
+          tester.widget<Text>(_statusText('M')).style?.fontSize,
           moreOrLessEquals(f.status, epsilon: 1e-3),
         );
         for (final (line, tag) in [(_inputLine, 'i'), (_resultLine, 'r')]) {

@@ -120,7 +120,8 @@ void main() {
               ),
             );
             for (final slot in LcdIndicatorSlot.values) {
-              if (slot.icon != null) continue; // 아이콘은 슬롯 크기에 맞춰 그린다
+              // 아이콘·반전 상자 글자(#160)는 슬롯 크기에 맞춰 그린다
+              if (slot.icon != null || slot.boxed) continue;
               final slotBox = find.byKey(ValueKey(slot));
               final text = find.descendant(
                 of: slotBox,

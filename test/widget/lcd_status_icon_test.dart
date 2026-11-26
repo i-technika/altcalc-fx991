@@ -12,9 +12,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
 
-/// 직접 그리는 상태 아이콘(#57)을 실제 번들 글꼴로 그린 **픽셀**로 검증한다.
-/// - 아이콘 잉크가 같은 줄 대문자(E)의 높이 띠 안, 슬롯 경계 안에 있는지 (슬롯 밖까지 넓혀 스캔)
-/// - 모양(근호 윗선이 칸을 덮음, 연필, ‖ 두 획, 화살표·x)이 실제로 그려지는지
+/// 직접 그리는 상태 아이콘(#57)과 반전 상자 글자(#160)를 실제 번들 글꼴로 그린 **픽셀**로 검증한다.
+/// - 잉크가 같은 줄 대문자(E)의 높이 띠 안, 슬롯 경계 안에 있는지 (슬롯 밖까지 넓혀 스캔)
+/// - 모양(근호 윗선이 칸의 윗변, 연필, ‖ 반전 상자의 두 획, 화살표·상자 안 x, 상자 안 글자)이 실제로 그려지는지
 /// - 꺼진 색·켜짐↔꺼짐 전환이 픽셀에 반영되는지
 
 /// 모든 표시기가 켜진 상태
@@ -270,7 +270,9 @@ void main() {
             CalcTheme.lcdStatusCapHeightRatio *
             CalcTheme.lcdStatusIconStrokeRatio;
         for (final slot in LcdIndicatorSlot.values) {
-          if (slot.icon == null) continue;
+          if (slot.icon == null && !slot.boxed) continue;
+          // 꺼진 상자 글자(R·G — 각도 단위는 하나만 켜진다)는 진한 잉크가 없다.
+          if (_allOn.indicatorFor(slot) == null) continue;
           final rect = _slotRect(tester, slot);
           // 슬롯 밖(이웃 슬롯과의 간격)까지 넓혀 스캔한다.
           final ink = shot.inkBounds(_scanRect(tester, slot));
@@ -305,52 +307,62 @@ void main() {
             reason: reason,
           );
         }
-        // 근호·이중선은 대문자 높이까지 올라간다.
-        for (final slot in [LcdIndicatorSlot.math, LcdIndicatorSlot.disp]) {
+        // 근호·상자(‖·→x의 x 상자·반전 상자 글자)는 대문자 높이까지 올라간다.
+        for (final slot in [
+          LcdIndicatorSlot.math,
+          LcdIndicatorSlot.disp,
+          LcdIndicatorSlot.store,
+          for (final slot in LcdIndicatorSlot.values)
+            if (slot.boxed && _allOn.indicatorFor(slot) != null) slot,
+        ]) {
           expect(
             shot.inkBounds(_scanRect(tester, slot))!.top,
             lessThanOrEqualTo(letter.top + reach),
             reason: slot.name,
           );
         }
-        // →x: 화살표는 x높이 띠 가운데에 대칭이고 머리가 몸통보다 높다. x는 x높이~기준선을 채운다
-        // (곱셈 기호 ×는 기준선에 닿지 않는다).
+        // →x: 화살표는 대문자 높이 띠 가운데에 대칭이고(상자를 가리킨다) 머리가 몸통보다 높다.
+        // x는 둘째 칸의 테두리 상자 안에 있다 — 상자는 띠를 채우고, 가운데 줄에서 왼쪽 변·x·오른쪽 변 세 구간이다.
         final store = _slotRect(tester, LcdIndicatorSlot.store);
         final half = store.center.dx;
         final arrow = shot.inkBounds(
           Rect.fromLTRB(store.left, store.top, half, store.bottom),
         )!;
-        final xBandMid = letter.bottom - xHeight / 2;
         expect(
           arrow.center.dy,
-          closeTo(xBandMid, reach),
-          reason: '화살표 $arrow, x높이 가운데 $xBandMid',
+          closeTo(letter.center.dy, reach),
+          reason: '화살표 $arrow, 대문자 높이 가운데 ${letter.center.dy}',
         );
         expect(
           arrow.height,
           greaterThan(stroke * 2),
           reason: '화살표 머리가 몸통보다 높아야 한다',
         );
-        final letterX = shot.inkBounds(
-          Rect.fromLTRB(half, store.top, store.right, store.bottom),
-        )!;
+        final boxed = Rect.fromLTRB(half, store.top, store.right, store.bottom);
+        final box = shot.inkBounds(boxed)!;
+        expect(box.top, closeTo(letter.top, reach), reason: 'x 상자 $box');
+        expect(box.bottom, closeTo(letter.bottom, reach), reason: 'x 상자 $box');
+        // x 높이 가운데 줄: x의 두 획이 만나는 곳 — 상자 왼쪽 변, x, 오른쪽 변
+        expect(shot.inkRuns(box.center.dy, boxed), 3, reason: 'x 상자 $box');
+        // x는 상자 가운데에 상자보다 작게 놓인다(변 안쪽만 스캔).
+        final xInk = shot.inkBounds(box.deflate(stroke * 1.2))!;
         expect(
-          letterX.top,
-          closeTo(letter.bottom - xHeight, reach),
-          reason: 'x 글자 $letterX',
+          xInk.center.dy,
+          closeTo(box.center.dy, reach),
+          reason: 'x $xInk',
         );
+        // x는 상자 높이 비율로 줄인 글자다(x높이 × 상자 안 글자 비율).
         expect(
-          letterX.bottom,
-          closeTo(letter.bottom, reach),
-          reason: 'x 글자가 기준선에 닿아야 한다 (×가 아님)',
+          xInk.height,
+          closeTo(xHeight * CalcTheme.lcdStatusBoxedLetterRatio, reach),
+          reason: 'x $xInk',
         );
       },
     );
   }
 
-  testWidgets('아이콘 모양: 근호 윗선이 칸을 덮고 칸은 비었으며, 연필은 오른쪽 위→왼쪽 아래로 기울고, ‖는 두 획', (
-    tester,
-  ) async {
+  testWidgets('아이콘 모양: 근호 윗선이 칸의 윗변이 되고 칸은 비었으며, 연필은 촉을 칸 옆에 대고 오른쪽 위로 기울고, '
+      '‖는 반전 상자의 밝은 두 획 (#160)', (tester) async {
     const fontSize = 60.0;
     final shot = await _render(tester, _allOn, fontSize: fontSize);
     final e = shot.inkBounds(_slotRect(tester, LcdIndicatorSlot.engineering))!;
@@ -369,36 +381,107 @@ void main() {
     final topRow = e.top + stroke / 2;
     expect(shot.inkRuns(topRow, radicalBox), 1);
     expect(shot.longestRun(topRow, radicalBox), greaterThan(third));
-    // 칸 높이 가운데 줄: 근호 대각선 + 칸 왼쪽·오른쪽 변 = 구간 셋 (칸 안쪽은 비었다).
-    expect(shot.inkRuns(e.bottom - e.height * 0.3, radicalBox), 3);
-    // 연필: 셋째 칸의 오른쪽 위·왼쪽 아래 모서리에 잉크, 왼쪽 위·오른쪽 아래 모서리는 비었다
-    // (모서리 = 가로·세로 35% 영역 — 가운데를 지나는 연필 몸통은 들어가지 않는다).
+    // 윗선 바로 아래 줄: 근호 오른쪽 획 + 칸 왼쪽·오른쪽 변 = 구간 셋 — 칸이 윗선에 매달려 대문자
+    // 높이 전체를 차지한다(실물 사진).
+    expect(shot.inkRuns(e.top + stroke * 1.5, radicalBox), 3);
+    // 아래쪽 30% 줄: 근호의 두 획(왼쪽 획은 대문자 높이 55%에서 시작) + 칸 왼쪽·오른쪽 변 = 구간 넷
+    // (칸 안쪽은 비었다).
+    expect(shot.inkRuns(e.bottom - e.height * 0.3, radicalBox), 4);
+    // 칸 아랫변: 기준선 바로 위 줄에서 칸 폭 대부분이 이어진다.
+    expect(
+      shot.longestRun(e.bottom - stroke / 2, radicalBox),
+      greaterThan(third * 0.6),
+    );
+
+    // 연필 (셋째 칸)
     final pencil = Rect.fromLTRB(
       math.left + third * 2,
       e.top,
       math.right,
       e.bottom,
     );
-    Rect corner(bool right, bool bottom) {
-      final w = pencil.width * 0.35;
-      final h = pencil.height * 0.35;
-      return Rect.fromLTWH(
-        right ? pencil.right - w : pencil.left,
-        bottom ? pencil.bottom - h : pencil.top,
-        w,
-        h,
-      );
-    }
+    Rect region(double l, double t, double r, double b) => Rect.fromLTRB(
+      pencil.left + pencil.width * l,
+      pencil.top + pencil.height * t,
+      pencil.left + pencil.width * r,
+      pencil.top + pencil.height * b,
+    );
+    // 오른쪽 위에 몸통, 왼쪽(대문자 높이의 아래 20~50%)에 촉
+    expect(shot.anyInk(region(0.65, 0, 1, 0.35)), isTrue, reason: '오른쪽 위');
+    expect(shot.anyInk(region(0, 0.5, 0.35, 0.8)), isTrue, reason: '왼쪽 촉');
+    // 기준선까지 내려오지 않는다(아래 15% 띠가 비었다). 왼쪽 위(25%)·오른쪽 아래(35%)도 비었다 —
+    // 연필이 칸 옆의 촉에서 오른쪽 위 모서리로 기운 대각선이다.
+    expect(shot.anyInk(region(0, 0.85, 1, 1)), isFalse, reason: '아래 띠');
+    expect(shot.anyInk(region(0, 0, 0.25, 0.25)), isFalse, reason: '왼쪽 위');
+    expect(shot.anyInk(region(0.65, 0.65, 1, 1)), isFalse, reason: '오른쪽 아래');
 
-    expect(shot.anyInk(corner(true, false)), isTrue, reason: '오른쪽 위');
-    expect(shot.anyInk(corner(false, true)), isTrue, reason: '왼쪽 아래');
-    expect(shot.anyInk(corner(false, false)), isFalse, reason: '왼쪽 위');
-    expect(shot.anyInk(corner(true, true)), isFalse, reason: '오른쪽 아래');
-
-    // ‖ (1칸) — 대문자 높이 가운데 줄에서 잉크 구간이 둘
+    // ‖ (1칸) — 반전 상자: 대문자 높이 가운데 줄에서 어두운 구간 셋(왼쪽·가운데·오른쪽) 사이로 밝은 두 획.
+    // 위아래 가장자리 줄은 상자가 이어진다(획은 상자 위아래를 뚫지 않는다).
     final disp = _slotRect(tester, LcdIndicatorSlot.disp);
-    expect(shot.inkRuns(e.center.dy, disp), 2);
+    expect(shot.inkRuns(e.center.dy, disp), 3);
+    expect(shot.inkRuns(e.top + 1, disp), 1);
+    expect(shot.inkRuns(e.bottom - 1, disp), 1);
   });
+
+  // (글자 크기, 화면 배율) — 크게, 그리고 실제 크기(폰 LCD 상태 글자 ~10dp, 3x 화면)에서 글자가 뭉개지지 않는지
+  for (final (fontSize, dpr) in [(60.0, 1.0), (10.0, 3.0)]) {
+    testWidgets('반전 상자 글자 S·A·D·R·G: 상자는 대문자 높이·한 칸이고, 글자 모양으로 비어 배경이 보인다 '
+        '(글자 $fontSize, 화면 ${dpr}x, #160)', (tester) async {
+      final shot = await _render(tester, _allOn, fontSize: fontSize, dpr: dpr);
+      final e = shot.inkBounds(
+        _slotRect(tester, LcdIndicatorSlot.engineering),
+      )!;
+      final px = 1 / dpr;
+      // 켜진 상자: S·A (각도 단위는 기본값 D만 켜짐)
+      for (final slot in [
+        LcdIndicatorSlot.shift,
+        LcdIndicatorSlot.alpha,
+        LcdIndicatorSlot.angleDegree,
+      ]) {
+        final rect = _slotRect(tester, slot);
+        final box = shot.inkBounds(rect)!;
+        final reason = '${slot.name} 상자 $box, E $e';
+        // 상자는 옆 글자와 같은 높이(대문자 높이 띠)다.
+        expect(box.top, closeTo(e.top, 2 * px), reason: reason);
+        expect(box.bottom, closeTo(e.bottom, 2 * px), reason: reason);
+        // 위아래 가장자리 줄은 상자로 꽉 차 있다(글자가 상자 가장자리를 뚫지 않는다).
+        expect(shot.inkRuns(box.top + px, rect), 1, reason: reason);
+        expect(shot.inkRuns(box.bottom - px, rect), 1, reason: reason);
+        // 가운데 줄은 글자 획 자리가 비어 구간이 둘 이상으로 나뉜다.
+        expect(
+          shot.inkRuns(box.center.dy, rect),
+          greaterThanOrEqualTo(2),
+          reason: reason,
+        );
+        // 비운 자리는 배경(흰색)까지 밝다 — 글자를 LCD 배경색(빨강 213)으로 칠한 것이 아니라 상자를 지웠다.
+        var brightest = 0;
+        final py = (box.center.dy * dpr).floor();
+        for (
+          var x = (box.left * dpr).ceil();
+          x < (box.right * dpr).floor();
+          x++
+        ) {
+          brightest = math.max(brightest, shot.red(x, py));
+        }
+        // 작은 크기에서는 획이 2~3물리 픽셀이라 가장자리 안티에일리어싱이 섞인다.
+        expect(
+          brightest,
+          greaterThan(fontSize >= 60 ? 240 : 200),
+          reason: reason,
+        );
+      }
+      // 꺼진 상자(R·G)도 같은 자리에 흐리게 그린다.
+      for (final slot in [
+        LcdIndicatorSlot.angleRadian,
+        LcdIndicatorSlot.angleGradian,
+      ]) {
+        final rect = _slotRect(tester, slot);
+        expect(shot.anyInk(rect), isFalse, reason: slot.name);
+        expect(shot.darkest(rect), lessThan(255), reason: slot.name);
+        expect(shot.darkest(rect), greaterThan(235), reason: slot.name);
+      }
+    });
+  }
 
   testWidgets('꺼진 아이콘은 배경과 거의 같은 색(4%)으로 그리고, 켜짐↔꺼짐이 바뀌면 다시 그린다', (
     tester,

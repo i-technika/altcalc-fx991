@@ -567,8 +567,12 @@ abstract final class CalcTheme {
   static const double lcdStatusXHeightRatio = 0.542;
 
   /// 상태 아이콘 선 굵기 (글자 크기 대비) — SemiBold 글자 획 굵기와 비슷하게.
-  /// `‖`의 두 획(칸의 30%·70% 위치) 사이가 비어 보이도록 칸 폭의 40%보다 가늘어야 한다(테스트로 검증).
+  /// `‖`의 밝은 두 획(칸의 33%·67% 위치) 사이에 어두운 부분이 남도록 칸 폭의 34%보다 가늘어야 한다(테스트로 검증, #160).
   static const double lcdStatusIconStrokeRatio = 0.1;
+
+  /// 상자 안 글자 크기 (상자 높이 = 대문자 높이 대비) — 반전 상자 글자(S·A·D·R·G)와 `→x`의 x (#160).
+  /// 실물은 7도트 높이 상자 안에 위아래 1도트를 남긴 5도트 글자다(ClassWiz 스프라이트·Commons 사진의 D).
+  static const double lcdStatusBoxedLetterRatio = 5 / 7;
 
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
