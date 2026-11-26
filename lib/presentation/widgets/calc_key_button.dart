@@ -104,6 +104,11 @@ class CalcKeyButton extends StatefulWidget {
   /// 상자보다 크면 키를 그리지 않고 터치 영역만 남는다.
   final EdgeInsets hitOutset;
 
+  /// 메인 라벨 자리에서 뺄 여백 — 키캡(그림 상자) 안에서 이만큼 뺀 나머지의 가운데에 라벨을 놓는다.
+  /// 라벨이 그 나머지보다 크면 줄여 그린다. 키캡 일부가 다른 그림에 덮이는 키에 쓴다.
+  /// 예: 커서 패드 방향 키는 가운데 쪽 허브만큼 뺀다(#65). 음수일 수 없다.
+  final EdgeInsets labelInsets;
+
   const CalcKeyButton({
     super.key,
     required this.keyDef,
@@ -119,6 +124,7 @@ class CalcKeyButton extends StatefulWidget {
     this.shape,
     this.hitShape,
     this.hitOutset = EdgeInsets.zero,
+    this.labelInsets = EdgeInsets.zero,
   });
 
   /// 기본 반복 시작 지연
@@ -320,6 +326,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       'hitOutset은 hitShape와 함께 써야 한다 (터치 영역을 정할 경로가 없다)',
     );
     assert(widget.hitOutset.isNonNegative, 'hitOutset은 음수일 수 없다');
+    assert(widget.labelInsets.isNonNegative, 'labelInsets는 음수일 수 없다');
     assert(
       widget.hitShape == null || !widget.extendHitAreaToLegend,
       'hitShape가 있으면 터치 영역은 그 경로가 정한다 — extendHitAreaToLegend와 함께 쓰지 않는다',
@@ -371,6 +378,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             widget.mainLabelFontSize ??
             capHeight * CalcTheme.keyMainLabelFontRatio,
         horizontalPadding: width * CalcTheme.keyCapHorizontalPaddingRatio,
+        labelInsets: widget.labelInsets,
         textScaler: textScaler,
       ),
     );
@@ -607,6 +615,7 @@ class _Keycap extends StatelessWidget {
   final bool enabled;
   final double fontSize;
   final double horizontalPadding;
+  final EdgeInsets labelInsets;
   final TextScaler textScaler;
 
   const _Keycap({
@@ -615,6 +624,7 @@ class _Keycap extends StatelessWidget {
     required this.enabled,
     required this.fontSize,
     required this.horizontalPadding,
+    required this.labelInsets,
     required this.textScaler,
   });
 
@@ -662,7 +672,8 @@ class _Keycap extends StatelessWidget {
                   ),
                 ],
         ),
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding)
+            .add(labelInsets),
         alignment: Alignment.center,
         child: FittedBox(
           fit: BoxFit.scaleDown,

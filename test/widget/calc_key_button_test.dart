@@ -1650,4 +1650,48 @@ void _shapeAndLegendTests() {
       );
     });
   });
+
+  group('라벨 여백 (labelInsets, #65)', () {
+    const box = Size(120, 80);
+
+    Rect labelOf(WidgetTester tester) => tester.getRect(
+      find.descendant(
+        of: _keycap(CalcKeyId.cursorUp),
+        matching: find.byType(Text),
+      ),
+    );
+
+    Widget button(EdgeInsets labelInsets) => _host(
+      CalcKeyButton(
+        keyDef: keyDefOf(CalcKeyId.cursorUp),
+        showLegendBand: false,
+        enableHaptics: false,
+        labelInsets: labelInsets,
+        onPressed: (_) {},
+      ),
+      size: box,
+    );
+
+    testWidgets('라벨은 키캡에서 여백을 뺀 나머지의 가운데에 놓이고, 키캡 크기는 그대로다', (tester) async {
+      await tester.pumpWidget(button(EdgeInsets.zero));
+      final keycap = tester.getRect(_keycap(CalcKeyId.cursorUp));
+      final centered = labelOf(tester);
+
+      await tester.pumpWidget(button(const EdgeInsets.only(bottom: 30)));
+      await tester.pumpAndSettle(); // 키캡 여백 변화는 AnimatedContainer가 애니메이션한다
+      expect(tester.getRect(_keycap(CalcKeyId.cursorUp)), keycap);
+      final shifted = labelOf(tester);
+      // 아래 30dp를 빼면 라벨 중심이 15dp 올라간다. 크기는 그대로다(남은 자리에 들어간다).
+      expect(shifted.size, centered.size);
+      expect(shifted.center.dx, moreOrLessEquals(centered.center.dx));
+      expect(shifted.center.dy, moreOrLessEquals(centered.center.dy - 15));
+    });
+
+    testWidgets('labelInsets가 음수면 디버그 assert로 알린다', (tester) async {
+      await tester.pumpWidget(button(const EdgeInsets.only(top: -1)));
+      final error = tester.takeException();
+      expect(error, isA<AssertionError>());
+      expect('$error', contains('음수'));
+    });
+  });
 }
