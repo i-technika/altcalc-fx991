@@ -9,6 +9,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/key_legends.dart';
 import '../support/korean_locale.dart';
 
 /// 지정한 크기의 셀 하나에 위젯을 배치한다.
@@ -106,12 +107,14 @@ void main() {
         _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sin))),
       );
 
-      final shift = tester.widget<Text>(find.text('sin⁻¹'));
-      final alpha = tester.widget<Text>(find.text('D'));
-      expect(shift.style!.color, CalcTheme.shiftLabel);
-      expect(alpha.style!.color, CalcTheme.alphaLabel);
+      final sinShift = findLegend(keyDefOf(CalcKeyId.sin).shiftLegend!);
+      expect(legendStyleOf(tester, sinShift).color, CalcTheme.shiftLabel);
+      expect(
+        tester.widget<Text>(find.text('D')).style!.color,
+        CalcTheme.alphaLabel,
+      );
 
-      final shiftRect = tester.getRect(find.text('sin⁻¹'));
+      final shiftRect = tester.getRect(sinShift);
       final alphaRect = tester.getRect(find.text('D'));
       final capRect = tester.getRect(_keycap(CalcKeyId.sin));
       expect(shiftRect.center.dx, lessThan(alphaRect.center.dx));
@@ -159,8 +162,11 @@ void main() {
           def.category.background,
           reason: '$def',
         );
-        final main = tester.widget<Text>(find.text(def.mainLabel));
-        expect(main.style!.color, def.category.foreground, reason: '$def');
+        expect(
+          legendStyleOf(tester, findLegend(def.mainLegend)).color,
+          def.category.foreground,
+          reason: '$def',
+        );
       }
     });
   });
@@ -238,20 +244,20 @@ void main() {
           reason: '$def',
         );
         expect(
-          tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+          legendStyleOf(tester, findLegend(def.mainLegend)).color,
           palette.keyForeground(def.category),
           reason: '$def',
         );
-        if (def.shiftLabel case final shift?) {
+        if (def.shiftLegend case final shift?) {
           expect(
-            tester.widget<Text>(find.text(shift)).style!.color,
+            legendStyleOf(tester, findLegend(shift)).color,
             palette.shiftLabel,
             reason: '$def',
           );
         }
-        if (def.alphaLabel case final alpha?) {
+        if (def.alphaLegend case final alpha?) {
           expect(
-            tester.widget<Text>(find.text(alpha)).style!.color,
+            legendStyleOf(tester, findLegend(alpha)).color,
             palette.alphaLabel,
             reason: '$def',
           );
@@ -289,13 +295,13 @@ void main() {
             reason: '$def',
           );
           expect(
-            tester.widget<Text>(find.text(def.mainLabel)).style!.color,
+            legendStyleOf(tester, findLegend(def.mainLegend)).color,
             palette.keyPressedForeground(category),
             reason: '$def',
           );
 
           Color? label() =>
-              tester.widget<Text>(find.text(def.mainLabel)).style!.color;
+              legendStyleOf(tester, findLegend(def.mainLegend)).color;
 
           await gesture.up();
           await tester.pump();
@@ -344,10 +350,10 @@ void main() {
           );
           // 같은 키가 활성 ↔ 비활성으로 바뀌면 라벨 색도 뗄 때와 같은 시간 동안 옮겨 간다.
           await tester.pump(CalcTheme.keyPressAnimationDuration);
-          final color = tester
-              .widget<Text>(find.text(def.mainLabel))
-              .style!
-              .color!;
+          final color = legendStyleOf(
+            tester,
+            findLegend(def.mainLegend),
+          ).color!;
           return contrast(Color.alphaBlend(color, background), background);
         }
 
@@ -390,12 +396,16 @@ void main() {
         await tester.pumpWidget(
           _host(CalcKeyButton(keyDef: def), size: const Size(55, 38)),
         );
-        for (final label in [def.mainLabel, def.shiftLabel, def.alphaLabel]) {
-          if (label == null) continue;
+        for (final legend in [
+          def.mainLegend,
+          def.shiftLegend,
+          def.alphaLegend,
+        ]) {
+          if (legend == null) continue;
           expect(
-            tester.getRect(find.text(label)).height,
+            tester.getRect(findLegend(legend)).height,
             greaterThanOrEqualTo(5.0),
-            reason: '$def "$label"',
+            reason: '$def "${legend.plainText}"',
           );
         }
       }
@@ -426,8 +436,9 @@ void main() {
         ),
       );
 
-      expect(tester.widget<Text>(find.text('sin⁻¹')).style!.fontSize, 7);
-      expect(tester.widget<Text>(find.text('sin')).style!.fontSize, 13);
+      final sin = keyDefOf(CalcKeyId.sin);
+      expect(legendStyleOf(tester, findLegend(sin.shiftLegend!)).fontSize, 7);
+      expect(legendStyleOf(tester, findLegend(sin.mainLegend)).fontSize, 13);
     });
 
     testWidgets('제약이 무한한 축에만 fallbackSize를 쓴다', (tester) async {
@@ -1626,7 +1637,9 @@ void _shapeAndLegendTests() {
       );
       // 긴 각인은 남은 폭 안에 들어가도록 줄어든다 (띠 밖으로 넘치지 않는다).
       final band = tester.getRect(find.byType(CalcKeyButton));
-      final long = tester.getRect(find.text('a b/c⇔d/c'));
+      final long = tester.getRect(
+        findLegend(keyDefOf(CalcKeyId.sdToggle).shiftLegend!),
+      );
       expect(long.left, greaterThanOrEqualTo(band.left - 0.01));
       expect(long.right, lessThan(tester.getRect(y).left));
       expect(tester.takeException(), isNull);

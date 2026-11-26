@@ -9,6 +9,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/key_legends.dart';
 import '../support/korean_locale.dart';
 
 /// 지정한 크기 영역에 키패드를 배치한다.
@@ -721,9 +722,10 @@ void _cursorPadR2Tests() {
         );
         for (final def in allKeys) {
           if (def.category == KeyCategory.cursor) continue;
+          // 2차원 각인(#155)은 Text가 아니라 KeyLegendView로 그려진다.
           final text = find.descendant(
             of: _keycap(def.id),
-            matching: find.byType(Text),
+            matching: findLegend(def.mainLegend),
           );
           expect(
             tester.getRect(text).height,

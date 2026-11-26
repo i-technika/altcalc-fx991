@@ -398,7 +398,8 @@ abstract final class CalcTheme {
   static const String monoFontFamily = 'NotoSansMono';
 
   /// 수학 기호 대체 폰트 패밀리 이름 (번들 글꼴 Noto Sans Math).
-  /// [monoFontFamily]에 없는 `∑`·`∛`·`∫`를 채운다. 고정폭이 아니므로 LCD 줄 글자에는 쓰지 않는다.
+  /// [monoFontFamily]에 없는 `∑`·`∫`를 채운다(`∛`도 있지만 키캡 근호는 그림으로 그린다, #155).
+  /// 고정폭이 아니므로 LCD 줄 글자에는 쓰지 않는다.
   static const String mathFontFamily = 'NotoSansMath';
 
   /// [monoFontFamily]에 없는 글자를 찾을 대체 폰트 (모두 번들 글꼴이다).
@@ -528,6 +529,57 @@ abstract final class CalcTheme {
 
   /// 키 라벨에 반영하는 시스템 글자 크기 배율 상한 (넘침은 FittedBox가 추가로 막는다)
   static const double keyMaxTextScaleFactor = 1.3;
+
+  // ── 2차원 각인 배치 (#155) ──
+  // 분수·위첨자·아래첨자·근호 각인(`KeyLegendView`)의 배치 비율. 모두 그 조각을 품은 글자 크기 대비이며,
+  // 세로 위치는 기준선 위가 +다. 잉크 범위(글리프의 실제 위아래 끝)는 `KeyLegendView.glyphInk` 표를 쓴다.
+  // 분수·첨자를 넣어도 각인 높이가 한 줄(1em)을 크게 넘지 않도록 정했다 — 가장 높은 `d/dx◼`가 약 1.07em이다.
+  // 각인 높이는 키패드 통일 글자 크기 계산(`KeypadMetrics`)이 폭과 함께 잰다.
+
+  /// 위첨자·아래첨자 글자 크기 비율
+  static const double keyLegendScriptScale = 0.66;
+
+  /// 위첨자 기준선 올림 — 바탕 글자와 무관하게 같은 높이에 둔다(`sin⁻¹`·`cos⁻¹`·`tan⁻¹`의 −1이 같은 높이)
+  static const double keyLegendSuperscriptRaise = 0.36;
+
+  /// 아래첨자 기준선 내림 (`log`의 밑 칸, ∫·∑의 아래 끝 칸)
+  static const double keyLegendSubscriptDrop = 0.22;
+
+  /// 바탕 글자와 첨자 사이 간격
+  static const double keyLegendScriptGap = 0.03;
+
+  /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
+  static const double keyLegendFractionScale = 0.65;
+
+  /// 각인 전체가 분수 하나일 때(분수 키 `◼/◻`)의 분자·분모 글자 크기 비율 — 한 줄 높이를 채운다
+  static const double keyLegendDisplayFractionScale = 0.95;
+
+  /// 분수 가로줄 가운데 높이 (기준선 위)
+  static const double keyLegendFractionAxis = 0.28;
+
+  /// 분수 가로줄 두께
+  static const double keyLegendFractionBarThickness = 0.06;
+
+  /// 분수 가로줄과 분자·분모 잉크 사이 간격
+  static const double keyLegendFractionGap = 0.04;
+
+  /// 분수 가로줄이 분자·분모보다 좌우로 더 나가는 길이
+  static const double keyLegendFractionOverhang = 0.06;
+
+  /// 거듭제곱근 지수(`∛`의 3, `◼√◻`의 ◼) 글자 크기 비율
+  static const double keyLegendRadicalIndexScale = 0.6;
+
+  /// 근호 선 두께
+  static const double keyLegendRadicalStroke = 0.07;
+
+  /// 근호 가로줄과 피개법수 잉크 위끝 사이 간격
+  static const double keyLegendRadicalGap = 0.10;
+
+  /// 근호 왼쪽 부분(가로줄 앞까지) 폭
+  static const double keyLegendRadicalSignWidth = 0.46;
+
+  /// 분수 가로줄·근호 선의 최소 두께 (dp) — 작은 각인에서도 선이 사라지지 않게 한다
+  static const double keyLegendMinStroke = 0.75;
 
   /// 키캡 그림자 색
   static const Color keyShadow = Color(0x66000000);
