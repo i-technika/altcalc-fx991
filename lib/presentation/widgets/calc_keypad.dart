@@ -29,10 +29,9 @@ enum KeypadArrangement {
   /// [standard]보다 키가 클 때만 쓴다([KeypadMetrics.preferredArrangementFor]). 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것).
-  /// 대표 기기(Fold 가로·Pixel Fold 세로 반 접힘)에서는 이 배열이 아래 절반 폭을 다 써서 손잡이로 옮길 자리가 없다.
-  /// 블록 폭이 [CalcTheme.keypadMaxWidth]에 걸리는 더 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
-  /// 가장자리로 가므로, 왼손잡이면 숫자부가 화면 가운데 쪽에 온다 — 숫자부 위치가 손잡이마다 바뀌면 손에 익은
-  /// 위치가 설정에 따라 달라지므로 블록 순서는 바꾸지 않는다.
+  /// 이 배열을 쓰는 테이블톱 배치는 #143까지 블록 폭 상한(`CalcTheme.screenTabletopKeypadMaxBlockWidth`)을 남겨 두어,
+  /// 블록 폭이 상한에 걸리는 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽 가장자리로 가고 왼손잡이면
+  /// 숫자부가 화면 가운데 쪽에 온다. 손잡이에 따라 블록을 좌우 대칭으로 놓는 것은 가로형 배치(#142)에서 정한다.
   wide,
 }
 
@@ -138,43 +137,30 @@ class KeypadMetrics {
   /// 숫자부 키의 셀 높이 (간격 제외, dp)
   double get numberKeyHeight => math.max(0.0, numberRowHeight - verticalGap);
 
-  /// [available] 영역 안에서 [arrangement] 배열이 가로/세로 비 범위를 지키는 가장 큰 키패드 크기.
+  /// [available] 영역 안에서 [arrangement] 배열이 세로로 길어지지 않는 가장 큰 키패드 크기.
   ///
-  /// - [KeypadArrangement.standard]: 가로/세로 비 [CalcTheme.keypadMinAspectRatio]~[CalcTheme.keypadMaxAspectRatio],
-  ///   폭은 [CalcTheme.keypadMaxWidth] 이하.
-  /// - [KeypadArrangement.wide]: 블록 하나의 가로/세로 비가 위 범위 × [wideHeightFactor]이고(같은 행 높이의
-  ///   표준 키패드와 키 모양 범위가 같다), 블록 폭은 [CalcTheme.keypadMaxWidth] 이하, 블록 사이 간격은
-  ///   블록 폭 × [CalcTheme.keypadWideSectionGapRatio]다.
+  /// 폭은 언제나 영역 폭 전체다 — 가로 쪽 상한은 없다(#141, 사용자 결정 "가로로는 구역을 끝까지 채운다").
+  /// 높이만 영역 높이와 다음 상한 중 작은 쪽으로 줄인다. 그래서 키는 가로로 넓어질 수는 있어도 세로로 길어지지 않는다.
+  /// - [KeypadArrangement.standard]: 키패드 폭 / [CalcTheme.keypadMinAspectRatio].
+  /// - [KeypadArrangement.wide]: 블록 폭 / ([CalcTheme.keypadMinAspectRatio] × [wideHeightFactor]) — 같은 행 높이의
+  ///   표준 키패드와 키 모양의 세로 한계가 같다. 블록 폭은 영역 폭에서 블록 사이 간격
+  ///   (블록 폭 × [CalcTheme.keypadWideSectionGapRatio])을 뺀 절반이다.
   static Size fitSize(
     Size available, [
     KeypadArrangement arrangement = KeypadArrangement.standard,
   ]) {
-    final availableWidth = math.max(0.0, available.width);
+    final width = available.width.isFinite
+        ? math.max(0.0, available.width)
+        : 0.0;
     final availableHeight = math.max(0.0, available.height);
-    switch (arrangement) {
-      case KeypadArrangement.standard:
-        final width = math.min(
-          math.min(availableWidth, CalcTheme.keypadMaxWidth),
-          availableHeight * CalcTheme.keypadMaxAspectRatio,
-        );
-        final height = math.min(
-          availableHeight,
-          width / CalcTheme.keypadMinAspectRatio,
-        );
-        return Size(width, height);
-      case KeypadArrangement.wide:
-        final factor = wideHeightFactor;
-        final block = math.min(
-          math.min(availableWidth / _wideWidthUnits, CalcTheme.keypadMaxWidth),
-          availableHeight * CalcTheme.keypadMaxAspectRatio * factor,
-        );
-        final height = math.min(
-          availableHeight,
-          block / (CalcTheme.keypadMinAspectRatio * factor),
-        );
-        // 폭은 영역 폭을 넘지 않는다 (블록 폭 × 단위 수의 부동소수점 오차로 넘치지 않게).
-        return Size(math.min(block * _wideWidthUnits, availableWidth), height);
-    }
+    final maxHeight = switch (arrangement) {
+      KeypadArrangement.standard => width / CalcTheme.keypadMinAspectRatio,
+      KeypadArrangement.wide =>
+        width /
+            _wideWidthUnits /
+            (CalcTheme.keypadMinAspectRatio * wideHeightFactor),
+    };
+    return Size(width, math.min(availableHeight, maxHeight));
   }
 
   /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키가 [KeypadArrangement.standard]보다
@@ -245,7 +231,9 @@ class KeypadMetrics {
   /// 각인·메인 라벨 글자 크기를 각각 하나로 정해 모든 키에 주입한다. 배율은 [CalcKeyButton]과 같이
   /// [CalcTheme.keyMaxTextScaleFactor]까지 반영하며, 다음 순서로 정한다.
   /// 1. **높이 기준**: 함수부 셀 높이에서 [CalcKeyButton]과 같은 비율로 구한 크기를, 배율을 반영해도
-  ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다.
+  ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다. 큰 키(태블릿)에서는 [CalcTheme.keyMainLabelMaxFontSize]·
+  ///    [CalcTheme.keyLegendMaxFontSize]에서 멈춘다(#141). 폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는
+  ///    이 높이 기준보다 커지지 않는다.
   /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 모든 라벨이 자기 셀 폭에
   ///    들어가는 크기까지 줄인다. 그래서 대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
@@ -283,9 +271,15 @@ class KeypadMetrics {
       maxScaleFactor: CalcTheme.keyMaxTextScaleFactor,
     );
 
-    // 1. 높이 기준
+    // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141)
     final legendByHeight = fitFontSizeToHeight(
-      math.max(minFittedFontSize, legendHeight * CalcTheme.keyLegendFontRatio),
+      math.max(
+        minFittedFontSize,
+        math.min(
+          legendHeight * CalcTheme.keyLegendFontRatio,
+          CalcTheme.keyLegendMaxFontSize,
+        ),
+      ),
       maxHeight: legendHeight,
       textScaler: scaler,
       heightFactor: CalcTheme.keyShiftLabelStyle.height ?? 1.0,
@@ -296,7 +290,13 @@ class KeypadMetrics {
         math.min(CalcTheme.keyPressedOffset, capHeight) -
         2 * CalcTheme.keyBorderWidth;
     final mainByHeight = fitFontSizeToHeight(
-      math.max(minFittedFontSize, capHeight * CalcTheme.keyMainLabelFontRatio),
+      math.max(
+        minFittedFontSize,
+        math.min(
+          capHeight * CalcTheme.keyMainLabelFontRatio,
+          CalcTheme.keyMainLabelMaxFontSize,
+        ),
+      ),
       maxHeight: capInnerHeight,
       textScaler: scaler,
       heightFactor: CalcTheme.keyMainLabelStyle.height ?? 1.0,
@@ -862,8 +862,8 @@ class CursorPadGeometry {
   /// X = max(m·허브 반지름, 허브 반지름), Y = X / m이다. m ≥ 1이면(지금 k와 패드 비율 1.4 이상에서 m ≥ 1.26)
   /// ◀·▶ 영역 반높이 Y가 허브 반지름과 같다. #43의 하한(반높이의 0.3배)은 허브가 그보다 커서 뺐다.
   /// 허브 비를 0.3 아래로 줄이면 ◀·▶ 시맨틱 높이도 함께 줄어드니 그때 하한을 되살린다.
-  /// 실측 허브(#65)가 커서 ▲·▼ 영역은 낮고 넓다. 320×568·상태바 20dp에서 ▲·▼ 43.1×15.7dp,
-  /// ◀·▶ 27.3×29.5dp(실측 전 ▲·▼ 43.1×21.6, ◀·▶ 27.3×17.7)이다. 허브 고리는 누르면 입력되지만
+  /// 실측 허브(#65)가 커서 ▲·▼ 영역은 낮고 넓다. 320×568·상태바 20dp에서 ▲·▼ 43.1×17.5dp,
+  /// ◀·▶ 27.3×32.9dp(실측 전 ▲·▼ 43.1×24.0, ◀·▶ 27.3×19.7)이다. 허브 고리는 누르면 입력되지만
   /// 시맨틱 영역에는 넣지 않는다 — 영역이 그려진 허브를 덮지 않게 한 #43 규칙을 지킨다.
   ///
   /// [bounds](셀)를 주면 바깥쪽 변을 셀 변까지 넓힌다 — 터치 영역(#64)과 같게, 셀 여백을 손가락으로
@@ -1046,11 +1046,11 @@ class CursorPadGeometry {
 ///   그쪽 방향 하나의 것이 되어, 이웃 키(ALPHA·MENU)와 맞닿은 옆 변은 전부 ◀·▶이고 위·아래 변은 ▲·▼다.
 ///   - 홈을 그대로 연장하는 방식은 (#64 당시 모양에서) 되찾은 넓이의 약 80%를 이미 넓던 ▲·▼에 주고,
 ///     옆 변의 위·아래 끝까지 ▲·▼로 만들었다(왼쪽 가장자리를 눌렀는데 ▲ — 리뷰 R1).
-///   - 홈 기울기 실측(#65) 뒤 터치 넓이는 함수 키 셀 대비 ◀·▶ 약 1.14~1.20배(가로로 긴 셀 1.30배),
-///     ▲·▼ 약 1.06~1.11배(가로로 긴 셀 0.95배)다.
+///   - 홈 기울기 실측(#65) 뒤 터치 넓이는 함수 키 셀 대비 ◀·▶ 약 1.14~1.20배, ▲·▼ 약 1.05~1.11배다.
+///     셀이 패드 비율 상한보다 넓은 키패드(#159)에서는 ▲·▼가 약 0.54~0.66배까지 낮아진다.
 ///   - 방향 키에 들어가는 가장 큰 원(내접원)은 셀이 패드와 비슷하면 셀까지 넓혀도 조금만 는다(▲·▼ 약 +1~4dp).
 ///     홈 사이 쐐기와 셀 변이 정하기 때문이며, 쐐기는 실물 모양이라 바꾸지 않는다. 지금은 실물처럼 ▲·▼ 쪽이
-///     좁다(세로 폰 ▲·▼ 약 27~43dp, ◀·▶ 약 35~48dp). 셀이 패드보다 가로로 긴 배치(분할 화면 등)에서는
+///     좁다(세로 폰 ▲·▼ 약 30~46dp, ◀·▶ 약 36~52dp). 셀이 패드보다 가로로 긴 배치(분할 화면 등)에서는
 ///     옆 여백을 받는 ◀·▶ 내접원이 약 +12dp 커진다.
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
 /// - 셀 밖(셀 여백 `_cellPadding`)은 넓히지 않는다 — 이웃 키와의 간격은 다른 키 사이와 같다.
@@ -1148,19 +1148,22 @@ class CursorPad extends StatelessWidget {
 
   /// [sector] 키캡(패드의 반쪽, 패드 크기 [size])에서 라벨 자리를 뺄 여백 (`CalcKeyButton.labelInsets`, #65).
   ///
-  /// 가운데 쪽 변에서 허브 반지름 + 둘레선 반 두께만큼 뺀다. 그러면 라벨이 허브 둘레선과 외곽 사이
-  /// 가운데쯤에 놓인다(키캡 아래 눌림 여유 1dp 때문에 ±1dp 어긋나고, ▲는 눌리면 1dp 허브 쪽으로 내려간다).
-  /// 눌림 이동량까지 빼면 가로로 긴 셀·글자 배율 1.3에서 ▲ 라벨이 외곽 밖으로 밀려나 더하지 않는다.
-  /// 눌린 상태에서도 허브에 닿지 않는지는 키패드 테스트가 확인한다.
+  /// - 가운데 쪽 변: 허브 반지름 + 둘레선 반 두께를 뺀다.
+  /// - 바깥쪽 변: 외곽선 두께를 뺀다. 반쪽 상자 변에서 외곽선 안쪽 가장자리까지의 거리다.
+  ///
+  /// 그러면 라벨이 허브 둘레선과 외곽선 사이 가운데쯤에 놓인다. 키캡 아래 눌림 여유 1dp 때문에 ±1dp
+  /// 어긋나고, ▲는 눌리면 1dp 허브 쪽으로 내려간다. 눌린 상태에서도 허브에 닿지 않는지는 키패드 테스트가 확인한다.
+  /// 그 사이가 라벨보다 좁으면 라벨을 줄여 그린다. 예: 가로로 긴 800×300 키패드, 글자 배율 1.3의 ▲·▼.
   /// 실측 허브는 지름이 패드 높이의 약 1/2이다. 반쪽 상자 가운데(허브 가장자리)에 두면 라벨 절반이 허브에 덮인다.
   static EdgeInsets labelInsetsOf(CursorPadSector sector, Size size) {
-    final hub =
+    final inner =
         CursorPadGeometry(size).hubRadius + CalcTheme.cursorPadDividerWidth / 2;
+    const outer = CalcTheme.cursorPadDividerWidth;
     return switch (sector) {
-      CursorPadSector.up => EdgeInsets.only(bottom: hub),
-      CursorPadSector.down => EdgeInsets.only(top: hub),
-      CursorPadSector.left => EdgeInsets.only(right: hub),
-      CursorPadSector.right => EdgeInsets.only(left: hub),
+      CursorPadSector.up => EdgeInsets.only(top: outer, bottom: inner),
+      CursorPadSector.down => EdgeInsets.only(top: inner, bottom: outer),
+      CursorPadSector.left => EdgeInsets.only(left: outer, right: inner),
+      CursorPadSector.right => EdgeInsets.only(left: inner, right: outer),
     };
   }
 

@@ -30,8 +30,12 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   LcdIndicatorSlot.alpha => [const LcdStatus(alpha: true)],
   LcdIndicatorSlot.memory => [const LcdStatus(memory: true)],
   LcdIndicatorSlot.store => [const LcdStatus(store: true)],
-  LcdIndicatorSlot.angleUnit => [
-    for (final unit in AngleUnit.values) LcdStatus(angleUnit: unit),
+  LcdIndicatorSlot.angleDegree => [const LcdStatus()],
+  LcdIndicatorSlot.angleRadian => [
+    const LcdStatus(angleUnit: AngleUnit.radian),
+  ],
+  LcdIndicatorSlot.angleGradian => [
+    const LcdStatus(angleUnit: AngleUnit.gradian),
   ],
   LcdIndicatorSlot.fixFormat => [
     const LcdStatus(numberFormat: NumberDisplayFormat.fix),
@@ -41,8 +45,10 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   ],
   LcdIndicatorSlot.engineering => [const LcdStatus(engineering: true)],
   LcdIndicatorSlot.math => [const LcdStatus()],
-  LcdIndicatorSlot.complex => [
+  LcdIndicatorSlot.complexRectangular => [
     const LcdStatus(complex: ComplexResultIndicator.rectangular),
+  ],
+  LcdIndicatorSlot.complexPolar => [
     const LcdStatus(complex: ComplexResultIndicator.polar),
   ],
   LcdIndicatorSlot.historyDown => [const LcdStatus(historyDown: true)],
@@ -133,8 +139,8 @@ void main() {
       });
 
       test('켜진 표시기는 모두 기호 없는 의미 라벨을 갖고, 꺼진 표시기는 읽지 않는다', () {
+        final labels = <String>[];
         for (final slot in LcdIndicatorSlot.values) {
-          final labels = <String>{};
           for (final status in _statusesWith(slot)) {
             expect(status.indicatorFor(slot), isNotNull, reason: slot.name);
             final label = strings.indicator(slot, status);
@@ -142,19 +148,18 @@ void main() {
             expect(label, matches(_speakable), reason: label);
             labels.add(label!);
           }
-          // 값이 여러 개인 슬롯(D/R/G, i/∠)은 값마다 다르게 읽는다.
-          expect(
-            labels,
-            hasLength(_statusesWith(slot).length),
-            reason: slot.name,
-          );
         }
+        // 슬롯마다 다르게 읽는다 — 자리가 나뉜 D/R/G, i/∠도 값마다 다른 말이다(#58).
+        expect(labels.toSet(), hasLength(labels.length));
         const allOff = LcdStatus(mathIO: false);
         for (final slot in [
           LcdIndicatorSlot.shift,
           LcdIndicatorSlot.fixFormat,
           LcdIndicatorSlot.sciFormat,
-          LcdIndicatorSlot.complex,
+          LcdIndicatorSlot.complexRectangular,
+          LcdIndicatorSlot.complexPolar,
+          LcdIndicatorSlot.angleRadian,
+          LcdIndicatorSlot.angleGradian,
           LcdIndicatorSlot.math,
         ]) {
           expect(strings.indicator(slot, allOff), isNull, reason: slot.name);
@@ -203,10 +208,10 @@ void main() {
     });
 
     test('상태 표시줄은 켜진 표시기의 의미를 슬롯 순서로 읽는다', () {
-      expect(ko.statusBar(LcdStatus.initial), '각도 단위 도, 수학 입출력');
+      expect(ko.statusBar(LcdStatus.initial), '수학 입출력, 각도 단위 도');
       expect(
         ko.statusBar(const LcdStatus(shift: true, memory: true)),
-        '시프트, 메모리, 각도 단위 도, 수학 입출력',
+        '시프트, 메모리, 수학 입출력, 각도 단위 도',
       );
     });
 
@@ -215,20 +220,20 @@ void main() {
         ko.statusBar(
           const LcdStatus(historyUp: true, historyDown: true, disp: true),
         ),
-        '각도 단위 도, 수학 입출력, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중',
+        '수학 입출력, 각도 단위 도, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중',
       );
     });
 
     test('FIX와 SCI는 각자의 의미로 읽고, 꺼진 쪽은 읽지 않는다 (#44 — 슬롯 분리)', () {
       const fix = LcdStatus(numberFormat: NumberDisplayFormat.fix);
       const sci = LcdStatus(numberFormat: NumberDisplayFormat.sci);
-      expect(ko.statusBar(fix), '각도 단위 도, 소수 자릿수 고정, 수학 입출력');
-      expect(ko.statusBar(sci), '각도 단위 도, 유효숫자 고정, 수학 입출력');
+      expect(ko.statusBar(fix), '수학 입출력, 각도 단위 도, 소수 자릿수 고정');
+      expect(ko.statusBar(sci), '수학 입출력, 각도 단위 도, 유효숫자 고정');
       const en = EnSemanticStrings();
-      expect(en.statusBar(fix), 'Degrees, Fixed decimals, Math input output');
+      expect(en.statusBar(fix), 'Math input output, Degrees, Fixed decimals');
       expect(
         en.statusBar(sci),
-        'Degrees, Significant digits, Math input output',
+        'Math input output, Degrees, Significant digits',
       );
       for (final strings in CalcSemanticStrings.all) {
         expect(strings.indicator(LcdIndicatorSlot.sciFormat, fix), isNull);

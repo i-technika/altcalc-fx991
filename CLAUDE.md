@@ -31,7 +31,9 @@
   - 연산 단계별 반올림 방식·언더플로 처리 등 세부 규칙은 #30에서 실물 대조로 확정한다.
 - **2D 자연어 수식 렌더링 (Natural Textbook Display):** `IntrinsicWidth`, `Row`, `Column` 등을 활용한 재귀 위젯 트리(`MathNodeWidget`)로 분수, 루트, 지수, 정적분, 시그마 기호를 렌더링한다.
 - **수익화 및 서버리스 인앱결제:**
-  - 하단 적응형 배너 광고(`google_mobile_ads`): 최하단 키패드 행 아래 `8dp~12dp` 오터치 방지 안전 여백 확보
+  - 광고 없는 배치(과금 사용자)가 기준이다 (#141). 화면 맨 아래 광고 슬롯은 없고, 무과금 사용자의 배너 광고(`google_mobile_ads`)는
+    그 배치에서 LCD 쪽 한 영역을 줄여 넣는다 — 키패드에서 가장 먼 곳(폰·태블릿 세로는 화면 맨 위, 그 밖에는 기록 영역), 기록 영역부터 줄이고
+    활성 LCD는 줄이지 않는다(#18). 광고를 키패드 바로 옆에 두지 않는다(AdMob 실수 클릭 안내).
   - 비소모성 인앱결제(`in_app_purchase`, 상품 ID: `remove_ads`) + `shared_preferences` 로컬 캐싱 + 앱 시작 시 백그라운드 `restorePurchases()` 동기화 (백엔드 서버 없음)
 
 ## 2. 디렉토리 구조 (`lib/`)
@@ -42,10 +44,10 @@
 - `core/layout/form_factor.dart`: 기기 종류(폰·폴더블·태블릿) 판정·방향 고정 규칙, 창 크기·접힘선 기준 배치 판정
 - `domain/models/`: `math_node.dart` (수식 AST 노드), `calc_state.dart` (계산기 전체 상태), `lcd_status.dart` (LCD 상태 표시기 스냅샷), `handedness.dart` (손잡이 설정 — 좌우 분할 시 키패드 위치)
 - `domain/engine/`: `cursor_navigator.dart` (방향키 커서 이동), `ast_evaluator.dart` (수식 계산기), `numerical_methods.dart` (수치해석)
-- `presentation/providers/`: `calc_provider.dart`, `settings_provider.dart` (`shared_preferences` 앱 설정 — `main()`이 불러와 override), `device_provider.dart` (폴더블 기기 여부 — `main()`이 힌지 센서로 판정해 override), `iap_provider.dart`
+- `presentation/providers/`: `calc_provider.dart`, `settings_provider.dart` (`shared_preferences` 앱 설정 — `main()`이 불러와 override), `device_provider.dart` (폴더블 기기 여부 — `main()`이 시작 판정(Android 쪽 `FoldableDeviceProbe.kt`)과 그 뒤 화면 정보로 기억한 값 `DeviceOrientationLock.foldableDevice`로 override), `iap_provider.dart`
 - `presentation/l10n/`: `calc_semantic_strings.dart` (스크린리더 음성 문구 — 키 기능 이름·LCD 표시기 의미, 한국어·영어), `device_locale_scope.dart` (기기 로캘 전달·언어 변경 시 재빌드), `settings_strings.dart` (설정 UI·화면 안내 문구, 한국어·영어)
 - `presentation/screens/`: `calculator_screen.dart`
-- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖), `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 테이블톱 아래 절반용 넓은 배열 `KeypadArrangement`), `banner_ad_slot.dart`, `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 버튼), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_button.dart`·`handedness_dialog.dart` (설정 진입·키패드 위치 선택), `top_strip.dart` (LCD 위 상단 띠 장식 — 워드마크·태양전지 모양. 띠 배치 규칙은 `CalcTheme` "상단 띠" 절, 계산은 `calculator_screen.dart`의 `CalcTopStripLayout`), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
+- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖), `math_node_widget.dart`, `calc_key_button.dart`, `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 테이블톱 아래 절반용 넓은 배열 `KeypadArrangement`), `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 버튼), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_button.dart`·`handedness_dialog.dart` (설정 진입·키패드 위치 선택), `top_strip.dart` (LCD 위 상단 띠 장식 — 워드마크·태양전지 모양. 띠 배치 규칙은 `CalcTheme` "상단 띠" 절, 계산은 `calculator_screen.dart`의 `CalcTopStripLayout`), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
 - 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회하고, SDK 고정 검사는 CI의 버전 읽기 스크립트를 bash로 실행한다, 액션 고정 스크립트 검사는 가짜 gh로, 릴리스 APK API 격리 검사 스크립트는 가짜 Android SDK와 실제 빌드에서 옮긴 dexdump 표본으로 실행한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap 파서, LCD 글자 목록, 키 터치 치수 측정, 커서 패드 라벨 검사, 화면 배치 판정, CI 워크플로 파일 목록·YAML 로더·`uses:` 줄 추출, 셸 스크립트 실행용 bash 찾기, 가짜 APK용 ZIP 작성기)
 - Android 단위 테스트: `android/app/src/test/kotlin/` (Kotlin 플랫폼 코드의 JVM 테스트 — Robolectric으로 API 수준별 분기를 기기 없이 검사한다.
   `TestSupport.kt`에 테스트 대상 API 수준 상수·가짜 메신저·시스템 설정 흉내 도구, `MainActivityLifecycleTest`는 Mockito `FlutterJNI` 대역 캐시 엔진으로 생명주기를 돈다. `flutter test`와 따로 Gradle로 돌린다 — README "Android 단위 테스트")
@@ -57,7 +59,9 @@
 
 ## 3. 코딩 원칙
 - 일반 스마트폰, 폴더블, 태블릿 등 다양한 화면비에서도 키패드 비율이 깨지지 않도록 반응형으로 설계한다.
-- M1 단계부터 하단 배너 광고 슬롯 높이(`50dp~60dp`)를 미리 확보하여 추후 광고 연동 시 키패드 레이아웃이 찌그러지지 않게 한다.
+- 화면 배치는 광고 없는 배치를 기준으로 화면을 다 채운다(#141). 키가 세로로 길어지는 것은 피하고(키패드 가로/세로 비 하한),
+  가로로 넓어지는 것은 받아들이되 키 글자 크기에 상한을 둔다. 무과금 광고는 이 배치의 LCD 쪽 영역을 줄여 넣으며(#18),
+  광고 높이가 바뀌어도 키패드가 찌그러지지 않게 한다.
 - 기본 연산 시 부동소수점 오차(`0.1 + 0.2`) 방지를 위해 일반 `double` 대신 `Decimal`을 사용한다.
 - 키 명세·테마 등 상수 데이터에는 반드시 불변식 테스트(키 개수, ID 중복 금지 등)를 함께 둔다.
 - 커밋 전 항상 `flutter analyze`(이슈 0건)와 `flutter test`(전부 통과)를 확인한다.

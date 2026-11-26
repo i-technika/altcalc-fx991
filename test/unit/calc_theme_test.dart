@@ -710,26 +710,6 @@ void main() {
   });
 
   group('치수', () {
-    test('광고 슬롯 높이는 50~60dp, 안전 여백은 8~12dp 범위다', () {
-      expect(CalcTheme.adSlotHeight, inInclusiveRange(50, 60));
-      expect(CalcTheme.adSlotMaxHeight, inInclusiveRange(50, 60));
-      expect(
-        CalcTheme.adSlotHeight,
-        lessThanOrEqualTo(CalcTheme.adSlotMaxHeight),
-      );
-      expect(CalcTheme.adSlotSafetyMargin, inInclusiveRange(8, 12));
-      expect(CalcTheme.adSlotMinSafetyMargin, 8);
-      expect(CalcTheme.adSlotMaxSafetyMargin, 12);
-      expect(
-        CalcTheme.adSlotSafetyMargin,
-        inInclusiveRange(
-          CalcTheme.adSlotMinSafetyMargin,
-          CalcTheme.adSlotMaxSafetyMargin,
-        ),
-      );
-      expect(CalcTheme.adSlotLargeScreenShortestSide, greaterThan(0));
-    });
-
     test(
       '상태 아이콘 치수: 높이 비율은 x높이 < 대문자 높이 < 1, 선 굵기는 ‖ 두 획이 붙지 않을 만큼 가늘다 (#57)',
       () {
@@ -840,15 +820,22 @@ void main() {
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));
     });
 
-    test('키패드 배치 상수: 숫자 행이 더 크고, 가로/세로 비 하한 < 상한이다', () {
+    test('키패드 배치 상수: 숫자 행이 더 크고, 가로/세로 비 하한은 키가 세로로 길어지지 않는 0~1 사이다', () {
       expect(CalcTheme.keypadNumberRowHeightRatio, inInclusiveRange(1.0, 2.0));
       expect(CalcTheme.keypadSectionGapRatio, inExclusiveRange(0, 0.1));
-      expect(CalcTheme.keypadMinAspectRatio, greaterThan(0));
-      expect(
-        CalcTheme.keypadMinAspectRatio,
-        lessThan(CalcTheme.keypadMaxAspectRatio),
-      );
+      // 가로 쪽 상한은 없다 (#141) — 하한만 둔다.
+      expect(CalcTheme.keypadMinAspectRatio, inExclusiveRange(0, 1));
       expect(CalcTheme.keyMinTouchTargetHeight, greaterThanOrEqualTo(44));
+    });
+
+    test('키 글자 크기 상한: 양수이고 각인이 메인 라벨보다 작다 (#141)', () {
+      expect(CalcTheme.keyMainLabelMaxFontSize, greaterThan(0));
+      expect(CalcTheme.keyLegendMaxFontSize, greaterThan(0));
+      expect(
+        CalcTheme.keyLegendMaxFontSize,
+        lessThan(CalcTheme.keyMainLabelMaxFontSize),
+      );
+      // 폰에 걸리지 않는지·태블릿에서 멈추는지는 calc_keypad_test가 번들 글꼴로 실측한다.
     });
 
     test('통일 글자 하한 비율은 0.5~1, 커서 패드 경계선은 양수 두께다', () {
@@ -920,16 +907,6 @@ void main() {
   });
 
   group('대화면·좌우 분할 배치 (#24)', () {
-    test(
-      '키패드 최대 폭은 가장 넓은 폰(440dp, iPhone Pro Max)의 키패드 폭보다 넓다 — 폰에는 걸리지 않는다',
-      () {
-        const widestPhoneKeypad = 440 - 2 * CalcTheme.screenPadding;
-        expect(CalcTheme.keypadMaxWidth, greaterThan(widestPhoneKeypad));
-        // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
-        expect(CalcTheme.keypadMaxWidth, lessThanOrEqualTo(77 / 25.4 * 160));
-      },
-    );
-
     test('분할 배치 상수: 간격은 양수, 키패드 몫은 0.3~0.5 (LCD 쪽 패널이 키패드보다 좁아지지 않는다)', () {
       expect(CalcTheme.screenSplitGap, greaterThan(0));
       expect(
@@ -945,21 +922,53 @@ void main() {
       expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
     });
 
-    test('위아래·테이블톱 LCD 최대 폭: 키패드 최대 폭을 넘지 않고, 가장 넓은 폰 본체보다 넓다 (#92)', () {
-      // 위아래 배치에서 LCD가 키패드(최대 폭)보다 넓어지지 않는다.
-      expect(
-        CalcTheme.screenLcdMaxWidth,
-        lessThanOrEqualTo(CalcTheme.keypadMaxWidth),
-      );
-      // 세로 폰 폭에서는 걸리지 않는다 (가장 넓은 폰 440dp − 좌우 여백).
+    test('테이블톱 키패드 임시 상한 (#143까지): 블록은 실물 본체 폭 이하·폰보다 넓고, 가로세로비 상한 > 하한', () {
       const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
-      expect(CalcTheme.screenLcdMaxWidth, greaterThan(widestPhoneBody));
-      // 상한 폭에서도 LCD 최대 높이가 최소 높이 이상이다.
       expect(
-        CalcTheme.screenLcdMaxWidth / CalcTheme.screenLcdMinAspectRatio,
-        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+        CalcTheme.screenTabletopKeypadMaxBlockWidth,
+        greaterThan(widestPhoneBody),
+      );
+      // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
+      expect(
+        CalcTheme.screenTabletopKeypadMaxBlockWidth,
+        lessThanOrEqualTo(77 / 25.4 * 160),
+      );
+      expect(
+        CalcTheme.screenTabletopKeypadMaxAspectRatio,
+        greaterThan(CalcTheme.keypadMinAspectRatio),
       );
     });
+
+    test('큰 세로 창 띠 늘리기의 키패드 하한 (#141 R1): 가장 넓은 폰의 키패드 최대 높이보다 높다', () {
+      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
+      expect(
+        CalcTheme.screenTopStripFullRowKeypadMinHeight,
+        greaterThan(widestPhoneBody / CalcTheme.keypadMinAspectRatio),
+      );
+      // 늘린 띠의 본체 안 몫은 최소 띠보다 높다.
+      expect(
+        CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding,
+        greaterThan(CalcTheme.screenTopStripMinHeight),
+      );
+    });
+
+    test(
+      '테이블톱 LCD 최대 폭 (#143까지의 임시 상한): 가장 넓은 폰 본체보다 넓고 최대 높이가 최소 높이 이상이다',
+      () {
+        // Flip 내부(폰 폭)에서는 걸리지 않는다 (가장 넓은 폰 440dp − 좌우 여백).
+        const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
+        expect(
+          CalcTheme.screenTabletopLcdMaxWidth,
+          greaterThan(widestPhoneBody),
+        );
+        // 상한 폭에서도 LCD 최대 높이가 최소 높이 이상이다.
+        expect(
+          CalcTheme.screenTabletopLcdMaxWidth /
+              CalcTheme.screenLcdMinAspectRatio,
+          greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+        );
+      },
+    );
 
     test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
       expect(CalcTheme.keyTouchHeightFloor, greaterThan(0));

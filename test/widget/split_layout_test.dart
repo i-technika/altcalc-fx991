@@ -37,7 +37,6 @@ const _verticalFold = DisplayFeature(
 
 final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
-final _ad = find.byKey(const ValueKey('banner-ad-slot'));
 final _settings = find.byKey(SettingsButton.buttonKey);
 
 /// 설정 대화상자의 보이는 면 (대화상자 위젯 자체는 화면 전체를 덮는다)
@@ -128,7 +127,6 @@ void main() {
 
             final lcd = tester.getRect(_lcd);
             final keypad = tester.getRect(_keypad);
-            final ad = tester.getRect(_ad);
             final settings = tester.getRect(_settings);
             final left = padding.left + CalcTheme.screenPadding;
             final right = size.width - padding.right - CalcTheme.screenPadding;
@@ -152,8 +150,8 @@ void main() {
               );
               expect(settings.right, moreOrLessEquals(lcd.right));
             }
-            // LCD 폭 = min(LCD 쪽 패널 폭, 키패드 폭 × 상한 비율) (#71). 접힘선이 없으면 패널 ≥ 키패드라
-            // 항상 키패드 폭 × 비율이다.
+            // LCD 폭 = min(LCD 쪽 패널 폭, 키패드 폭 × 상한 비율) (#71). 접힘선이 없으면 키패드가 (본체 폭 − 간격)의
+            // 절반을 다 쓰고(#141 — 폭 상한 없음) 패널도 같은 폭이라, LCD는 패널을 다 쓴다.
             final panel =
                 right - left - CalcTheme.screenSplitGap - keypad.width;
             expect(
@@ -165,21 +163,22 @@ void main() {
                 ),
               ),
             );
-            expect(panel, greaterThanOrEqualTo(keypad.width - 0.01));
+            expect(
+              keypad.width,
+              moreOrLessEquals((right - left - CalcTheme.screenSplitGap) / 2),
+            );
+            expect(panel, moreOrLessEquals(keypad.width));
+            expect(lcd.width, moreOrLessEquals(panel));
 
-            // 위아래: LCD와 키패드 윗변이 맞고, 키패드 아래에 광고 안전 여백, 광고는 전체 폭
+            // 위아래: LCD와 키패드 윗변이 맞고, 키패드는 아래 인셋 위 화면 여백까지 내려온다(#141 — 광고 슬롯 없음)
             expect(lcd.top, moreOrLessEquals(keypad.top));
             expect(lcd.top, greaterThanOrEqualTo(padding.top));
             expect(
-              ad.top - keypad.bottom,
-              greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
+              keypad.bottom,
+              moreOrLessEquals(
+                size.height - padding.bottom - CalcTheme.screenPadding,
+              ),
             );
-            expect(
-              ad.bottom,
-              lessThanOrEqualTo(size.height - padding.bottom + 0.01),
-            );
-            // 광고는 전체 폭에서 좌우 시스템 인셋만 피한다 (BannerAdSlot 계약)
-            expect(ad.width, moreOrLessEquals(size.width - padding.horizontal));
 
             // 설정 버튼: LCD 아래, 키패드 높이 안, 겹치지 않음, 48dp, 눌린다
             expect(settings.top, greaterThanOrEqualTo(lcd.bottom));
@@ -195,10 +194,10 @@ void main() {
             );
             expect(_settings.hitTestable(), findsOneWidget);
 
-            // 키 크기 상한
+            // 키는 세로로 길어지지 않는다 (키패드 가로/세로 비 하한)
             expect(
-              keypad.width,
-              lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 0.01),
+              keypad.width / keypad.height,
+              greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
             );
           });
         }
@@ -242,33 +241,29 @@ void main() {
     });
   });
 
-  group('위아래 배치: LCD 폭 상한과 가운데 정렬 (#92)', () {
-    // (창, 인셋, LCD 높이, 상단 띠) — 키패드는 모두 폭 480dp, LCD 폭도 480dp.
-    const lcdMaxHeight = 480 / 1.75;
+  group('위아래 배치: LCD·키패드가 본체 폭 전체를 쓴다 (#141)', () {
+    // (창, 인셋, LCD 높이, 상단 띠) — 폭 상한(#92의 480dp)이 없어 태블릿 세로도 남는 높이 없이 LCD는 목표 비율,
+    // 키패드는 나머지 전부다. 키패드가 실물 크기(640dp)보다 높은 태블릿 세로는 띠를 줄 전체 높이(본체 안 40dp)까지
+    // 늘린다 — 늘린 몫은 키패드만 낸다(#141 R1·R2, [CalcTheme] "화면 배치" 절).
+    const strip = CalcTheme.screenTopStripMinHeight;
+    const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
     const windows = [
-      // 12.9인치 iPad 세로: 본체 1008×1244 (1366 − 24 − 8 − 광고 슬롯 60·안전 여백 10·아래 인셋 20).
-      // 상한 전 LCD 1008×576 → 480×274.3, 키패드 640, 남는 321.7은 상단 띠
+      // 12.9인치 iPad 세로: 본체 1008×1306 (1366 − 24 − 20 − 화면 여백 8×2)
       (
         Size(1024, 1366),
         EdgeInsets.only(top: 24, bottom: 20),
-        lcdMaxHeight,
-        1236 - lcdMaxHeight - 640,
+        (1306 - strip) * 0.28,
+        fullRow,
       ),
-      // 10인치 Android 세로: 본체 784×1130 (1280 − 24 − 8 − 70 − 48), 상한 전 LCD 784×448
+      // 10인치 Android 세로: 본체 784×1192 (1280 − 24 − 48 − 16)
       (
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
-        lcdMaxHeight,
-        1122 - lcdMaxHeight - 640,
+        (1192 - strip) * 0.28,
+        fullRow,
       ),
-      // 정사각형 창: 본체 752×690 — LCD는 목표 비율((690 − 최소 띠 12) × 0.28)이라 폭 상한만 걸리고
-      // 띠는 최소 높이(#41)뿐이다
-      (
-        Size(768, 768),
-        EdgeInsets.zero,
-        (690 - CalcTheme.screenTopStripMinHeight) * 0.28,
-        CalcTheme.screenTopStripMinHeight,
-      ),
+      // 정사각형 창: 본체 752×752 — 키패드가 640dp보다 낮아 띠는 최소 높이
+      (Size(768, 768), EdgeInsets.zero, (752 - strip) * 0.28, strip),
     ];
 
     for (final (size, padding, lcdHeight, band) in windows) {
@@ -286,78 +281,53 @@ void main() {
           final lcd = tester.getRect(_lcd);
           final keypad = tester.getRect(_keypad);
           final bodyTop = padding.top + CalcTheme.screenPadding;
+          final left = padding.left + CalcTheme.screenPadding;
+          final right = size.width - padding.right - CalcTheme.screenPadding;
 
-          // LCD는 키패드와 같은 폭으로 본체 가운데에 있다(손잡이와 무관).
-          expect(keypad.width, moreOrLessEquals(480));
-          expect(lcd.width, moreOrLessEquals(CalcTheme.screenLcdMaxWidth));
-          expect(lcd.center.dx, moreOrLessEquals(size.width / 2));
-          expect(lcd.left, moreOrLessEquals(keypad.left));
-          expect(lcd.right, moreOrLessEquals(keypad.right));
-          // 높이는 상한 폭으로 정한 최대 높이 이하이고, 남는 높이는 LCD 위 상단 띠가 된다.
+          // LCD와 키패드가 본체 폭 전체다(손잡이와 무관).
+          for (final r in [lcd, keypad]) {
+            expect(r.left, moreOrLessEquals(left), reason: '$r');
+            expect(r.right, moreOrLessEquals(right), reason: '$r');
+          }
           expect(lcd.height, moreOrLessEquals(lcdHeight));
           expect(lcd.top - bodyTop, moreOrLessEquals(band));
           expect(
             keypad.top - lcd.bottom,
             moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
           );
+          expect(
+            keypad.bottom,
+            moreOrLessEquals(
+              size.height - padding.bottom - CalcTheme.screenPadding,
+            ),
+          );
           expect(isStackedArrangement(tester), isTrue);
         });
       }
     }
 
-    testWidgets('12.9인치 iPad를 돌려도 LCD 크기와 줄 글자 크기가 그대로다', (tester) async {
-      const padding = EdgeInsets.only(top: 24, bottom: 20);
-      const expected = Size(480, 480 / 1.75);
-      double lineFont() => DefaultTextStyle.of(
-        tester.element(find.byKey(const ValueKey('lcd-input-text'))),
-      ).style.fontSize!;
-
-      final (container, _) = await _pump(
-        tester,
-        size: const Size(1024, 1366),
-        padding: padding,
-      );
-      expect(isStackedArrangement(tester), isTrue);
-      expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
-      expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
-      final font = lineFont();
-
-      for (final size in const [Size(1366, 1024), Size(1024, 1366)]) {
-        await _pump(tester, size: size, padding: padding, container: container);
-        expect(tester.getSize(_lcd).width, moreOrLessEquals(expected.width));
-        expect(tester.getSize(_lcd).height, moreOrLessEquals(expected.height));
-        expect(lineFont(), moreOrLessEquals(font), reason: '$size');
-        // 가로는 좌우 분할, 세로는 위아래 배치
-        expect(isStackedArrangement(tester), size.width < size.height);
-      }
-    });
-
-    // 폰·폴더블 커버 화면 폭에서는 상한에 걸리지 않는다 — LCD는 본체 폭 그대로다.
+    // 폰·폴더블 커버 화면·정사각형 창 — LCD는 본체 폭 그대로다.
     for (final size in const [
       Size(320, 568),
       Size(390, 844),
       Size(430, 932),
       Size(440, 956), // iPhone Pro Max
       Size(344, 882),
-      // 폭이 480을 넘는 정사각형 창 — 상한에 걸리고, 키패드는 높이에 묶여 LCD보다 좁다.
-      // (짧은 변 600dp 미만 창은 키가 큰 쪽인 좌우 분할이 되기 쉬워(#38) 짧은 변 600의 정사각형 창을 쓴다)
+      // 짧은 변 600의 정사각형 창 (짧은 변 600dp 미만 창은 키가 큰 쪽인 좌우 분할이 되기 쉽다 — #38)
       Size(600, 600),
     ]) {
-      testWidgets('${size.width}×${size.height}: LCD 폭 = min(본체 폭, 480)', (
-        tester,
-      ) async {
+      testWidgets('${size.width}×${size.height}: LCD 폭 = 본체 폭', (tester) async {
         await _pump(tester, size: size);
         final lcd = tester.getRect(_lcd);
+        final keypad = tester.getRect(_keypad);
         final bodyWidth = size.width - 2 * CalcTheme.screenPadding;
-        expect(
-          lcd.width,
-          moreOrLessEquals(math.min(bodyWidth, CalcTheme.screenLcdMaxWidth)),
-        );
+        expect(lcd.width, moreOrLessEquals(bodyWidth));
+        expect(keypad.width, moreOrLessEquals(bodyWidth));
         expect(lcd.center.dx, moreOrLessEquals(size.width / 2));
       });
     }
 
-    testWidgets('좌우 인셋이 비대칭이면 창이 아니라 본체 가운데에 키패드와 함께 정렬한다', (tester) async {
+    testWidgets('좌우 인셋이 비대칭이면 LCD·키패드가 창이 아니라 본체 폭 전체를 쓴다', (tester) async {
       // 오른쪽 내비게이션 바 48 → 본체 x 8 ~ 544 (폭 536). 가로 폰(844×390)처럼 짧은 변 600dp 미만인 창은 짧은 창
       // 규칙으로 좌우 분할이 되므로(#38) 위아래 배치로 남는 짧은 변 600의 정사각형 창을 쓴다.
       const size = Size(600, 600);
@@ -365,20 +335,17 @@ void main() {
       await _pump(tester, size: size, padding: padding);
       expect(tester.takeException(), isNull);
       expect(isStackedArrangement(tester), isTrue);
-      final lcd = tester.getRect(_lcd);
-      final keypad = tester.getRect(_keypad);
-      const bodyCenter = (8 + (600 - 48 - 8)) / 2;
-      expect(lcd.width, moreOrLessEquals(CalcTheme.screenLcdMaxWidth));
-      expect(lcd.center.dx, moreOrLessEquals(bodyCenter));
-      expect(keypad.center.dx, moreOrLessEquals(bodyCenter));
-      expect(keypad.width, lessThan(lcd.width)); // 키패드는 높이에 묶인다
+      for (final r in [tester.getRect(_lcd), tester.getRect(_keypad)]) {
+        expect(r.left, moreOrLessEquals(8), reason: '$r');
+        expect(r.right, moreOrLessEquals(600 - 48 - 8), reason: '$r');
+      }
     });
   });
 
   group('테이블톱 배치: LCD 폭 상한 고정값 (#92)', () {
     // Galaxy Z Fold 내부 가로 반 접힘 841×673, 인셋 24/24: 본체 825 폭, 접힘선 336.5(본체 304.5).
     // 상한 전 LCD 825×296.5 → 480×274.3. 키패드는 넓은 배열로 아래 절반 폭을 다 쓰고(825dp, #80), LCD는 넓히지
-    // 않는다(근거는 `CalcTheme.screenLcdMaxWidth`). LCD 손 쪽 끝이 키패드 바깥 끝과 맞는다.
+    // 않는다(근거는 `CalcTheme.screenTabletopLcdMaxWidth` — #143까지). LCD 손 쪽 끝이 키패드 바깥 끝과 맞는다.
     for (final handedness in Handedness.values) {
       testWidgets('Fold 가로 반 접힘·${handedness.name}', (tester) async {
         await _pump(
@@ -413,52 +380,85 @@ void main() {
     }
   });
 
-  group('키 크기 상한', () {
+  testWidgets(
+    '12.9인치 iPad를 돌려도 LCD 줄 글자 크기는 크게 바뀌지 않는다 (#71 — #141 뒤로는 LCD 폭이 회전마다 바뀐다)',
+    (tester) async {
+      // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×362, 가로는
+      // 667×381이다. 줄 글자는 높이에 묶여 회전해도 10% 안에서 움직인다.
+      const padding = EdgeInsets.only(top: 24, bottom: 20);
+      double lineFont() => DefaultTextStyle.of(
+        tester.element(find.byKey(const ValueKey('lcd-input-text'))),
+      ).style.fontSize!;
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(1024, 1366),
+        padding: padding,
+      );
+      expect(isStackedArrangement(tester), isTrue);
+      final portrait = lineFont();
+      await _pump(
+        tester,
+        size: const Size(1366, 1024),
+        padding: padding,
+        container: container,
+      );
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(lineFont(), moreOrLessEquals(portrait, epsilon: portrait * 0.1));
+    },
+  );
+
+  group('키패드 폭 상한 없음 (#141)', () {
     for (final size in const [
       Size(800, 1280),
       Size(1366, 1024),
       Size(2000, 1400),
-      // 폴더블 내부 화면(위아래 배치)에도 같은 상한이 걸린다 — Fold5 내부 키패드 폭 약 674 → 480dp (의도)
+      // 폴더블 내부 화면(위아래 배치) — 예전에는 키패드 폭 약 674 → 480dp로 줄였다
       Size(690, 829),
     ]) {
-      testWidgets('${size.width}×${size.height}: 키패드는 최대 폭·높이를 넘지 않는다', (
-        tester,
-      ) async {
-        await _pump(tester, size: size);
-        final keypad = tester.getRect(_keypad);
-        expect(keypad.width, moreOrLessEquals(CalcTheme.keypadMaxWidth));
-        expect(
-          keypad.height,
-          lessThanOrEqualTo(
-            CalcTheme.keypadMaxWidth / CalcTheme.keypadMinAspectRatio + 0.01,
-          ),
-        );
-        // 세로 창에서는 가운데 정렬된다.
-        if (size.height > size.width) {
-          expect(keypad.center.dx, moreOrLessEquals(size.width / 2));
-        }
-      });
+      testWidgets(
+        '${size.width}×${size.height}: 키패드는 받은 폭을 다 쓰고 세로로 길어지지 않는다',
+        (tester) async {
+          await _pump(tester, size: size);
+          final keypad = tester.getRect(_keypad);
+          final bodyWidth = size.width - 2 * CalcTheme.screenPadding;
+          // 세로 창은 위아래 배치로 본체 폭 전체, 가로 창은 좌우 분할로 (본체 폭 − 간격)의 절반이다.
+          expect(
+            keypad.width,
+            moreOrLessEquals(
+              size.height > size.width
+                  ? bodyWidth
+                  : (bodyWidth - CalcTheme.screenSplitGap) / 2,
+            ),
+          );
+          expect(
+            keypad.height,
+            lessThanOrEqualTo(
+              keypad.width / CalcTheme.keypadMinAspectRatio + 0.01,
+            ),
+          );
+        },
+      );
     }
   });
 
-  group('태블릿 가로: LCD 폭 상한과 위쪽 띠 (#71)', () {
-    // (창, 인셋, LCD 쪽 패널 바깥 여백, 위쪽 띠) — 키패드는 모두 최대 폭 480dp.
-    // 접힘선이 없는 좌우 분할에서는 LCD 폭 = 키패드 폭이라, 패널의 나머지가 바깥 여백이 된다.
+  group('태블릿 가로: 패널을 다 쓰는 LCD와 위쪽 띠 (#71, #141)', () {
+    // (창, 인셋) — 키패드 폭 상한(480dp)을 푼 뒤로(#141) 키패드는 (본체 폭 − 간격)의 절반이고 LCD 쪽 패널도 같은
+    // 폭이라 LCD가 패널을 다 쓴다(바깥 여백 없음). 키패드 높이는 본체 높이와 폭 / 가로세로비 하한 중 작은 쪽이고,
+    // 본체가 그보다 높은 만큼 위쪽이 띠로 남는다.
     const windows = [
-      // 12.9인치 iPad: 본체 1350×902 (1024 − 24 − 8 − 광고 슬롯 60·안전 여백 10·아래 인셋 20)
-      (Size(1366, 1024), EdgeInsets.only(top: 24, bottom: 20), 374.0, 262.0),
-      // 11인치 iPad: 본체 1178×712
-      (Size(1194, 834), EdgeInsets.only(top: 24, bottom: 20), 202.0, 72.0),
-      // 10인치 Android: 본체 1264×650 (상한 전 LCD 768dp)
-      (Size(1280, 800), EdgeInsets.only(top: 24, bottom: 48), 288.0, 10.0),
-      // iPad 1024×768: 본체 1008×646 — 이 목록에서 본체 높이가 키패드 최대 높이(640)를 겨우 넘는 경우
-      (Size(1024, 768), EdgeInsets.only(top: 24, bottom: 20), 32.0, 6.0),
-      // 데스크톱 창: 본체 1984×1322
-      (Size(2000, 1400), EdgeInsets.zero, 1008.0, 682.0),
+      // 12.9인치 iPad: 본체 1350×964 → 키패드 667×889.3, 띠 74.7
+      (Size(1366, 1024), EdgeInsets.only(top: 24, bottom: 20)),
+      // 11인치 iPad: 본체 1178×774 → 키패드 581×774, 띠 0
+      (Size(1194, 834), EdgeInsets.only(top: 24, bottom: 20)),
+      // 10인치 Android: 본체 1264×712 → 키패드 624×712
+      (Size(1280, 800), EdgeInsets.only(top: 24, bottom: 48)),
+      // iPad 1024×768: 본체 1008×708 → 키패드 496×661.3, 띠 46.7
+      (Size(1024, 768), EdgeInsets.only(top: 24, bottom: 20)),
+      // 데스크톱 창: 본체 1984×1384 → 키패드 984×1312, 띠 72
+      (Size(2000, 1400), EdgeInsets.zero),
     ];
-    const lcdHeight = 480 / 1.75;
 
-    for (final (size, padding, margin, band) in windows) {
+    for (final (size, padding) in windows) {
       for (final handedness in Handedness.values) {
         testWidgets('${size.width}×${size.height}·${handedness.name}', (
           tester,
@@ -473,38 +473,54 @@ void main() {
           final lcd = tester.getRect(_lcd);
           final keypad = tester.getRect(_keypad);
           final settings = tester.getRect(_settings);
-          final ad = tester.getRect(_ad);
           final left = padding.left + CalcTheme.screenPadding;
           final right = size.width - padding.right - CalcTheme.screenPadding;
           final bodyTop = padding.top + CalcTheme.screenPadding;
+          final bodyBottom =
+              size.height - padding.bottom - CalcTheme.screenPadding;
+          final half = (right - left - CalcTheme.screenSplitGap) / 2;
+          final keypadHeight = math.min(
+            bodyBottom - bodyTop,
+            half / CalcTheme.keypadMinAspectRatio,
+          );
 
-          // 키패드 480×640, 손 쪽 가장자리. LCD 480×(480/1.75), 키패드 쪽에 붙고 바깥쪽에 여백이 남는다.
-          expect(keypad.size, const Size(480, 640));
-          expect(lcd.width, moreOrLessEquals(480));
-          expect(lcd.height, moreOrLessEquals(lcdHeight));
+          expect(keypad.width, moreOrLessEquals(half));
+          expect(keypad.height, moreOrLessEquals(keypadHeight));
+          expect(lcd.width, moreOrLessEquals(half));
+          expect(
+            lcd.height,
+            moreOrLessEquals(
+              math.min(
+                half / CalcTheme.screenLcdMinAspectRatio,
+                keypadHeight -
+                    CalcTheme.screenSplitSettingsGap -
+                    CalcTheme.settingsButtonSize,
+              ),
+            ),
+          );
           if (handedness.keypadOnRight) {
             expect(keypad.right, moreOrLessEquals(right));
             expect(lcd.right, moreOrLessEquals(keypad.left - 16));
-            expect(lcd.left - left, moreOrLessEquals(margin));
+            expect(lcd.left, moreOrLessEquals(left));
             expect(settings.left, moreOrLessEquals(lcd.left));
           } else {
             expect(keypad.left, moreOrLessEquals(left));
             expect(lcd.left, moreOrLessEquals(keypad.right + 16));
-            expect(right - lcd.right, moreOrLessEquals(margin));
+            expect(lcd.right, moreOrLessEquals(right));
             expect(settings.right, moreOrLessEquals(lcd.right));
           }
           // 설정 버튼은 LCD 바로 아래 (간격 8)
           expect(settings.top, moreOrLessEquals(lcd.bottom + 8));
           expect(_settings.hitTestable(), findsOneWidget);
 
-          // 위아래: 위아래 배치(#41)와 같이 키패드를 광고 슬롯 바로 위에 붙이고(가운데 정렬하지 않음),
+          // 위아래: 위아래 배치(#41)와 같이 키패드를 본체 아래에 붙이고(가운데 정렬하지 않음),
           // LCD 윗변은 키패드 윗변에 맞춘다. 본체가 키패드 최대 높이보다 높은 만큼 위쪽이 띠로 남는다(장식은 top_strip_test).
-          expect(
-            ad.top - keypad.bottom,
-            lessThanOrEqualTo(CalcTheme.adSlotMaxSafetyMargin + 0.01),
-          );
+          expect(keypad.bottom, moreOrLessEquals(bodyBottom));
           expect(lcd.top, moreOrLessEquals(keypad.top));
-          expect(keypad.top - bodyTop, moreOrLessEquals(band));
+          expect(
+            keypad.top - bodyTop,
+            moreOrLessEquals(bodyBottom - bodyTop - keypadHeight),
+          );
         });
       }
     }
@@ -944,22 +960,21 @@ void main() {
       }
     });
 
-    test('10인치 Android 가로(본체 1264×650) 오른손잡이 배치 고정값 (#71)', () {
-      final l = CalcSplitLayout.of(const Size(1264, 650), Handedness.right);
+    test('10인치 Android 가로(본체 1264×712) 오른손잡이 배치 고정값 (#71, #141)', () {
+      final l = CalcSplitLayout.of(const Size(1264, 712), Handedness.right);
+      // 키패드는 (1264 − 16) / 2 = 624 폭, 본체 높이 712 전체(폭 기준 최대 높이 832 미만)
       expect(
         l.keypad,
-        rectMoreOrLessEquals(const Rect.fromLTWH(784, 10, 480, 640)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(640, 0, 624, 712)),
       );
-      // LCD는 키패드 폭(480)이고 키패드 쪽(간격 16)에 붙는다 — 바깥 여백 288
+      // LCD는 키패드 폭(624)이고 키패드 쪽(간격 16)에 붙는다 — 패널을 다 써 바깥 여백이 없다
       expect(
         l.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(288, 10, 480, 480 / 1.75)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 624, 624 / 1.75)),
       );
       expect(
         l.settingsButton,
-        rectMoreOrLessEquals(
-          const Rect.fromLTWH(288, 10 + 480 / 1.75 + 8, 48, 48),
-        ),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 624 / 1.75 + 8, 48, 48)),
       );
     });
 
@@ -981,8 +996,8 @@ void main() {
         Size(1350, 902), // 12.9인치 iPad 가로
         Size(1264, 650),
         Size(944, 450), // 키패드가 폭 비율 상한(0.5)에 걸림 → 패널 = 키패드 폭
-        Size(2000, 400), // 낮고 넓은 창: 키패드는 높이에 걸리지만(480×400) 폭은 최대 폭
-        Size(1200, 300), // 키패드가 높이에 걸려 좁다(375×300) → LCD도 375
+        Size(2000, 400), // 낮고 넓은 창: 키패드는 절반 폭을 다 쓴다(992×400, #141 — 가로로 넓어진다)
+        Size(1200, 300),
         Size(700, 300),
         Size(40, 40),
       ]) {
@@ -1015,13 +1030,13 @@ void main() {
       }
     });
 
-    test('접힘선 기준: LCD 폭 상한에 걸리면 LCD는 접힘선 쪽에 붙는다 (#71)', () {
-      // 두 화면 기기: 절반 패널(524)이 키패드 최대 폭(480)보다 넓다.
+    test('접힘선 기준: 키패드는 손 쪽 절반을 다 쓰고, LCD는 키패드 폭으로 접힘선 쪽에 붙는다 (#71, #141)', () {
+      // 두 화면 기기: 절반 패널이 524dp다. 예전에는 키패드가 480dp에서 멈춰 LCD–키패드 사이가 94dp였다.
       const body = Size(1098, 594);
       const hinge = Rect.fromLTWH(532, 0, 34, 594);
       for (final h in Handedness.values) {
         final l = CalcSplitLayout.of(body, h, hinge: hinge);
-        expect(l.keypad.width, moreOrLessEquals(CalcTheme.keypadMaxWidth));
+        expect(l.keypad.width, moreOrLessEquals(524));
         expect(
           l.lcd.width,
           moreOrLessEquals(l.keypad.width * CalcTheme.screenLcdMaxWidthRatio),
@@ -1031,33 +1046,31 @@ void main() {
             l.lcd.right,
             moreOrLessEquals(hinge.left - CalcTheme.screenHingeMargin),
           );
-          expect(l.lcd.left, greaterThan(0));
         } else {
           expect(
             l.lcd.left,
             moreOrLessEquals(hinge.right + CalcTheme.screenHingeMargin),
           );
-          expect(l.lcd.right, lessThan(body.width));
         }
       }
-      // 고정값: 키패드는 바깥 가장자리라 LCD–키패드 사이는 94dp(접힘선 34 + 간격 8×2 + 키패드 쪽 남는 폭 44)
+      // 고정값: LCD–키패드 사이는 접힘선 34 + 간격 8×2 = 50dp
       final r = CalcSplitLayout.of(body, Handedness.right, hinge: hinge);
       expect(
         r.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(44, 0, 480, 480 / 1.75)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 524, 524 / 1.75)),
       );
       expect(
         r.keypad,
-        rectMoreOrLessEquals(const Rect.fromLTWH(618, 0, 480, 594)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(574, 0, 524, 594)),
       );
-      expect(r.keypad.left - r.lcd.right, moreOrLessEquals(94));
-      expect(r.settingsButton.left, moreOrLessEquals(44));
+      expect(r.keypad.left - r.lcd.right, moreOrLessEquals(50));
+      expect(r.settingsButton.left, moreOrLessEquals(0));
       final l = CalcSplitLayout.of(body, Handedness.left, hinge: hinge);
       expect(
         l.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(574, 0, 480, 480 / 1.75)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(574, 0, 524, 524 / 1.75)),
       );
-      expect(l.settingsButton.right, moreOrLessEquals(1054));
+      expect(l.settingsButton.right, moreOrLessEquals(1098));
     });
 
     test('음수·비유한 크기는 0으로 본다', () {
@@ -1111,10 +1124,11 @@ void main() {
           .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
           .first
           .mainLabelFontSize!;
-      // 줄 글자 약 39dp, 키 메인 각인 약 16dp(번들 글꼴). 상한 전(LCD 854×488)은 약 72dp였다.
-      expect(keyFont, moreOrLessEquals(16.45, epsilon: 0.5));
+      // 줄 글자 약 55.7dp(LCD 667×381 — #141 전에는 키패드 폭 상한 480dp로 LCD도 480×274·줄 글자 약 39dp),
+      // 키 메인 각인은 상한 16.5dp(번들 글꼴). LCD 폭 상한(#71) 전(LCD 854×488)은 약 72dp였다.
+      expect(keyFont, moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize));
       expect(lineFont, greaterThan(keyFont));
-      expect(lineFont, moreOrLessEquals(39.1, epsilon: 0.5));
+      expect(lineFont, moreOrLessEquals(55.7, epsilon: 0.5));
       expect(
         lineFont,
         lessThan(
@@ -1270,7 +1284,6 @@ void _hingeLayoutTests() {
               final lcd = tester.getRect(_lcd);
               final keypad = tester.getRect(_keypad);
               final settings = tester.getRect(_settings);
-              final ad = tester.getRect(_ad);
 
               // 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않는다.
               for (final r in [lcd, keypad, settings]) {
@@ -1325,14 +1338,20 @@ void _hingeLayoutTests() {
                 moreOrLessEquals(CalcTheme.settingsButtonSize),
               );
               expect(_settings.hitTestable(), findsOneWidget);
-              // 광고 슬롯 안전 여백, 키 크기 상한
-              expect(
-                ad.top - keypad.bottom,
-                greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
-              );
+              // 키패드는 손 쪽 절반 폭을 다 쓰고(#141 — 폭 상한 없음) 아래 인셋 위 화면 여백까지 내려온다.
               expect(
                 keypad.width,
-                lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 0.01),
+                moreOrLessEquals(
+                  handedness.keypadOnRight
+                      ? right - hinge.right - CalcTheme.screenHingeMargin
+                      : hinge.left - CalcTheme.screenHingeMargin - left,
+                ),
+              );
+              expect(
+                keypad.bottom,
+                moreOrLessEquals(
+                  size.height - padding.bottom - CalcTheme.screenPadding,
+                ),
               );
               // 절반 폭 키패드도 터치 하한을 지킨다 (글자 배율과 무관한 치수라 배율 1.0에서만 본다).
               if (scale == 1.0) _expectTouchTargets(tester);
@@ -1401,7 +1420,6 @@ void _hingeLayoutTests() {
               final lcd = tester.getRect(_lcd);
               final keypad = tester.getRect(_keypad);
               final settings = tester.getRect(_settings);
-              final ad = tester.getRect(_ad);
 
               for (final r in [lcd, keypad, settings]) {
                 expect(
@@ -1424,7 +1442,7 @@ void _hingeLayoutTests() {
               expect(
                 lcd.width,
                 moreOrLessEquals(
-                  math.min(right - left, CalcTheme.screenLcdMaxWidth),
+                  math.min(right - left, CalcTheme.screenTabletopLcdMaxWidth),
                 ),
               );
               if (handedness.keypadOnRight) {
@@ -1447,9 +1465,13 @@ void _hingeLayoutTests() {
                   floor: CalcTheme.keyTouchHeightFloor,
                 );
               }
+              // 키패드는 아래 절반 폭을 다 쓰고(#141) 아래 인셋 위 화면 여백까지 내려온다.
+              expect(keypad.width, moreOrLessEquals(right - left));
               expect(
-                ad.top - keypad.bottom,
-                greaterThanOrEqualTo(CalcTheme.adSlotMinSafetyMargin),
+                keypad.bottom,
+                moreOrLessEquals(
+                  size.height - padding.bottom - CalcTheme.screenPadding,
+                ),
               );
             },
           );
@@ -1547,12 +1569,13 @@ void _hingeLayoutTests() {
       expect(isStackedArrangement(tester), isTrue);
       _expectTouchTargets(tester);
 
-      // 가로 반 접힘: 아래쪽 352dp(창 좌표로는 사전 판정 통과) + 아래 인셋 200 → 광고 슬롯까지 빼면 키패드 자리 높이
-      // 74dp. 넓은 배열(#80)로도 키가 테이블톱 하한보다 낮다(약 12.6dp).
+      // 가로 반 접힘: 아래쪽 352dp(창 좌표로는 사전 판정 통과) + 아래 인셋 260 → 접힘선 간격·화면 여백까지 빼면 키패드
+      // 자리 높이 76dp. 넓은 배열(#80)로도 키가 테이블톱 하한보다 낮다(약 12.9dp). (#141 전에는 아래 인셋 200에
+      // 광고 슬롯까지 빼 74dp였다 — 광고 슬롯이 빠져 인셋을 키웠다.)
       await _pump(
         tester,
         size: const Size(841, 673),
-        padding: const EdgeInsets.only(top: 24, bottom: 200),
+        padding: const EdgeInsets.only(top: 24, bottom: 260),
         displayFeatures: [_halfOpenedAt(const Rect.fromLTWH(0, 321, 841, 0))],
       );
       expect(tester.takeException(), isNull);
@@ -2928,7 +2951,7 @@ void _hingeLayoutTests() {
       expect(r.keypadArrangement, KeypadArrangement.standard);
       expect(r.keypad.width, moreOrLessEquals(350 * 1.25));
       expect(r.settingsButton.top, r.keypad.top);
-      expect(r.lcd.width, CalcTheme.screenLcdMaxWidth);
+      expect(r.lcd.width, CalcTheme.screenTabletopLcdMaxWidth);
       expect(r.lcd.height, moreOrLessEquals(480 / 1.75));
       expect(r.lcd.right, body.width);
       expect(r.lcd.bottom, moreOrLessEquals(304.5 - 8));
@@ -2959,7 +2982,7 @@ void _hingeLayoutTests() {
         );
         // 키패드 옆 자리가 없어 버튼은 위 절반 모서리, LCD(480)는 버튼 옆으로 비켜 있어 줄지 않는다.
         expect(l.settingsButton.top, 0, reason: '$h');
-        expect(l.lcd.width, CalcTheme.screenLcdMaxWidth, reason: '$h');
+        expect(l.lcd.width, CalcTheme.screenTabletopLcdMaxWidth, reason: '$h');
         expect(l.lcd.height, moreOrLessEquals(480 / 1.75), reason: '$h');
         expect(l.lcd.overlaps(l.settingsButton), isFalse, reason: '$h');
         expect(
