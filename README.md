@@ -181,7 +181,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
    명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다([Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서) 아래 알림 설명).
-   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
+   개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome·Android 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
    `"type": "dart"` 실행 구성도 쓸 수 없다. 나중에 바꾸려면 명령 팔레트의 `Workspaces: Manage Workspace Trust`를 쓴다.
@@ -194,6 +194,91 @@ flutter run -d chrome -t preview/key_preview_main.dart
    ```
 
 4. 실행 및 디버그(Ctrl+Shift+D)에서 구성을 고르고 F5를 누른다.
+
+### Android 기기에서 실행
+
+`AltCalc (앱)`은 기기를 지정하지 않는다. F5 전에 상태 표시줄 오른쪽의 기기 이름을 눌러 Android 기기를 고른다.
+아래 표기의 뜻은 다음과 같다(자세한 방법은 [확인 방법](#확인-방법-68)).
+
+- **(실측)**: #68에서 실제 VS Code 창으로 본 것
+- **(DAP 실측)**: VS Code 없이 디버그 어댑터에 직접 붙여 본 것
+- **(소스)**: 확장(Dart-Code 3.146) 소스로만 확인한 것
+
+#### 기기 고르기
+
+- 기기 목록의 "Available Devices"에는 이 프로젝트가 지원하는 플랫폼의 연결된 기기가 모두 나온다.
+  실기기, 켜져 있는 에뮬레이터, Windows·Chrome·Edge가 여기에 든다.
+  항목 설명에는 기기 ID가 붙는다(예: `emulator-5560 - mobile`) (소스).
+- 꺼진 에뮬레이터는 `Start <AVD 표시 이름>` 항목으로 켤 수 있다.
+  이미 켜져 있는 AVD는 이 목록에서 빠지므로, 같은 AVD를 하나 더 띄울 수는 없다 (소스).
+- 에뮬레이터는 AVD 표시 이름으로 나온다.
+  - 실행 세션 이름은 `AltCalc (앱) (Medium Phone API 36.1)`처럼 나왔다 (실측).
+  - 상태 표시줄은 `<AVD 표시 이름> (android-x64 emulator)` 형태다 (소스).
+  - 같은 AVD를 두 개 띄우면 이름이 똑같으므로 목록 설명의 기기 ID로 가린다.
+- 확장은 모바일 기기를 자동으로 고른다(`dart.flutterSelectDeviceWhenConnected`, 기본값 켜짐).
+  - 창을 켤 때 이미 연결돼 있던 에뮬레이터도 고른다 (실측). 실행 중에 새로 연결된 기기도 고른다 (소스).
+  - 예외가 있다. 어떤 기기가 이미 선택된 상태에서 새 기기가 붙을 때, 선택된 기기가 이 프로젝트에서 전에 목록으로 직접 고른 기기이면 바꾸지 않는다
+    (`dart.flutterRememberSelectedDevice`, 기본값 켜짐) (소스).
+  - 목록에서 직접 고른 기기는 기억된다(확장 로그 `Saving chrome as preferred device`) (실측).
+- 창을 켤 때 기기를 하나도 고르지 못할 수 있다. 창을 두 번 켜서 한 번 이랬다 (실측).
+  - 확장은 기기를 고르기 전에 그 기기가 지원 플랫폼인지 Flutter 데몬에 묻는다. 5초 안에 답이 없으면 지원 플랫폼이 없는 것으로 본다(소스).
+  - 실패한 쪽은 답이 5초 넘게 걸려 상태 표시줄이 `No Device`로 남았다. 성공한 쪽은 4초 걸렸다.
+  - `No Device`에서 F5를 누르면 기기 목록이 떠서 고를 때까지 기다린다.
+- 그러니 F5 전에 상태 표시줄의 기기를 확인한다. `No Device`이거나 다른 기기이면 직접 고른다.
+
+#### 실행
+
+- Debug Console에는 `Launching lib\main.dart on <기기 모델명> in debug mode...`가 먼저 나온다 (실측).
+  - 이어서 `√ Built build\app\outputs\flutter-apk\app-debug.apk`, `Connecting to VM Service at ws://…`, `Connected to the VM Service.`가 나온다.
+  - 그 사이의 `Running Gradle task 'assembleDebug'...`, `Installing …app-debug.apk...`, `Syncing files to device ...`는 콘솔이 아니라 진행 알림으로 나온다.
+  - 경로 구분자와 `√`는 Windows 표기다. macOS·Linux에서는 `/`와 `✓`로 나온다.
+- 디버그 시작부터 앱이 뜰 때(`appStarted`)까지 걸린 시간은 다음과 같다. 이 PC에는 다른 작업 트리가 남긴 Gradle 캐시가 있었다.
+  Gradle 배포판과 의존성을 처음 내려받는 PC에서는 더 오래 걸린다.
+  - `build/`가 빈 작업 트리의 첫 실행: 105초, 그중 Gradle 빌드 91초 (DAP 실측)
+  - 같은 작업 트리에서 다시 실행: 44초, 그중 Gradle 빌드 27초 (실측)
+
+#### 핫 리로드·리스타트
+
+- 파일을 직접 저장하면(Ctrl+S 등) 핫 리로드가 된다 (실측).
+  - 탐침은 `TextDocument.save()`로 저장했다. 이 저장은 Ctrl+S와 같은 저장 사유(Manual)로 처리된다.
+  - 화면에 보이는 글자를 바꾸고 저장하자 Debug Console에 `Reloaded … in 1,074~1,494ms`가 찍혔다. 화면에 반영된 것은 캡처로 확인했다.
+- 설정 기본값이 `dart.flutterHotReloadOnSave: manual`이라 자동 저장(지연·포커스 이동)으로는 리로드하지 않는다.
+  저장한 파일에 Dart 오류가 있어도 하지 않는다 (소스).
+- 명령 팔레트의 `Flutter: Hot Reload`로도 리로드한다 (실측).
+- 디버그 중에는 단추와 단축키로도 리로드한다 (소스).
+  - 디버그 도구 모음의 번개 단추는 저장한 뒤 리로드한다.
+  - Ctrl+F5는 저장하지 않고 리로드한다. 이 단축키는 macOS에서도 Control+F5다.
+  - 디버그 중이 아닐 때 Ctrl+F5는 VS Code 기본 동작인 "Run Without Debugging"이다.
+- 핫 리스타트는 도구 모음의 다시 시작(Ctrl+Shift+F5, macOS는 Cmd+Shift+F5)이다 (소스).
+  다시 시작 명령을 실행하자 Debug Console에 `Restarted application in 2,875ms`가 찍혔다 (실측).
+- 디버그를 멈추면 `Application finished.`가 찍힌다. 이어서 Windows에서는 `Exited (-1).`이 찍힌다(종료 코드는 OS마다 다르다) (실측).
+
+#### 병렬 작업
+
+- 앱 ID(`android/app/build.gradle.kts`의 `applicationId`)는 모든 작업 트리에서 같다.
+  다른 작업 트리나 병렬 작업이 쓰는 기기에 실행하면 그 설치를 덮어쓴다.
+- 병렬 작업 중에는 자기 에뮬레이터를 따로 띄운다. 상태 표시줄에서 가릴 수 있도록 표시 이름이 다른 AVD를 쓰는 편이 낫다.
+- 같은 AVD를 하나 더 띄울 때는 SDK의 `emulator/emulator`(Windows는 `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe`)로 직접 띄운다.
+  예: `emulator -avd <AVD ID> -port 5560 -read-only`.
+  - AVD ID는 `emulator -list-avds`로 본다. 표시 이름과 다르다(예: ID `AltCalc_Phone_API33`, 표시 이름 `AltCalc Phone API33`).
+  - `-port`는 5554~5682 사이 짝수다. 기기 ID가 `emulator-<포트>`가 된다.
+  - `-read-only` 인스턴스는 끄면 바뀐 상태가 남지 않는다.
+
+#### 확인 방법 (#68)
+
+- **(실측)**: 같은 버전(1.147, 커밋 `8a14f0cc1b`)의 VS Code zip 배포본을 사용자 설정과 분리해 띄웠다(`--user-data-dir`·`--extensions-dir`).
+  - 창은 설치본이 업데이트를 기다리는 동안에는 새로 뜨지 않아 zip 배포본을 썼다.
+  - 확장은 Dart-Code 3.146, 에뮬레이터는 Android 16(API 36)이다.
+  - 분리한 사용자 설정에는 작업 영역 신뢰 끄기(`security.workspace.trust.enabled: false`)와 확장 로그 파일만 넣었다.
+  - 탐침 확장이 F5와 같은 API(`vscode.debug.startDebugging`)로 `AltCalc (앱)`을 실행했다. 이어서 저장, `flutter.hotReload` 명령, 디버그 다시 시작을 차례로 했다.
+  - 결과는 Debug Console 출력(DAP 메시지)과 에뮬레이터 화면 캡처로 봤다.
+  - 확장은 `-d <기기 ID>`와 `--devtools-server-address`를 붙여 실행했다.
+- 창은 두 번 켰다.
+  - 1차는 위 `No Device` 경우였다. F5가 기기 목록에서 기다리던 중 Chrome이 골라져 Chrome으로 실행됐다.
+  - 2차는 기억된 기기를 지우려고 `workspaceStorage`를 지운 뒤 켰다.
+  - 2차 탐침은 F5 전에 `adb reconnect`를 했지만 데몬 로그에 기기 제거·추가가 없었다. 결과에 영향이 없었으므로, 2차의 자동 선택은 창을 켤 때 일어난 것이다.
+- **(DAP 실측)**: 확장이 F5에서 만드는 `launch` 인자를 `flutter debug_adapter`에 직접 보냈다. 이 방식으로는 첫 실행의 시간만 잰다.
+- 키를 직접 누르지 않았으므로 단축키와 도구 모음 단추는 소스로만 확인했다.
 
 ### Flutter SDK를 찾는 순서
 
@@ -260,13 +345,18 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 ### 알아 둘 점
 
-- **개발자 모드가 꺼진 Windows**에서는 `flutter pub get` 자체가 종료 코드 1로 끝난다.
+- **개발자 모드가 꺼진 Windows**에서는 플러그인 목록 파일이 없거나 플러그인이 바뀐 뒤 처음 도는 `flutter pub get`이 종료 코드 1로 끝난다(아래).
   - 의존성 해석을 마친 뒤 `Building with plugins requires symlink support` 오류가 난다.
   - 확장이 돌리는 pub get도 같은 이유로 실패하며, 출력 패널의 `flutter (package:...)` 채널에 기록된다
     (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측했다. 루트 체크아웃이 #66이 들어간 브랜치이면
     그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
-  - 이때도 `package_config.json`은 이미 기록되어 있으므로 SDK 탐지와 Chrome 실행(`Key Preview (Chrome)`, Chrome에서 실행하는 `AltCalc (앱)`)에는 지장이 없다.
-  - 실패하는 것은 Windows 데스크톱 실행뿐이다.
+  - 이 오류는 Windows용 플러그인 심볼릭 링크를 만들 때 난다. 링크는 플러그인 목록 파일(`.flutter-plugins-dependencies`)이
+    새로 생기거나 플러그인 구성이 바뀔 때만 만든다(Flutter 도구 소스 기준). Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면, 고른 기기와 상관없이 만든다.
+    - 그래서 목록 파일이 없을 때(새 클론, `flutter clean` 뒤)와 플러그인 의존성을 바꾼 뒤에는 처음 도는 Flutter 명령이 이 오류로 끝난다.
+      pub get도, Android·Chrome을 고른 F5도 마찬가지다.
+    - 그 명령이 목록 파일을 먼저 써 두므로, 같은 명령을 다시 실행하면 지나간다(소스 기준, 개발자 모드를 끄고 다시 재지는 않음).
+  - `package_config.json`은 오류 전에 기록된다. 그래서 SDK 탐지에는 지장이 없다.
+  - 늘 실패하는 것은 Windows 데스크톱 실행뿐이다.
 
 ### 작업 영역 안의 git 워크트리
 
