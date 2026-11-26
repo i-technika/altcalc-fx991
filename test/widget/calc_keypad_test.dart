@@ -10,6 +10,8 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
+import '../support/cursor_pad_labels.dart';
+import '../support/key_legends.dart';
 import '../support/korean_locale.dart';
 
 /// 지정한 크기 영역에 키패드를 배치한다.
@@ -584,13 +586,14 @@ void main() {
             reason: '${sector.name} $area (전 $before)',
           );
         }
-        // 함수 키 셀과 견준 ▲·▼ 비율은 #64 기준(1.2배)보다 낮아진다(#159). 지금 값(가장 낮은 1600×300에서 약 0.74배)보다
-        // 나빠지지 않게 아래 한계를 고정한다 — #159에서 기준을 정하면 이 값을 바꾼다.
+        // 함수 키 셀과 견준 ▲·▼ 비율은 보통 크기의 하한(0.9배)보다 낮아진다(#159). 지금 값보다 나빠지지 않게 아래
+        // 한계를 고정한다 — #159에서 기준을 정하면 이 값을 바꾼다. 홈 기울기 실측(#65)으로 ▲·▼가 실물처럼 좁아져
+        // 가장 낮은 1600×300이 약 0.74 → 0.54배, 800×300이 약 0.66배다.
         final sin = tester.getSize(_button(CalcKeyId.sin));
         for (final sector in [CursorPadSector.up, CursorPadSector.down]) {
           expect(
             now[sector]! / (sin.width * sin.height),
-            greaterThanOrEqualTo(0.7),
+            greaterThanOrEqualTo(0.5),
             reason: '${sector.name} $area',
           );
         }
@@ -947,9 +950,10 @@ void _cursorPadR2Tests() {
         );
         for (final def in allKeys) {
           if (def.category == KeyCategory.cursor) continue;
+          // 2차원 각인(#155)은 Text가 아니라 KeyLegendView로 그려진다.
           final text = find.descendant(
             of: _keycap(def.id),
-            matching: find.byType(Text),
+            matching: findLegend(def.mainLegend),
           );
           expect(
             tester.getRect(text).height,
@@ -1290,7 +1294,8 @@ void _cursorPadShapeTests() {
       // 대각선 (0.68, 0.68): 타원이면 안(0.92 < 1)이지만 둥근 마름모는 밖이다.
       expect(g.sectorAt(at(g, 0.68, 0.68)), isNull);
       // 대각선 (0.55, 0.55): 뾰족한 마름모면 밖(|u|+|v| = 1.1)이지만 변이 부풀어 안이다.
-      expect(g.sectorAt(at(g, 0.55, 0.55)), CursorPadSector.down);
+      // (k < 1이라 이 점은 ◀·▶ 쪽이다 — |u| = 0.55 > k·|v|)
+      expect(g.sectorAt(at(g, 0.55, 0.55)), CursorPadSector.right);
     });
 
     test('외곽 꼭짓점은 뾰족하지 않고 둥글다 (꼭짓점에서 2차로 물러난다)', () {
@@ -1318,15 +1323,15 @@ void _cursorPadShapeTests() {
       expect(1 - edgeU(0.1), greaterThan(0));
     });
 
-    test('X자 홈은 |u| = k·|v| 이고, k > 1이라 ◀·▶ 쪽으로 좁아진다', () {
+    test('X자 홈은 |u| = k·|v| 이고, k < 1이라 ▲·▼ 쪽으로 좁아진다 (실측, #65)', () {
       final g = CursorPadGeometry(const Size(114, 66));
       const v = 0.4;
       expect(g.sectorAt(at(g, k * v * 0.95, -v)), CursorPadSector.up);
       expect(g.sectorAt(at(g, k * v * 1.05, -v)), CursorPadSector.right);
       expect(g.sectorAt(at(g, -k * v * 0.95, v)), CursorPadSector.down);
       expect(g.sectorAt(at(g, -k * v * 1.05, v)), CursorPadSector.left);
-      // 상자 대각선 위 점(타원 시절 경계)은 이제 ▲·▼ 쪽이다.
-      expect(g.sectorAt(at(g, 0.4, -0.4)), CursorPadSector.up);
+      // 상자 대각선 위 점은 ◀·▶ 쪽이다 (홈이 대각선보다 가파르다).
+      expect(g.sectorAt(at(g, 0.4, -0.4)), CursorPadSector.right);
     });
 
     test('데드존 안쪽만 무시하고, 그려진 허브의 바깥 고리는 방향 키다', () {
@@ -1358,7 +1363,7 @@ void _cursorPadShapeTests() {
       }
     });
 
-    test('▲·▼는 ◀·▶보다 넓고, 좌우·상하 대칭이며, 가장 좁은 구역도 충분히 넓다', () {
+    test('◀·▶는 ▲·▼보다 넓고(실측, #65), 좌우·상하 대칭이며, 가장 좁은 구역도 충분히 넓다', () {
       for (final size in padSizes) {
         final g = CursorPadGeometry(size);
         double area(CursorPadSector s) => g.sectorArea(s);
@@ -1370,14 +1375,15 @@ void _cursorPadShapeTests() {
           area(CursorPadSector.left),
           moreOrLessEquals(area(CursorPadSector.right), epsilon: 0.01),
         );
-        expect(
-          area(CursorPadSector.up),
-          greaterThan(area(CursorPadSector.left) * 1.2),
-          reason: '$size',
-        );
-        // 가장 좁은 ◀·▶도 패드 상자의 10% 이상이다.
+        // 실물은 ◀·▶ 키가 ▲·▼ 키보다 넓다(▲·▼는 위·아래 호를 따라 휜 띠). 90×47 패드에서 약 1.13배.
         expect(
           area(CursorPadSector.left),
+          greaterThan(area(CursorPadSector.up) * 1.05),
+          reason: '$size',
+        );
+        // 가장 좁은 ▲·▼도 패드 상자의 10% 이상이다.
+        expect(
+          area(CursorPadSector.up),
           greaterThan(size.width * size.height * 0.1),
           reason: '$size',
         );
@@ -1665,7 +1671,7 @@ void _cursorPadShapeTests() {
     for (final area in _areas) {
       for (final scale in [1.0, 1.3]) {
         testWidgets(
-          '${area.width}×${area.height}, 글자 배율 $scale: 방향 라벨은 통째로 자기 구역 안에 그려진다',
+          '${area.width}×${area.height}, 글자 배율 $scale: 방향 라벨은 통째로 자기 구역 안, 허브 밖에 그려지고 자리가 있으면 줄지 않는다',
           (tester) async {
             await tester.pumpWidget(
               _host(const CalcKeypad(), size: area, textScale: scale),
@@ -1693,6 +1699,22 @@ void _cursorPadShapeTests() {
               ]) {
                 expect(g.sectorAt(p), sector, reason: '${sector.name} $p');
               }
+            }
+            // 라벨은 허브(둘레선 포함)에 덮이지 않고 줄지도 않는다 (#65).
+            expectCursorPadLabelsClearOfHub(tester, context: '떼어 둠');
+            // 눌러서 키캡이 내려가도(▲는 허브 쪽으로 1dp) 마찬가지다.
+            for (final sector in CursorPadSector.values) {
+              final gesture = await tester.startGesture(
+                tester.getCenter(cursorPadLabel(sector)),
+              );
+              await tester.pump();
+              expectCursorPadLabelsClearOfHub(
+                tester,
+                sectors: [sector],
+                context: '누름',
+              );
+              await gesture.up();
+              await tester.pumpAndSettle();
             }
           },
         );
@@ -1795,14 +1817,15 @@ void _cursorPadShapeTests() {
         '${area.width}×${area.height}: 방향 키 터치 영역은 함수 키 셀보다 크게 줄지 않는다 (가로로 긴 셀 포함)',
         (tester) async {
           // #64 전에는 그림 구역만 눌려 ◀·▶가 함수 키 셀의 0.48~0.59배였다(가로로 긴 셀일수록 작았다).
-          // 셀 여백과 외곽 밖을 터치 영역에 넣어 ◀·▶ 0.81배 이상, ▲·▼ 1.27배 이상이 된다(측정값).
+          // 셀 여백과 외곽 밖을 터치 영역에 넣어 커졌고, 홈 기울기를 실측(#65)으로 바꾼 뒤의 측정값은
+          // ◀·▶ 1.14~1.20배, ▲·▼ 1.05~1.11배다.
           // 화면을 영역 크기로 넓혀 키패드가 테스트 화면(800×600)에 잘리지 않게 한다(780×900 등).
           _setViewSize(tester, area);
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
           final cell = tester.getRect(find.byType(CursorPad));
           // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
-          // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 1.2배 아래로 내려간다
+          // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 아래 하한(0.9배) 밑으로 내려갈 수 있다
           // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 #159). 그 크기([_wideCellAreas])는
           // 아래 "가로로 넓어져도" 테스트가 절대 넓이로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
           if (cell.width / cell.height > 2.2) {
@@ -1813,11 +1836,11 @@ void _cursorPadShapeTests() {
           final g = CursorPadGeometry(pad.size);
           final bounds = cell.shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
-            final wide =
+            final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
             expect(
               g.hitArea(sector, bounds) / (sin.width * sin.height),
-              greaterThanOrEqualTo(wide ? 1.2 : 0.78),
+              greaterThanOrEqualTo(vertical ? 0.9 : 1.1),
               reason: '${sector.name} $area',
             );
           }
