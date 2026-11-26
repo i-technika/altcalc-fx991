@@ -344,7 +344,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
 그 시점의 stable이 `pubspec.yaml`의 고정 버전과 다르면 이 PC의 모든 클론·워크트리에서 `pub get`이 실패한다([개발 환경](#개발-환경)).
 푸는 방법은 아래 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
 이 알림과 두 방법은 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)로 열어 실측했다
-(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows는 이번에 확인하지 않았다 — #52의 실측 결과는 [알아 둘 점](#알아-둘-점)).
+(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows에서는 이 알림을 확인하지 않았다 — 그 환경의 pub get·F5 실측(#164)은 [알아 둘 점](#알아-둘-점)).
 
 - **SDK를 PATH에 넣은 셸에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
   - VS Code 통합 터미널도 그 창의 PATH를 물려받으므로, 셸 프로필이 SDK를 PATH에 넣지 않으면 `flutter`를 전체 경로로 실행한다.
@@ -379,12 +379,20 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     (#52에서 작업 영역 안 `.claude/worktrees/`의 다른 체크아웃에 돈 것을 실측했다. 루트 체크아웃이 #66이 들어간 브랜치이면
     그곳은 확장의 프로젝트 목록에서 빠진다 — [작업 영역 안의 git 워크트리](#작업-영역-안의-git-워크트리) 참고).
   - 이 오류는 Windows용 플러그인 심볼릭 링크를 만들 때 난다. 링크는 플러그인 목록 파일(`.flutter-plugins-dependencies`)이
-    새로 생기거나 플러그인 구성이 바뀔 때만 만든다(Flutter 도구 소스 기준). Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면, 고른 기기와 상관없이 만든다.
+    새로 생기거나 플러그인 구성이 바뀔 때만 만든다(Flutter 도구 소스). Windows 데스크톱 기능이 켜져 있고 `windows/` 폴더가 있으면, 고른 기기와 상관없이 만든다.
     - 그래서 목록 파일이 없을 때(새 클론, `flutter clean` 뒤)와 플러그인 의존성을 바꾼 뒤에는 처음 도는 Flutter 명령이 이 오류로 끝난다.
-      pub get도, Android·Chrome을 고른 F5도 마찬가지다.
-    - 그 명령이 목록 파일을 먼저 써 두므로, 같은 명령을 다시 실행하면 지나간다(소스 기준, 개발자 모드를 끄고 다시 재지는 않음).
-  - `package_config.json`은 오류 전에 기록된다. 그래서 SDK 탐지에는 지장이 없다.
-  - 늘 실패하는 것은 Windows 데스크톱 실행뿐이다.
+      pub get도, Android·Chrome을 고른 F5도 마찬가지다 (실측, 플러그인 의존성을 바꾼 경우는 소스).
+    - 그 명령이 목록 파일을 먼저 써 두므로, 같은 명령을 다시 실행하면 지나간다 (실측). 다음 명령이 pub get이든 F5든 같다 —
+      목록 파일이 이미 있으면 링크를 다시 만들지 않는다. 링크 폴더(`windows/flutter/ephemeral/.plugin_symlinks`)는 빈 채로 남는다.
+  - `package_config.json`은 오류 전에 기록된다(`flutterRoot` 포함, 실측). 그래서 SDK 탐지에는 지장이 없다.
+  - 늘 실패하는 것은 Windows 데스크톱 실행뿐이다. Windows 빌드는 목록 파일과 상관없이 매번 링크를 만든다
+    (`flutter build windows --debug`를 두 번 실행해 두 번 다 같은 오류, 실측).
+  - **(실측)** 은 #164에서 개발자 모드를 끈 Windows 11(Flutter 3.50.0)로 잰 것이다.
+    - pub get: 새 워크트리에서 종료 코드 1 → 0 → 0, `flutter clean` 뒤에는 1 → 0.
+    - F5: 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)에서 탐침 확장이 `AltCalc (앱)` 구성에 기기 ID만 더해
+      `vscode.debug.startDebugging`으로 실행했다. 목록 파일을 지운 뒤 Android 에뮬레이터(API 34)는 첫 F5가 이 오류로 끝났고
+      두 번째 F5에서 앱이 시작됐다. 목록 파일을 다시 지운 뒤 Chrome도 같았다.
+    - 오류는 F5가 실행한 `flutter run`의 자동 pub get(`Resolving dependencies...`) 직후 Debug Console에 `Exited (1)`과 함께 나온다.
 
 ### 작업 영역 안의 git 워크트리
 
