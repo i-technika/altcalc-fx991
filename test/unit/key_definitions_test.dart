@@ -179,17 +179,85 @@ void main() {
       });
     });
 
-    test('템플릿 라벨은 첫 입력 칸 ◼를 정확히 하나 갖고, ▭는 쓰지 않는다', () {
-      // key_definitions.dart 머리 주석 "라벨 표기" (#16): ◼ = 커서가 처음 들어가는 칸, ◻ = 나머지 칸.
-      final labels = [
-        for (final k in allKeys) ...[k.mainLabel, k.shiftLabel, k.alphaLabel],
-      ].whereType<String>();
-      for (final label in labels) {
-        expect(label, isNot(contains('▭')), reason: label);
-        if (label.contains('◼') || label.contains('◻')) {
-          expect('◼'.allMatches(label).length, 1, reason: label);
+    test('템플릿 각인은 첫 입력 칸 ◼를 정확히 하나 갖고, ▭는 쓰지 않는다', () {
+      // key_definitions.dart 머리 주석 "각인 표기" (#16): ◼ = 커서가 처음 들어가는 칸, ◻ = 나머지 칸.
+      // 2차원 각인(#155)은 칸이 분수·첨자 안에 흩어져 있으므로 글자 조각 전체를 센다.
+      for (final legend in _allLegends()) {
+        final text = legend.texts.map((t) => t.text).join();
+        expect(text, isNot(contains('▭')), reason: legend.plainText);
+        if (text.contains('◼') || text.contains('◻')) {
+          expect('◼'.allMatches(text).length, 1, reason: legend.plainText);
         }
       }
+    });
+
+    group('2차원 각인 (#155)', () {
+      test('각인 글자에 한 줄 임시 표기(분수 /·위첨자 ^·유니코드 위첨자·근호 글자)가 없다', () {
+        // 분수·첨자·근호·위아래 끝은 구조(LegendFraction·LegendScript·LegendRadical·LegendLimits)로 담고 그림으로
+        // 그린다. 실물 비율 칸은 LegendBox다.
+        final forbidden = RegExp('[/^⁰¹²³⁴⁵⁶⁷⁸⁹⁻ˣ√∛]');
+        for (final legend in _allLegends()) {
+          for (final t in legend.texts) {
+            expect(
+              forbidden.hasMatch(t.text),
+              isFalse,
+              reason: '${legend.plainText}: "${t.text}"',
+            );
+          }
+        }
+      });
+
+      test('실물이 2차원 모양인 각인은 모두 2차원 각인이고, 그 밖의 각인은 글자만 있다', () {
+        final twoDimensional = {
+          for (final k in allKeys)
+            for (final (layer, legend) in [
+              ('main', k.mainLegend),
+              ('shift', k.shiftLegend),
+              ('alpha', k.alphaLegend),
+            ])
+              if (legend != null && !legend.isPlain) (k.id, layer),
+        };
+        expect(twoDimensional, _twoDimensionalLegends);
+      });
+
+      test('LegendRow는 조각이 둘 이상이고 중첩되지 않으며, 빈 글자 조각이 없다', () {
+        void check(KeyLegend legend, String reason) {
+          switch (legend) {
+            case LegendText(:final text):
+              expect(text, isNotEmpty, reason: reason);
+            case LegendRow(:final children):
+              expect(children.length, greaterThanOrEqualTo(2), reason: reason);
+              for (final c in children) {
+                expect(c, isNot(isA<LegendRow>()), reason: '$reason: 중첩 Row');
+                check(c, reason);
+              }
+            case LegendScript(
+              :final base,
+              :final superscript,
+              :final subscript,
+            ):
+              check(base, reason);
+              if (superscript != null) check(superscript, reason);
+              if (subscript != null) check(subscript, reason);
+            case LegendLimits(:final base, :final over, :final under):
+              check(base, reason);
+              check(over, reason);
+              check(under, reason);
+            case LegendBox():
+              break;
+            case LegendFraction(:final numerator, :final denominator):
+              check(numerator, reason);
+              check(denominator, reason);
+            case LegendRadical(:final radicand, :final index):
+              check(radicand, reason);
+              if (index != null) check(index, reason);
+          }
+        }
+
+        for (final legend in _allLegends()) {
+          check(legend, legend.plainText);
+        }
+      });
     });
 
     test('50키의 각인은 실물 대조표와 일치한다', () {
@@ -237,7 +305,11 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.cursorLeft: ('◄', null, null),
   CalcKeyId.cursorRight: ('►', null, null),
   // 함수부 1행
-  CalcKeyId.fraction: ('◼/◻', '◼◻/◻', null),
+  CalcKeyId.fraction: (
+    '◼/◻',
+    '◼ ◻/◻',
+    null,
+  ), // SHIFT 대분수 (한 줄 표기는 정수부 뒤를 띄운다, #155)
   CalcKeyId.sqrt: ('√◼', '∛◼', null),
   CalcKeyId.square: ('x²', 'x³', null), // G14
   CalcKeyId.power: ('x^◼', '◼√◻', null), // G15
@@ -278,4 +350,34 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.exp10: ('×10ˣ', 'π', 'e'), // G15
   CalcKeyId.ans: ('Ans', '%', null), // G11 %, ALPHA 없음은 사진 (가이드에 PreAns 없음)
   CalcKeyId.equals: ('=', '≈', null), // G7
+};
+
+/// 50키의 모든 각인 (메인·SHIFT·ALPHA)
+Iterable<KeyLegend> _allLegends() => [
+  for (final k in allKeys) ...[k.mainLegend, ?k.shiftLegend, ?k.alphaLegend],
+];
+
+/// 실물 키캡에 2차원 모양(분수·위첨자·아래첨자·근호)으로 인쇄된 각인 — 이슈 #155 "대상 각인" 표.
+/// 기준은 #15·#16과 같은 Quick Start Guide 1쪽 제품 사진이다.
+const Set<(CalcKeyId, String)> _twoDimensionalLegends = {
+  (CalcKeyId.fraction, 'main'), // ◼/◻
+  (CalcKeyId.fraction, 'shift'), // ◼ ◻/◻ (대분수)
+  (CalcKeyId.sqrt, 'main'), // √◼
+  (CalcKeyId.sqrt, 'shift'), // ∛◼
+  (CalcKeyId.power, 'main'), // x^◼
+  (CalcKeyId.power, 'shift'), // ◼√◻
+  (CalcKeyId.logBase, 'main'), // log◼◻
+  (CalcKeyId.logBase, 'shift'), // 10^◼
+  (CalcKeyId.ln, 'shift'), // e^◼
+  (CalcKeyId.integral, 'main'), // ∫◻◻◼
+  (CalcKeyId.integral, 'shift'), // d/dx◼
+  (CalcKeyId.variableX, 'shift'), // ∑◻◻◼
+  (CalcKeyId.sdToggle, 'shift'), // a b/c⇔d/c
+  (CalcKeyId.square, 'main'), // x²
+  (CalcKeyId.square, 'shift'), // x³
+  (CalcKeyId.reciprocal, 'main'), // x⁻¹
+  (CalcKeyId.sin, 'shift'), // sin⁻¹
+  (CalcKeyId.cos, 'shift'), // cos⁻¹
+  (CalcKeyId.tan, 'shift'), // tan⁻¹
+  (CalcKeyId.exp10, 'main'), // ×10ˣ
 };

@@ -20,6 +20,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dar
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/cursor_pad_labels.dart';
 import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
@@ -751,7 +752,9 @@ DisplayFeature _foldAt(
 DisplayFeature _halfOpenedAt(Rect bounds) =>
     _foldAt(bounds, state: DisplayFeatureState.postureHalfOpened);
 
-/// 키패드의 모든 키(커서 패드 제외)가 터치 하한 이상이고, 커서 패드 구역도 #43 하한을 지키는지 확인한다.
+/// 키패드의 모든 키(커서 패드 제외)가 터치 하한 이상이고, 커서 패드 방향 키도 하한을 지키는지 확인한다.
+/// 커서 패드는 세로 폰 화면 테스트와 같은 규칙이다: 터치 영역(셀까지 넓힌 것, #64) 내접원이 ◀·▶는 하한 이상,
+/// 실물처럼 좁은 ▲·▼는 하한의 95% 이상(#65).
 void _expectTouchTargets(
   WidgetTester tester, {
   double floor = CalcTheme.keyTouchHeightFloor,
@@ -776,17 +779,21 @@ void _expectTouchTargets(
     ),
     moreOrLessEquals(lowest, epsilon: 0.01),
   );
-  final pad = CursorPadGeometry(
-    tester.getSize(find.byKey(const ValueKey('cursor-pad'))),
-  );
+  final padRect = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+  final cell = tester.getRect(find.byType(CursorPad));
+  final pad = CursorPadGeometry(padRect.size);
+  final bounds = cell.shift(-padRect.topLeft); // 패드 로컬 좌표의 셀
   for (final sector in CursorPadSector.values) {
-    final wide = sector == CursorPadSector.up || sector == CursorPadSector.down;
+    final vertical =
+        sector == CursorPadSector.up || sector == CursorPadSector.down;
     expect(
-      inscribedDiameter(pad, sector),
-      greaterThanOrEqualTo(floor * (wide ? 1.0 : 0.9)),
+      hitInscribedDiameter(pad, sector, bounds),
+      greaterThanOrEqualTo(floor * (vertical ? 0.95 : 1.0)),
       reason: sector.name,
     );
   }
+  // 방향 라벨은 허브에 덮이지 않고 줄지 않는다(넓은 배열·분할 배치 포함, #65).
+  expectCursorPadLabelsClearOfHub(tester);
 }
 
 /// [rect]가 접힘선 [hinge]와 그 양쪽 간격([CalcTheme.screenHingeMargin]) 띠에 걸치지 않는지 (화면 좌표)

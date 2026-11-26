@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'core/layout/form_factor.dart';
+import 'core/layout/layout_log.dart';
 import 'core/theme/calc_theme.dart';
 import 'core/theme/font_licenses.dart';
 import 'core/theme/high_text_contrast.dart';
@@ -19,13 +20,22 @@ import 'presentation/screens/calculator_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
+  // 시작 판정·방향 요청·화면 배치 진단 로그 (#158, `adb logcat -s AltCalc flutter`)
+  LayoutLog.enableForBuild();
   // 방향 요청과 설정 저장소 열기를 함께 진행한다. 손잡이 설정이 첫 화면부터 반영되도록 둘 다 기다린다 (#24).
   // Android "고대비 텍스트" 첫 값도 함께 기다려 첫 화면부터 맞는 팔레트로 그린다 (#95).
   final (_, settings, _) = await (
-    FormFactor.queryFoldableDevice().then(
-      (foldable) =>
-          DeviceOrientationLock.instance.start(foldableDevice: foldable),
-    ),
+    FormFactor.queryFoldableDevice().then((startup) async {
+      LayoutLog.foldableQuery(startup);
+      // 창 배치 첫 값에 접힘선이 있었으면 그 정보가 화면 정보로 올 때까지 첫 화면을 미룬다 (#158) — 미루지 않으면
+      // 펼친 내부 화면의 첫 프레임이 위아래 배치였다가 접힘선 기준 배치로 바뀐다.
+      if (startup.fold == true) {
+        await DeviceOrientationLock.waitForFoldFeature();
+      }
+      return DeviceOrientationLock.instance.start(
+        foldableDevice: startup.foldable,
+      );
+    }),
     openSettingsStorage(),
     SystemHighTextContrast.instance.start(),
   ).wait;
@@ -38,6 +48,11 @@ Future<void> main() async {
         ),
       ],
       child: const AltCalcApp(),
+    ),
+  );
+  unawaited(
+    WidgetsBinding.instance.waitUntilFirstFrameRasterized.then(
+      (_) => LayoutLog.firstFrame(),
     ),
   );
 }
@@ -115,16 +130,67 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다.
-  OrientationPolicy currentPolicy() {
+  OrientationPolicy currentPolicy() => _currentDecision().policy;
+
+  /// 방향 정책과 그 근거(기기 종류·물리 화면 크기 — 진단 로그용, #158). 화면이 없으면 크기 0의 폰이다.
+  ({OrientationPolicy policy, DeviceKind kind, Size display})
+  _currentDecision() {
     final view = _view;
-    if (view == null) return OrientationPolicy.portrait;
+    if (view == null) {
+      return (
+        policy: OrientationPolicy.portrait,
+        kind: DeviceKind.phone,
+        display: Size.zero,
+      );
+    }
     final displaySize = FormFactor.displaySizeOf(view);
     final kind = FormFactor.deviceKindOf(
       displaySize,
       view.displayFeatures,
       foldableDevice: _foldableDevice.value,
     );
-    return FormFactor.orientationPolicyOf(kind, displaySize);
+    return (
+      policy: FormFactor.orientationPolicyOf(kind, displaySize),
+      kind: kind,
+      display: displaySize,
+    );
+  }
+
+  /// 접힘 정보를 기다리는 최대 시간 (#158). Flutter 엔진도 같은 출처(Jetpack WindowManager)를 따로 구독해 화면 정보로
+  /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Dart가 판정 답을 받은 뒤
+  /// 0~15ms 안에 왔다(7번). 오지 않으면 그냥 시작한다 — 그때는 위아래 배치가 먼저 보일 수 있다.
+  ///
+  /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간이다.
+  static const Duration foldFeatureWait = Duration(milliseconds: 300);
+
+  /// 화면 정보([FlutterView.displayFeatures])에 접히는 부분이 올 때까지(최대 [timeout]) 기다린다 (#158).
+  /// 이미 있으면 바로 끝난다. 앱 시작(`main()`)이 Android 판정의 `fold`가 참일 때 첫 화면을 띄우기 전에 부른다.
+  /// 접히는 부분이 아닌 화면 특징(화면 구멍 등)만 오면 계속 기다린다. 기다린 시간 로그는 실제 시계로 잰다(테스트의 가짜
+  /// 시간과 다르다).
+  static Future<void> waitForFoldFeature({
+    Duration timeout = foldFeatureWait,
+  }) async {
+    bool hasFold() {
+      final view = _view;
+      return view != null && FormFactor.hasFoldOrHinge(view.displayFeatures);
+    }
+
+    final watch = Stopwatch()..start();
+    if (hasFold()) {
+      LayoutLog.foldFeatureWait(arrived: true, waited: watch.elapsed);
+      return;
+    }
+    final arrived = Completer<bool>();
+    final observer = _MetricsObserver(() {
+      if (hasFold() && !arrived.isCompleted) arrived.complete(true);
+    });
+    WidgetsBinding.instance.addObserver(observer);
+    try {
+      final ok = await arrived.future.timeout(timeout, onTimeout: () => false);
+      LayoutLog.foldFeatureWait(arrived: ok, waited: watch.elapsed);
+    } finally {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
   }
 
   static FlutterView? get _view {
@@ -140,11 +206,14 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     final previous = _lastDisplay;
     if (display != null) _lastDisplay = display;
     if (_foldableDevice.value) return;
-    if (FormFactor.hasFoldOrHinge(view.displayFeatures) ||
-        (previous != null &&
-            display != null &&
-            FormFactor.isOtherScreen(previous, display))) {
+    if (FormFactor.hasFoldOrHinge(view.displayFeatures)) {
       _foldableDevice.value = true;
+      LayoutLog.foldableRemembered('접힘 정보');
+    } else if (previous != null &&
+        display != null &&
+        FormFactor.isOtherScreen(previous, display)) {
+      _foldableDevice.value = true;
+      LayoutLog.foldableRemembered('물리 화면 변경', from: previous, to: display);
     }
   }
 
@@ -162,16 +231,23 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   Future<void> _applyNow() async {
-    final policy = currentPolicy();
+    final (:policy, :kind, :display) = _currentDecision();
     if (policy == _applied) return;
     try {
       await SystemChrome.setPreferredOrientations(
         FormFactor.preferredOrientationsOf(policy),
       );
       _applied = policy;
+      LayoutLog.orientationRequest(policy, kind: kind, display: display);
     } catch (error) {
       // 기록하지 않으므로 다음 화면 정보 변화 때 다시 시도한다.
       debugPrint('화면 방향 요청 실패: $error');
+      LayoutLog.orientationRequest(
+        policy,
+        kind: kind,
+        display: display,
+        error: error,
+      );
     }
   }
 
@@ -181,6 +257,16 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _observeScreen();
     unawaited(_apply());
   }
+}
+
+/// 화면 정보가 바뀔 때마다 [onChange]를 부른다 ([DeviceOrientationLock.waitForFoldFeature]용).
+class _MetricsObserver with WidgetsBindingObserver {
+  final VoidCallback onChange;
+
+  _MetricsObserver(this.onChange);
+
+  @override
+  void didChangeMetrics() => onChange();
 }
 
 /// 앱 루트. 상태 관리를 위해 [ProviderScope] 아래에 둔다.

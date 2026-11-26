@@ -10,6 +10,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 ///
 /// 폴더블 기기는 접힘 정보(접힘선)가 오기 전까지 가로형(#142) 대신 위아래 배치를 쓴다(`FormFactor.arrangementOf`, #25).
 /// 단 짧은 변 600dp 미만 창은 화면이 짧은 창 규칙으로 키가 큰 가로형을 고를 수 있다(`CalculatorScreen`, #38).
+///
+/// 앱 시작 때는 Android가 창 배치 첫 값에 접힘선이 있다고 알리면 그 정보가 올 때까지(최대 300ms) 첫 화면을 미룬다(#158).
+/// 그 정보가 제때 오면 펼친 내부 화면에서 시작해도 위아래 배치가 먼저 보이지 않는다. Android가 첫 값을 제한 시간 안에
+/// 받지 못했거나 미룬 시간 안에 정보가 오지 않으면 예전처럼 위아래 배치가 잠깐 보일 수 있다.
 final foldableDeviceProvider = Provider<ValueListenable<bool>>(
   (ref) => const _NotFoldable(),
 );

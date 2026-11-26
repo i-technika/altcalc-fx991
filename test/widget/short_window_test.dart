@@ -78,7 +78,8 @@ Future<ProviderContainer> _pump(
   return container;
 }
 
-/// 창·인셋에서 본체 크기 (화면 여백·인셋을 뺀 크기 — `CalculatorScreen`과 같은 계산, #141)
+/// 창·인셋에서 본체 크기 (화면 여백·인셋을 뺀 크기 — `CalculatorScreen`과 같은 계산, #141).
+/// 이 파일의 화면은 제스처 영역을 주지 않으므로 아래 여백([CalcTheme.screenBottomMargin], #63)도 화면 여백이다.
 Size _bodyOf(Size window, EdgeInsets padding) => Size(
   window.width - padding.horizontal - 2 * CalcTheme.screenPadding,
   window.height - padding.vertical - 2 * CalcTheme.screenPadding,

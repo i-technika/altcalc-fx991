@@ -39,6 +39,10 @@ class MainActivityChannelsTest {
 
     private fun isFoldableDevice(): List<MethodReply> = messenger.startMethod(DEVICE_CHANNEL, "isFoldableDevice")
 
+    /** `isFoldableDevice` 응답 (#158 — 폴더블 여부와 창 배치 첫 값의 접힘) */
+    private fun reply(foldable: Boolean, fold: Boolean?): MethodReply =
+        MethodReply.Success(mapOf("foldable" to foldable, "fold" to fold))
+
     private fun declareHingeSensor() =
         shadowOf(activity.packageManager).setSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE, true)
 
@@ -47,11 +51,16 @@ class MainActivityChannelsTest {
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.R, FIRST_PUBLIC_API_SDK])
-    fun `isFoldableDevice - API 30 이상은 힌지 기능 선언이 있으면 바로 true`() {
+    fun `isFoldableDevice - API 30 이상은 힌지 기능 선언이 있으면 접힘이 없어도 폴더블`() {
         declareHingeSensor()
+        val replies = isFoldableDevice()
+        // 창 배치 정보 첫 값을 기다려 접힘과 함께 답한다 (#158)
+        assertTrue(replies.isEmpty())
 
-        // 창 배치 정보를 기다리지 않고 바로 답한다(창 배치 정보는 진단 로그용으로만 구독한다)
-        assertEquals(listOf<MethodReply>(MethodReply.Success(true)), isFoldableDevice())
+        layout.emit(false)
+        HighTextContrastSystem.idleMainLooper()
+
+        assertEquals(listOf(reply(foldable = true, fold = false)), replies)
     }
 
     @Test
@@ -62,7 +71,7 @@ class MainActivityChannelsTest {
         layout.emit(true)
         HighTextContrastSystem.idleMainLooper()
 
-        assertEquals(listOf<MethodReply>(MethodReply.Success(true)), replies)
+        assertEquals(listOf(reply(foldable = true, fold = true)), replies)
     }
 
     @Test
@@ -74,15 +83,15 @@ class MainActivityChannelsTest {
         layout.emit(false)
         HighTextContrastSystem.idleMainLooper()
 
-        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(listOf(reply(foldable = false, fold = false)), replies)
     }
 
     @Test
-    fun `isFoldableDevice - 창 배치 정보가 오지 않으면 제한 시간에 false`() {
+    fun `isFoldableDevice - 창 배치 정보가 오지 않으면 제한 시간에 폴더블 아님, 접힘 모름(null)`() {
         val replies = isFoldableDevice()
 
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS))
-        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(listOf(reply(foldable = false, fold = null)), replies)
 
         // 답한 뒤 진단 시간이 지나면 구독을 푼다
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.DIAGNOSTIC_MILLIS))
@@ -90,13 +99,13 @@ class MainActivityChannelsTest {
     }
 
     @Test
-    fun `엔진 정리 - 기다리는 폴더블 판정에 false로 답하고 창 배치 구독을 푼다`() {
+    fun `엔진 정리 - 기다리는 폴더블 판정에 답하고 창 배치 구독을 푼다`() {
         val replies = isFoldableDevice()
         assertEquals(1, layout.activeCount)
 
         activity.unregisterChannels(messenger)
 
-        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(listOf(reply(foldable = false, fold = null)), replies)
         assertEquals(0, layout.activeCount)
     }
 
@@ -106,7 +115,7 @@ class MainActivityChannelsTest {
 
         activity.registerChannels(messenger)
 
-        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(listOf(reply(foldable = false, fold = null)), replies)
         assertEquals(0, layout.activeCount)
     }
 

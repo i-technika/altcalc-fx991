@@ -77,7 +77,8 @@ Rect _stackedLcd(Size body) {
   return Rect.fromLTWH(0, l.top, body.width, l.lcdHeight);
 }
 
-/// 창 [size]·인셋(위 [top], 아래 [bottom])의 본체 크기 — 시스템 인셋과 네 변의 화면 여백 제외 (#141)
+/// 창 [size]·인셋(위 [top], 아래 [bottom])의 본체 크기 — 시스템 인셋과 네 변의 화면 여백 제외 (#141).
+/// 이 파일의 화면은 제스처 영역을 주지 않으므로 아래 여백([CalcTheme.screenBottomMargin], #63)도 화면 여백이다.
 Size _bodyOf(Size size, {double top = 0, double bottom = 0}) => Size(
   size.width - 2 * CalcTheme.screenPadding,
   size.height - top - bottom - 2 * CalcTheme.screenPadding,

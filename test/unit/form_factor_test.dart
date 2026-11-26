@@ -173,39 +173,75 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       });
 
+      const none = (foldable: false, fold: null);
+
       void mockChannel(Future<Object?> Function(MethodCall) handler) =>
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
               .setMockMethodCallHandler(FormFactor.deviceChannel, handler);
 
-      test('Android: 채널 응답을 그대로 쓴다', () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        final methods = <String>[];
-        mockChannel((call) async {
-          methods.add(call.method);
-          return true;
-        });
-        expect(await FormFactor.queryFoldableDevice(), isTrue);
-        expect(methods, [FormFactor.foldableDeviceMethod]);
-      });
+      test(
+        'Android: 채널 응답(map)을 그대로 쓴다 (#158 — 폴더블 여부와 창 배치 첫 값 접힘)',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          final methods = <String>[];
+          Object? reply;
+          mockChannel((call) async {
+            methods.add(call.method);
+            return reply;
+          });
+          for (final (foldable, fold) in [
+            (true, true),
+            (true, false),
+            (false, false),
+          ]) {
+            reply = {
+              FormFactor.foldableKey: foldable,
+              FormFactor.foldKey: fold,
+            };
+            expect(await FormFactor.queryFoldableDevice(), (
+              foldable: foldable,
+              fold: fold,
+            ));
+          }
+          // 첫 값을 받지 못했으면(제한 시간 초과 등) Android는 fold에 null을 보낸다 — 모름(null) 그대로 둔다
+          reply = {FormFactor.foldableKey: true, FormFactor.foldKey: null};
+          expect(await FormFactor.queryFoldableDevice(), (
+            foldable: true,
+            fold: null,
+          ));
+          expect(methods, List.filled(4, FormFactor.foldableDeviceMethod));
+          // 키가 없거나 bool이 아닌 값은 폴더블 아님·접힘 모름으로 읽는다
+          reply = <String, Object?>{};
+          expect(await FormFactor.queryFoldableDevice(), (
+            foldable: false,
+            fold: null,
+          ));
+          reply = {FormFactor.foldableKey: 'yes', FormFactor.foldKey: 1};
+          expect(await FormFactor.queryFoldableDevice(), (
+            foldable: false,
+            fold: null,
+          ));
+        },
+      );
 
-      test('Android: 채널 오류·미등록·null 응답이면 false', () async {
+      test('Android: 채널 오류·미등록·null 응답이면 둘 다 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         mockChannel((_) async => throw PlatformException(code: 'x'));
-        expect(await FormFactor.queryFoldableDevice(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), none);
         mockChannel((_) async => null);
-        expect(await FormFactor.queryFoldableDevice(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), none);
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
-        expect(
-          await FormFactor.queryFoldableDevice(),
-          isFalse,
-        ); // MissingPlugin
+        expect(await FormFactor.queryFoldableDevice(), none); // MissingPlugin
       });
 
       test('Android: 그 밖의 오류(응답 타입 등)도 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        mockChannel((_) async => 'not a bool');
-        expect(await FormFactor.queryFoldableDevice(), isFalse);
+        mockChannel((_) async => 'not a map');
+        expect(await FormFactor.queryFoldableDevice(), none);
+        // #158 전의 bool 응답도 map이 아니므로 false
+        mockChannel((_) async => true);
+        expect(await FormFactor.queryFoldableDevice(), none);
       });
 
       test('Android: 제한 시간 안에 응답이 없으면 false (앱 시작이 멈추지 않는다)', () async {
@@ -223,7 +259,7 @@ void main() {
               .setMockMessageHandler(FormFactor.deviceChannel.name, null),
         );
         final watch = Stopwatch()..start();
-        expect(await FormFactor.queryFoldableDevice(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), none);
         expect(
           watch.elapsed,
           greaterThanOrEqualTo(FormFactor.foldableQueryTimeout),
@@ -237,7 +273,7 @@ void main() {
           called = true;
           return true;
         });
-        expect(await FormFactor.queryFoldableDevice(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), none);
         expect(called, isFalse);
       });
     });

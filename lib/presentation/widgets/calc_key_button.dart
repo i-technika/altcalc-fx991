@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'key_legend_view.dart';
 import 'screen_coordinate_root.dart';
 
 /// fx-991EX 스타일의 단일 키 버튼.
@@ -105,6 +106,11 @@ class CalcKeyButton extends StatefulWidget {
   /// 상자보다 크면 키를 그리지 않고 터치 영역만 남는다.
   final EdgeInsets hitOutset;
 
+  /// 메인 라벨 자리에서 뺄 여백 — 키캡(그림 상자) 안에서 이만큼 뺀 나머지의 가운데에 라벨을 놓는다.
+  /// 라벨이 그 나머지보다 크면 줄여 그리고, 남는 자리가 없으면 그리지 않는다. 키캡 일부가 다른 그림에 덮이는 키에 쓴다.
+  /// 예: 커서 패드 방향 키는 가운데 쪽 허브만큼 뺀다(#65). 음수일 수 없다.
+  final EdgeInsets labelInsets;
+
   const CalcKeyButton({
     super.key,
     required this.keyDef,
@@ -120,6 +126,7 @@ class CalcKeyButton extends StatefulWidget {
     this.shape,
     this.hitShape,
     this.hitOutset = EdgeInsets.zero,
+    this.labelInsets = EdgeInsets.zero,
   });
 
   /// 기본 반복 시작 지연
@@ -321,6 +328,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       'hitOutset은 hitShape와 함께 써야 한다 (터치 영역을 정할 경로가 없다)',
     );
     assert(widget.hitOutset.isNonNegative, 'hitOutset은 음수일 수 없다');
+    assert(widget.labelInsets.isNonNegative, 'labelInsets는 음수일 수 없다');
     assert(
       widget.hitShape == null || !widget.extendHitAreaToLegend,
       'hitShape가 있으면 터치 영역은 그 경로가 정한다 — extendHitAreaToLegend와 함께 쓰지 않는다',
@@ -375,6 +383,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
               CalcTheme.keyMainLabelMaxFontSize,
             ),
         horizontalPadding: width * CalcTheme.keyCapHorizontalPaddingRatio,
+        labelInsets: widget.labelInsets,
         textScaler: textScaler,
       ),
     );
@@ -387,8 +396,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             height: legendHeight,
             width: width,
             child: _LegendRow(
-              shiftLabel: widget.keyDef.shiftLabel,
-              alphaLabel: widget.keyDef.alphaLabel,
+              shiftLegend: widget.keyDef.shiftLegend,
+              alphaLegend: widget.keyDef.alphaLegend,
               width: width,
               fontSize:
                   widget.legendFontSize ??
@@ -505,21 +514,21 @@ class _ShapeClipper extends CustomClipper<Path> {
 
 /// 키캡 위 본체 영역의 SHIFT/ALPHA 각인 띠.
 ///
-/// 두 각인이 모두 있으면 글자 수에 비례해 폭을 나눠, 넘치면 함께 같은 비율로 줄어든다.
-/// 단, 짧은 쪽이 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름 `A`~`F`, `y` 등)면
-/// 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
+/// 두 각인이 모두 있으면 자연 폭(2차원 각인 포함, [KeyLegendView.emSize])에 비례해 폭을 나눠, 넘치면 함께
+/// 같은 비율로 줄어든다. 단, 짧은 쪽이 한 줄 표기로 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름
+/// `A`~`F`, `y` 등)면 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
 /// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
 class _LegendRow extends StatelessWidget {
-  final String? shiftLabel;
-  final String? alphaLabel;
+  final KeyLegend? shiftLegend;
+  final KeyLegend? alphaLegend;
   final double width;
   final double fontSize;
   final double maxGap;
   final TextScaler textScaler;
 
   const _LegendRow({
-    required this.shiftLabel,
-    required this.alphaLabel,
+    required this.shiftLegend,
+    required this.alphaLegend,
     required this.width,
     required this.fontSize,
     required this.maxGap,
@@ -528,8 +537,8 @@ class _LegendRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shift = shiftLabel;
-    final alpha = alphaLabel;
+    final shift = shiftLegend;
+    final alpha = alphaLegend;
     if (shift == null && alpha == null) return const SizedBox.shrink();
     final palette = CalcPalette.of(context);
 
@@ -537,8 +546,8 @@ class _LegendRow extends StatelessWidget {
         ? math.min(fontSize * CalcTheme.keyLegendGapRatio, maxGap)
         : 0.0;
     // 자연 폭 우선 배분을 받을 짧은 각인 (둘 다 있고, 짧은 쪽이 충분히 짧을 때만)
-    final shiftRunes = shift?.runes.length ?? 0;
-    final alphaRunes = alpha?.runes.length ?? 0;
+    final shiftRunes = shift?.plainText.runes.length ?? 0;
+    final alphaRunes = alpha?.plainText.runes.length ?? 0;
     final both = shift != null && alpha != null;
     final shiftIsShort =
         both &&
@@ -551,23 +560,17 @@ class _LegendRow extends StatelessWidget {
     final shortMaxWidth = math.max(0.0, (width - gap) / 2);
 
     Widget legend(
-      String text,
+      KeyLegend legend,
       TextStyle style,
       Alignment alignment, {
       required bool short,
       required bool priorityLayout,
     }) {
+      final sized = style.copyWith(fontSize: fontSize);
       final label = FittedBox(
         fit: BoxFit.scaleDown,
         alignment: alignment,
-        child: Text(
-          text,
-          maxLines: 1,
-          softWrap: false,
-          textScaler: textScaler,
-          style: style.copyWith(fontSize: fontSize),
-          strutStyle: _labelStrut(style.copyWith(fontSize: fontSize)),
-        ),
+        child: _legendLabel(legend, sized, textScaler),
       );
       if (short) {
         return ConstrainedBox(
@@ -576,8 +579,13 @@ class _LegendRow extends StatelessWidget {
         );
       }
       return Expanded(
-        // 우선 배분이면 긴 쪽이 남은 폭 전부, 아니면 글자 수 비례
-        flex: priorityLayout ? 1 : math.max(1, text.runes.length),
+        // 우선 배분이면 긴 쪽이 남은 폭 전부, 아니면 자연 폭 비례 (고정폭 글자만이면 글자 수 비례와 같다)
+        flex: priorityLayout
+            ? 1
+            : math.max(
+                1,
+                (KeyLegendView.emSize(legend, style).width * 1000).round(),
+              ),
         child: Align(alignment: alignment, child: label),
       );
     }
@@ -614,6 +622,7 @@ class _Keycap extends StatelessWidget {
   final bool enabled;
   final double fontSize;
   final double horizontalPadding;
+  final EdgeInsets labelInsets;
   final TextScaler textScaler;
 
   const _Keycap({
@@ -622,6 +631,7 @@ class _Keycap extends StatelessWidget {
     required this.enabled,
     required this.fontSize,
     required this.horizontalPadding,
+    required this.labelInsets,
     required this.textScaler,
   });
 
@@ -671,23 +681,22 @@ class _Keycap extends StatelessWidget {
         ),
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         alignment: Alignment.center,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
-          child: TweenAnimationBuilder<Color?>(
-            tween: ColorTween(end: labelColor),
-            duration: duration,
-            builder: (context, color, _) => Text(
-              keyDef.mainLabel,
-              maxLines: 1,
-              softWrap: false,
-              textScaler: textScaler,
-              style: CalcTheme.keyMainLabelStyle.copyWith(
-                fontSize: fontSize,
-                color: color,
-              ),
-              strutStyle: _labelStrut(
-                CalcTheme.keyMainLabelStyle.copyWith(fontSize: fontSize),
+        // 라벨 여백은 애니메이션하지 않는다 — 창 크기가 바뀔 때 라벨이 즉시 그린 허브 등과 함께 움직이게 한다.
+        child: Padding(
+          padding: labelInsets,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: labelColor),
+              duration: duration,
+              builder: (context, color, _) => _legendLabel(
+                keyDef.mainLegend,
+                CalcTheme.keyMainLabelStyle.copyWith(
+                  fontSize: fontSize,
+                  color: color,
+                ),
+                textScaler,
               ),
             ),
           ),
@@ -697,14 +706,31 @@ class _Keycap extends StatelessWidget {
   }
 }
 
+/// 각인 하나를 그린다. 글자만 있는 각인은 `Text`, 2차원 각인(분수·첨자·근호)은 [KeyLegendView]다 (#155).
+///
+/// 두 위젯은 같은 strut 한 줄 상자와 기준선을 쓰므로, 2차원 각인이 한 줄을 넘지 않으면 크기·기준선이 같다.
+Widget _legendLabel(KeyLegend legend, TextStyle style, TextScaler textScaler) {
+  if (legend case LegendText(:final text)) {
+    return Text(
+      text,
+      maxLines: 1,
+      softWrap: false,
+      textScaler: textScaler,
+      style: style,
+      strutStyle: _labelStrut(style),
+    );
+  }
+  return KeyLegendView(legend: legend, style: style, textScaler: textScaler);
+}
+
 /// 키 라벨 줄 높이를 기본 글꼴(Noto Sans Mono) 기준 `fontSize × height`로 고정하는 strut.
 ///
-/// 대체 글꼴(Noto Sans Math — `∑`·`∛`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 그대로 두면 그 글자가
+/// 대체 글꼴(Noto Sans Math — `∑`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 그대로 두면 그 글자가
 /// 섞인 라벨만 줄이 약 7% 높아진다(#16 실측: 20 → 21dp). 키패드 글자 크기 계산(`KeypadMetrics`의
 /// `fitFontSizeToHeight`)이 전제하는 줄 높이와 맞추고, 라벨 사이 기준선을 같게 한다.
+/// 2차원 각인([KeyLegendView])도 글자 조각을 같은 strut로 배치한다.
 ///
-/// strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다. `∛`는 줄 상자 위로 약 0.27em,
-/// `∫`·`∑`는 아래로 약 0.025em 넘쳐 그려진다(#16 리뷰 R2 실측). 각인은 아래 정렬이라 `∛◼`의 윗부분이
-/// 키 사이 간격 쪽으로 나오며, 실기기에서 위 행 키캡에 닿지 않는지 확인한다(에픽 #1 실기기 점검).
+/// strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다. 2차원 각인은 잉크(첨자·분수·∫ 등)까지
+/// 각인 크기에 넣으므로 넘쳐 그려지지 않는다(#155 — 그 전의 `∛` 글자는 줄 상자 위로 약 0.27em 넘쳤다).
 StrutStyle _labelStrut(TextStyle style) =>
     StrutStyle.fromTextStyle(style, forceStrutHeight: true);

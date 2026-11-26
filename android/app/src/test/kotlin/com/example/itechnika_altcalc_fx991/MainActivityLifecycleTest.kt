@@ -123,10 +123,10 @@ class MainActivityLifecycleTest {
 
         // Robolectric에는 WindowManager 확장이 없어 Jetpack WindowManager가 빈 창 배치 정보를 바로 보낸다 —
         // 실제 출처(WindowLayoutFoldingSource)가 구독·응답까지 이어지는지 본다(시계는 그대로, 제한 시간 전).
-        assertEquals(false, invokeFromDart(DEVICE_CHANNEL, "isFoldableDevice"))
+        assertEquals(mapOf("foldable" to false, "fold" to false), invokeFromDart(DEVICE_CHANNEL, "isFoldableDevice"))
         // 구독 실패·제한 시간이 아니라 창 배치 값으로 답했다
         val logs = ShadowLog.getLogsForTag(FoldableDeviceProbe.LOG_TAG).map { it.msg }
-        assertTrue(logs.toString(), logs.any { it.contains("창 배치 접힘=없음") })
+        assertTrue(logs.toString(), logs.any { it.contains("창 배치 첫 값 접힘=없음") })
     }
 
     @Test
@@ -142,7 +142,7 @@ class MainActivityLifecycleTest {
 
         controller.destroy()
 
-        assertEquals(false, replyTo(replyId))
+        assertEquals(mapOf("foldable" to false, "fold" to null), replyTo(replyId))
         assertEquals(0, layout.activeCount)
     }
 

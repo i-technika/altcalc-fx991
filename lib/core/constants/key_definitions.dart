@@ -1,5 +1,9 @@
 import 'package:meta/meta.dart';
 
+import 'key_legend.dart';
+
+export 'key_legend.dart';
+
 // ═══════════════════════════════════════════════════════════════
 // 카시오 fx-991EX ClassWiz 50키 키패드 명세
 // ═══════════════════════════════════════════════════════════════
@@ -35,16 +39,22 @@ import 'package:meta/meta.dart';
 //   이 명세는 노란색·빨간색 각인만 담는다. 모드별 각인은 #33에서 다룬다.
 //   숫자 1~6 키에는 각인이 없다.
 //
-// ※ 라벨 표기 (#16에서 확정, 실물 키캡 각인과 같은 규칙):
+// ※ 각인 표기 (#16에서 칸 규칙 확정, #155에서 2차원 모양으로 바꿈 — 실물 키캡 각인과 같은 규칙):
+//   - 각인은 구조([KeyLegend], `key_legend.dart`)로 담는다. 글자만 있는 각인은 [LegendText]이고,
+//     분수·위첨자·아래첨자·근호·위아래 끝(∑)이 있는 각인은 실물처럼 2차원으로 그린다(아래 "2차원 각인" 절).
+//     실물 비율이 필요한 칸은 글자 대신 직접 그리는 칸([LegendBox])으로 둔다(지금은 ∑ 각인만, #169).
+//     키캡 각인 어디에도 한 줄 임시 표기(분수 `/`, 위첨자 `^`, 유니코드 위첨자 `²`·`⁻¹`·`ˣ`)를 쓰지 않는다
+//     (테스트로 검증). 한 줄 표기는 [KeyLegend.plainText]로만 만든다(M1 LCD 임시 표시·로그용).
 //   - 입력 칸은 **실물 각인에 그려진 칸 수**만큼 쓴다(템플릿의 실제 입력 칸 수와 다를 수 있다 —
 //     예: `d/dx◼` 각인은 칸 1개지만 템플릿은 함수·x값 2칸). `◼` = 템플릿을 넣은 직후 커서가 들어가는 칸,
-//     `◻` = 나머지 칸. 템플릿 라벨에는 `◼`가 정확히 하나 있다(테스트로 검증).
+//     `◻` = 나머지 칸. 템플릿 각인에는 `◼`가 정확히 하나 있다(테스트로 검증).
 //     예: `log◼◻`(밑 → 진수), `◼√◻`(지수 → 피개법수), `∫◻◻◼`(본문 → 아래·위 끝).
-//   - 칸의 위치(위첨자·아래첨자·분수)는 한 줄 텍스트로 나타낼 수 없어 읽는 순서로 늘어놓는다.
-//     위첨자는 `^`로 표시한다(`x^◼`, `10^◼`). 2차원 모양은 LCD 수식 렌더링(M2)에서 그린다.
+//     (예시는 [KeyLegend.plainText] 표기다. 칸의 채움 여부는 Quick Start Guide 1쪽 제품 사진을 따른다.)
 //   - `▭`(U+25AD)는 쓰지 않는다. 번들 글꼴 Noto Sans Mono에서 두 칸 폭이라 라벨 폭 측정을 왜곡한다.
 //     같은 이유로 커서 패드 좌우는 `◀`·`▶` 대신 한 칸 폭인 `◄`·`►`를 쓴다 (`▲`·`▼`와 같은 디자인).
 //     두 칸 폭 글자는 실물 각인에 꼭 필요한 `⇔`(S⇔D)만 허용한다(테스트로 검증).
+//   - 근호는 글자(`√`·`∛`)가 아니라 그림으로 그린다(가로줄이 칸 위를 덮어야 해서). ∫·∑는 번들 대체 글꼴
+//     Noto Sans Math의 글자다.
 
 // ═══════════════════════════════════════════════════════════════
 // 키 식별자
@@ -174,35 +184,154 @@ class CalcKeyDef {
   /// 키 고유 식별자
   final CalcKeyId id;
 
-  /// 키캡 중앙에 표시되는 메인 라벨
-  final String mainLabel;
+  /// 키캡 중앙에 표시되는 메인 각인
+  final KeyLegend mainLegend;
 
   /// SHIFT 후 입력되는 기능의 금색 각인. 없으면 `null`.
-  final String? shiftLabel;
+  final KeyLegend? shiftLegend;
 
   /// ALPHA 후 입력되는 기능의 빨간색 각인. 없으면 `null`.
-  final String? alphaLabel;
+  final KeyLegend? alphaLegend;
 
   /// 키 시각적 카테고리 (색상 테마 결정)
   final KeyCategory category;
 
   const CalcKeyDef({
     required this.id,
-    required this.mainLabel,
-    this.shiftLabel,
-    this.alphaLabel,
+    required this.mainLegend,
+    this.shiftLegend,
+    this.alphaLegend,
     required this.category,
   });
 
+  /// 메인 각인의 한 줄 표기 ([KeyLegend.plainText] — 화면 각인에는 쓰지 않는다)
+  String get mainLabel => mainLegend.plainText;
+
+  /// SHIFT 각인의 한 줄 표기. 없으면 `null`.
+  String? get shiftLabel => shiftLegend?.plainText;
+
+  /// ALPHA 각인의 한 줄 표기. 없으면 `null`.
+  String? get alphaLabel => alphaLegend?.plainText;
+
   /// SHIFT 기능 보유 여부
-  bool get hasShift => shiftLabel != null;
+  bool get hasShift => shiftLegend != null;
 
   /// ALPHA 기능 보유 여부
-  bool get hasAlpha => alphaLabel != null;
+  bool get hasAlpha => alphaLegend != null;
 
   @override
   String toString() => 'CalcKeyDef(${id.name}, "$mainLabel")';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 2차원 각인 (#155)
+// ═══════════════════════════════════════════════════════════════
+//
+// 실물 키캡처럼 분수는 위아래로 쌓고, 지수 칸은 오른쪽 위, 밑 칸은 오른쪽 아래에 작게 그린다.
+// 주석의 한 줄 표기는 [KeyLegend.plainText]다.
+//
+// 실물 대조 (#169, Quick Start Guide 1쪽 제품 사진 `All_CASIO_QuickStartGuide_fx-991EX_fx-570EX_page-0001.jpg` —
+// 원본 1275×1650을 원본 픽셀로 재고, 키캡 부분을 6배 확대해 봄. 각인 높이 약 13~17px라 칸 크기도 잴 수 있다):
+// - **자리**(칸이 첨자·분수·근호·위아래 끝 중 어디에 있는지, 채운 칸·빈 칸)
+//   - ∑◻◻◼(SHIFT): 끝 칸 두 개가 ∑ **바로 위·아래 가운데**에 쌓인다(오른쪽 첨자가 아니다) → [LegendLimits]로 고쳤다.
+//     칸은 ∑에 맞춘 납작한 직사각형(사진 끝 칸 9×4px·본문 칸 8×4px, ∑ 7×7px)이라 [LegendBox]로 직접 그린다.
+//   - log◼◻: 채운 밑 칸은 작은 정사각형으로 **아래끝이 기준선**(o의 아래끝 높이)이다. g의 내림 획까지 내려가지 않는다
+//     → `subscriptOnBaseline`으로 고쳤다(#155는 g 아래끝에 맞췄다).
+//   - ∫◻◻◼(메인): 끝 칸 두 개가 ∫ **오른쪽** 위·아래 → [LegendScript]의 위·아래첨자로 맞다.
+//   - 나머지도 맞다: 대분수 `◼ ◻/◻`(채운 정수 칸이 분수 가운데 높이, 분수 두 칸은 빈 칸), `d/dx◼`, `a b/c⇔d/c`(작게
+//     쌓은 분수 둘), `√◼`·`∛◼`(작은 3이 근호 왼쪽 위), `◼√◻`(채운 지수 칸이 근호 왼쪽 위), `x^◼`·`10^◼`·`e^◼`(채운 칸이
+//     위첨자), 분수 키 `◼/◻`(분자 채움·분모 빈 칸).
+// - **모양**(칸의 가로세로 비)은 ∑ 각인 말고는 아직 사진과 다르다 — 실물 칸은 자리마다 비가 다른 직사각형인데
+//   (log 진수 칸 약 6×13px로 세로로 길고, ∫ 본문 칸 약 12×6px로 가로로 길며, ∫ 아래 끝 칸은 ∫ 기울기를 따라 위 끝
+//   칸보다 약 4px 왼쪽) 앱은 글꼴의 정사각형 `◼`·`◻`를 쓴다. 칸 모양을 맞출지는 #186에서 정한다.
+
+const _box = LegendText('◼');
+const _emptyBox = LegendText('◻');
+
+/// `∫◻◻◼` — ∫ 오른쪽 아래·위 끝 칸, 그다음 본문 칸
+const _integral = LegendRow([
+  LegendScript(LegendText('∫'), subscript: _emptyBox, superscript: _emptyBox),
+  _box,
+]);
+
+/// `d/dx◼` — d 위·dx 아래로 쌓은 분수, 그다음 칸
+const _derivative = LegendRow([
+  LegendFraction(LegendText('d'), LegendText('dx')),
+  _box,
+]);
+
+/// `∑◻◻◼` — ∑ 바로 아래·위에 쌓은 납작한 끝 칸, 그다음 ∑ 가운데 높이의 납작한 본문 칸 (#169 — 실물은 오른쪽 첨자가
+/// 아니라 위아래에 쌓고, 칸은 글꼴 정사각형이 아니라 ∑ 크기에 맞춘 직사각형이다)
+const _sumLimit = LegendBox(LegendBoxShape.sumLimit, filled: false);
+const _sum = LegendRow([
+  LegendLimits(LegendText('∑'), over: _sumLimit, under: _sumLimit),
+  LegendBox(LegendBoxShape.sumOperand, filled: true),
+]);
+
+/// `◼/◻` — 위 ◼, 가로줄, 아래 ◻
+const _fraction = LegendFraction(_box, _emptyBox);
+
+/// `◼ ◻/◻` — 대분수: 왼쪽 ◼, 오른쪽에 쌓은 분수
+const _mixedFraction = LegendRow([_box, LegendFraction(_emptyBox, _emptyBox)]);
+
+/// `√◼` — 근호 가로줄이 칸 위를 덮는다
+const _squareRoot = LegendRadical(_box);
+
+/// `∛◼` — 근호 왼쪽 위에 작은 3
+const _cubeRoot = LegendRadical(_box, index: LegendText('3'));
+
+/// `x²`
+const _square = LegendScript(LegendText('x'), superscript: LegendText('2'));
+
+/// `x³`
+const _cube = LegendScript(LegendText('x'), superscript: LegendText('3'));
+
+/// `x^◼` — x 오른쪽 위에 작은 칸
+const _power = LegendScript(LegendText('x'), superscript: _box);
+
+/// `◼√◻` — 근호 왼쪽 위에 작은 지수 칸
+const _nthRoot = LegendRadical(_emptyBox, index: _box);
+
+/// `log◼◻` — log 오른쪽에 작은 밑 칸(아래끝이 기준선 — #169 사진 대조), 그다음 진수 칸
+const _logBase = LegendRow([
+  LegendScript(LegendText('log'), subscript: _box, subscriptOnBaseline: true),
+  _emptyBox,
+]);
+
+/// `10^◼` — 10 오른쪽 위에 작은 칸
+const _tenPower = LegendScript(LegendText('10'), superscript: _box);
+
+/// `e^◼` — e 오른쪽 위에 작은 칸
+const _ePower = LegendScript(LegendText('e'), superscript: _box);
+
+/// 위첨자 −1 (역수·역삼각함수)
+const _inverse = LegendText('−1');
+
+/// `x⁻¹`
+const _reciprocal = LegendScript(LegendText('x'), superscript: _inverse);
+
+/// `sin⁻¹`
+const _arcsin = LegendScript(LegendText('sin'), superscript: _inverse);
+
+/// `cos⁻¹`
+const _arccos = LegendScript(LegendText('cos'), superscript: _inverse);
+
+/// `tan⁻¹`
+const _arctan = LegendScript(LegendText('tan'), superscript: _inverse);
+
+/// `a b/c⇔d/c` — 대분수 a b/c ⇔ 분수 d/c (쌓은 작은 분수)
+const _fractionToggle = LegendRow([
+  LegendText('a'),
+  LegendFraction(LegendText('b'), LegendText('c')),
+  LegendText('⇔'),
+  LegendFraction(LegendText('d'), LegendText('c')),
+]);
+
+/// `×10ˣ` — ×10 다음 오른쪽 위에 작은 x
+const _exp10 = LegendRow([
+  LegendText('×'),
+  LegendScript(LegendText('10'), superscript: LegendText('x')),
+]);
 
 // ═══════════════════════════════════════════════════════════════
 // 상단 조작부 (커서 패드 좌우 2행 × 2열씩)
@@ -213,27 +342,27 @@ const List<List<CalcKeyDef>> controlLeftRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.shift,
-      mainLabel: 'SHIFT',
+      mainLegend: LegendText('SHIFT'),
       category: KeyCategory.shift,
     ),
     CalcKeyDef(
       id: CalcKeyId.alpha,
-      mainLabel: 'ALPHA',
+      mainLegend: LegendText('ALPHA'),
       category: KeyCategory.alpha,
     ),
   ],
   [
     CalcKeyDef(
       id: CalcKeyId.optn,
-      mainLabel: 'OPTN',
-      shiftLabel: 'QR',
+      mainLegend: LegendText('OPTN'),
+      shiftLegend: LegendText('QR'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.calc,
-      mainLabel: 'CALC',
-      shiftLabel: 'SOLVE',
-      alphaLabel: '=',
+      mainLegend: LegendText('CALC'),
+      shiftLegend: LegendText('SOLVE'),
+      alphaLegend: LegendText('='),
       category: KeyCategory.function,
     ),
   ],
@@ -244,24 +373,28 @@ const List<List<CalcKeyDef>> controlRightRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.menu,
-      mainLabel: 'MENU',
-      shiftLabel: 'SETUP',
+      mainLegend: LegendText('MENU'),
+      shiftLegend: LegendText('SETUP'),
       category: KeyCategory.menu,
     ),
-    CalcKeyDef(id: CalcKeyId.on, mainLabel: 'ON', category: KeyCategory.on),
+    CalcKeyDef(
+      id: CalcKeyId.on,
+      mainLegend: LegendText('ON'),
+      category: KeyCategory.on,
+    ),
   ],
   [
     CalcKeyDef(
       id: CalcKeyId.integral,
-      mainLabel: '∫◻◻◼',
-      shiftLabel: 'd/dx◼',
-      alphaLabel: ':',
+      mainLegend: _integral,
+      shiftLegend: _derivative,
+      alphaLegend: LegendText(':'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.variableX,
-      mainLabel: 'x',
-      shiftLabel: '∑◻◻◼',
+      mainLegend: LegendText('x'),
+      shiftLegend: _sum,
       category: KeyCategory.function,
     ),
   ],
@@ -290,22 +423,22 @@ class CursorPadKeys {
 const CursorPadKeys cursorPad = CursorPadKeys(
   up: CalcKeyDef(
     id: CalcKeyId.cursorUp,
-    mainLabel: '▲',
+    mainLegend: LegendText('▲'),
     category: KeyCategory.cursor,
   ),
   down: CalcKeyDef(
     id: CalcKeyId.cursorDown,
-    mainLabel: '▼',
+    mainLegend: LegendText('▼'),
     category: KeyCategory.cursor,
   ),
   left: CalcKeyDef(
     id: CalcKeyId.cursorLeft,
-    mainLabel: '◄',
+    mainLegend: LegendText('◄'),
     category: KeyCategory.cursor,
   ),
   right: CalcKeyDef(
     id: CalcKeyId.cursorRight,
-    mainLabel: '►',
+    mainLegend: LegendText('►'),
     category: KeyCategory.cursor,
   ),
 );
@@ -323,38 +456,38 @@ const List<List<CalcKeyDef>> functionRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.fraction,
-      mainLabel: '◼/◻',
-      shiftLabel: '◼◻/◻',
+      mainLegend: _fraction,
+      shiftLegend: _mixedFraction,
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.sqrt,
-      mainLabel: '√◼',
-      shiftLabel: '∛◼',
+      mainLegend: _squareRoot,
+      shiftLegend: _cubeRoot,
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.square,
-      mainLabel: 'x²',
-      shiftLabel: 'x³',
+      mainLegend: _square,
+      shiftLegend: _cube,
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.power,
-      mainLabel: 'x^◼',
-      shiftLabel: '◼√◻',
+      mainLegend: _power,
+      shiftLegend: _nthRoot,
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.logBase,
-      mainLabel: 'log◼◻',
-      shiftLabel: '10^◼',
+      mainLegend: _logBase,
+      shiftLegend: _tenPower,
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.ln,
-      mainLabel: 'ln',
-      shiftLabel: 'e^◼',
+      mainLegend: LegendText('ln'),
+      shiftLegend: _ePower,
       category: KeyCategory.function,
     ),
   ],
@@ -362,44 +495,44 @@ const List<List<CalcKeyDef>> functionRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.negative,
-      mainLabel: '(−)',
-      shiftLabel: 'log', // log(a,b) 입력, 밑 a 생략 시 10 (가이드 "log" 예제)
-      alphaLabel: 'A',
+      mainLegend: LegendText('(−)'),
+      shiftLegend: LegendText('log'), // log(a,b) 입력, 밑 a 생략 시 10 (가이드 "log" 예제)
+      alphaLegend: LegendText('A'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.degMinSec,
-      mainLabel: '°\'"',
-      shiftLabel: 'FACT',
-      alphaLabel: 'B',
+      mainLegend: LegendText('°\'"'),
+      shiftLegend: LegendText('FACT'),
+      alphaLegend: LegendText('B'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.reciprocal,
-      mainLabel: 'x⁻¹',
-      shiftLabel: 'x!',
-      alphaLabel: 'C',
+      mainLegend: _reciprocal,
+      shiftLegend: LegendText('x!'),
+      alphaLegend: LegendText('C'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.sin,
-      mainLabel: 'sin',
-      shiftLabel: 'sin⁻¹',
-      alphaLabel: 'D',
+      mainLegend: LegendText('sin'),
+      shiftLegend: _arcsin,
+      alphaLegend: LegendText('D'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.cos,
-      mainLabel: 'cos',
-      shiftLabel: 'cos⁻¹',
-      alphaLabel: 'E',
+      mainLegend: LegendText('cos'),
+      shiftLegend: _arccos,
+      alphaLegend: LegendText('E'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.tan,
-      mainLabel: 'tan',
-      shiftLabel: 'tan⁻¹',
-      alphaLabel: 'F',
+      mainLegend: LegendText('tan'),
+      shiftLegend: _arctan,
+      alphaLegend: LegendText('F'),
       category: KeyCategory.function,
     ),
   ],
@@ -407,42 +540,42 @@ const List<List<CalcKeyDef>> functionRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.sto,
-      mainLabel: 'STO',
-      shiftLabel: 'RECALL',
+      mainLegend: LegendText('STO'),
+      shiftLegend: LegendText('RECALL'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.eng,
-      mainLabel: 'ENG',
+      mainLegend: LegendText('ENG'),
       // ALPHA 기능은 없다. 키 위의 보라색 ∠·i는 Complex 모드 전용 각인이다 (#33).
-      shiftLabel: '←',
+      shiftLegend: LegendText('←'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.parenOpen,
-      mainLabel: '(',
-      shiftLabel: 'Abs',
+      mainLegend: LegendText('('),
+      shiftLegend: LegendText('Abs'),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.parenClose,
-      mainLabel: ')',
-      shiftLabel: ',',
-      alphaLabel: 'x', // 변수 x (실물 각인은 빨간 이탤릭 소문자)
+      mainLegend: LegendText(')'),
+      shiftLegend: LegendText(','),
+      alphaLegend: LegendText('x'), // 변수 x (실물 각인은 빨간 이탤릭 소문자)
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.sdToggle,
-      mainLabel: 'S⇔D',
-      shiftLabel: 'a b/c⇔d/c',
-      alphaLabel: 'y', // 변수 y
+      mainLegend: LegendText('S⇔D'),
+      shiftLegend: _fractionToggle,
+      alphaLegend: LegendText('y'), // 변수 y
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.mPlus,
-      mainLabel: 'M+',
-      shiftLabel: 'M−',
-      alphaLabel: 'M',
+      mainLegend: LegendText('M+'),
+      shiftLegend: LegendText('M−'),
+      alphaLegend: LegendText('M'),
       category: KeyCategory.function,
     ),
   ],
@@ -460,125 +593,125 @@ const List<List<CalcKeyDef>> numberRows = [
   [
     CalcKeyDef(
       id: CalcKeyId.num7,
-      mainLabel: '7',
-      shiftLabel: 'CONST',
+      mainLegend: LegendText('7'),
+      shiftLegend: LegendText('CONST'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num8,
-      mainLabel: '8',
-      shiftLabel: 'CONV',
+      mainLegend: LegendText('8'),
+      shiftLegend: LegendText('CONV'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num9,
-      mainLabel: '9',
-      shiftLabel: 'RESET',
+      mainLegend: LegendText('9'),
+      shiftLegend: LegendText('RESET'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.del,
-      mainLabel: 'DEL',
-      shiftLabel: 'INS',
-      alphaLabel: 'UNDO',
+      mainLegend: LegendText('DEL'),
+      shiftLegend: LegendText('INS'),
+      alphaLegend: LegendText('UNDO'),
       category: KeyCategory.del,
     ),
     CalcKeyDef(
       id: CalcKeyId.ac,
-      mainLabel: 'AC',
-      shiftLabel: 'OFF',
+      mainLegend: LegendText('AC'),
+      shiftLegend: LegendText('OFF'),
       category: KeyCategory.ac,
     ),
   ],
   [
     CalcKeyDef(
       id: CalcKeyId.num4,
-      mainLabel: '4',
+      mainLegend: LegendText('4'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num5,
-      mainLabel: '5',
+      mainLegend: LegendText('5'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num6,
-      mainLabel: '6',
+      mainLegend: LegendText('6'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.multiply,
-      mainLabel: '×',
-      shiftLabel: 'nPr',
+      mainLegend: LegendText('×'),
+      shiftLegend: LegendText('nPr'),
       category: KeyCategory.operator,
     ),
     CalcKeyDef(
       id: CalcKeyId.divide,
-      mainLabel: '÷',
-      shiftLabel: 'nCr',
+      mainLegend: LegendText('÷'),
+      shiftLegend: LegendText('nCr'),
       category: KeyCategory.operator,
     ),
   ],
   [
     CalcKeyDef(
       id: CalcKeyId.num1,
-      mainLabel: '1',
+      mainLegend: LegendText('1'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num2,
-      mainLabel: '2',
+      mainLegend: LegendText('2'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.num3,
-      mainLabel: '3',
+      mainLegend: LegendText('3'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.add,
-      mainLabel: '+',
-      shiftLabel: 'Pol',
+      mainLegend: LegendText('+'),
+      shiftLegend: LegendText('Pol'),
       category: KeyCategory.operator,
     ),
     CalcKeyDef(
       id: CalcKeyId.subtract,
-      mainLabel: '−',
-      shiftLabel: 'Rec',
+      mainLegend: LegendText('−'),
+      shiftLegend: LegendText('Rec'),
       category: KeyCategory.operator,
     ),
   ],
   [
     CalcKeyDef(
       id: CalcKeyId.num0,
-      mainLabel: '0',
-      shiftLabel: 'Rnd',
+      mainLegend: LegendText('0'),
+      shiftLegend: LegendText('Rnd'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.dot,
-      mainLabel: '.',
-      shiftLabel: 'Ran#',
-      alphaLabel: 'RanInt',
+      mainLegend: LegendText('.'),
+      shiftLegend: LegendText('Ran#'),
+      alphaLegend: LegendText('RanInt'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.exp10,
-      mainLabel: '×10ˣ',
-      shiftLabel: 'π',
-      alphaLabel: 'e',
+      mainLegend: _exp10,
+      shiftLegend: LegendText('π'),
+      alphaLegend: LegendText('e'),
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.ans,
-      mainLabel: 'Ans',
-      shiftLabel: '%', // ALPHA 기능 없음
+      mainLegend: LegendText('Ans'),
+      shiftLegend: LegendText('%'), // ALPHA 기능 없음
       category: KeyCategory.number,
     ),
     CalcKeyDef(
       id: CalcKeyId.equals,
-      mainLabel: '=',
-      shiftLabel: '≈',
+      mainLegend: LegendText('='),
+      shiftLegend: LegendText('≈'),
       category: KeyCategory.equals,
     ),
   ],
