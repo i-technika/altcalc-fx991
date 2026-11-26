@@ -196,6 +196,14 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   NUM=<A가 출력한 번호>; EPIC=<에픽번호>; TYPE=<타입 id>
   # 프로젝트 추가 — 이미 들어 있으면 그대로다(A의 실패 원인일 수 있어 항상 한 번 더 한다)
   gh issue edit "$NUM" --add-project "AltCalc FX-991" >/dev/null
+  # 에픽과 마일스톤이 같은 M인지 **연결 전에** 확인 — 에픽 번호는 M 번호와 다르다(CLAUDE.md "마일스톤 대응 표").
+  # 조회 결과는 변수로 먼저 받는다(파이프는 gh 실패를 삼킨다). 다르면 아무것도 연결하지 않고 멈춘다 —
+  # EPIC 또는 이슈의 마일스톤(`gh issue edit "$NUM" --milestone "<이름>"`)을 고친 뒤 B를 다시 실행한다.
+  EPIC_TITLE=$(gh issue view "$EPIC" --json title --jq .title)
+  ISSUE_MS=$(gh issue view "$NUM" --json milestone --jq '.milestone.title // ""')
+  EPIC_M=$(printf '%s' "$EPIC_TITLE" | sed -nE 's/^\[(M[0-9]+)\].*/\1/p')
+  ISSUE_M=$(printf '%s' "$ISSUE_MS" | sed -nE 's/^(M[0-9]+):.*/\1/p')
+  [ -n "$EPIC_M" ] && [ "$EPIC_M" = "$ISSUE_M" ] || { echo "에픽 #$EPIC($EPIC_M)과 이슈 마일스톤($ISSUE_M)이 다르다 — 연결하지 않았다. EPIC 또는 --milestone을 고친 뒤 B를 다시 실행"; exit 1; }
   # 상위 에픽 연결 — 이미 연결돼 있으면 건너뛴다(addSubIssue는 중복 연결 시 오류)
   PARENT=$(gh issue view "$NUM" --json parent --jq '.parent.number // empty')
   ISSUE_ID=$(gh issue view "$NUM" --json id --jq .id)   # ID는 변수로 먼저 받는다 — 인자 안의 $(...) 실패는 set -e가 잡지 못한다
@@ -204,12 +212,10 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
     gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
       -f p="$EPIC_ID" -f c="$ISSUE_ID" >/dev/null
   elif [ "$PARENT" != "$EPIC" ]; then
-    echo "#$NUM 은 이미 다른 에픽 #$PARENT 에 연결돼 있다 — 확인 필요"; exit 1
+    # 옛 에픽에서 떼려면: gh api graphql -f query='mutation($p:ID!,$c:ID!){removeSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
+    #   -f p="$(gh issue view <옛 에픽> --json id --jq .id)" -f c="$ISSUE_ID"   — 뗀 뒤 B를 다시 실행
+    echo "#$NUM 은 이미 다른 에픽 #$PARENT 에 연결돼 있다 — 맞는 에픽인지 확인하고, 아니면 removeSubIssue 뒤 B를 다시 실행"; exit 1
   fi
-  # 에픽과 마일스톤이 같은 M인지 확인 — 에픽 번호는 M 번호와 다르다(CLAUDE.md "마일스톤 대응 표")
-  EPIC_M=$(gh issue view "$EPIC" --json title --jq '.title' | sed -nE 's/^\[(M[0-9]+)\].*/\1/p')
-  ISSUE_M=$(gh issue view "$NUM" --json milestone --jq '.milestone.title // ""' | sed -nE 's/^(M[0-9]+):.*/\1/p')
-  [ -n "$EPIC_M" ] && [ "$EPIC_M" = "$ISSUE_M" ] || { echo "에픽 #$EPIC($EPIC_M)과 마일스톤($ISSUE_M)이 다르다 — 에픽·마일스톤을 확인"; exit 1; }
   # 이슈 타입(Task/Bug/Feature) 지정 — 같은 값으로 다시 지정해도 무방
   gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
     -f i="$ISSUE_ID" -f t="$TYPE" >/dev/null

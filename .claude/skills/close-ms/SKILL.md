@@ -3,7 +3,8 @@ name: close-ms
 description: >-
   마일스톤 에픽 번호를 받아 모든 서브이슈 완료를 검증하고, 마일스톤 Draft PR을 Ready로 전환해 멀티플랫폼 전체 CI를 통과시킨 뒤
   main에 머지하고 에픽 이슈·milestone.md·프로젝트 보드를 완료 처리한다.
-  사용자가 `/close-ms <번호>`를 입력하거나 "M1 마무리/main에 머지해줘"처럼 마일스톤 종료를 요청할 때 사용한다.
+  사용자가 `/close-ms <번호>`를 입력하거나 "M1 마무리/main에 머지해줘"처럼 마일스톤 종료를 요청할 때 사용한다
+  (M 번호로 요청받으면 CLAUDE.md "마일스톤 대응 표"에서 에픽 번호를 찾는다 — 예: M8 → 에픽 #6).
 argument-hint: <마일스톤 에픽 이슈 번호>
 ---
 
@@ -12,6 +13,7 @@ argument-hint: <마일스톤 에픽 이슈 번호>
 입력: `$ARGUMENTS` = 마일스톤 에픽 이슈 번호 (`<번호>`)
 
 **M 번호 `<N>`은 에픽 제목의 `[M<N>]`에서 읽는다.** 에픽 번호와 다르다(CLAUDE.md "마일스톤 대응 표" — 예: 에픽 #6 → M8, 브랜치 `milestone/m8`).
+M 번호로 요청받았으면 1단계에서 에픽 제목의 `[M<N>]`이 요청한 M과 같은지 확인하고, 다르면 중단한다. `<마일스톤 이름>`은 1단계 JSON의 `milestone.title`이다.
 
 > 규칙의 기준은 [CLAUDE.md](../../../CLAUDE.md)이다. `main` 머지는 되돌리기 어려운 작업이므로
 > **4단계 머지 직전에 반드시 사용자에게 최종 확인**을 받는다.
@@ -24,9 +26,12 @@ gh issue list --milestone "<마일스톤 이름>" --state open --json number,tit
 - `milestone` 라벨이 없으면 중단한다.
 - 열린 서브이슈가 있으면 목록을 보여 주고 단일 선택으로 묻는다 (CLAUDE.md "질의 규칙"):
   "남은 서브이슈를 먼저 처리 (Recommended)" / "다음 마일스톤으로 옮기고 진행" / "그대로 진행".
-  - 옮길 곳은 과제 성격으로 정한다(CLAUDE.md "마일스톤 대응 표"): 실기기 확인 이슈는 M8·에픽 #6(GitHub 번호 6, #185),
-    실물 대조 100종·스토어 빌드 성격도 M8, 그 밖(에뮬레이터 확인 등)은 다음 M의 마일스톤·에픽이다.
-  - 옮길 때 마일스톤만 바꾸지 말고 상위 에픽도 바꾼다: GraphQL `removeSubIssue`로 옛 에픽에서 뗀 뒤 `/fix-issue` 9단계 B 블록을 새 에픽 번호로 다시 실행한다.
+  - 옮길 곳(CLAUDE.md "마일스톤 대응 표"):
+    - M1~M7을 닫을 때 실기기 확인 이슈는 M8·에픽 #6(#185). M8 에픽 체크리스트의 "실물 대조 100종"·스토어 빌드 항목에 해당하는 이슈도 M8.
+    - 그 밖(개별 기능의 실물 대조·에뮬레이터 확인 등, M8·M9를 닫을 때의 실기기 이슈 포함)은 다음 M의 마일스톤·에픽이다.
+  - 옮기는 순서: ① 마일스톤 바꾸기(`gh issue edit <이슈> --milestone "<새 마일스톤 이름>"`) ② 옛 에픽에서 떼기
+    (`gh api graphql -f query='mutation($p:ID!,$c:ID!){removeSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' -f p=<옛 에픽 id> -f c=<이슈 id>`)
+    ③ `/fix-issue` 9단계 B 블록을 새 에픽 번호로 실행 — `TYPE`은 그 이슈의 기존 `issueType` id(`gh issue view <이슈> --json issueType --jq .issueType.id`)를 쓴다.
 
 ## 2. 마일스톤 브랜치 최종 점검
 ```bash
