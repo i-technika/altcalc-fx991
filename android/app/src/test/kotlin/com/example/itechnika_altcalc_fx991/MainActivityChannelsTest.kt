@@ -2,8 +2,8 @@ package com.example.itechnika_altcalc_fx991
 
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Looper
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -12,6 +12,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.time.Duration
 
 /**
  * [MainActivity]가 거는 플랫폼 채널 (#108) — `altcalc/device`(#24)와 고대비 텍스트 이벤트 채널(#95).
@@ -26,39 +27,87 @@ import org.robolectric.annotation.Config
 class MainActivityChannelsTest {
     private lateinit var activity: MainActivity
     private val messenger = FakeBinaryMessenger()
+    private val layout = FakeFoldingLayoutSource()
 
     @Before
     fun setUp() {
         // get()은 컨텍스트만 붙인 액티비티를 준다 — onCreate를 부르면 Flutter 엔진(네이티브)을 띄우려 한다.
         activity = Robolectric.buildActivity(MainActivity::class.java).get()
+        activity.foldingLayoutSource = layout
         activity.registerChannels(messenger)
     }
 
-    private fun hasHingeSensor(): MethodReply = messenger.invokeMethod(DEVICE_CHANNEL, "hasHingeSensor")
+    private fun isFoldableDevice(): List<MethodReply> = messenger.startMethod(DEVICE_CHANNEL, "isFoldableDevice")
 
-    private fun declareHingeSensor(declared: Boolean) =
-        shadowOf(activity.packageManager).setSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE, declared)
+    private fun declareHingeSensor() =
+        shadowOf(activity.packageManager).setSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE, true)
 
     // ---- altcalc/device ----
+    // 판정 규칙의 자세한 경우는 FoldableDeviceProbeTest가 본다. 여기서는 채널·메서드 이름과 액티비티의 실제 신호 연결을 본다.
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.R, FIRST_PUBLIC_API_SDK])
-    fun `hasHingeSensor - API 30 이상은 힌지 각도 센서 기능 선언을 따른다`() {
-        assertEquals("선언 정보 없음", MethodReply.Success(false), hasHingeSensor())
+    fun `isFoldableDevice - API 30 이상은 힌지 기능 선언이 있으면 바로 true`() {
+        declareHingeSensor()
 
-        declareHingeSensor(true)
-        assertEquals(MethodReply.Success(true), hasHingeSensor())
+        // 창 배치 정보를 기다리지 않고 바로 답한다(창 배치 정보는 진단 로그용으로만 구독한다)
+        assertEquals(listOf<MethodReply>(MethodReply.Success(true)), isFoldableDevice())
+    }
 
-        declareHingeSensor(false)
-        assertEquals(MethodReply.Success(false), hasHingeSensor())
+    @Test
+    fun `isFoldableDevice - 힌지 신호가 없으면 창 배치 정보 첫 값으로 답한다`() {
+        val replies = isFoldableDevice()
+        assertTrue(replies.isEmpty())
+
+        layout.emit(true)
+        HighTextContrastSystem.idleMainLooper()
+
+        assertEquals(listOf<MethodReply>(MethodReply.Success(true)), replies)
     }
 
     @Test
     @Config(sdk = [MIN_SDK, Build.VERSION_CODES.Q])
-    fun `hasHingeSensor - API 29 이하는 기능 선언이 있어도 false`() {
-        declareHingeSensor(true)
+    fun `isFoldableDevice - API 29 이하는 기능 선언이 있어도 창 배치 정보로 판정한다`() {
+        declareHingeSensor()
+        val replies = isFoldableDevice()
 
-        assertEquals(MethodReply.Success(false), hasHingeSensor())
+        layout.emit(false)
+        HighTextContrastSystem.idleMainLooper()
+
+        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+    }
+
+    @Test
+    fun `isFoldableDevice - 창 배치 정보가 오지 않으면 제한 시간에 false`() {
+        val replies = isFoldableDevice()
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS))
+        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+
+        // 답한 뒤 진단 시간이 지나면 구독을 푼다
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.DIAGNOSTIC_MILLIS))
+        assertEquals(0, layout.activeCount)
+    }
+
+    @Test
+    fun `엔진 정리 - 기다리는 폴더블 판정에 false로 답하고 창 배치 구독을 푼다`() {
+        val replies = isFoldableDevice()
+        assertEquals(1, layout.activeCount)
+
+        activity.unregisterChannels(messenger)
+
+        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(0, layout.activeCount)
+    }
+
+    @Test
+    fun `다시 등록하면 앞 등록의 기다리는 폴더블 판정을 정리한다`() {
+        val replies = isFoldableDevice()
+
+        activity.registerChannels(messenger)
+
+        assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+        assertEquals(0, layout.activeCount)
     }
 
     @Test

@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.StandardMethodCodec
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.nio.ByteBuffer
 
 /**
@@ -79,12 +81,22 @@ class MainActivityLifecycleTest {
 
     /** Dart의 `invokeMethod`처럼 엔진에 메서드 호출을 넣고, 플랫폼이 보낸 응답을 푼다 */
     private fun invokeFromDart(channel: String, method: String): Any? {
+        val replyId = sendFromDart(channel, method)
+        HighTextContrastSystem.idleMainLooper()
+        return replyTo(replyId)
+    }
+
+    /** Dart가 보내는 것처럼 엔진에 메서드 호출을 넣고 응답 번호를 돌려준다 (응답은 [replyTo]로 본다) */
+    private fun sendFromDart(channel: String, method: String): Int {
         val replyId = nextReplyId++
         val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall(method, null))
         message.flip()
         fromDart.handleMessageFromDart(channel, message, replyId, 0)
-        HighTextContrastSystem.idleMainLooper()
+        return replyId
+    }
 
+    /** 플랫폼이 [replyId]에 보낸 응답을 푼다. 응답이 없거나 두 번 이상이면 실패한다. */
+    private fun replyTo(replyId: Int): Any? {
         val reply = ArgumentCaptor.forClass(ByteBuffer::class.java)
         verify(jni).invokePlatformMessageResponseCallback(eq(replyId), reply.capture(), anyInt())
         val buffer = reply.value.duplicate().apply { flip() }
@@ -106,10 +118,32 @@ class MainActivityLifecycleTest {
     }
 
     @Test
-    fun `configureFlutterEngine이 기기 채널을 건다`() {
+    fun `configureFlutterEngine이 기기 채널을 건다 - 실제 창 배치 정보 첫 값으로 제한 시간 전에 답한다`() {
         controller.create()
 
-        assertEquals(false, invokeFromDart(DEVICE_CHANNEL, "hasHingeSensor"))
+        // Robolectric에는 WindowManager 확장이 없어 Jetpack WindowManager가 빈 창 배치 정보를 바로 보낸다 —
+        // 실제 출처(WindowLayoutFoldingSource)가 구독·응답까지 이어지는지 본다(시계는 그대로, 제한 시간 전).
+        assertEquals(false, invokeFromDart(DEVICE_CHANNEL, "isFoldableDevice"))
+        // 구독 실패·제한 시간이 아니라 창 배치 값으로 답했다
+        val logs = ShadowLog.getLogsForTag(FoldableDeviceProbe.LOG_TAG).map { it.msg }
+        assertTrue(logs.toString(), logs.any { it.contains("창 배치 접힘=없음") })
+    }
+
+    @Test
+    fun `cleanUpFlutterEngine - 기다리는 폴더블 판정에 답하고 창 배치 구독을 푼다`() {
+        val layout = FakeFoldingLayoutSource()
+        controller.get().foldingLayoutSource = layout
+        controller.create()
+        val replyId = sendFromDart(DEVICE_CHANNEL, "isFoldableDevice")
+        // 메시지를 처리기까지 보낸다(시계는 그대로 — 제한 시간은 지나지 않는다). 창 배치 정보가 아직 없어 답이 없다.
+        HighTextContrastSystem.idleMainLooper()
+        verify(jni, never()).invokePlatformMessageResponseCallback(eq(replyId), any(), anyInt())
+        assertEquals(1, layout.activeCount)
+
+        controller.destroy()
+
+        assertEquals(false, replyTo(replyId))
+        assertEquals(0, layout.activeCount)
     }
 
     @Test
@@ -161,7 +195,7 @@ class MainActivityLifecycleTest {
         controller.create().start().resume().pause().stop().destroy()
 
         // 엔진은 캐시에 살아 있다 — 끝난 액티비티의 처리기가 남아 있으면 응답한다
-        for ((channel, method) in listOf(HIGH_TEXT_CONTRAST_CHANNEL to "listen", DEVICE_CHANNEL to "hasHingeSensor")) {
+        for ((channel, method) in listOf(HIGH_TEXT_CONTRAST_CHANNEL to "listen", DEVICE_CHANNEL to "isFoldableDevice")) {
             val replyId = nextReplyId++
             val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall(method, null))
             message.flip()

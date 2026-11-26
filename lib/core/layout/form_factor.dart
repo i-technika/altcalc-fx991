@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui'
     show
         DisplayFeature,
@@ -15,7 +16,8 @@ enum DeviceKind {
   /// 일반 폰
   phone,
 
-  /// 폴더블 — 힌지 각도 센서가 있거나 접히는 부분(fold/hinge)이 보고되는 기기 (커버 화면 포함)
+  /// 폴더블 — 시작 시 폴더블로 판정했거나([FormFactor.queryFoldableDevice]) 그 뒤 화면 정보로 알아본
+  /// (`DeviceOrientationLock.foldableDevice` — 접히는 부분 보고, [FormFactor.isOtherScreen]) 기기 (커버 화면 포함)
   foldable,
 
   /// 태블릿 — 짧은 변 [FormFactor.largeScreenMinShortestSide] 이상인 폴더블이 아닌 기기
@@ -81,52 +83,66 @@ abstract final class FormFactor {
   @visibleForTesting
   static const MethodChannel deviceChannel = MethodChannel('altcalc/device');
 
+  /// [deviceChannel]의 폴더블 판정 메서드 이름 ([queryFoldableDevice])
+  @visibleForTesting
+  static const String foldableDeviceMethod = 'isFoldableDevice';
+
   /// [features]에 접히는 부분(fold·hinge)이 있는지. 화면 구멍(cutout)은 세지 않는다.
   static bool hasFoldOrHinge(Iterable<DisplayFeature> features) => features.any(
     (f) =>
         f.type == DisplayFeatureType.fold || f.type == DisplayFeatureType.hinge,
   );
 
-  /// 기기에 힌지 각도 센서가 있는지 (Android `FEATURE_SENSOR_HINGE_ANGLE`). 폴더블 기기를 앱 시작 시점에
-  /// 구분하는 데 쓴다 — 접히는 부분 정보([FlutterView.displayFeatures])는 화면이 붙은 뒤 비동기로 와서
-  /// 시작 시점에는 비어 있다. Android가 아니거나, 조회에 실패하거나, [hingeQueryTimeout] 안에 응답이 없으면
-  /// `false` — 앱 시작(`main()`)이 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  /// 폴더블 기기인지 (#24, 보강 #70). 폴더블 기기를 앱 시작 시점에 구분하는 데 쓴다 — 접히는 부분 정보
+  /// ([FlutterView.displayFeatures])는 화면이 붙은 뒤 비동기로 와서 시작 시점에는 비어 있고, 비어 있어도
+  /// "아직 안 옴"인지 "없음"인지 구분할 수 없다.
   ///
-  /// 한계: 힌지 센서 선언은 제조사 몫이라, 선언하지 않는 폴더블은 접히는 부분 정보가 도착할 때까지 태블릿으로
-  /// 판정된다(`DeviceOrientationLock`이 정보 도착 후 바로잡는다). 실기기 확인은 후속 과제다.
-  static Future<bool> queryHingeSensor() async {
+  /// Android `MainActivity`(`FoldableDeviceProbe`)가 다음 중 하나라도 있으면 폴더블로 답한다.
+  /// 1. 힌지 각도 센서 기능 선언 (`FEATURE_SENSOR_HINGE_ANGLE`, API 30+) — 제조사가 선언해야만 보고된다.
+  /// 2. 힌지 각도 센서 자체 (`Sensor.TYPE_HINGE_ANGLE`, API 30+)
+  /// 3. Jetpack WindowManager 창 배치 정보 첫 값의 접히는 부분 — Samsung처럼 OEM 확장으로 접힘 정보만 주는 기기 대비.
+  ///    창이 붙은 뒤 오므로 Android 쪽이 최대 500ms 기다린다(그동안 시작 화면이 남는다).
+  ///
+  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 `false` — 앱 시작(`main()`)이
+  /// 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  ///
+  /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
+  /// 펼치면 `DeviceOrientationLock`이 물리 화면이 바뀐 것([isOtherScreen])을 보고 폴더블로 기억한다.
+  /// 각 신호의 실기기 값은 #158에서 기록한다.
+  static Future<bool> queryFoldableDevice() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return false;
     }
     try {
       final result = await deviceChannel
-          .invokeMethod<bool>('hasHingeSensor')
-          .timeout(hingeQueryTimeout);
+          .invokeMethod<bool>(foldableDeviceMethod)
+          .timeout(foldableQueryTimeout);
       return result ?? false;
     } on MissingPluginException {
       return false;
     } catch (error) {
-      debugPrint('힌지 센서 조회 실패: $error');
+      debugPrint('폴더블 판정 조회 실패: $error');
       return false;
     }
   }
 
-  /// 힌지 센서 조회 응답 제한 시간
-  static const Duration hingeQueryTimeout = Duration(seconds: 1);
+  /// 폴더블 판정 조회 응답 제한 시간. Android 쪽이 창 배치 정보를 기다리는 최대 시간(`FoldableDeviceProbe`
+  /// `LAYOUT_TIMEOUT_MILLIS`)보다 넉넉히 길어야 한다 — `test/unit/main_activity_source_test.dart`가 대조한다.
+  static const Duration foldableQueryTimeout = Duration(seconds: 1);
 
   /// 기기 종류를 정한다.
   /// - [displaySize]: 물리 화면 크기 (dp)
   /// - [features]: 화면 특징 (접히는 부분 등)
-  /// - [hasHingeSensor]: 힌지 각도 센서 유무 ([queryHingeSensor])
+  /// - [foldableDevice]: 앱 시작 시 판정한 폴더블 기기 여부 ([queryFoldableDevice])
   ///
-  /// 폴더블 내부 화면은 짧은 변이 600dp를 넘어 크기로는 태블릿과 구분되지 않으므로, 힌지 센서나 접히는
+  /// 폴더블 내부 화면은 짧은 변이 600dp를 넘어 크기로는 태블릿과 구분되지 않으므로, 시작 시 판정이나 접히는
   /// 부분 정보로 구분한다. 폴더블은 접은 커버 화면에서도 [DeviceKind.foldable]이다.
   static DeviceKind deviceKindOf(
     Size displaySize,
     Iterable<DisplayFeature> features, {
-    bool hasHingeSensor = false,
+    bool foldableDevice = false,
   }) {
-    if (hasHingeSensor || hasFoldOrHinge(features)) return DeviceKind.foldable;
+    if (foldableDevice || hasFoldOrHinge(features)) return DeviceKind.foldable;
     if (displaySize.shortestSide >= largeScreenMinShortestSide) {
       return DeviceKind.tablet;
     }
@@ -134,12 +150,41 @@ abstract final class FormFactor {
   }
 
   /// [view]가 놓인 물리 화면 크기 (dp). 플랫폼이 화면 크기를 알려주지 않으면(크기 0) 창 크기를 쓴다.
-  static Size displaySizeOf(FlutterView view) {
+  static Size displaySizeOf(FlutterView view) =>
+      reportedDisplaySizeOf(view) ?? view.physicalSize / view.devicePixelRatio;
+
+  /// 플랫폼이 알려 준 [view]의 물리 화면 크기 (dp). 알려 주지 않으면(크기 0) `null` — 창 크기로 대신하지 않는다.
+  static Size? reportedDisplaySizeOf(FlutterView view) {
     final display = view.display;
-    if (!display.size.isEmpty && display.devicePixelRatio > 0) {
-      return display.size / display.devicePixelRatio;
+    if (display.size.isEmpty || !(display.devicePixelRatio > 0)) return null;
+    return display.size / display.devicePixelRatio;
+  }
+
+  /// 물리 화면이 바뀌었다고 볼 화면 비율(긴 변 ÷ 짧은 변) 차이 (작은 쪽 비율에 대한 상대값). 폴더블의 커버 ↔ 내부
+  /// 화면은 비율이 크게 다르다(Galaxy Z Fold 커버 약 2.6 ↔ 내부 약 1.2, Z Flip 내부 약 2.4 ↔ 커버 약 1.0).
+  static const double otherScreenAspectTolerance = 0.15;
+
+  /// 물리 화면 크기 [before]에서 [after]로 바뀐 것이 **폴더블의 다른 화면**으로 바뀐 것인지 (#70) — 커버 ↔ 내부 화면
+  /// 전환이다. 다음 두 조건을 모두 만족할 때만 참이다.
+  /// - 비율(긴 변 ÷ 짧은 변)이 [otherScreenAspectTolerance]보다 많이 다르다. 회전(가로·세로가 맞바뀜)과 화면 크기·글자
+  ///   확대 설정(dp 크기만 바뀐다)은 비율이 그대로라 세지 않는다.
+  /// - 적어도 한쪽이 폰 크기(짧은 변 [largeScreenMinShortestSide] 미만)다. 폴더블은 한쪽이 늘 폰 크기다(Fold·Flip의 커버,
+  ///   Flip의 내부). 양쪽이 모두 대화면인 전환 — 노트북 화면 ↔ 모니터(ChromeOS·Mac), iPad ↔ 외부 모니터, 태블릿 ↔
+  ///   모니터 — 은 다른 디스플레이로 옮긴 것이라 세지 않는다. 플랫폼은 창이 놓인 디스플레이의 크기를 알려 주는데,
+  ///   어느 디스플레이인지는 알 수 없다(Android는 늘 같은 디스플레이 번호를 준다).
+  ///
+  /// 한계: 폰을 외부 디스플레이(DeX 등)로 옮기면 참이 된다 — 그러면 폴더블로 기억해 접힘선 없는 넓은 창도 위아래 배치가
+  /// 된다([arrangementOf]의 폴더블 외부 디스플레이 제약과 같다). 폰 화면 자체의 정책은 폴더블이어도 같다(세로).
+  static bool isOtherScreen(Size before, Size after) {
+    if (before.isEmpty || after.isEmpty) return false;
+    if (before.shortestSide >= largeScreenMinShortestSide &&
+        after.shortestSide >= largeScreenMinShortestSide) {
+      return false;
     }
-    return view.physicalSize / view.devicePixelRatio;
+    double aspect(Size s) => s.longestSide / s.shortestSide;
+    final a = aspect(before);
+    final b = aspect(after);
+    return (a - b).abs() / math.min(a, b) > otherScreenAspectTolerance;
   }
 
   /// 기기 종류([kind])와 물리 화면 크기([displaySize], dp)별 방향 정책.

@@ -258,7 +258,7 @@ void main() {
       addTearDown(tester.view.reset);
       addTearDown(tester.view.display.reset);
       addTearDown(DeviceOrientationLock.instance.stop);
-      // 힌지 센서 조회 채널: 기본은 "센서 없음". 채널을 흉내 내지 않으면 테스트의 가짜 비동기 안에서
+      // 폴더블 판정 조회 채널: 기본은 "폴더블 아님". 채널을 흉내 내지 않으면 테스트의 가짜 비동기 안에서
       // 응답이 오지 않아 main()이 끝나지 않는다.
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         FormFactor.deviceChannel,
@@ -353,11 +353,11 @@ void main() {
       expect(keypad.right, lessThan(lcd.left));
     });
 
-    /// 힌지 센서 조회 채널 응답을 [hinge]로 고정한다.
-    void mockHingeSensor(WidgetTester tester, {required bool hinge}) {
+    /// 폴더블 판정 조회 채널 응답을 [foldable]로 고정한다.
+    void mockFoldableDevice(WidgetTester tester, {required bool foldable}) {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         FormFactor.deviceChannel,
-        (call) async => hinge,
+        (call) async => foldable,
       );
       addTearDown(
         () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -374,12 +374,12 @@ void main() {
     ];
 
     testWidgets(
-      '폴더블(힌지 센서): 펼친 내부 화면은 처음부터 네 방향을 허용하고, 접힘 정보가 오면 접힘선 기준으로 나눈다',
+      '폴더블(시작 시 판정): 펼친 내부 화면은 처음부터 네 방향을 허용하고, 접힘 정보가 오면 접힘선 기준으로 나눈다',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         // 내부 화면을 가로로 든 상태, 접힘 정보는 아직 도착 전
         setDevice(tester, const Size(841, 701));
-        mockHingeSensor(tester, hinge: true);
+        mockFoldableDevice(tester, foldable: true);
         final calls = recordPlatformCalls(tester);
         await app.main();
         await tester.pump();
@@ -407,14 +407,14 @@ void main() {
     );
 
     testWidgets(
-      '힌지 센서를 알리지 않는 폴더블: 접힘 정보가 오면 네 방향 허용으로 다시 요청하고, 같은 정책이면 다시 요청하지 않는다',
+      '시작 시 판정이 놓친 폴더블: 접힘 정보가 오면 네 방향 허용으로 다시 요청하고, 같은 정책이면 다시 요청하지 않는다',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         setDevice(tester, const Size(841, 701));
         final calls = recordPlatformCalls(tester);
         await app.main();
         await tester.pump();
-        // 힌지 센서 정보가 없으면 시작 시점에는 태블릿으로 판정된다(대비책 경로).
+        // 시작 시 판정이 놓치면 시작 시점에는 태블릿으로 판정된다(대비책 경로).
         expect(orientationRequests(calls), hasLength(1));
         expect(
           DeviceOrientationLock.instance.appliedPolicy,
@@ -453,7 +453,7 @@ void main() {
       setDevice(tester, inner);
       tester.view.displayFeatures = const [innerFold];
       addTearDown(tester.view.resetDisplayFeatures);
-      mockHingeSensor(tester, hinge: true);
+      mockFoldableDevice(tester, foldable: true);
       final calls = recordPlatformCalls(tester);
       await app.main();
       await tester.pump();
@@ -494,6 +494,92 @@ void main() {
       expect(_lcdInputText(tester), input);
       expect(tester.element(find.byType(LcdDisplay)), same(lcdElement));
     });
+
+    testWidgets(
+      '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·좌우 분할 없음 (#70)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        const cover = Size(344, 882);
+        // 내부 화면을 가로로 든 채 펼친다 (Android 16 이상은 대화면에서 방향 고정을 무시한다)
+        const innerLandscape = Size(841, 673);
+        const innerFold = DisplayFeature(
+          bounds: Rect.fromLTWH(420.5, 0, 0, 673),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        setDevice(tester, cover);
+        addTearDown(tester.view.resetDisplayFeatures);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [
+          ['DeviceOrientation.portraitUp'],
+        ]);
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isFalse);
+
+        // 펼친다: 물리 화면이 비율이 다른 화면으로 바뀐다. 접힘 정보는 아직 없다.
+        tester.view.display.size = innerLandscape * 2;
+        tester.view.physicalSize = innerLandscape * 2;
+        await tester.pump();
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isTrue);
+        expect(orientationRequests(calls).last, anyOrientation);
+        expect(
+          orientationRequests(calls),
+          isNot(
+            contains([
+              'DeviceOrientation.landscapeLeft',
+              'DeviceOrientation.landscapeRight',
+            ]),
+          ),
+        );
+        // 같은 프레임의 배치도 폴더블 규칙이다: 접힘 정보 전에는 위아래 배치
+        expect(isStackedArrangement(tester), isTrue);
+
+        // 접힘 정보가 오면 접힘선 기준 좌우 배치
+        tester.view.displayFeatures = const [innerFold];
+        await tester.pump();
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      },
+    );
+
+    testWidgets(
+      '시작 시 판정이 놓친 폴더블: 접힘 정보를 한 번 본 뒤에는 접힘 정보가 잠시 사라져도 좌우 분할로 그리지 않는다 (#70)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // 물리 화면은 그대로(크기 변화로는 알 수 없다), 접힘 정보만 오간다
+        const innerLandscape = Size(841, 673);
+        const innerFold = DisplayFeature(
+          bounds: Rect.fromLTWH(420.5, 0, 0, 673),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        setDevice(tester, innerLandscape);
+        addTearDown(tester.view.resetDisplayFeatures);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        // 시작 시점에는 태블릿으로 판정된다(대비책 경로)
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.landscape,
+        );
+
+        tester.view.displayFeatures = const [innerFold];
+        await tester.pump();
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isTrue);
+        expect(orientationRequests(calls).last, anyOrientation);
+
+        // 접힘 정보가 사라진다(회전 직후처럼 몇 프레임 늦게 다시 오는 구간) — 폴더블 규칙대로 위아래 배치
+        tester.view.displayFeatures = const [];
+        await tester.pump();
+        expect(isStackedArrangement(tester), isTrue);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.any,
+        );
+      },
+    );
 
     testWidgets('방향 요청이 실패해도 앱은 뜨고, 다음 화면 정보 변화 때 다시 요청한다', (tester) async {
       SharedPreferences.setMockInitialValues({});

@@ -630,12 +630,21 @@ class CalculatorScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 폴더블 여부는 화면 정보 변화를 받은 그 프레임에 바뀔 수 있다 (#70, [foldableDeviceProvider])
+    return ValueListenableBuilder<bool>(
+      valueListenable: ref.watch(foldableDeviceProvider),
+      builder: (context, foldableDevice, _) =>
+          _buildScreen(context, foldableDevice: foldableDevice),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context, {required bool foldableDevice}) {
     final window = MediaQuery.sizeOf(context);
     final features = MediaQuery.displayFeaturesOf(context);
     final arrangement = FormFactor.arrangementOf(
       window,
       features,
-      foldableDevice: ref.watch(foldableDeviceProvider),
+      foldableDevice: foldableDevice,
     );
     // 접힘선(화면 좌표)을 본체 좌표로 옮긴다. 이 화면은 화면 전체를 채우므로(앱 바 없음) 본체 원점은
     // 시스템 인셋(SafeArea) + 화면 여백 만큼 떨어져 있다. 미리보기처럼 화면을 흉내 내는 곳도

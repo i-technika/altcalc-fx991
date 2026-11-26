@@ -91,16 +91,82 @@ void main() {
       expect(FormFactor.hasFoldOrHinge(const [_cutout, _fold]), isTrue);
     });
 
-    test('힌지 센서가 있으면 접힘 정보가 오기 전에도 폴더블이다 (커버 화면 포함)', () {
+    test('시작 시 폴더블로 판정했으면 접힘 정보가 오기 전에도 폴더블이다 (커버 화면 포함)', () {
       for (final size in const [Size(841, 701), Size(344, 882)]) {
         expect(
-          FormFactor.deviceKindOf(size, const [], hasHingeSensor: true),
+          FormFactor.deviceKindOf(size, const [], foldableDevice: true),
           DeviceKind.foldable,
         );
       }
     });
 
-    group('힌지 센서 조회', () {
+    group('다른 물리 화면으로 바뀜 (#70)', () {
+      test('폴더블 커버 ↔ 내부 화면 전환은 다른 화면이다 (양방향)', () {
+        const pairs = [
+          (Size(344, 882), Size(673, 841)), // Galaxy Z Fold 커버 → 내부
+          (Size(344, 882), Size(841, 673)), // 내부를 가로로 든 채 펼침
+          (Size(412, 1006), Size(360, 374)), // Galaxy Z Flip 내부 → 커버
+          (Size(411, 841), Size(841, 701)), // Pixel Fold 커버 → 내부(가로가 기본)
+        ];
+        for (final (a, b) in pairs) {
+          expect(FormFactor.isOtherScreen(a, b), isTrue, reason: '$a → $b');
+          expect(FormFactor.isOtherScreen(b, a), isTrue, reason: '$b → $a');
+        }
+      });
+
+      test('회전·화면 크기 확대 설정·같은 화면은 다른 화면이 아니다', () {
+        const phone = Size(390, 844);
+        expect(FormFactor.isOtherScreen(phone, phone), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone.flipped), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone * 0.85), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone * 1.2), isFalse);
+        // 태블릿 600dp가 확대 설정으로 짧은 변 600 밑으로 내려가도 비율은 같다
+        expect(
+          FormFactor.isOtherScreen(const Size(600, 960), const Size(533, 853)),
+          isFalse,
+        );
+      });
+
+      test('허용치 경계: 비율 차이가 허용치 이하면 같은 화면, 넘으면 다른 화면', () {
+        const base = Size(400, 800); // 비율 2.0, 폰 크기
+        final within = Size(
+          400,
+          800 * (1 + FormFactor.otherScreenAspectTolerance) - 1,
+        );
+        final beyond = Size(
+          400,
+          800 * (1 + FormFactor.otherScreenAspectTolerance) + 1,
+        );
+        expect(FormFactor.isOtherScreen(base, within), isFalse);
+        expect(FormFactor.isOtherScreen(base, beyond), isTrue);
+      });
+
+      test('양쪽 모두 대화면인 전환(다른 디스플레이로 옮김)은 다른 화면이 아니다', () {
+        const pairs = [
+          (Size(1280, 853), Size(1440, 810)), // ChromeOS 3:2 노트북 ↔ 16:9 모니터
+          (Size(1024, 1366), Size(1920, 1080)), // iPad ↔ 외부 모니터 (Stage Manager)
+          (Size(1470, 956), Size(1920, 1080)), // MacBook ↔ 16:9 모니터
+          (Size(1280, 800), Size(2560, 1080)), // 태블릿 ↔ 울트라와이드 모니터
+        ];
+        for (final (a, b) in pairs) {
+          expect(FormFactor.isOtherScreen(a, b), isFalse, reason: '$a → $b');
+          expect(FormFactor.isOtherScreen(b, a), isFalse, reason: '$b → $a');
+        }
+      });
+
+      test('크기를 모르면(빈 크기) 다른 화면으로 보지 않는다', () {
+        expect(
+          FormFactor.isOtherScreen(Size.zero, const Size(673, 841)),
+          isFalse,
+        );
+        expect(
+          FormFactor.isOtherScreen(const Size(344, 882), Size.zero),
+          isFalse,
+        );
+      });
+    });
+
+    group('폴더블 판정 조회', () {
       tearDown(() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
@@ -118,25 +184,28 @@ void main() {
           methods.add(call.method);
           return true;
         });
-        expect(await FormFactor.queryHingeSensor(), isTrue);
-        expect(methods, ['hasHingeSensor']);
+        expect(await FormFactor.queryFoldableDevice(), isTrue);
+        expect(methods, [FormFactor.foldableDeviceMethod]);
       });
 
       test('Android: 채널 오류·미등록·null 응답이면 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         mockChannel((_) async => throw PlatformException(code: 'x'));
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         mockChannel((_) async => null);
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
-        expect(await FormFactor.queryHingeSensor(), isFalse); // MissingPlugin
+        expect(
+          await FormFactor.queryFoldableDevice(),
+          isFalse,
+        ); // MissingPlugin
       });
 
       test('Android: 그 밖의 오류(응답 타입 등)도 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         mockChannel((_) async => 'not a bool');
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
       });
 
       test('Android: 제한 시간 안에 응답이 없으면 false (앱 시작이 멈추지 않는다)', () async {
@@ -154,10 +223,10 @@ void main() {
               .setMockMessageHandler(FormFactor.deviceChannel.name, null),
         );
         final watch = Stopwatch()..start();
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         expect(
           watch.elapsed,
-          greaterThanOrEqualTo(FormFactor.hingeQueryTimeout),
+          greaterThanOrEqualTo(FormFactor.foldableQueryTimeout),
         );
       });
 
@@ -168,7 +237,7 @@ void main() {
           called = true;
           return true;
         });
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         expect(called, isFalse);
       });
     });
