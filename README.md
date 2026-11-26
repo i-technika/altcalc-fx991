@@ -255,9 +255,12 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 임시 폴더(Windows는 `%TEMP%`)의 `dart-code-startup-log-<16진수>.txt`에 로그를 쓴다. 일반(General) 범주 전부와 다른 범주의 경고·오류가 들어간다.
 창이 켜질 때 새 파일이 만들어지고 창이 떠 있는 동안 계속 쓰이며, 창을 닫아도 지워지지 않는다.
 
-- 어느 창의 파일인지는 머리말의 `Workspace name:`(연 폴더 이름)과 `Log file started` 날짜로 가린다. 같은 이름이 여럿이면 가장 최근에 바뀐 파일이 지금 창이다.
+- 어느 창의 파일인지는 SDK 탐색 뒤에 찍히는 `Workspace name:`(연 폴더 이름)으로 가린다. 같은 이름이 여럿이면
+  맨 앞 `Log file started` 날짜·시각이 가장 늦은 파일이 지금 창이다(한가한 창은 오래 쓰지 않아 수정 시각으로는 가릴 수 없다).
 - 줄마다 찍히는 시각에는 날짜가 없다. 여러 날 켜 둔 창의 로그는 앞뒤 줄로 날짜를 짐작한다.
 - `Found projects`·`filter out excluded projects`·`Found pub status`·`Skipping pubspec change`를 찾아 본다.
+
+확장의 동작은 다음과 같다.
 
 - **프로젝트 목록**
   - (소스) 연 폴더를 포함해 5단계(루트 아래 4단계, `dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
@@ -294,8 +297,12 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     - 그러나 루트가 이미 최신이면 오래된 것이 워크트리 하나뿐일 때 그 워크트리에 돈다. 예를 들어
       루트의 `pubspec_overrides.yaml`만 바꿨을 때(오래됨 판정에 쓰이지 않는다), 또는 터미널 `flutter pub add`가
       `package_config.json`까지 먼저 다시 썼을 때다. `analyzer.exclude`가 워크트리를 이 셈에서 빼서 막는다.
-    - (실사용) #66 뒤에는 브랜치 전환 등으로 루트 `pubspec.yaml`이 바뀌어도 워크트리는 `Found projects`에만 잡히고 셈에서 빠졌다.
-      루트 하나만 `Found pub status for 1 folders`에 들어, 루트에만 묻지 않고 pub get이 돌았다.
+    - (실사용) 루트 `pubspec.yaml`이 바뀐(루트 자신이 오래됨이 된) 경우를 #66 전·후로 보았다.
+      - #66 전: `package_config.json` 없는 워크트리 2개가 셈에 들어 `Found pub status for 3 folders`(알림)가 됐다.
+      - #66 후(루트에서 merge·checkout·pull): 워크트리는 `Found projects`에만 잡히고 셈에서 빠졌다.
+        루트 하나만 `Found pub status for 1 folders`에 들어 루트에만 묻지 않고 pub get이 돌았다.
+        빠진 워크트리가 오래됨이었는지는 기록되지 않았다.
+      - 루트가 이미 최신이고 워크트리만 오래된 경우는 실사용에서 관측하지 못했다.
   - 바뀐 폴더 자체는 거르지 않는다. 그래서 점으로 시작하지 않는 폴더에 워크트리를 만들면, 만드는 즉시 그 워크트리에
     pub get이 돈다(실측. 저장소 안 `wt-visible-66/`). 워크트리 위치 규칙은 이것 때문이다.
 - **루트 체크아웃의 브랜치에 달려 있다** (소스)
