@@ -771,7 +771,7 @@ void main() {
       );
     });
 
-    test('폰 폭·LCD 최대 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
+    test('폰·태블릿 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
       for (final width in [
         304.0,
         344.0,
@@ -779,7 +779,10 @@ void main() {
         396.0,
         414.0,
         424.0,
-        CalcTheme.screenLcdMaxWidth, // 태블릿 세로·정사각형 창 (#92)
+        CalcTheme.screenTabletopLcdMaxWidth, // 테이블톱 LCD 최대 폭 (#92, #143까지)
+        752.0, // 태블릿 세로 iPad 768×1024 (#141 — 세로형 LCD는 본체 폭 전체)
+        784.0, // 태블릿 세로 10인치 800×1280
+        1008.0, // 태블릿 세로 12.9인치 iPad
       ]) {
         final atMax = LcdFontSizes.forSize(
           Size(width, width / CalcTheme.screenLcdMinAspectRatio),

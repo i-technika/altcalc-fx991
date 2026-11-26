@@ -9,6 +9,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/bundled_fonts.dart';
 import '../support/korean_locale.dart';
 
 /// 지정한 크기 영역에 키패드를 배치한다.
@@ -34,6 +35,22 @@ Widget _host(
       ),
     ),
   );
+}
+
+/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 키패드 크기 — 실제 창에서 생기는 크기를 포함한다.
+const _wideCellAreas = <Size>[
+  Size(800, 300), // _areas의 가로 모드 폰 (화면은 짧은 창이라 좌우 분할로 그린다)
+  Size(584, 411.04), // 600×610 창의 위아래 배치
+  Size(752, 524.8), // 768×768 정사각형 창의 위아래 배치
+  Size(624, 384), // 1280×400 데스크톱 창의 좌우 분할
+  Size(1600, 300),
+];
+
+/// 테스트 화면(기본 800×600)을 [size]로 넓힌다 — [_host]의 영역이 화면보다 크면 화면 크기로 잘리기 때문이다.
+void _setViewSize(WidgetTester tester, Size size) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  addTearDown(tester.view.reset);
 }
 
 List<CalcKeyButton> _buttons(WidgetTester tester) =>
@@ -235,13 +252,11 @@ void main() {
             expect(bounds.inflate(0.01).contains(keypad.topLeft), isTrue);
             expect(bounds.inflate(0.01).contains(keypad.bottomRight), isTrue);
 
-            final aspect = keypad.width / keypad.height;
+            // 폭은 영역 폭 전체이고(#141 — 가로 상한 없음), 세로로 길어지지 않는다.
+            expect(keypad.width, moreOrLessEquals(area.width, epsilon: 0.01));
             expect(
-              aspect,
-              inInclusiveRange(
-                CalcTheme.keypadMinAspectRatio - 1e-6,
-                CalcTheme.keypadMaxAspectRatio + 1e-6,
-              ),
+              keypad.width / keypad.height,
+              greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
             );
 
             for (final def in allKeys) {
@@ -389,6 +404,87 @@ void main() {
           .scale(large.mainLabelFontSize);
       expect(scaledLarge, greaterThan(scaledNormal));
     });
+
+    group('글자 크기 상한 (#141)', () {
+      test('태블릿처럼 큰 키패드는 키가 아무리 커져도 상한에서 멈춘다 (가로로 넓어져도 커지지 않는다)', () {
+        for (final area in const [
+          Size(784, 813.6), // 10인치 800×1280 세로
+          Size(1008, 895.68), // 12.9인치 iPad 세로
+          Size(2000, 2000),
+          Size(3000, 900), // 아주 넓은 키
+        ]) {
+          final m = KeypadMetrics.compute(area, TextScaler.noScaling);
+          expect(
+            m.mainLabelFontSize,
+            moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
+            reason: '$area',
+          );
+          expect(
+            m.legendFontSize,
+            moreOrLessEquals(CalcTheme.keyLegendMaxFontSize),
+            reason: '$area',
+          );
+        }
+      });
+
+      testWidgets('상한에 걸린 키패드도 시스템 글자 배율은 그대로 반영한다 (상한은 배율 반영 전 크기)', (
+        tester,
+      ) async {
+        // 테스트 글꼴은 글자 폭이 넓어 784dp 폭에서는 배율 1.3의 폭 기준에 걸린다 — 폭 제한이 없는 큰 키패드로 본다.
+        const area = Size(2000, 1500);
+        _setViewSize(tester, area);
+        await tester.pumpWidget(
+          _host(const CalcKeypad(), size: area, textScale: 1.3),
+        );
+        expect(tester.takeException(), isNull);
+        final m = KeypadMetrics.compute(area, const TextScaler.linear(1.3));
+        expect(
+          m.mainLabelFontSize,
+          moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
+        );
+        // 한 글자 라벨(숫자 7)은 상한 × 배율 크기로 그려진다(FittedBox가 줄이지 않는다).
+        final seven = find.descendant(
+          of: _keycap(CalcKeyId.num7),
+          matching: find.byType(Text),
+        );
+        expect(
+          tester.widget<Text>(seven).style?.fontSize,
+          CalcTheme.keyMainLabelMaxFontSize,
+        );
+        expect(
+          tester.getRect(seven).height,
+          moreOrLessEquals(tester.getSize(seven).height, epsilon: 0.01),
+        );
+      });
+
+      testWidgets('글자 크기를 주입하지 않은 키 버튼도 상한을 넘지 않는다', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: CalcKeyButton(
+                    keyDef: allKeys.firstWhere((d) => d.id == CalcKeyId.num7),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final text = tester.widget<Text>(
+          find.descendant(
+            of: _keycap(CalcKeyId.num7),
+            matching: find.byType(Text),
+          ),
+        );
+        expect(
+          text.style?.fontSize,
+          lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
+        );
+      });
+    });
   });
 
   group('터치 영역 확장', () {
@@ -399,15 +495,15 @@ void main() {
       );
       expect(small.extendFunctionHitArea, isTrue);
 
-      // 최대 크기 키패드(폭 상한 480dp, #24): 숫자부 키캡은 48dp 이상이라 넓히지 않고,
+      // 실물 크기 키패드(480×640dp — #141 전의 최대 크기): 숫자부 키캡은 48dp 이상이라 넓히지 않고,
       // 함수부 키캡(약 39dp)은 여전히 각인 띠까지 넓힌다.
       final huge = KeypadMetrics.compute(
-        const Size(1200, 1600),
+        const Size(480, 640),
         TextScaler.noScaling,
       );
       double capHeightOf(double cellHeight) =>
           cellHeight * (1 - CalcTheme.keyLegendHeightRatio);
-      expect(huge.size.width, CalcTheme.keypadMaxWidth);
+      expect(huge.size, const Size(480, 640));
       expect(
         capHeightOf(huge.numberKeyHeight),
         greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
@@ -418,6 +514,18 @@ void main() {
         lessThan(CalcTheme.keyMinTouchTargetHeight),
       );
       expect(huge.extendFunctionHitArea, isTrue);
+
+      // 태블릿 세로 키패드(10인치 800×1280의 784×813.6, #141): 함수부 키캡도 48dp 이상이라 어느 쪽도 넓히지 않는다.
+      final tablet = KeypadMetrics.compute(
+        const Size(784, 813.6),
+        TextScaler.noScaling,
+      );
+      expect(
+        capHeightOf(tablet.functionKeyHeight),
+        greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+      );
+      expect(tablet.extendFunctionHitArea, isFalse);
+      expect(tablet.extendNumberHitArea, isFalse);
     });
 
     testWidgets('확장 여부가 각 구역 키에 전달된다 (커서 패드는 제외)', (tester) async {
@@ -443,56 +551,174 @@ void main() {
   _cursorPadShapeTests();
   _cursorPadHitTests();
 
+  for (final area in _wideCellAreas) {
+    testWidgets(
+      '${area.width}×${area.height}: 키패드가 가로로 넓어져도 방향 키 터치 영역은 #141 전 폭보다 줄지 않는다',
+      (tester) async {
+        // 같은 높이에서 #141 전 키패드 폭(높이 × 1.25, 480dp 이하)과 견준다. 패드는 비율 상한에서 멈추고 남는 폭은
+        // ◀·▶가 받으므로, 어느 방향도 그때보다 좁아지지 않는다.
+        Map<CursorPadSector, double> hitAreas() {
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final g = CursorPadGeometry(pad.size);
+          final bounds = cell.shift(-pad.topLeft);
+          return {
+            for (final sector in CursorPadSector.values)
+              sector: g.hitArea(sector, bounds),
+          };
+        }
+
+        _setViewSize(tester, area);
+        final before = Size(
+          math.min(area.height * 1.25, math.min(480.0, area.width)),
+          area.height,
+        );
+        await tester.pumpWidget(_host(const CalcKeypad(), size: before));
+        final old = hitAreas();
+        await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+        final now = hitAreas();
+        for (final sector in CursorPadSector.values) {
+          expect(
+            now[sector],
+            greaterThanOrEqualTo(old[sector]! - 1e-6),
+            reason: '${sector.name} $area (전 $before)',
+          );
+        }
+        // 함수 키 셀과 견준 ▲·▼ 비율은 #64 기준(1.2배)보다 낮아진다(#159). 지금 값(가장 낮은 1600×300에서 약 0.74배)보다
+        // 나빠지지 않게 아래 한계를 고정한다 — #159에서 기준을 정하면 이 값을 바꾼다.
+        final sin = tester.getSize(_button(CalcKeyId.sin));
+        for (final sector in [CursorPadSector.up, CursorPadSector.down]) {
+          expect(
+            now[sector]! / (sin.width * sin.height),
+            greaterThanOrEqualTo(0.7),
+            reason: '${sector.name} $area',
+          );
+        }
+      },
+    );
+  }
+
   group('KeypadMetrics.fitSize', () {
     test('비율 범위 안이면 영역을 그대로 쓴다', () {
       expect(KeypadMetrics.fitSize(const Size(360, 420)), const Size(360, 420));
     });
 
-    test('큰 영역에서도 폭은 최대 폭, 높이는 최대 폭 / 가로세로비 하한을 넘지 않는다 (#24)', () {
+    test('폭은 언제나 영역 폭 전체이고, 높이만 폭 / 가로세로비 하한을 넘지 않게 줄인다 (#141)', () {
       for (final area in const [
         Size(1200, 1600),
         Size(2000, 700),
         Size(784, 1100),
-        Size(double.infinity, double.infinity),
+        Size(784, 842),
+        Size(800, 300),
       ]) {
         final s = KeypadMetrics.fitSize(area);
-        expect(
-          s.width,
-          lessThanOrEqualTo(CalcTheme.keypadMaxWidth),
-          reason: '$area',
-        );
+        expect(s.width, area.width, reason: '$area');
         expect(
           s.height,
-          lessThanOrEqualTo(
-            CalcTheme.keypadMaxWidth / CalcTheme.keypadMinAspectRatio,
-          ),
+          math.min(area.height, area.width / CalcTheme.keypadMinAspectRatio),
           reason: '$area',
         );
       }
-      expect(
-        KeypadMetrics.fitSize(const Size(1200, 1600)),
-        const Size(
-          CalcTheme.keypadMaxWidth,
-          CalcTheme.keypadMaxWidth / CalcTheme.keypadMinAspectRatio,
-        ),
-      );
+      // 태블릿 세로: 예전 폭 상한(480dp)·가로세로비 상한(1.25)이 없어 영역을 그대로 쓴다.
+      expect(KeypadMetrics.fitSize(const Size(784, 842)), const Size(784, 842));
     });
 
-    test('너무 넓으면 폭을, 너무 길면 높이를 줄인다', () {
-      final wide = KeypadMetrics.fitSize(const Size(800, 300));
-      expect(wide.height, 300);
-      expect(wide.width, 300 * CalcTheme.keypadMaxAspectRatio);
+    test('너무 길면 높이를 줄이고, 넓은 영역은 그대로 쓴다 (가로로 넓어지는 것은 허용 — #141)', () {
+      expect(KeypadMetrics.fitSize(const Size(800, 300)), const Size(800, 300));
 
       final tall = KeypadMetrics.fitSize(const Size(360, 900));
       expect(tall.width, 360);
       expect(tall.height, 360 / CalcTheme.keypadMinAspectRatio);
     });
 
+    test('넓은 배열도 폭은 영역 폭 전체이고, 블록이 세로로 길어지지 않게 높이만 줄인다 (#141)', () {
+      for (final area in const [
+        Size(825, 300),
+        Size(1248, 464),
+        Size(2400, 400),
+        Size(700, 900),
+      ]) {
+        final s = KeypadMetrics.fitSize(area, KeypadArrangement.wide);
+        expect(s.width, area.width, reason: '$area');
+        final block = area.width / (2 + CalcTheme.keypadWideSectionGapRatio);
+        expect(
+          s.height,
+          moreOrLessEquals(
+            math.min(
+              area.height,
+              block /
+                  (CalcTheme.keypadMinAspectRatio *
+                      KeypadMetrics.wideHeightFactor),
+            ),
+          ),
+          reason: '$area',
+        );
+      }
+    });
+
+    test(
+      '비유한 폭은 0으로 본다 (호출 측은 유한한 영역을 넘긴다 — CalcKeypad는 fallbackSize로 바꾼다)',
+      () {
+        expect(
+          KeypadMetrics.fitSize(const Size(double.infinity, double.infinity)),
+          Size.zero,
+        );
+      },
+    );
+
     test('0 이하 영역도 예외 없이 0 크기가 된다', () {
       expect(KeypadMetrics.fitSize(Size.zero), Size.zero);
       final m = KeypadMetrics.compute(Size.zero, TextScaler.noScaling);
       expect(m.legendFontSize, greaterThan(0));
       expect(m.mainLabelFontSize, greaterThan(0));
+    });
+  });
+
+  // 실제 번들 글꼴로 잰다 (테스트 글꼴은 글자 폭이 넓어 폭 기준에 먼저 걸린다). 글꼴 등록은 이후 테스트에도 남으므로
+  // main의 맨 끝 그룹에 둔다.
+  group('실제 글꼴 기준 글자 크기 상한 (#141)', () {
+    setUpAll(loadBundledFonts);
+
+    test('폰 키패드(가장 넓은 폰 본체 424dp 이하)에는 상한이 걸리지 않는다 (실제 글꼴 — 폭 기준이 덜 줄인다)', () {
+      // 세로 폰의 키패드는 폭 기준 최대 높이(폭 / 가로세로비 하한)를 넘지 않는다.
+      for (final width in [304.0, 374.0, 424.0]) {
+        final area = Size(width, width / CalcTheme.keypadMinAspectRatio);
+        for (final scale in [1.0, 1.3]) {
+          final m = KeypadMetrics.compute(area, TextScaler.linear(scale));
+          expect(
+            m.mainLabelFontSize,
+            lessThan(CalcTheme.keyMainLabelMaxFontSize),
+            reason: '$area ×$scale',
+          );
+          expect(
+            m.legendFontSize,
+            lessThan(CalcTheme.keyLegendMaxFontSize),
+            reason: '$area ×$scale',
+          );
+        }
+      }
+    });
+
+    test('실물 크기 키패드(480×640dp)의 글자는 상한 이하이고, 상한은 그 글자를 크게 넘지 않는다', () {
+      // 상한의 근거 (CalcTheme.keyMainLabelMaxFontSize): #141 전 최대 키패드의 글자 크기를 올림한 값이다.
+      final m = KeypadMetrics.compute(
+        const Size(480, 640),
+        TextScaler.noScaling,
+      );
+      expect(
+        m.mainLabelFontSize,
+        inInclusiveRange(
+          CalcTheme.keyMainLabelMaxFontSize - 0.5,
+          CalcTheme.keyMainLabelMaxFontSize,
+        ),
+      );
+      expect(
+        m.legendFontSize,
+        inInclusiveRange(
+          CalcTheme.keyLegendMaxFontSize - 0.5,
+          CalcTheme.keyLegendMaxFontSize,
+        ),
+      );
     });
   });
 }
@@ -1570,9 +1796,19 @@ void _cursorPadShapeTests() {
         (tester) async {
           // #64 전에는 그림 구역만 눌려 ◀·▶가 함수 키 셀의 0.48~0.59배였다(가로로 긴 셀일수록 작았다).
           // 셀 여백과 외곽 밖을 터치 영역에 넣어 ◀·▶ 0.81배 이상, ▲·▼ 1.27배 이상이 된다(측정값).
+          // 화면을 영역 크기로 넓혀 키패드가 테스트 화면(800×600)에 잘리지 않게 한다(780×900 등).
+          _setViewSize(tester, area);
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
           final cell = tester.getRect(find.byType(CursorPad));
+          // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
+          // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 1.2배 아래로 내려간다
+          // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 #159). 그 크기([_wideCellAreas])는
+          // 아래 "가로로 넓어져도" 테스트가 절대 넓이로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
+          if (cell.width / cell.height > 2.2) {
+            expect(_wideCellAreas, contains(area));
+            return;
+          }
           final sin = tester.getSize(_button(CalcKeyId.sin));
           final g = CursorPadGeometry(pad.size);
           final bounds = cell.shift(-pad.topLeft);
