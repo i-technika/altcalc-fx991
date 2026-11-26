@@ -9,7 +9,9 @@ argument-hint: <마일스톤 에픽 이슈 번호>
 
 # 마일스톤 완료 및 main 머지 (`/close-ms <번호>`)
 
-입력: `$ARGUMENTS` = 마일스톤 에픽 이슈 번호
+입력: `$ARGUMENTS` = 마일스톤 에픽 이슈 번호 (`<번호>`)
+
+**M 번호 `<N>`은 에픽 제목의 `[M<N>]`에서 읽는다.** 에픽 번호와 다르다(CLAUDE.md "마일스톤 대응 표" — 예: 에픽 #6 → M8, 브랜치 `milestone/m8`).
 
 > 규칙의 기준은 [CLAUDE.md](../../../CLAUDE.md)이다. `main` 머지는 되돌리기 어려운 작업이므로
 > **4단계 머지 직전에 반드시 사용자에게 최종 확인**을 받는다.
@@ -22,22 +24,24 @@ gh issue list --milestone "<마일스톤 이름>" --state open --json number,tit
 - `milestone` 라벨이 없으면 중단한다.
 - 열린 서브이슈가 있으면 목록을 보여 주고 단일 선택으로 묻는다 (CLAUDE.md "질의 규칙"):
   "남은 서브이슈를 먼저 처리 (Recommended)" / "다음 마일스톤으로 옮기고 진행" / "그대로 진행".
-  - 옮길 때 실기기 확인 이슈는 다음 마일스톤이 아니라 M8·에픽 #6(GitHub 마일스톤 번호 6)으로 옮긴다(CLAUDE.md "브랜치/PR 규칙", #185). 에뮬레이터·실물 대조 이슈는 다음 마일스톤으로 옮긴다.
+  - 옮길 곳은 과제 성격으로 정한다(CLAUDE.md "마일스톤 대응 표"): 실기기 확인 이슈는 M8·에픽 #6(GitHub 번호 6, #185),
+    실물 대조 100종·스토어 빌드 성격도 M8, 그 밖(에뮬레이터 확인 등)은 다음 M의 마일스톤·에픽이다.
+  - 옮길 때 마일스톤만 바꾸지 말고 상위 에픽도 바꾼다: GraphQL `removeSubIssue`로 옛 에픽에서 뗀 뒤 `/fix-issue` 9단계 B 블록을 새 에픽 번호로 다시 실행한다.
 
 ## 2. 마일스톤 브랜치 최종 점검
 ```bash
-git checkout milestone/m<번호> && git pull --ff-only origin milestone/m<번호>
+git checkout milestone/m<N> && git pull --ff-only origin milestone/m<N>
 git fetch origin main && git merge-base --is-ancestor origin/main HEAD || echo "main이 앞서 있음 → 병합 필요"
 flutter analyze && flutter test
 ```
 - `main`이 앞서 있으면 `git merge origin/main`으로 반영 후 푸시한다 (충돌 시 충돌 파일과 각 해결안을 보여 주고 단일 선택으로 묻는다 — 추천안에 `(Recommended)`).
 - [milestone.md](../../../milestone.md)의 해당 마일스톤 체크박스와 제목 `[ ]`를 `[x]`로 갱신해 커밋·푸시한다:
-  `docs: Mark milestone M<번호> complete in milestone.md (#<번호>)`
+  `docs: Mark milestone M<N> complete in milestone.md (#<번호>)`
 - 에픽 이슈 본문의 체크리스트도 완료 항목을 `[x]`로 갱신한다 (`gh issue edit <번호> --body-file ...`).
 
 ## 3. PR Ready 전환 및 전체 CI
 ```bash
-gh pr list --head milestone/m<번호> --json number,url,isDraft
+gh pr list --head milestone/m<N> --json number,url,isDraft
 gh pr ready <PR번호>
 gh pr checks <PR번호> --watch --fail-fast
 ```
@@ -68,4 +72,5 @@ bash .claude/scripts/set-project-status.sh <PR번호> Done
 ```bash
 git checkout main && git pull --ff-only origin main
 ```
-- 머지 커밋, CI 결과 요약, 다음 마일스톤 에픽 번호를 보고하고 `/open-ms <다음 번호>`를 안내한다.
+- 머지 커밋, CI 결과 요약, 다음 마일스톤(M<N+1>)의 에픽 번호를 CLAUDE.md "마일스톤 대응 표"에서 찾아 보고하고 `/open-ms <그 에픽 번호>`를 안내한다
+  (에픽 번호는 M 번호 순서대로가 아니다 — 예: M5(#5) 다음은 M6(#191)).
