@@ -22,6 +22,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dar
 import 'package:material_ui/material_ui.dart';
 
 import '../../preview/key_preview_main.dart';
+import '../support/screen_arrangement.dart';
 
 /// 개발용 미리보기 실행기(#21)가 앱 코드 변경에 맞춰 계속 동작하는지 지킨다.
 /// (`flutter analyze`가 컴파일을, 이 테스트가 실행·입력 기록을, CI 웹 빌드가 웹 컴파일을 검증한다.)
@@ -687,7 +688,7 @@ void main() {
               arrangement,
               reason: key,
             );
-            // 폴더블 기기로 판정되어도(앱의 힌지 센서) 배치는 같다.
+            // 폴더블 기기로 판정되어도(앱의 시작 판정·화면 정보 기억) 배치는 같다.
             expect(
               FormFactor.arrangementOf(
                 posed.size,
@@ -1261,6 +1262,23 @@ void main() {
         }
       });
     }
+
+    testWidgets('짧은 창 프리셋: 분할 화면 위는 좌우 분할, 작은 팝업 창은 안내다 (README, #38·#141)', (
+      tester,
+    ) async {
+      await _pumpPreview(tester);
+      int indexOf(String name) =>
+          previewDevices.indexWhere((d) => d.name == name);
+
+      await _selectDevice(tester, indexOf('분할 화면 위'));
+      expect(tester.takeException(), isNull);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+
+      await _selectDevice(tester, indexOf('작은 팝업 창'));
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsOneWidget);
+    });
 
     testWidgets('창이 기기 화면을 그릴 수 없을 만큼 좁으면 안내 문구를 보인다', (tester) async {
       // 넓은 배치에서 창 높이가 여백(16×2)+캡션(24)보다 낮은 경우

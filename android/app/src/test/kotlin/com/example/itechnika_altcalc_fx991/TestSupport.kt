@@ -173,18 +173,32 @@ internal class FakeBinaryMessenger : BinaryMessenger {
         if (handler == null) handlers.remove(channel) else handlers[channel] = handler
     }
 
-    /** Dart의 `invokeMethod`처럼 [channel]에 메서드 호출을 넣고 응답을 돌려준다 */
+    /** Dart의 `invokeMethod`처럼 [channel]에 메서드 호출을 넣고, 바로(호출 안에서) 온 응답을 돌려준다 */
     fun invokeMethod(channel: String, method: String, arguments: Any? = null): MethodReply {
+        val replies = startMethod(channel, method, arguments)
+        if (replies.size != 1) throw AssertionError("응답은 정확히 한 번이어야 한다: ${replies.size}번")
+        return replies.single()
+    }
+
+    /**
+     * [channel]에 메서드 호출을 넣고 응답을 받을 목록을 돌려준다 — 나중에 답하는 메서드용.
+     * 응답이 오면 목록에 쌓이므로, 테스트가 메인 루퍼를 돌린 뒤 목록을 본다.
+     */
+    fun startMethod(channel: String, method: String, arguments: Any? = null): List<MethodReply> {
         val handler = handlers[channel] ?: throw AssertionError("채널 $channel 에 처리기가 없다")
         // 코덱은 다 쓴 위치의 버퍼를 돌려주고, 엔진은 읽을 위치로 되돌려 건넨다.
         val message = StandardMethodCodec.INSTANCE.encodeMethodCall(MethodCall(method, arguments))
         message.flip()
-        val replies = mutableListOf<ByteBuffer?>()
-        handler.onMessage(message) { replies += it }
-        if (replies.size != 1) throw AssertionError("응답은 정확히 한 번이어야 한다: ${replies.size}번")
-        val reply = replies.single() ?: return MethodReply.NotImplemented
-        reply.flip()
-        return MethodReply.Success(StandardMethodCodec.INSTANCE.decodeEnvelope(reply))
+        val replies = mutableListOf<MethodReply>()
+        handler.onMessage(message) { reply ->
+            replies += if (reply == null) {
+                MethodReply.NotImplemented
+            } else {
+                reply.flip()
+                MethodReply.Success(StandardMethodCodec.INSTANCE.decodeEnvelope(reply))
+            }
+        }
+        return replies
     }
 
     /** 플랫폼이 [channel]로 보낸 이벤트(성공 봉투)를 순서대로 푼다 */

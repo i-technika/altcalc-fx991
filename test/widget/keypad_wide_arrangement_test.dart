@@ -99,60 +99,53 @@ void main() {
       );
     });
 
-    test('fitSize: 영역 안, 블록 폭 ≤ 최대 폭, 함수부 셀 비는 표준 키패드 범위와 같다', () {
-      // 표준 키패드의 함수부 셀 가로/세로 비 범위 (가로/세로 비 하한·상한 키패드)
-      final low = _functionCellAspect(
-        KeypadMetrics.compute(
-          Size(360, 360 / CalcTheme.keypadMinAspectRatio),
-          TextScaler.noScaling,
-        ),
-      );
-      final high = _functionCellAspect(
-        KeypadMetrics.compute(
-          Size(360 * CalcTheme.keypadMaxAspectRatio, 360),
-          TextScaler.noScaling,
-        ),
-      );
-      for (final area in const [
-        _foldTabletop,
-        _flipTabletop,
-        Size(685, 318.5), // Pixel Fold 세로 반 접힘 — 폭에 묶인다
-        Size(2000, 300), // 아주 넓은 영역 — 블록 폭 상한
-        Size(600, 600),
-        Size(300, 100),
-        Size(double.infinity, double.infinity),
-      ]) {
-        final s = KeypadMetrics.fitSize(area, KeypadArrangement.wide);
-        expect(s.width, lessThanOrEqualTo(area.width), reason: '$area');
-        expect(s.height, lessThanOrEqualTo(area.height), reason: '$area');
-        final m = KeypadMetrics.compute(
-          area,
-          TextScaler.noScaling,
-          arrangement: KeypadArrangement.wide,
+    test(
+      'fitSize: 영역 폭 전체, 함수부 셀은 표준 키패드보다 세로로 길어지지 않는다 (#141 — 가로 상한 없음)',
+      () {
+        // 표준 키패드의 함수부 셀 가로/세로 비 하한 (가로/세로 비 하한 키패드)
+        final low = _functionCellAspect(
+          KeypadMetrics.compute(
+            Size(360, 360 / CalcTheme.keypadMinAspectRatio),
+            TextScaler.noScaling,
+          ),
         );
-        expect(m.size, s, reason: '$area');
-        // 블록 사이 간격 = 블록 폭 × 비율 (fitSize의 폭 단위와 치수 계산의 블록 폭이 맞는다)
+        for (final area in const [
+          _foldTabletop,
+          _flipTabletop,
+          Size(685, 318.5), // Pixel Fold 세로 반 접힘 — 폭에 묶인다
+          Size(2000, 300), // 아주 넓은 영역 — 블록이 가로로 넓어진다
+          Size(600, 600),
+          Size(300, 100),
+        ]) {
+          final s = KeypadMetrics.fitSize(area, KeypadArrangement.wide);
+          expect(s.width, area.width, reason: '$area');
+          expect(s.height, lessThanOrEqualTo(area.height), reason: '$area');
+          final m = KeypadMetrics.compute(
+            area,
+            TextScaler.noScaling,
+            arrangement: KeypadArrangement.wide,
+          );
+          expect(m.size, s, reason: '$area');
+          // 블록 사이 간격 = 블록 폭 × 비율 (fitSize의 폭 단위와 치수 계산의 블록 폭이 맞는다)
+          expect(
+            m.sectionGap,
+            moreOrLessEquals(
+              m.blockWidth * CalcTheme.keypadWideSectionGapRatio,
+            ),
+            reason: '$area',
+          );
+          expect(
+            _functionCellAspect(m),
+            greaterThanOrEqualTo(low - 1e-9),
+            reason: '$area',
+          );
+        }
         expect(
-          m.sectionGap,
-          moreOrLessEquals(m.blockWidth * CalcTheme.keypadWideSectionGapRatio),
-          reason: '$area',
+          KeypadMetrics.fitSize(Size.zero, KeypadArrangement.wide),
+          Size.zero,
         );
-        expect(
-          m.blockWidth,
-          lessThanOrEqualTo(CalcTheme.keypadMaxWidth + 1e-9),
-          reason: '$area',
-        );
-        expect(
-          _functionCellAspect(m),
-          inInclusiveRange(low - 1e-9, high + 1e-9),
-          reason: '$area',
-        );
-      }
-      expect(
-        KeypadMetrics.fitSize(Size.zero, KeypadArrangement.wide),
-        Size.zero,
-      );
-    });
+      },
+    );
 
     test('preferredArrangementFor: 넓은 배열의 키가 클 때만 넓은 배열이다', () {
       // Fold 가로 반 접힘: 19.9 → 39.9dp
