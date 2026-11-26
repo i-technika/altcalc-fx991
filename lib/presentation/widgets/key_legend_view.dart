@@ -308,7 +308,10 @@ final class _PathOp extends _Op {
   final List<Offset> points;
   final double strokeWidth;
 
-  const _PathOp(this.points, this.strokeWidth);
+  /// 마지막 점에서 첫 점으로 닫는지 (빈 칸 테두리)
+  final bool closed;
+
+  const _PathOp(this.points, this.strokeWidth, {this.closed = false});
 }
 
 /// 배치한 조각: 폭과 잉크 위끝·아래끝(기준선 기준, 위가 +), 그리기 명령.
@@ -412,7 +415,7 @@ class _LegendLayout {
             ),
             fill,
           );
-        case _PathOp(:final points, :final strokeWidth):
+        case _PathOp(:final points, :final strokeWidth, :final closed):
           final path = Path();
           for (final (i, p) in points.indexed) {
             final c = toCanvas(at + p);
@@ -422,6 +425,7 @@ class _LegendLayout {
               path.lineTo(c.dx, c.dy);
             }
           }
+          if (closed) path.close();
           canvas.drawPath(
             path,
             Paint()
@@ -507,12 +511,20 @@ class _Builder {
   _Piece layout(KeyLegend legend, double fontSize) => switch (legend) {
     LegendText(:final text) => _text(text, fontSize),
     LegendRow(:final children) => _row(children, fontSize),
-    LegendScript(:final base, :final superscript, :final subscript) => _script(
-      base,
-      superscript,
-      subscript,
-      fontSize,
-    ),
+    LegendScript(
+      :final base,
+      :final superscript,
+      :final subscript,
+      :final subscriptOnBaseline,
+    ) =>
+      _script(
+        base,
+        superscript,
+        subscript,
+        fontSize,
+        subscriptOnBaseline: subscriptOnBaseline,
+      ),
+    LegendBox(:final shape, :final filled) => _box(shape, filled, fontSize),
     LegendLimits(:final base, :final over, :final under) => _limits(
       base,
       over,
@@ -575,8 +587,9 @@ class _Builder {
     KeyLegend base,
     KeyLegend? superscript,
     KeyLegend? subscript,
-    double fontSize,
-  ) {
+    double fontSize, {
+    bool subscriptOnBaseline = false,
+  }) {
     final basePiece = layout(base, fontSize);
     final scriptSize = fontSize * CalcTheme.keyLegendScriptScale;
     final gap = fontSize * CalcTheme.keyLegendScriptGap;
@@ -599,11 +612,14 @@ class _Builder {
     }
     if (subscript != null) {
       final sub = layout(subscript, scriptSize);
-      // 기본 깊이에 두되, 바탕 잉크가 더 깊으면(∫·log의 g) 아래첨자 아래끝을 바탕 아래끝에 맞춘다.
-      final drop = math.max(
-        fontSize * CalcTheme.keyLegendSubscriptDrop,
-        sub.inkBottom - basePiece.inkBottom,
-      );
+      // 기본 깊이에 두되, 바탕 잉크가 더 깊으면(∫) 아래첨자 아래끝을 바탕 아래끝에 맞춘다.
+      // 기준선에 두는 아래첨자(`log`의 밑 칸 — #169 사진 대조)는 아래끝을 기준선에 둔다.
+      final drop = subscriptOnBaseline
+          ? sub.inkBottom
+          : math.max(
+              fontSize * CalcTheme.keyLegendSubscriptDrop,
+              sub.inkBottom - basePiece.inkBottom,
+            );
       ops.addAll(sub.shifted(x, -drop));
       top = math.max(top, sub.inkTop - drop);
       bottom = math.min(bottom, sub.inkBottom - drop);
@@ -612,8 +628,60 @@ class _Builder {
     return _Piece(x + scriptWidth, top, bottom, ops);
   }
 
-  /// 위아래 끝 — 바탕을 [CalcTheme.keyLegendLimitBaseScale]배, 끝 칸을 [CalcTheme.keyLegendLimitScale]배로 줄여
-  /// 바탕 잉크 위·아래에 [CalcTheme.keyLegendLimitGap]만큼 띄워 가운데로 쌓는다(#169 — 실물 ∑ 각인).
+  /// 직접 그리는 칸 ([LegendBox], #169). 크기는 ∑ 각인 기준 — ∑ 잉크 높이(글자 크기 ×
+  /// [CalcTheme.keyLegendLimitBaseScale] × ∑ 잉크 범위)에 사진 비율([CalcTheme.keyLegendSumBoxHeightRatio] 등)을 곱한다.
+  /// - [LegendBoxShape.sumLimit]: 아래끝이 기준선 — [_limits]가 ∑ 위·아래로 옮긴다.
+  /// - [LegendBoxShape.sumOperand]: 세로 가운데가 분수 축 높이([CalcTheme.keyLegendFractionAxis]) — 쌓은 ∑의 가운데와 같다.
+  /// 빈 칸은 테두리 선(바깥 끝이 칸 크기)으로, 채운 칸은 칸 전체를 칠한다.
+  _Piece _box(LegendBoxShape shape, bool filled, double fontSize) {
+    final sigma = KeyLegendView.glyphInk['∑']!;
+    final sigmaInk =
+        (sigma.$2 - sigma.$1) * fontSize * CalcTheme.keyLegendLimitBaseScale;
+    final height = sigmaInk * CalcTheme.keyLegendSumBoxHeightRatio;
+    final width =
+        sigmaInk *
+        switch (shape) {
+          LegendBoxShape.sumLimit => CalcTheme.keyLegendSumLimitWidthRatio,
+          LegendBoxShape.sumOperand => CalcTheme.keyLegendSumOperandWidthRatio,
+        };
+    final bottom = switch (shape) {
+      LegendBoxShape.sumLimit => 0.0,
+      LegendBoxShape.sumOperand =>
+        fontSize * CalcTheme.keyLegendFractionAxis - height / 2,
+    };
+    // 본문 칸은 쌓은 ∑와 끝 칸 간격만큼 띄운다(사진 약 1px).
+    final left = switch (shape) {
+      LegendBoxShape.sumLimit => 0.0,
+      LegendBoxShape.sumOperand => fontSize * CalcTheme.keyLegendLimitGap,
+    };
+    // 조각 좌표(위가 +): rect.top이 아래끝, rect.bottom이 위끝이다(`_BarOp`와 같은 규칙).
+    final rect = Rect.fromLTRB(left, bottom, left + width, bottom + height);
+    final _Op op;
+    if (filled) {
+      op = _BarOp(rect);
+    } else {
+      // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다.
+      final stroke = math.min(
+        _paintStroke(fontSize * CalcTheme.keyLegendBoxStroke),
+        math.min(width, height) / 2,
+      );
+      final r = rect.deflate(stroke / 2);
+      op = _PathOp(
+        [
+          Offset(r.left, r.top),
+          Offset(r.right, r.top),
+          Offset(r.right, r.bottom),
+          Offset(r.left, r.bottom),
+        ],
+        stroke,
+        closed: true,
+      );
+    }
+    return _Piece(rect.right, rect.bottom, rect.top, [(Offset.zero, op)]);
+  }
+
+  /// 위아래 끝 — 바탕을 [CalcTheme.keyLegendLimitBaseScale]배로 줄이고, 끝 칸을 바탕 잉크 위·아래에
+  /// [CalcTheme.keyLegendLimitGap]만큼 띄워 가운데로 쌓는다(#169 — 실물 ∑ 각인).
   /// 쌓은 전체 잉크의 가운데를 분수 가로줄 높이([CalcTheme.keyLegendFractionAxis])에 맞춘다 — 옆 칸(◼)과 분수
   /// 각인처럼 같은 높이에 놓이고, 전체 높이가 가장 높은 각인(`d/dx◼`)을 넘지 않는다(테스트로 고정).
   _Piece _limits(
@@ -626,9 +694,9 @@ class _Builder {
       base,
       fontSize * CalcTheme.keyLegendLimitBaseScale,
     );
-    final limitSize = fontSize * CalcTheme.keyLegendLimitScale;
-    final overPiece = layout(over, limitSize);
-    final underPiece = layout(under, limitSize);
+    // 끝 칸([LegendBox])은 각인 글자 크기 기준으로 ∑ 크기에 맞춰 그린다(`_box`).
+    final overPiece = layout(over, fontSize);
+    final underPiece = layout(under, fontSize);
     final gap = fontSize * CalcTheme.keyLegendLimitGap;
     final width = math.max(
       basePiece.width,

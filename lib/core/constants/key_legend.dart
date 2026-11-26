@@ -8,7 +8,7 @@ import 'package:meta/meta.dart';
 // `x^◼`는 x 오른쪽 위의 작은 칸). 한 줄 문자열로는 이 모양을 나타낼 수 없으므로 각인을 구조로 담는다.
 //
 // - 글자만 있는 각인은 [LegendText] 하나다(`sin`, `SOLVE` 등 — 화면에서는 지금처럼 `Text`로 그린다).
-// - 2차원 각인은 [LegendRow]·[LegendScript]·[LegendLimits]·[LegendFraction]·[LegendRadical]을 조합한다.
+// - 2차원 각인은 [LegendRow]·[LegendScript]·[LegendLimits]·[LegendFraction]·[LegendRadical]·[LegendBox]를 조합한다.
 //   그리는 쪽은 `presentation/widgets/key_legend_view.dart`(`KeyLegendView`)다.
 // - 이 파일은 도메인 계층에서도 쓰도록 UI 패키지에 의존하지 않는다.
 //
@@ -119,8 +119,16 @@ final class LegendScript extends KeyLegend {
   /// 아래첨자 (오른쪽 아래). 없으면 `null`.
   final KeyLegend? subscript;
 
-  const LegendScript(this.base, {this.superscript, this.subscript})
-    : assert(superscript != null || subscript != null, '첨자가 하나는 있어야 한다');
+  /// 아래첨자 아래끝을 기준선에 둔다(내리지 않는다). `log◼◻`의 밑 칸 — 실물은 작은 칸이 기준선 위에 앉아 있고
+  /// g의 내림 획까지 내려가지 않는다(Quick Start Guide 1쪽 제품 사진, #169).
+  final bool subscriptOnBaseline;
+
+  const LegendScript(
+    this.base, {
+    this.superscript,
+    this.subscript,
+    this.subscriptOnBaseline = false,
+  }) : assert(superscript != null || subscript != null, '첨자가 하나는 있어야 한다');
 
   @override
   String get plainText {
@@ -180,14 +188,22 @@ final class LegendScript extends KeyLegend {
       other is LegendScript &&
       other.base == base &&
       other.superscript == superscript &&
-      other.subscript == subscript;
+      other.subscript == subscript &&
+      other.subscriptOnBaseline == subscriptOnBaseline;
 
   @override
-  int get hashCode => Object.hash(LegendScript, base, superscript, subscript);
+  int get hashCode => Object.hash(
+    LegendScript,
+    base,
+    superscript,
+    subscript,
+    subscriptOnBaseline,
+  );
 
   @override
   String toString() =>
-      'LegendScript($base, sup: $superscript, sub: $subscript)';
+      'LegendScript($base, sup: $superscript, sub: $subscript'
+      '${subscriptOnBaseline ? ', sub on baseline' : ''})';
 }
 
 /// 바탕 바로 위·아래에 작게 쌓은 끝 칸 (`∑`의 위아래 끝 — #169).
@@ -229,6 +245,50 @@ final class LegendLimits extends KeyLegend {
 
   @override
   String toString() => 'LegendLimits($base, over: $over, under: $under)';
+}
+
+/// 글자(`◼`·`◻`) 대신 직접 그리는 입력 칸의 모양 (#169)
+enum LegendBoxShape {
+  /// ∑ 위아래 끝 칸 — 납작한 직사각형(사진 9×4px, ∑ 잉크 7×7px 대비)
+  sumLimit,
+
+  /// ∑ 오른쪽 본문 칸 — 납작한 직사각형(사진 8×4px), 세로 가운데가 ∑ 가운데와 같다
+  sumOperand,
+}
+
+/// 글자 대신 직사각형으로 그리는 입력 칸 (#169). 크기와 자리는 [shape]마다 그리는 쪽(`KeyLegendView`)이 정한다.
+///
+/// 실물 각인의 칸은 글꼴의 정사각형 `◼`·`◻`와 달리 자리에 따라 가로세로 비가 다른 직사각형이다. 지금은 ∑ 각인만
+/// 실물 비율로 그린다 — 다른 각인의 칸 모양은 후속 이슈에서 다룬다. 한 줄 표기와 칸 개수 검사([texts])에서는
+/// 글자 `◼`(채움)·`◻`(빈 칸)와 같다.
+final class LegendBox extends KeyLegend {
+  /// 칸 모양
+  final LegendBoxShape shape;
+
+  /// 채운 칸(`◼` — 커서가 처음 들어가는 칸)인지, 빈 칸(`◻`)인지
+  final bool filled;
+
+  const LegendBox(this.shape, {required this.filled});
+
+  /// 같은 뜻의 글자 (`◼`·`◻`)
+  String get glyph => filled ? '◼' : '◻';
+
+  @override
+  String get plainText => glyph;
+
+  @override
+  Iterable<LegendText> get texts => [LegendText(glyph)];
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegendBox && other.shape == shape && other.filled == filled;
+
+  @override
+  int get hashCode => Object.hash(LegendBox, shape, filled);
+
+  @override
+  String toString() =>
+      'LegendBox(${shape.name}, ${filled ? 'filled' : 'empty'})';
 }
 
 /// 위아래로 쌓고 가로줄을 그은 분수 (`◼/◻`, `d/dx`).

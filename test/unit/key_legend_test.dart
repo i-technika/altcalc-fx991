@@ -144,6 +144,76 @@ void main() {
     );
   });
 
+  group('위아래 끝(LegendLimits)·직접 그리는 칸(LegendBox)·기준선 아래첨자 (#169)', () {
+    test('LegendLimits의 한 줄 표기는 바탕 → 아래 끝 → 위 끝 순서다', () {
+      const limits = LegendLimits(
+        LegendText('∑'),
+        over: LegendText('n'),
+        under: LegendText('k'),
+      );
+      expect(limits.plainText, '∑kn');
+      expect(limits.texts.map((t) => t.text).toList(), ['∑', 'n', 'k']);
+    });
+
+    test('LegendLimits는 같은 조각의 LegendScript와 다르고, 구조가 같으면 같다(상수가 아니어도)', () {
+      KeyLegend limits(String over) => LegendLimits(
+        LegendText('∑'),
+        over: LegendText(over),
+        under: LegendText('◻'),
+      );
+      expect(limits('◻'), limits('◻'));
+      expect(limits('◻').hashCode, limits('◻').hashCode);
+      expect(limits('◻'), isNot(limits('◼')));
+      expect(
+        limits('◻'),
+        isNot(
+          const LegendScript(
+            LegendText('∑'),
+            superscript: LegendText('◻'),
+            subscript: LegendText('◻'),
+          ),
+        ),
+      );
+    });
+
+    test('LegendBox는 한 줄 표기·글자 조각이 ◼(채움)·◻(빈 칸)이고, 모양·채움이 같으면 같다', () {
+      const filled = LegendBox(LegendBoxShape.sumOperand, filled: true);
+      const empty = LegendBox(LegendBoxShape.sumLimit, filled: false);
+      expect(filled.plainText, '◼');
+      expect(empty.plainText, '◻');
+      expect(filled.texts.map((t) => t.text).toList(), ['◼']);
+      expect(empty.texts.map((t) => t.text).toList(), ['◻']);
+      expect(
+        LegendBox(LegendBoxShape.values.first, filled: true),
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+      );
+      expect(
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+        isNot(const LegendBox(LegendBoxShape.sumOperand, filled: true)),
+      );
+      expect(
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+        isNot(const LegendBox(LegendBoxShape.sumLimit, filled: false)),
+      );
+      expect(filled, isNot(const LegendText('◼')));
+    });
+
+    test('기준선 아래첨자(subscriptOnBaseline)는 한 줄 표기는 같고 구조는 다르다', () {
+      const onBaseline = LegendScript(
+        LegendText('log'),
+        subscript: LegendText('◼'),
+        subscriptOnBaseline: true,
+      );
+      const dropped = LegendScript(
+        LegendText('log'),
+        subscript: LegendText('◼'),
+      );
+      expect(onBaseline.plainText, dropped.plainText);
+      expect(onBaseline, isNot(dropped));
+      expect(onBaseline.hashCode, isNot(dropped.hashCode));
+    });
+  });
+
   test('texts는 구조 안의 모든 글자 조각을 돌려준다', () {
     const legend = LegendRow([
       LegendScript(

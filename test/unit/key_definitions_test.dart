@@ -242,6 +242,8 @@ void main() {
               check(base, reason);
               check(over, reason);
               check(under, reason);
+            case LegendBox():
+              break;
             case LegendFraction(:final numerator, :final denominator):
               check(numerator, reason);
               check(denominator, reason);

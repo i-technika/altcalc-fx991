@@ -229,15 +229,20 @@ class CalcKeyDef {
 // 실물 키캡처럼 분수는 위아래로 쌓고, 지수 칸은 오른쪽 위, 밑 칸은 오른쪽 아래에 작게 그린다.
 // 주석의 한 줄 표기는 [KeyLegend.plainText]다.
 //
-// 실물 대조 (#169, Quick Start Guide 1쪽 제품 사진 — 키캡 부분을 6배 확대해 봄):
-// - ∫◻◻◼(메인): 끝 칸 두 개가 ∫ **오른쪽** 위·아래에 붙는다(위 칸은 ∫ 윗끝 옆, 아래 칸은 ∫ 아랫끝 옆). 둘 다 빈 칸,
-//   본문은 채운 칸이다 → [LegendScript]의 위·아래첨자.
-// - ∑◻◻◼(SHIFT): 끝 칸 두 개가 ∑ **바로 위·아래 가운데**에 쌓인다(오른쪽 첨자가 아니다). 둘 다 빈 칸, 오른쪽 본문은
-//   채운 칸이다 → [LegendLimits]. #155에서는 사진을 보지 못해 오른쪽 첨자로 두었던 것을 고쳤다.
-// - 나머지는 사진과 같다: 대분수 `◼ ◻/◻`(채운 정수 칸이 분수 가운데 높이, 분수 두 칸은 빈 칸), `d/dx◼`, `a b/c⇔d/c`
-//   (작게 쌓은 분수 둘), `√◼`·`∛◼`(작은 3이 근호 왼쪽 위), `◼√◻`(채운 지수 칸이 근호 왼쪽 위), `log◼◻`(채운 밑 칸이
-//   아래첨자), `x^◼`·`10^◼`·`e^◼`(채운 칸이 위첨자), 분수 키 `◼/◻`(분자 채움·분모 빈 칸).
-//   사진 해상도(키캡 각인 높이 약 10px)로는 칸 크기 비율까지는 잴 수 없어 크기는 #155의 값을 그대로 둔다.
+// 실물 대조 (#169, Quick Start Guide 1쪽 제품 사진 `All_CASIO_QuickStartGuide_fx-991EX_fx-570EX_page-0001.jpg` —
+// 원본 1275×1650을 원본 픽셀로 재고, 키캡 부분을 6배 확대해 봄. 각인 높이 약 13~17px라 칸 크기도 잴 수 있다):
+// - **자리**(칸이 첨자·분수·근호·위아래 끝 중 어디에 있는지, 채운 칸·빈 칸)
+//   - ∑◻◻◼(SHIFT): 끝 칸 두 개가 ∑ **바로 위·아래 가운데**에 쌓인다(오른쪽 첨자가 아니다) → [LegendLimits]로 고쳤다.
+//     칸은 ∑에 맞춘 납작한 직사각형(사진 끝 칸 9×4px·본문 칸 8×4px, ∑ 7×7px)이라 [LegendBox]로 직접 그린다.
+//   - log◼◻: 채운 밑 칸은 작은 정사각형으로 **아래끝이 기준선**(o의 아래끝 높이)이다. g의 내림 획까지 내려가지 않는다
+//     → `subscriptOnBaseline`으로 고쳤다(#155는 g 아래끝에 맞췄다).
+//   - ∫◻◻◼(메인): 끝 칸 두 개가 ∫ **오른쪽** 위·아래 → [LegendScript]의 위·아래첨자로 맞다.
+//   - 나머지도 맞다: 대분수 `◼ ◻/◻`(채운 정수 칸이 분수 가운데 높이, 분수 두 칸은 빈 칸), `d/dx◼`, `a b/c⇔d/c`(작게
+//     쌓은 분수 둘), `√◼`·`∛◼`(작은 3이 근호 왼쪽 위), `◼√◻`(채운 지수 칸이 근호 왼쪽 위), `x^◼`·`10^◼`·`e^◼`(채운 칸이
+//     위첨자), 분수 키 `◼/◻`(분자 채움·분모 빈 칸).
+// - **모양**(칸의 가로세로 비)은 ∑ 각인 말고는 아직 사진과 다르다 — 실물 칸은 자리마다 비가 다른 직사각형인데
+//   (log 진수 칸 약 6×13px로 세로로 길고, ∫ 본문 칸 약 12×6px로 가로로 길며, ∫ 아래 끝 칸은 ∫ 기울기를 따라 위 끝
+//   칸보다 약 4px 왼쪽) 앱은 글꼴의 정사각형 `◼`·`◻`를 쓴다. 칸 모양을 맞출지는 #186에서 정한다.
 
 const _box = LegendText('◼');
 const _emptyBox = LegendText('◻');
@@ -254,10 +259,12 @@ const _derivative = LegendRow([
   _box,
 ]);
 
-/// `∑◻◻◼` — ∑ 바로 아래·위에 쌓은 끝 칸, 그다음 본문 칸 (#169 — 실물은 오른쪽 첨자가 아니라 위아래에 쌓는다)
+/// `∑◻◻◼` — ∑ 바로 아래·위에 쌓은 납작한 끝 칸, 그다음 ∑ 가운데 높이의 납작한 본문 칸 (#169 — 실물은 오른쪽 첨자가
+/// 아니라 위아래에 쌓고, 칸은 글꼴 정사각형이 아니라 ∑ 크기에 맞춘 직사각형이다)
+const _sumLimit = LegendBox(LegendBoxShape.sumLimit, filled: false);
 const _sum = LegendRow([
-  LegendLimits(LegendText('∑'), over: _emptyBox, under: _emptyBox),
-  _box,
+  LegendLimits(LegendText('∑'), over: _sumLimit, under: _sumLimit),
+  LegendBox(LegendBoxShape.sumOperand, filled: true),
 ]);
 
 /// `◼/◻` — 위 ◼, 가로줄, 아래 ◻
@@ -284,9 +291,9 @@ const _power = LegendScript(LegendText('x'), superscript: _box);
 /// `◼√◻` — 근호 왼쪽 위에 작은 지수 칸
 const _nthRoot = LegendRadical(_emptyBox, index: _box);
 
-/// `log◼◻` — log 아래첨자 칸(밑), 그다음 진수 칸
+/// `log◼◻` — log 오른쪽에 작은 밑 칸(아래끝이 기준선 — #169 사진 대조), 그다음 진수 칸
 const _logBase = LegendRow([
-  LegendScript(LegendText('log'), subscript: _box),
+  LegendScript(LegendText('log'), subscript: _box, subscriptOnBaseline: true),
   _emptyBox,
 ]);
 

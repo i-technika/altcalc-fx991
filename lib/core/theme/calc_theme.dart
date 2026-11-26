@@ -531,15 +531,16 @@ abstract final class CalcTheme {
   // 각인 높이는 키패드 통일 글자 크기 계산(`KeypadMetrics`)이 폭과 함께 잰다.
   //
   // 실물·화면 대조 (#169):
-  // - 모양·위치: Quick Start Guide 1쪽 제품 사진과 대조했다 — ∑의 끝 칸만 위아래에 쌓도록 고쳤고(`LegendLimits`,
-  //   아래 `keyLegendLimit*`), 나머지는 사진과 같다(`key_definitions.dart` "2차원 각인" 절).
+  // - 자리: Quick Start Guide 1쪽 제품 사진과 대조했다 — ∑의 끝 칸을 위아래로 쌓고(`LegendLimits`, 칸은 사진 비율의
+  //   `LegendBox` — 아래 `keyLegendLimit*`·`keyLegendSum*`), log 밑 칸을 기준선에 두도록 고쳤다. 나머지 자리는 사진과
+  //   같다. 칸 모양(가로세로 비)은 ∑ 말고는 사진과 달라 #186에서 정한다(`key_definitions.dart` "2차원 각인" 절).
   // - 작은 쌓은 분수의 크기: Android 에뮬레이터(1080×2400, 420dpi = 2.625배, 본체 폭 약 396dp)에 실제 앱을 띄워 기기
   //   픽셀로 쟀다. 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려진다. 크기(기기 픽셀, 1px ≈ 0.06mm):
-  //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px, ∑ 약 15px·
-  //     위아래 칸 약 6px
+  //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px,
+  //     ∑ 약 12px(≈ 0.7mm)·위아래 빈 칸 약 16×7px·본문 칸 약 15×7px
   //   · 글자 배율 130%: 약 1.3배(분수 `d` 약 17px, `dx` 약 13px)
-  //   사람이 실제 화면에서 읽을 수 있는지는 에뮬레이터로 판단할 수 없어, [keyLegendFractionScale]은 그대로 두고 실기기
-  //   확인(#174)에서 정한다.
+  //   사람이 실제 화면에서 읽을 수 있는지(짧은 창 하한에서 빈 칸·채운 칸이 구분되는지 포함)는 에뮬레이터로 판단할 수
+  //   없어, [keyLegendFractionScale]·∑ 크기는 그대로 두고 실기기 확인(#174)에서 정한다.
 
   /// 위첨자·아래첨자 글자 크기 비율
   static const double keyLegendScriptScale = 0.66;
@@ -549,24 +550,36 @@ abstract final class CalcTheme {
   static const double keyLegendSuperscriptRaise = 0.36;
 
   /// 아래첨자 기준선 기본 내림. 이 깊이에서 아래첨자 아래끝이 바탕 잉크 아래끝보다 높으면 바탕 아래끝까지
-  /// 내린다(`log`의 g 아래로 맞춘 밑 칸, ∫의 아래 끝 칸).
+  /// 내린다(∫의 아래 끝 칸). `log`의 밑 칸은 내리지 않고 아래끝을 기준선에 둔다(`subscriptOnBaseline`, #169 사진 대조).
   static const double keyLegendSubscriptDrop = 0.22;
 
   /// 바탕 글자와 첨자 사이 간격
   static const double keyLegendScriptGap = 0.03;
 
-  /// 위아래 끝 각인(`LegendLimits` — ∑)의 바탕(∑) 글자 크기 비율 (#169).
-  /// 실물은 ∑ 위·아래에 작은 칸을 쌓는다(Quick Start Guide 1쪽 제품 사진). 그대로 쌓으면 각인이 한 줄보다 크게
-  /// 높아지므로 ∑를 줄인다 — 쌓은 높이(∑ 잉크 0.954em × 0.62 + 칸 2개 + 간격 2개 ≈ 1.13em)가 가장 높은 각인
-  /// `d/dx◼`(약 1.14em)를 넘지 않아 키패드 통일 각인 크기가 작아지지 않는다(테스트로 고정). 사진의 ∑ : 칸 높이
-  /// ≈ 2.2 : 1에 가깝다(0.59 : 0.24 ≈ 2.45 : 1).
-  static const double keyLegendLimitBaseScale = 0.62;
+  /// ∑ 각인(`LegendLimits` + `LegendBox`)의 ∑ 글자 크기 비율 (#169, 사용자 결정 "사진 비율을 높이 예산 안에서").
+  ///
+  /// 실물(Quick Start Guide 1쪽 제품 사진, 원본 픽셀로 잼)의 ∑ 각인: ∑ 잉크 7×7px, 위·아래 끝 칸 9×4px(빈 칸),
+  /// 오른쪽 본문 칸 8×4px(채운 칸, 세로 가운데가 ∑와 같다), 칸과 ∑ 사이 약 1px. 쌓은 높이 17px는 가장 높은 각인
+  /// `d/dx◼`(15px)보다 높다. 앱은 쌓은 높이를 `d/dx◼`(약 1.14em) 안에 두어 키패드 통일 각인 크기를 지키고, 그 안에서
+  /// 사진의 칸 비율(아래 `keyLegendSum*Ratio`)을 그대로 쓴다 — 그래서 ∑는 작아진다(잉크 0.954em × 0.5 ≈ 0.48em, x높이
+  /// 0.54em 정도). 쌓은 높이 ≈ 0.48 + 2 × 0.27 + 2 × 0.04 ≈ 1.10em(테스트로 고정).
+  static const double keyLegendLimitBaseScale = 0.5;
 
-  /// 위아래 끝 칸(∑ 위·아래 ◻) 글자 크기 비율 (#169)
-  static const double keyLegendLimitScale = 0.5;
+  /// ∑ 각인 칸(위·아래 끝, 오른쪽 본문)의 높이 (∑ 잉크 높이 대비) — 사진 4px / 7px (#169)
+  static const double keyLegendSumBoxHeightRatio = 4 / 7;
 
-  /// 위아래 끝 칸과 바탕(∑) 잉크 사이 간격 (#169)
-  static const double keyLegendLimitGap = 0.03;
+  /// ∑ 위·아래 끝 칸의 폭 (∑ 잉크 높이 대비 — ∑ 잉크는 거의 정사각형) — 사진 9px / 7px (#169)
+  static const double keyLegendSumLimitWidthRatio = 9 / 7;
+
+  /// ∑ 오른쪽 본문 칸의 폭 (∑ 잉크 높이 대비) — 사진 8px / 7px (#169)
+  static const double keyLegendSumOperandWidthRatio = 8 / 7;
+
+  /// ∑ 위·아래 끝 칸과 ∑ 잉크 사이 간격 (#169 — 사진 약 1px, ∑ 높이의 약 1/7)
+  static const double keyLegendLimitGap = 0.04;
+
+  /// 직접 그리는 빈 칸(`LegendBox`)의 테두리 두께 — 글꼴 `◻`의 획과 비슷하게. [keyLegendMinStroke]보다 가늘면 그
+  /// 두께로 칠하되, 칸 높이의 절반을 넘지 않는다(작은 칸이 채운 칸처럼 메워지지 않게).
+  static const double keyLegendBoxStroke = 0.05;
 
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
   static const double keyLegendFractionScale = 0.65;
