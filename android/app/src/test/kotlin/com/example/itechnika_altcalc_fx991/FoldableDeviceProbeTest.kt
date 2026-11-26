@@ -38,13 +38,15 @@ class FoldableDeviceProbeTest {
     val publisher = WindowLayoutInfoPublisherRule()
 
     private val layout = FakeFoldingLayoutSource()
-    private val replies = mutableListOf<Boolean>()
+    private val replies = mutableListOf<FoldableDeviceProbe.Answer>()
 
     private fun probe(declared: Boolean = false, sensor: Boolean = false, pc: Boolean = false) = FoldableDeviceProbe(
         hingeSignals = { FoldableDeviceProbe.HingeSignals(declared, sensor, pc) },
         layoutSource = layout,
         handler = Handler(Looper.getMainLooper()),
     )
+
+    private fun answer(foldable: Boolean, fold: Boolean?) = FoldableDeviceProbe.Answer(foldable, fold)
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
@@ -55,53 +57,50 @@ class FoldableDeviceProbeTest {
     // ---- 판정 규칙 ----
 
     @Test
-    fun `힌지 기능 선언이나 센서가 있으면 창 배치 정보를 기다리지 않고 바로 true`() {
+    fun `힌지 기능 선언이나 센서가 있어도 창 배치 정보 첫 값을 기다려 접힘과 함께 답한다 (#158)`() {
         for ((declared, sensor) in listOf(true to false, false to true, true to true)) {
-            replies.clear()
-            probe(declared, sensor).query { replies += it }
-            assertEquals("declared=$declared sensor=$sensor", listOf(true), replies)
+            for (hasFold in listOf(true, false)) {
+                replies.clear()
+                probe(declared, sensor).query { replies += it }
+                assertTrue("첫 값 전에는 답하지 않는다", replies.isEmpty())
+
+                layout.emit(hasFold)
+                idle()
+
+                assertEquals("declared=$declared sensor=$sensor fold=$hasFold", listOf(answer(true, hasFold)), replies)
+            }
         }
     }
 
     @Test
-    fun `힌지 신호로 바로 답해도 창 배치 첫 값을 진단 로그로 남기고, 진단 시간이 지나면 구독을 푼다`() {
+    fun `힌지 신호가 있는데 창 배치 정보가 오지 않으면 제한 시간에 폴더블로, 접힘은 모름으로 답한다`() {
+        probe(sensor = true).query { replies += it }
+
+        idleFor(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS - 1)
+        assertTrue(replies.isEmpty())
+        idleFor(1)
+
+        assertEquals(listOf(answer(true, null)), replies)
+    }
+
+    @Test
+    fun `힌지 신호가 있는데 창 배치 정보 구독이 실패하면 바로 폴더블로, 접힘은 모름으로 답한다`() {
+        layout.failure = IllegalStateException("구독 실패 (테스트)")
         val probe = probe(declared = true)
         probe.query { replies += it }
-        assertEquals(listOf(true), replies)
-        assertEquals("진단용 구독", 1, layout.activeCount)
-        assertEquals(0, probe.pendingCount)
 
-        layout.emit(false)
-        idle()
-
-        assertEquals("답은 그대로", listOf(true), replies)
-        val diagnostics = logs().filter { it.startsWith("폴더블 판정 진단: 창 배치 첫 값 접힘=없음") }
-        assertEquals(logs().toString(), 1, diagnostics.size)
-
-        idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
-        assertEquals(0, layout.activeCount)
-        assertEquals(0, probe.activeCount)
-        assertEquals(listOf(true), replies)
-    }
-
-    @Test
-    fun `힌지 신호로 바로 답한 뒤 진단 구독이 실패해도 다시 답하지 않는다`() {
-        layout.failure = IllegalStateException("구독 실패 (테스트)")
-        val probe = probe(sensor = true)
-        probe.query { replies += it }
-
-        assertEquals(listOf(true), replies)
+        assertEquals(listOf(answer(true, null)), replies)
         assertEquals(0, probe.activeCount)
     }
 
     @Test
-    fun `cancel - 힌지 신호로 답한 진단 구독도 풀고 다시 답하지 않는다`() {
+    fun `cancel - 힌지 신호가 있으면 기다리던 판정에 폴더블로 답한다`() {
         val probe = probe(declared = true)
         probe.query { replies += it }
 
         probe.cancel()
 
-        assertEquals(listOf(true), replies)
+        assertEquals(listOf(answer(true, null)), replies)
         assertEquals(0, layout.activeCount)
     }
 
@@ -113,7 +112,7 @@ class FoldableDeviceProbeTest {
         layout.emit(false)
         idle()
 
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, false)), replies)
     }
 
     @Test
@@ -126,21 +125,34 @@ class FoldableDeviceProbeTest {
             layout.emit(hasFold)
             idle()
 
-            assertEquals(listOf(hasFold), replies)
+            assertEquals(listOf(answer(hasFold, hasFold)), replies)
         }
     }
 
     @Test
     fun `판정 로그에 신호별 값과 결과를 남긴다`() {
-        probe().query { replies += it }
+        probe(sensor = true).query { replies += it }
         layout.emit(true)
         idle()
 
         assertTrue(
             logs().toString(),
             logs().any {
-                it.startsWith("폴더블 판정: 기능 선언=false, 센서=false, ChromeOS=false, 창 배치 접힘=접힘") && it.endsWith("→ true")
+                it.startsWith("폴더블 판정: 기능 선언=false, 센서=true, ChromeOS=false, 창 배치 첫 값 접힘=접힘 (") &&
+                    it.endsWith("→ 폴더블=true, 접힘=있음")
             },
+        )
+    }
+
+    @Test
+    fun `채널 값 - 폴더블 여부와 첫 값 접힘(모르면 null)을 map으로 보낸다`() {
+        assertEquals(
+            mapOf(FoldableDeviceProbe.KEY_FOLDABLE to true, FoldableDeviceProbe.KEY_FOLD to null),
+            answer(true, null).toChannelValue(),
+        )
+        assertEquals(
+            mapOf(FoldableDeviceProbe.KEY_FOLDABLE to false, FoldableDeviceProbe.KEY_FOLD to false),
+            answer(false, false).toChannelValue(),
         )
     }
 
@@ -162,18 +174,21 @@ class FoldableDeviceProbeTest {
     }
 
     @Test
-    fun `첫 값만 답이다 - 뒤에 다른 값이 오면 답은 그대로 두고 로그로 남긴다`() {
-        probe().query { replies += it }
+    fun `첫 값만 답이다 - 뒤에 앞 값과 다른 값이 올 때만 로그로 남긴다`() {
+        probe(declared = true).query { replies += it }
 
         layout.emit(false)
         layout.emit(false)
         layout.emit(true)
+        layout.emit(true)
         idle()
 
-        assertEquals(listOf(false), replies)
+        assertEquals("힌지 신호로 폴더블, 접힘은 첫 값", listOf(answer(true, false)), replies)
         val later = logs().filter { it.startsWith("폴더블 판정 뒤") }
-        assertEquals("다른 값만 한 번 남긴다: $later", 1, later.size)
-        assertTrue(later.single(), later.single().contains("창 배치 접힘=접힘"))
+        // 힌지 신호가 있어도 답(폴더블=true)이 아니라 앞 창 배치 값과 비교한다 — 같은 값이 이어지면 남기지 않는다
+        assertEquals("바뀐 때만 한 번: $later", 1, later.size)
+        assertTrue(later.single(), later.single().startsWith("폴더블 판정 뒤 창 배치 접힘=접힘 ("))
+        assertTrue(later.single(), later.single().endsWith("앞 값=없음)"))
     }
 
     @Test
@@ -183,13 +198,13 @@ class FoldableDeviceProbeTest {
         assertTrue("구독 함수 안에서는 답하지 않는다", replies.isEmpty())
 
         idle()
-        assertEquals(listOf(true), replies)
+        assertEquals(listOf(answer(true, true)), replies)
         idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
         assertEquals(0, layout.activeCount)
     }
 
     @Test
-    fun `창 배치 정보가 오지 않으면 제한 시간에 false로 답한다`() {
+    fun `창 배치 정보가 오지 않으면 제한 시간에 폴더블 아님, 접힘 모름으로 답한다`() {
         val probe = probe()
         probe.query { replies += it }
 
@@ -197,13 +212,14 @@ class FoldableDeviceProbeTest {
         assertTrue("제한 시간 전에는 답하지 않는다", replies.isEmpty())
 
         idleFor(1)
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, null)), replies)
         assertEquals(0, probe.pendingCount)
 
-        // 늦게 온 값은 답을 바꾸지 않는다(진단 로그만)
+        // 늦게 온 첫 값은 답을 바꾸지 않는다(진단 로그만)
         layout.emit(true)
         idle()
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, null)), replies)
+        assertTrue(logs().toString(), logs().any { it.startsWith("폴더블 판정 뒤 창 배치 첫 값 접힘=접힘") })
         idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
         assertEquals(0, layout.activeCount)
     }
@@ -216,18 +232,18 @@ class FoldableDeviceProbeTest {
 
         idleFor(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS * 2)
 
-        assertEquals(listOf(true), replies)
+        assertEquals(listOf(answer(true, true)), replies)
     }
 
     @Test
-    fun `창 배치 정보 구독이 실패하면 기다리지 않고 false - 링크 오류도 잡는다`() {
+    fun `창 배치 정보 구독이 실패하면 기다리지 않고 답한다 - 링크 오류도 잡는다`() {
         for (error in listOf<Throwable>(IllegalStateException("구독 실패 (테스트)"), NoClassDefFoundError("확장 없음 (테스트)"))) {
             replies.clear()
             layout.failure = error
             val probe = probe()
             probe.query { replies += it }
 
-            assertEquals(error.toString(), listOf(false), replies)
+            assertEquals(error.toString(), listOf(answer(false, null)), replies)
             assertEquals(0, probe.activeCount)
         }
     }
@@ -243,14 +259,14 @@ class FoldableDeviceProbeTest {
         layout.emit(true)
         idle()
 
-        assertEquals(listOf(true), replies)
+        assertEquals(listOf(answer(true, true)), replies)
     }
 
     @Test
     fun `여러 번 부르면 각각 따로 구독하고 답한다`() {
         val probe = probe()
-        val first = mutableListOf<Boolean>()
-        val second = mutableListOf<Boolean>()
+        val first = mutableListOf<FoldableDeviceProbe.Answer>()
+        val second = mutableListOf<FoldableDeviceProbe.Answer>()
         probe.query { first += it }
         probe.query { second += it }
         assertEquals(2, layout.activeCount)
@@ -258,26 +274,26 @@ class FoldableDeviceProbeTest {
         layout.emit(true)
         idle()
 
-        assertEquals(listOf(true), first)
-        assertEquals(listOf(true), second)
+        assertEquals(listOf(answer(true, true)), first)
+        assertEquals(listOf(answer(true, true)), second)
     }
 
     @Test
-    fun `cancel - 기다리는 판정에 false로 답하고 구독을 풀며, 뒤에 오는 값과 제한 시간은 무시한다`() {
+    fun `cancel - 기다리는 판정에 답하고 구독을 풀며, 뒤에 오는 값과 제한 시간은 무시한다`() {
         val probe = probe()
         probe.query { replies += it }
 
         probe.cancel()
 
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, null)), replies)
         assertEquals(0, layout.activeCount)
         assertEquals(0, probe.activeCount)
         layout.emit(true)
         idleFor(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS * 2)
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, null)), replies)
         // 거듭 불러도 안전하다
         probe.cancel()
-        assertEquals(listOf(false), replies)
+        assertEquals(listOf(answer(false, null)), replies)
     }
 
     @Test
@@ -290,7 +306,7 @@ class FoldableDeviceProbeTest {
 
         probe.cancel()
 
-        assertEquals("다시 답하지 않는다", listOf(true), replies)
+        assertEquals("다시 답하지 않는다", listOf(answer(true, true)), replies)
         assertEquals(0, layout.activeCount)
         assertEquals(0, probe.activeCount)
     }
@@ -317,10 +333,10 @@ class FoldableDeviceProbeTest {
     }
 
     @Test
-    fun `실제 출처로 판정하면 첫 값으로 답하고 로그에 창 배치 값이 남는다`() {
+    fun `실제 출처로 판정하면 힌지 신호가 있어도 첫 값을 기다려 답하고 로그에 창 배치 값이 남는다`() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         FoldableDeviceProbe(
-            hingeSignals = { FoldableDeviceProbe.HingeSignals(declared = false, sensor = false) },
+            hingeSignals = { FoldableDeviceProbe.HingeSignals(declared = true, sensor = false) },
             layoutSource = WindowLayoutFoldingSource(activity),
             handler = Handler(Looper.getMainLooper()),
         ).query { replies += it }
@@ -329,8 +345,8 @@ class FoldableDeviceProbeTest {
         publisher.overrideWindowLayoutInfo(WindowLayoutInfo(listOf(FoldingFeature(activity))))
         idle()
 
-        assertEquals(listOf(true), replies)
-        assertTrue(logs().toString(), logs().any { it.contains("창 배치 접힘=접힘") })
+        assertEquals(listOf(answer(true, true)), replies)
+        assertTrue(logs().toString(), logs().any { it.contains("창 배치 첫 값 접힘=접힘") })
     }
 
     // ---- 힌지 신호 (실제 시스템 값) ----

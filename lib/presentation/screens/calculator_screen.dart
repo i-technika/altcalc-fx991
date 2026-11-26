@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/layout/form_factor.dart';
+import '../../core/layout/layout_log.dart';
 import '../../core/theme/calc_theme.dart';
 import '../../domain/models/calc_state.dart';
 import '../../domain/models/handedness.dart';
@@ -623,7 +624,8 @@ class CalcTopStripLayout {
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
-///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38).
+///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38). 앱 시작 때는
+///   `main()`이 접힘 정보가 올 때까지 첫 화면을 미뤄(#158) 첫 프레임부터 접힘선 기준 배치다.
 /// - 접기·펼치기·회전으로 배치가 바뀌어도 상태는 [calcProvider]에 있고 LCD·키패드 element도 유지된다(`_Body`).
 class CalculatorScreen extends ConsumerWidget {
   const CalculatorScreen({super.key});
@@ -1053,6 +1055,19 @@ class _Body extends ConsumerWidget {
     final tooSmall =
         KeypadMetrics.minKeyTouchHeightOf(keypad.size, keypadArrangement) <
         CalcTheme.keyTouchHeightUsableMin;
+    // 진단 로그 (#158, 앱에서만 켜진다): 배치가 바뀐 프레임마다 한 줄 — 첫 프레임 깜빡임을 logcat으로 본다.
+    // 창 크기·화면 특징이 바뀌면 부모가 새 본체 크기·배치로 이 위젯을 다시 만드므로, 여기서 MediaQuery를 읽어도
+    // 다시 빌드되는 횟수는 늘지 않는다.
+    if (LayoutLog.enabled) {
+      LayoutLog.layout(
+        chosen: arrangement,
+        drawn: drawn,
+        tooSmall: tooSmall,
+        window: MediaQuery.sizeOf(context),
+        features: MediaQuery.displayFeaturesOf(context),
+        foldableDevice: ref.read(foldableDeviceProvider).value,
+      );
+    }
     // 손잡이를 바꾸면 배치가 달라지는지 (#41 R2): 위아래 배치로 그렸어도, 반대 손잡이로는 접힘선 기준 배치가
     // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
     // 접힘선 기준 배치는 반대 손잡이로도 같은 배치이고 키패드 자리가 같으면 키패드가 옮겨 가지 않는다 — 넓은

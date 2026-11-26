@@ -41,8 +41,8 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     // 폴더블 판정 (#70): 접힘 정보(displayFeatures)는 화면이 붙은 뒤 비동기로 오므로, 힌지 신호와
-                    // 창 배치 정보 첫 값으로 시작 시점에 구분한다 — 규칙은 [FoldableDeviceProbe].
-                    "isFoldableDevice" -> probe.query { result.success(it) }
+                    // 창 배치 정보 첫 값으로 시작 시점에 구분한다 — 규칙은 [FoldableDeviceProbe]. 답은 map (#158).
+                    "isFoldableDevice" -> probe.query { result.success(it.toChannelValue()) }
                     else -> result.notImplemented()
                 }
             }

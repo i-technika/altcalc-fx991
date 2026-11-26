@@ -17,16 +17,16 @@ const _mainActivity =
 const _foldableProbe =
     'android/app/src/main/kotlin/com/example/itechnika_altcalc_fx991/FoldableDeviceProbe.kt';
 
-/// `MainActivity.kt`의 `private const val <name> = "<값>"` 값
+/// Kotlin 소스([source])의 `(private) const val <name> = "<값>"` 값
 String _kotlinConstant(String source, String name) {
   final matches = RegExp(
-    '^\\s*private const val $name = "([^"]+)"\\s*\$',
+    '^\\s*(?:private )?const val $name = "([^"]+)"\\s*\$',
     multiLine: true,
   ).allMatches(source).toList();
   expect(
     matches,
     hasLength(1),
-    reason: '$_mainActivity에 "private const val $name = \\"…\\"" 줄이 하나 있어야 한다',
+    reason: '"const val $name = \\"…\\"" 줄이 하나 있어야 한다',
   );
   return matches.single[1]!;
 }
@@ -69,6 +69,9 @@ void main() {
     expect(probe, isNot(contains('getDefaultSensor(')));
     // 메서드 이름도 맞댄다 — 한쪽만 바꾸면 Dart는 notImplemented(→ false)를 받아 늘 폴더블 아님이 된다
     expect(source, contains('"${FormFactor.foldableDeviceMethod}" ->'));
+    // 응답 map의 키도 맞댄다 (#158) — 한쪽만 바꾸면 Dart는 늘 폴더블 아님·접힘 없음으로 읽는다
+    expect(_kotlinConstant(probe, 'KEY_FOLDABLE'), FormFactor.foldableKey);
+    expect(_kotlinConstant(probe, 'KEY_FOLD'), FormFactor.foldKey);
   });
 
   test('고대비 텍스트 이벤트 채널 (#95)', () {

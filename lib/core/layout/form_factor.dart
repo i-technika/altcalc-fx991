@@ -41,6 +41,11 @@ enum ScreenArrangement {
   hingeStacked,
 }
 
+/// 앱 시작 시 폴더블 판정 결과 ([FormFactor.queryFoldableDevice], #158).
+/// - `foldable`: 폴더블 기기인지
+/// - `fold`: Android 창 배치 정보 첫 값에 접히는 부분이 있었는지 — 참이면 접힘 정보가 곧 화면 정보로 온다
+typedef FoldableStartup = ({bool foldable, bool fold});
+
 /// 기기 종류·화면 크기별로 요청할 화면 방향 정책 (#24, 폴더블은 #25)
 enum OrientationPolicy {
   /// 세로만 (폰, 폴더블 커버 화면)
@@ -101,30 +106,48 @@ abstract final class FormFactor {
   /// 1. 힌지 각도 센서 기능 선언 (`FEATURE_SENSOR_HINGE_ANGLE`, API 30+) — 제조사가 선언해야만 보고된다.
   /// 2. 힌지 각도 센서 자체 (`Sensor.TYPE_HINGE_ANGLE`, API 30+)
   /// 3. Jetpack WindowManager 창 배치 정보 첫 값의 접히는 부분 — Samsung처럼 OEM 확장으로 접힘 정보만 주는 기기 대비.
-  ///    창이 붙은 뒤 오므로 Android 쪽이 최대 500ms 기다린다(그동안 시작 화면이 남는다).
+  ///    창이 붙은 뒤 오므로 Android 쪽이 최대 500ms 기다린다(그동안 시작 화면이 남는다). 1·2가 있어도 기다린다(#158).
   ///
-  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 `false` — 앱 시작(`main()`)이
+  /// 답의 `fold`는 3의 첫 값에 접히는 부분이 있었는지다 — 참이면 [FlutterView.displayFeatures]에도 곧 오므로,
+  /// `main()`이 그것이 올 때까지 첫 화면을 미룬다(`DeviceOrientationLock.waitForFoldFeature`). 미루지 않으면 펼친
+  /// 내부 화면에서 시작할 때 첫 프레임이 위아래 배치였다가 접힘선 기준 배치로 바뀐다(#158, Pixel Fold 에뮬레이터).
+  ///
+  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 둘 다 `false` — 앱 시작(`main()`)이
   /// 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
   ///
   /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
   /// 펼치면 `DeviceOrientationLock`이 물리 화면이 바뀐 것([isOtherScreen])을 보고 폴더블로 기억한다.
-  /// 각 신호의 실기기 값은 #158에서 기록한다.
-  static Future<bool> queryFoldableDevice() async {
+  /// 에뮬레이터 기록은 Android `FoldableDeviceProbe` 주석에 있다. Samsung 실기기 기록은 #158에서 이어 한다.
+  static Future<FoldableStartup> queryFoldableDevice() async {
+    const none = (foldable: false, fold: false);
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
-      return false;
+      return none;
     }
     try {
       final result = await deviceChannel
-          .invokeMethod<bool>(foldableDeviceMethod)
+          .invokeMapMethod<String, Object?>(foldableDeviceMethod)
           .timeout(foldableQueryTimeout);
-      return result ?? false;
+      if (result == null) return none;
+      return (
+        foldable: result[foldableKey] == true,
+        fold: result[foldKey] == true,
+      );
     } on MissingPluginException {
-      return false;
+      return none;
     } catch (error) {
       debugPrint('폴더블 판정 조회 실패: $error');
-      return false;
+      return none;
     }
   }
+
+  /// [queryFoldableDevice] 응답(map)의 폴더블 여부 키 — Android `FoldableDeviceProbe.KEY_FOLDABLE`과 같아야 한다
+  @visibleForTesting
+  static const String foldableKey = 'foldable';
+
+  /// [queryFoldableDevice] 응답의 "창 배치 첫 값에 접히는 부분 있음" 키 — Android `FoldableDeviceProbe.KEY_FOLD`와 같아야 한다.
+  /// 값이 `null`(첫 값을 받지 못함)이면 `false`로 읽는다.
+  @visibleForTesting
+  static const String foldKey = 'fold';
 
   /// 폴더블 판정 조회 응답 제한 시간. Android 쪽이 창 배치 정보를 기다리는 최대 시간(`FoldableDeviceProbe`
   /// `LAYOUT_TIMEOUT_MILLIS`)보다 넉넉히 길어야 한다 — `test/unit/main_activity_source_test.dart`가 대조한다.
