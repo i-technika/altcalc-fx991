@@ -246,10 +246,24 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 
 [analysis_options.yaml](analysis_options.yaml)의 `analyzer.exclude`에 `.claude/worktrees/**`를 두어 확장이 워크트리를
 프로젝트로 보지 않게 한다(#66). 아래에서 **(소스)** 는 확장(Dart-Code 3.146) 소스로 확인한 것이다. **(실측)** 은
-사용자 설정과 분리한 VS Code(`--user-data-dir`·`--extensions-dir`)를 저장소 루트로 띄우고 확장 로그(`dart.extensionLogFile`)로 본 것이다.
+사용자 설정과 분리한 VS Code(`--user-data-dir`·`--extensions-dir`)를 저장소 루트로 띄우고 확장 로그(`dart.extensionLogFile`)로 본 것이다(#66).
+**(실사용)** 은 평소 쓰는 VS Code 1.147 창(사용자 설정·다른 확장 그대로)이 남긴 확장 로그로 본 것이다(#89).
+사용자 설정에 Dart 설정이 없어 SDK는 `.dart_tool`의 `flutterRoot`로 찾는 창이다. 창을 켤 때는 기기가 없었고,
+켜져 있는 동안 에뮬레이터가 연결됐다. 2026-11-22 오전(#66 머지 전)과 같은 날 밤(#66 머지 뒤)에 켠 창의 로그를 비교했다.
 
-- **프로젝트 목록** (소스)
-  - 연 폴더를 포함해 5단계(루트 아래 4단계, `dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
+확장 로그는 설정 없이도 남는다 (소스·실사용). `dart.extensionLogFile`이 비어 있으면 Dart 확장이 켜진 창마다
+임시 폴더(Windows는 `%TEMP%`)의 `dart-code-startup-log-<16진수>.txt`에 로그를 쓴다. 일반(General) 범주 전부와 다른 범주의 경고·오류가 들어간다.
+창이 켜질 때 새 파일이 만들어지고 창이 떠 있는 동안 계속 쓰이며, 창을 닫아도 지워지지 않는다.
+
+- 어느 창의 파일인지는 SDK 탐색 뒤에 찍히는 `Workspace name:`(연 폴더 이름)으로 가린다. 같은 이름이 여럿이면
+  맨 앞 `Log file started` 날짜·시각이 가장 늦은 파일이 지금 창이다(한가한 창은 오래 쓰지 않아 수정 시각으로는 가릴 수 없다).
+- 줄마다 찍히는 시각에는 날짜가 없다. 여러 날 켜 둔 창의 로그는 앞뒤 줄로 날짜를 짐작한다.
+- `Found projects`·`filter out excluded projects`·`Found pub status`·`Skipping pubspec change`를 찾아 본다.
+
+확장의 동작은 다음과 같다.
+
+- **프로젝트 목록**
+  - (소스) 연 폴더를 포함해 5단계(루트 아래 4단계, `dart.projectSearchDepth`)까지 `pubspec.yaml`이 있는 폴더를 모두 프로젝트로 본다.
     점 폴더도 들어간다(analyzer가 점 폴더를 분석하지 않는 것과 다르다).
   - 목록을 쓰는 모든 곳(시작 알림, pubspec 변경 처리, `Pub: Get Packages for All Projects`, 프로젝트 선택 목록, 작업·테스트 실행 등)에
     `analyzer.exclude`가 적용된다.
@@ -257,6 +271,8 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     [test/unit/analysis_options_test.dart](test/unit/analysis_options_test.dart)가 지킨다. 확장 쪽 규칙이 바뀌는 것은 테스트가 잡지 못한다.
   - analyzer는 원래 점 폴더를 건너뛰므로 `flutter analyze` 결과는 달라지지 않는다.
   - 목록은 5분 동안 캐시된다. 작업 영역 안 어디서든 `.dart_tool/package_config.json`이 바뀌면(pub get) 캐시가 바로 비워진다.
+  - (실사용) 창이 켜진 채 에뮬레이터가 연결되자 플랫폼 조회(`Checking 1 projects for supported platforms`)가 돌았다.
+    이때 찾은 워크트리 폴더 3개는 `.dart_tool` 유무와 무관하게 모두 빠져 `1 projects remain.`이었다.
 - **켜질 때**
   - (소스) 패키지가 없거나 오래된 프로젝트를 모아 "Some packages are missing or out of sync…" 알림으로 pub get을 묻는다.
     마지막 pub get 때보다 Dart SDK 메이저·마이너가 올라간 프로젝트가 하나라도 있으면, 그 알림 대신 upgrade 알림 하나로
@@ -264,16 +280,29 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     이 단계에는 묻지 않고 돌리는 경로가 없다.
   - (실측) 새 워크트리를 `.claude/worktrees/`에 만들고 창을 열면, 수정 전에는 그 워크트리가 `package_config.json` 없음으로
     알림 대상이 된다. 수정 후에는 프로젝트 목록에서 빠져 알림이 없다.
+  - (실사용) 평소 창에서도 같다.
+    - #66 머지 전에 켠 창: 워크트리 2개가 `package_config.json` 없음으로 `Found pub status for 2 folders`에 들어 알림 대상이 됐다.
+    - #66 머지 뒤에 켠 창: 워크트리 1개가 루트와 함께 잡혔지만 `1 projects remain.`으로 빠졌고, `Found pub status for 0 folders`로 알림이 없었다.
+      이때 빠진 워크트리에 `.dart_tool`이 있었는지는 기록되지 않았다.
+  - (소스) 알림 대상은 걸러진 목록에서만 고른다. 그래서 빠진 워크트리는 `.dart_tool`이 있든 없든 알림에 나오지 않는다.
 - **켜져 있는 동안 `pubspec.yaml`·`pubspec_overrides.yaml`이 생기거나 바뀌면** (소스, `dart.runPubGetOnPubspecChanges` 기본값 `always`)
   - 바뀐 파일의 절대경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 이 동작은 브랜치와 무관하다.
     - 그래서 `.claude/worktrees/`에서 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다(실측. 대조군이라 수정 전에도 같다).
+    - (실사용) 2026-11-22~26 켜 둔 창에서 워크트리 쪽 pubspec 변경에 남은 로그는 `Skipping pubspec change for ignored folder`뿐이었다.
+      출력 패널에도 루트의 `flutter (package:...)` 채널만 생겨, 워크트리에 pub get이 돈 적이 없었다.
     - 반대로 워크트리 자체를 VS Code로 열면 그 창에서는 이 자동 실행이 늘 꺼진다. pubspec을 바꾼 뒤 직접 `flutter pub get`을 한다.
   - 그 밖에는 걸러진 목록에서 오래된 프로젝트를 센다.
     - 0개이면 바뀐 폴더에, **1개이면 그 프로젝트에** 묻지 않고 돌린다. 2개 이상이면 알림을 띄운다.
-    - 루트 `pubspec.yaml`을 저장하면 루트 자신도 오래됨이 되어 보통 알림으로 간다.
+    - 루트 `pubspec.yaml`을 저장하면 루트 자신도 오래됨이 된다. 오래된 워크트리가 셈에 들면 2개 이상이 되어 알림으로 간다.
     - 그러나 루트가 이미 최신이면 오래된 것이 워크트리 하나뿐일 때 그 워크트리에 돈다. 예를 들어
       루트의 `pubspec_overrides.yaml`만 바꿨을 때(오래됨 판정에 쓰이지 않는다), 또는 터미널 `flutter pub add`가
       `package_config.json`까지 먼저 다시 썼을 때다. `analyzer.exclude`가 워크트리를 이 셈에서 빼서 막는다.
+    - (실사용) 루트 `pubspec.yaml`이 바뀐(루트 자신이 오래됨이 된) 경우를 #66 전·후로 보았다.
+      - #66 전: `package_config.json` 없는 워크트리 2개가 셈에 들어 `Found pub status for 3 folders`(알림)가 됐다.
+      - #66 후(루트에서 merge·checkout·pull): 워크트리는 `Found projects`에만 잡히고 셈에서 빠졌다.
+        루트 하나만 `Found pub status for 1 folders`에 들어 루트에만 묻지 않고 pub get이 돌았다.
+        빠진 워크트리가 오래됨이었는지는 기록되지 않았다.
+      - 루트가 이미 최신이고 워크트리만 오래된 경우는 실사용에서 관측하지 못했다.
   - 바뀐 폴더 자체는 거르지 않는다. 그래서 점으로 시작하지 않는 폴더에 워크트리를 만들면, 만드는 즉시 그 워크트리에
     pub get이 돈다(실측. 저장소 안 `wt-visible-66/`). 워크트리 위치 규칙은 이것 때문이다.
 - **루트 체크아웃의 브랜치에 달려 있다** (소스)
