@@ -9,8 +9,9 @@ import '../../core/theme/calc_theme.dart';
 /// 키캡 각인([KeyLegend])을 실물처럼 2차원으로 그리는 위젯 (#155).
 ///
 /// 분수는 위아래로 쌓고 가로줄을 긋고, 위첨자·아래첨자는 작게 올리거나 내리며, 근호는 가로줄이 피개법수를
-/// 덮는 모양으로 그린다. 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
-/// 가로줄·근호는 같은 색 선으로 그린다. 픽셀 이미지를 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
+/// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 실물 비율이 필요한 칸([LegendBox])은 글자 대신
+/// 직사각형으로 직접 그린다. 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
+/// 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
 ///
 /// ## 크기·기준선
 /// - 크기는 [textScaler]를 반영한 글자 크기로 배치한 각인의 폭과, **한 줄 상자**(같은 글자 크기의
@@ -432,7 +433,8 @@ class _LegendLayout {
               ..color = color
               ..style = PaintingStyle.stroke
               ..strokeWidth = strokeWidth
-              ..strokeJoin = StrokeJoin.round
+              // 근호 꺾임은 둥글게, 빈 칸 테두리는 실물처럼 각지게
+              ..strokeJoin = closed ? StrokeJoin.miter : StrokeJoin.round
               ..strokeCap = StrokeCap.butt,
           );
       }
@@ -660,10 +662,12 @@ class _Builder {
     if (filled) {
       op = _BarOp(rect);
     } else {
-      // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다.
+      // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다. 테두리는 칸 안쪽에 칠하므로
+      // 남는 구멍은 `칸 − 2 × 두께`다 — 최소 두께로 굵어져도 두께를 칸의 1/4 이하로 두어 구멍이 칸의 절반 이상 남게
+      // 한다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
       final stroke = math.min(
         _paintStroke(fontSize * CalcTheme.keyLegendBoxStroke),
-        math.min(width, height) / 2,
+        math.min(width, height) / 4,
       );
       final r = rect.deflate(stroke / 2);
       op = _PathOp(
@@ -686,8 +690,8 @@ class _Builder {
   /// 각인처럼 같은 높이에 놓이고, 전체 높이가 가장 높은 각인(`d/dx◼`)을 넘지 않는다(테스트로 고정).
   _Piece _limits(
     KeyLegend base,
-    KeyLegend over,
-    KeyLegend under,
+    LegendBox over,
+    LegendBox under,
     double fontSize,
   ) {
     final basePiece = layout(

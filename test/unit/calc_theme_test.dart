@@ -881,6 +881,55 @@ void main() {
       }
     });
 
+    test(
+      '∑ 각인 상수 (#169): 칸은 납작하고 끝 칸이 본문 칸보다 넓으며, 쌓은 높이가 d/dx◼(약 1.141em)보다 낮다',
+      () {
+        expect(CalcTheme.keyLegendLimitBaseScale, inExclusiveRange(0.3, 1));
+        expect(CalcTheme.keyLegendSumBoxHeightRatio, inExclusiveRange(0, 1));
+        expect(CalcTheme.keyLegendSumLimitWidthRatio, greaterThan(1));
+        expect(
+          CalcTheme.keyLegendSumLimitWidthRatio,
+          greaterThan(CalcTheme.keyLegendSumOperandWidthRatio),
+        );
+        expect(
+          CalcTheme.keyLegendSumOperandWidthRatio,
+          greaterThan(CalcTheme.keyLegendSumBoxHeightRatio),
+        ); // 본문 칸도 납작하다
+        expect(CalcTheme.keyLegendLimitGap, inExclusiveRange(0, 0.1));
+        expect(CalcTheme.keyLegendBoxStroke, inExclusiveRange(0, 0.1));
+        // ∑ 잉크 범위 0.954em (Noto Sans Math, KeyLegendView.glyphInk) — 쌓은 잉크 높이식
+        const sigma = 0.954 * CalcTheme.keyLegendLimitBaseScale;
+        const stack =
+            sigma +
+            2 * sigma * CalcTheme.keyLegendSumBoxHeightRatio +
+            2 * CalcTheme.keyLegendLimitGap;
+        expect(stack, lessThan(1.141));
+      },
+    );
+
+    test(
+      '빈 칸 테두리는 최소 두께로 굵어져도 구멍이 칸의 절반 이상 남는다 — 짧은 창 하한 각인 3.2dp부터 (#169 R2)',
+      () {
+        const sigmaRatio = 0.954 * CalcTheme.keyLegendLimitBaseScale;
+        for (var f = 3.2; f <= 12; f += 0.1) {
+          final height = f * sigmaRatio * CalcTheme.keyLegendSumBoxHeightRatio;
+          final width = f * sigmaRatio * CalcTheme.keyLegendSumLimitWidthRatio;
+          final short = height < width ? height : width;
+          final raw = f * CalcTheme.keyLegendBoxStroke;
+          final painted = raw > CalcTheme.keyLegendMinStroke
+              ? raw
+              : CalcTheme.keyLegendMinStroke;
+          // key_legend_view.dart `_box`와 같은 상한: 짧은 변의 1/4
+          final stroke = painted < short / 4 ? painted : short / 4;
+          expect(
+            height - 2 * stroke,
+            greaterThanOrEqualTo(height / 2 - 1e-9),
+            reason: '$f',
+          );
+        }
+      },
+    );
+
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));

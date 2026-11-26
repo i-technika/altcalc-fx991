@@ -206,19 +206,21 @@ final class LegendScript extends KeyLegend {
       '${subscriptOnBaseline ? ', sub on baseline' : ''})';
 }
 
-/// 바탕 바로 위·아래에 작게 쌓은 끝 칸 (`∑`의 위아래 끝 — #169).
+/// 바탕 바로 위·아래에 작게 쌓은 끝 칸 (`∑`의 위아래 끝 — #169). **∑ 각인 전용이다.**
 ///
 /// [LegendScript]의 첨자는 바탕 **오른쪽** 위·아래에 붙지만(∫의 끝 칸), 이 노드는 바탕 **위·아래 가운데**에 쌓는다.
 /// 실물 fx-991EX는 ∑ 각인의 끝 칸을 기호 위·아래에 둔다(Quick Start Guide 1쪽 제품 사진, #169에서 대조).
+/// 끝은 ∑ 크기에 맞춰 직접 그리는 칸([LegendBox])만 받는다 — 바탕은 줄여 그리고 끝 칸 크기는 ∑ 잉크 높이로 정하므로
+/// (`KeyLegendView`), 글자 끝(예: `n`)을 받으면 크기 규칙과 각인 높이 예산이 맞지 않는다.
 final class LegendLimits extends KeyLegend {
   /// 끝 칸이 붙는 바탕 조각 (∑)
   final KeyLegend base;
 
   /// 위 끝 (바탕 위 가운데)
-  final KeyLegend over;
+  final LegendBox over;
 
   /// 아래 끝 (바탕 아래 가운데)
-  final KeyLegend under;
+  final LegendBox under;
 
   const LegendLimits(this.base, {required this.over, required this.under});
 

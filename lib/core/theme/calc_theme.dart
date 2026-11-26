@@ -574,11 +574,13 @@ abstract final class CalcTheme {
   /// ∑ 오른쪽 본문 칸의 폭 (∑ 잉크 높이 대비) — 사진 8px / 7px (#169)
   static const double keyLegendSumOperandWidthRatio = 8 / 7;
 
-  /// ∑ 위·아래 끝 칸과 ∑ 잉크 사이 간격 (#169 — 사진 약 1px, ∑ 높이의 약 1/7)
+  /// ∑ 위·아래 끝 칸과 ∑ 잉크 사이 간격, ∑ 덩어리와 본문 칸 사이 간격 (#169). 사진은 약 1px(∑ 높이의 약 1/7)이지만,
+  /// 1/7(약 0.068em)이면 쌓은 높이가 약 1.16em으로 `d/dx◼`(약 1.14em)를 넘으므로 높이 예산 안에서 약 1/12로 둔다.
   static const double keyLegendLimitGap = 0.04;
 
   /// 직접 그리는 빈 칸(`LegendBox`)의 테두리 두께 — 글꼴 `◻`의 획과 비슷하게. [keyLegendMinStroke]보다 가늘면 그
-  /// 두께로 칠하되, 칸 높이의 절반을 넘지 않는다(작은 칸이 채운 칸처럼 메워지지 않게).
+  /// 두께로 칠하되, 칸의 짧은 변의 1/4을 넘지 않는다 — 테두리는 칸 안쪽에 칠하므로 구멍이 칸의 절반 이상 남아, 작은
+  /// 각인(짧은 창 하한 약 3.2dp)에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2, 테스트로 고정).
   static const double keyLegendBoxStroke = 0.05;
 
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)

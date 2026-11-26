@@ -563,11 +563,26 @@ void main() {
             moreOrLessEquals((sigmaL + sigmaR) / 2, epsilon: 2),
           );
         }
+        // 끝 칸은 빈 칸(가운데가 비었다), 본문 칸은 채운 칸(가운데가 칠해졌다).
+        final inkSet = ink.toSet();
+        for (final limit in [over, under]) {
+          final (l, r) = widthOf(limit);
+          final centre = ((l + r) ~/ 2, (limit.$1 + limit.$2) ~/ 2);
+          expect(inkSet.contains(centre), isFalse, reason: '빈 끝 칸 $limit');
+        }
         // 본문 칸: 사진 8×4px — 납작하고, 세로 가운데가 ∑ 가운데와 같다.
         final bodyRows = runsOf(body.map((p) => p.$2));
         expect(bodyRows, hasLength(1));
         final (bodyTop, bodyBottom) = bodyRows.single;
         expect(boxRight - boxLeft, greaterThan(bodyBottom - bodyTop));
+        expect(
+          inkSet.contains((
+            (boxLeft + boxRight) ~/ 2,
+            (bodyTop + bodyBottom) ~/ 2,
+          )),
+          isTrue,
+          reason: '채운 본문 칸',
+        );
         expect(
           (bodyTop + bodyBottom) / 2,
           moreOrLessEquals((sigma.$1 + sigma.$2) / 2, epsilon: 2),

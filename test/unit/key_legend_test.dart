@@ -146,31 +146,32 @@ void main() {
 
   group('위아래 끝(LegendLimits)·직접 그리는 칸(LegendBox)·기준선 아래첨자 (#169)', () {
     test('LegendLimits의 한 줄 표기는 바탕 → 아래 끝 → 위 끝 순서다', () {
+      // 순서가 드러나도록 위 끝만 채운 칸으로 둔다(실제 ∑ 각인은 둘 다 빈 칸).
       const limits = LegendLimits(
         LegendText('∑'),
-        over: LegendText('n'),
-        under: LegendText('k'),
+        over: LegendBox(LegendBoxShape.sumLimit, filled: true),
+        under: LegendBox(LegendBoxShape.sumLimit, filled: false),
       );
-      expect(limits.plainText, '∑kn');
-      expect(limits.texts.map((t) => t.text).toList(), ['∑', 'n', 'k']);
+      expect(limits.plainText, '∑◻◼');
+      expect(limits.texts.map((t) => t.text).toList(), ['∑', '◼', '◻']);
     });
 
     test('LegendLimits는 같은 조각의 LegendScript와 다르고, 구조가 같으면 같다(상수가 아니어도)', () {
-      KeyLegend limits(String over) => LegendLimits(
+      KeyLegend limits(bool overFilled) => LegendLimits(
         LegendText('∑'),
-        over: LegendText(over),
-        under: LegendText('◻'),
+        over: LegendBox(LegendBoxShape.sumLimit, filled: overFilled),
+        under: LegendBox(LegendBoxShape.sumLimit, filled: false),
       );
-      expect(limits('◻'), limits('◻'));
-      expect(limits('◻').hashCode, limits('◻').hashCode);
-      expect(limits('◻'), isNot(limits('◼')));
+      expect(limits(false), limits(false));
+      expect(limits(false).hashCode, limits(false).hashCode);
+      expect(limits(false), isNot(limits(true)));
       expect(
-        limits('◻'),
+        limits(false),
         isNot(
           const LegendScript(
             LegendText('∑'),
-            superscript: LegendText('◻'),
-            subscript: LegendText('◻'),
+            superscript: LegendBox(LegendBoxShape.sumLimit, filled: false),
+            subscript: LegendBox(LegendBoxShape.sumLimit, filled: false),
           ),
         ),
       );

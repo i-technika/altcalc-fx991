@@ -193,7 +193,8 @@ void main() {
 
     group('2차원 각인 (#155)', () {
       test('각인 글자에 한 줄 임시 표기(분수 /·위첨자 ^·유니코드 위첨자·근호 글자)가 없다', () {
-        // 분수·첨자·근호는 구조(LegendFraction·LegendScript·LegendRadical)로 담고 그림으로 그린다.
+        // 분수·첨자·근호·위아래 끝은 구조(LegendFraction·LegendScript·LegendRadical·LegendLimits)로 담고 그림으로
+        // 그린다. 실물 비율 칸은 LegendBox다.
         final forbidden = RegExp('[/^⁰¹²³⁴⁵⁶⁷⁸⁹⁻ˣ√∛]');
         for (final legend in _allLegends()) {
           for (final t in legend.texts) {
