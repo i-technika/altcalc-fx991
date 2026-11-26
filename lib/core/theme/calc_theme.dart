@@ -391,7 +391,8 @@ abstract final class CalcTheme {
   static const String monoFontFamily = 'NotoSansMono';
 
   /// 수학 기호 대체 폰트 패밀리 이름 (번들 글꼴 Noto Sans Math).
-  /// [monoFontFamily]에 없는 `∑`·`∛`·`∫`를 채운다. 고정폭이 아니므로 LCD 줄 글자에는 쓰지 않는다.
+  /// [monoFontFamily]에 없는 `∑`·`∫`를 채운다(`∛`도 있지만 키캡 근호는 그림으로 그린다, #155).
+  /// 고정폭이 아니므로 LCD 줄 글자에는 쓰지 않는다.
   static const String mathFontFamily = 'NotoSansMath';
 
   /// [monoFontFamily]에 없는 글자를 찾을 대체 폰트 (모두 번들 글꼴이다).
@@ -522,6 +523,62 @@ abstract final class CalcTheme {
 
   /// 키 라벨에 반영하는 시스템 글자 크기 배율 상한 (넘침은 FittedBox가 추가로 막는다)
   static const double keyMaxTextScaleFactor = 1.3;
+
+  // ── 2차원 각인 배치 (#155) ──
+  // 분수·위첨자·아래첨자·근호 각인(`KeyLegendView`)의 배치 비율. 모두 그 조각을 품은 글자 크기 대비이며,
+  // 세로 위치는 기준선 위가 +다. 잉크 범위(글리프의 실제 위아래 끝)는 `KeyLegendView.glyphInk` 표를 쓴다.
+  // 분수·첨자를 넣어도 각인 높이가 한 줄(1em)을 크게 넘지 않도록 정했다 — 가장 높은 `d/dx◼`가 약 1.14em이다
+  // (각인 띠는 글자 크기의 1.25em — 테스트로 고정).
+  // 각인 높이는 키패드 통일 글자 크기 계산(`KeypadMetrics`)이 폭과 함께 잰다.
+
+  /// 위첨자·아래첨자 글자 크기 비율
+  static const double keyLegendScriptScale = 0.66;
+
+  /// 위첨자 기준선 기본 올림 (`x²`·`x^◼`·`e^◼`·`sin⁻¹`·`cos⁻¹`·`tan⁻¹`은 이 높이 — −1이 같은 높이다).
+  /// 이 높이에서 위첨자 위끝이 바탕 잉크 위끝보다 낮으면 바탕 위끝까지 올린다(`10^◼`·`×10ˣ`·∫·∑의 위 끝 칸).
+  static const double keyLegendSuperscriptRaise = 0.36;
+
+  /// 아래첨자 기준선 기본 내림. 이 깊이에서 아래첨자 아래끝이 바탕 잉크 아래끝보다 높으면 바탕 아래끝까지
+  /// 내린다(`log`의 g 아래로 맞춘 밑 칸, ∫·∑의 아래 끝 칸).
+  static const double keyLegendSubscriptDrop = 0.22;
+
+  /// 바탕 글자와 첨자 사이 간격
+  static const double keyLegendScriptGap = 0.03;
+
+  /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
+  static const double keyLegendFractionScale = 0.65;
+
+  /// 각인 전체가 분수 하나일 때(분수 키 `◼/◻`)의 분자·분모 글자 크기 비율 — 한 줄 높이를 채운다
+  static const double keyLegendDisplayFractionScale = 0.95;
+
+  /// 분수 가로줄 가운데 높이 (기준선 위)
+  static const double keyLegendFractionAxis = 0.28;
+
+  /// 분수 가로줄 두께
+  static const double keyLegendFractionBarThickness = 0.06;
+
+  /// 분수 가로줄과 분자·분모 잉크 사이 간격
+  static const double keyLegendFractionGap = 0.04;
+
+  /// 분수 가로줄이 분자·분모보다 좌우로 더 나가는 길이
+  static const double keyLegendFractionOverhang = 0.06;
+
+  /// 거듭제곱근 지수(`∛`의 3, `◼√◻`의 ◼) 글자 크기 비율
+  static const double keyLegendRadicalIndexScale = 0.6;
+
+  /// 근호 선 두께
+  static const double keyLegendRadicalStroke = 0.07;
+
+  /// 근호 가로줄과 피개법수 잉크 위끝 사이 간격
+  static const double keyLegendRadicalGap = 0.10;
+
+  /// 근호 왼쪽 부분(가로줄 앞까지) 폭
+  static const double keyLegendRadicalSignWidth = 0.46;
+
+  /// 분수 가로줄·근호 선의 최소 두께 (dp) — 작은 각인에서도 선이 사라지지 않게 한다
+  /// 0.5dp는 기기 배율 2~3에서 1~1.5 물리 픽셀이다. 더 굵게 하면 작은 각인(글자 5~7dp)에서 굵어진 만큼이
+  /// 분수 가로줄·근호 가로줄 옆 여백을 다 덮는다(#155 R2 — 0.75dp일 때 5.7dp 글자의 분수 여백 0.02dp).
+  static const double keyLegendMinStroke = 0.5;
 
   /// 키캡 그림자 색
   static const Color keyShadow = Color(0x66000000);
@@ -690,10 +747,17 @@ abstract final class CalcTheme {
   /// 커서 패드 X자 홈·외곽선·허브 테두리 두께 (dp). 색은 [keyBorder](본체 대비 3:1 이상).
   static const double cursorPadDividerWidth = 2.0;
 
-  // 커서 패드 모양 (#43) — 실물 fx-991EX(Quick Start Guide 1쪽 제품 사진)처럼 가로로 긴 둥근 마름모를
-  // X자 홈으로 4분할하고, 가운데에 누를 수 없는 검은 허브를 둔다. 치수는 패드 크기 비례이고,
+  // 커서 패드 모양 (#43) — 실물 fx-991EX처럼 가로로 긴 둥근 마름모를 X자 홈으로 4분할하고,
+  // 가운데에 누를 수 없는 검은 허브를 둔다. 치수는 패드 크기 비례이고,
   // 패드 상자의 가로/세로 비는 [cursorPadMinAspectRatio]~[cursorPadMaxAspectRatio]로 제한해
   // 폰·폴더블·태블릿 어디서나 "가로로 긴" 모양을 유지한다(셀이 범위를 벗어나면 가운데에 줄여 놓는다).
+  //
+  // 실측 (#65): Wikimedia Commons의 fx-991EX 정면 사진 두 장(서로 다른 기기·촬영자)에서 네 방향 키 윗면이 이루는
+  // 외곽에 모델을 겹쳐 맞췄다. 두 사진의 값이 서로 맞았다. 사진 픽셀 기준 정밀도는 대략 ±2px(패드 높이의 약 1~2%)이다.
+  // - "File:Fx-991EX.jpg"(932×1920, 정면 오려낸 사진): 패드 268×172px
+  // - "File:Casio fx-991EX Scientific Calculator.jpg"(3120×4160): 패드 534×349px
+  // 실물에서 키 사이 홈은 폭이 패드 높이의 약 9%인 어두운 틈이고, 허브는 별도 부품이 아니라 그 틈과 같은 어두운 바닥이다.
+  // 여기서는 홈을 [cursorPadDividerWidth] 선으로 그린다. 터치 경계가 틈 없이 맞닿아야 하기 때문이다.
 
   /// 커서 패드 상자 최소 가로/세로 비 — 세로로 긴 셀(일반 폰 약 1.3)에서도 납작한 마름모를 유지한다.
   static const double cursorPadMinAspectRatio = 1.4;
@@ -701,30 +765,47 @@ abstract final class CalcTheme {
   /// 커서 패드 상자 최대 가로/세로 비 — 가로로 긴 셀에서 지나치게 납작해지지 않게 한다. #141 전에는 셀이 약 2.2까지였고,
   /// 폭 상한을 푼 뒤로는 정사각형 창 768×768(위아래 배치)에서 약 2.3, 낮고 넓은 창에서는 4 이상이 된다. 그런 셀에서 패드는
   /// 이 비율에서 멈추고 남는 폭은 ◀·▶ 터치 영역이 받는다 — ▲·▼ 터치 넓이는 줄지 않지만 넓어진 함수 키 셀과 견준
-  /// 비율은 낮아진다(768×768: 1.18배, #64 기준 1.2배). 패드 모양을 넓힐지는 #159에서 정한다.
-  /// 실물은 약 1.6이다(제품 사진 눈대중). 범위 안이면 셀을 그대로 써서 터치 넓이를 잃지 않는다.
+  /// 비율은 낮아진다. 패드 모양을 넓힐지는 #159에서 정한다.
+  /// 실측(#65)은 약 1.53이다. 큰 사진(534×349px)에서 1.53이 나왔다. 오려낸 사진(268×172px)은 보정 전 1.56이고,
+  /// 본체 가로세로비가 실물(77×165.5mm)보다 약 4% 가로로 늘어나 있어 보정하면 약 1.50이다.
+  /// 범위 안이면 셀을 그대로 써서 터치 넓이를 잃지 않는다.
   static const double cursorPadMaxAspectRatio = 1.8;
 
   /// 커서 패드 외곽 지수 p — 패드 반폭·반높이로 정규화한 좌표 (u, v)에서 |u+v|ᵖ + |u−v|ᵖ = 2
   /// (45° 돌린 Lamé 곡선). 2이면 타원, 클수록 마름모에 가까워진다. 2보다 크면 꼭짓점 곡률이 유한해
   /// 꼭짓점이 둥글다(|u|ⁿ + |v|ⁿ 초타원은 1 < n < 2에서 꼭짓점이 뾰족해진다).
+  /// 실측(#65): 두 사진의 외곽(▲ 윗변 호, ◀·▶ 끝의 뭉툭한 꼭짓점)이 p = 3 곡선과 2px 이내로 겹친다.
   static const double cursorPadOutlineExponent = 3.0;
 
   /// 커서 패드 X자 홈의 기울기 k — 정규화 좌표에서 |u| ≤ k·|v|이면 ▲·▼, 아니면 ◀·▶ 구역이다.
-  /// 1이면 홈이 패드 상자의 대각선이고, 1보다 크면 실물처럼 ▲·▼가 넓은 사다리꼴, ◀·▶가 좁은 삼각형이 된다.
+  /// 1이면 홈이 패드 상자의 대각선이다. 1보다 작으면 홈이 대각선보다 가파르다. 그러면 ▲·▼는 위·아래 호를 따라
+  /// 휜 띠, ◀·▶는 옆으로 뭉툭한 넓은 구역이 된다.
+  /// 실측(#65) k ≈ 0.9: 홈이 외곽과 만나는 점이 두 사진 모두 정규화 좌표 (±0.57, ±0.64) 부근이다.
+  /// ▲ 윗면 폭은 패드 폭의 약 47%, ◀ 바깥 높이는 패드 높이의 약 57%이다.
+  /// 실물 홈은 중심을 지나지 않고 허브 가장자리 쪽으로 조금 가파르게 꺾인다. 직선 모델은 외곽 쪽 끝을 맞췄다.
+  /// 그려지는 홈은 허브 가장자리에서 시작하므로 차이는 허브 근처의 몇 dp뿐이다.
   /// (가운데 원은 화면 좌표의 원이라 가로로 긴 패드에서는 ▲·▼ 쪽을 더 깎는다 — 넓이 비는 k만으로 정해지지 않는다.)
-  static const double cursorPadGrooveSlope = 1.5;
+  static const double cursorPadGrooveSlope = 0.9;
 
   /// 커서 패드 가운데 허브(검은 원) 반지름 — 패드 반높이·반폭 중 짧은 쪽 대비.
-  /// 허브 지름이 패드 높이의 약 1/4이 된다(실물 사진 눈대중).
-  static const double cursorPadHubRadiusRatio = 0.25;
+  /// 실측(#65) 약 0.5: ▲·▼ 키 안쪽 끝(가운데로 오목한 V자)이 두 사진 모두 중심에서 반높이의 약 50~51%에 있다.
+  /// 그래서 허브 지름이 패드 높이의 약 1/2이다. 실물의 어두운 가운데는 가로로 조금 더 넓다.
+  /// ◀·▶ 안쪽 끝이 반폭의 약 44%, 즉 반높이의 약 67%다. 그 차이는 홈이 메워 원 하나로 근사한다.
+  static const double cursorPadHubRadiusRatio = 0.5;
 
   /// 커서 패드 데드존(누를 수 없는 가운데 원) 반지름 — 패드 반높이·반폭 중 짧은 쪽 대비.
   /// 허브보다 작게 두어, 방향이 가장 모호한 한가운데만 무시하고 허브 바깥 고리는 방향 키에 준다.
-  /// 그려진 허브 전체를 데드존으로 두면 320×568 폰에서 ▲·▼ 깊이가 23.7dp로 터치 하한 28dp 아래가 된다.
+  /// 허브를 실측대로 키운 뒤(#65)에도 그대로 둔다. 키울 여유가 거의 없다(320×568·상태바 20dp, ▲ 터치 내접원 측정).
+  /// - 0.1~0.12: 29.8dp로 같다. 이 범위에서는 홈 사이 쐐기와 셀 변이 내접원을 정한다.
+  /// - 0.2: 27.2dp로 터치 하한 28dp 아래다.
+  /// - 0.3: 25.0dp, 그려진 허브 전체(0.5): 21.0dp. 둘 다 ▲·▼ 하한(28dp의 95%) 아래다.
+  /// 그래서 그려진 허브의 약 96%는 누르면 입력된다. 허브 안에는 홈 선이 없어, 대각선 가까이를 누르면
+  /// 보이지 않는 홈 연장선(k)에 따라 방향이 갈린다.
   static const double cursorPadDeadZoneRadiusRatio = 0.1;
 
-  /// 커서 패드 허브 색 — 실물의 검은 허브. 방향 키캡([keyCursor])보다 어둡고, 둘레는 [keyBorder]로 긋는다.
+  /// 커서 패드 허브 색 — 실물의 어두운 가운데(홈 바닥과 같은 색). 방향 키캡([keyCursor])보다 어둡고,
+  /// 둘레는 [keyBorder]로 긋는다. 사진(#65)에서도 가운데는 주변 본체보다 어둡고 홈과 같은 밝기였다.
+  /// 색 값은 사진 노출에 따라 달라 실측하지 않는다.
   static const Color cursorPadHub = Color(0xFF151515);
 
   // ───────────────────────────────────────────

@@ -63,9 +63,15 @@ val mockitoVersion = "5.24.0"
 val mockitoAgent: Configuration by configurations.creating
 
 dependencies {
+    // 시작 시 폴더블 판정(#70, FoldableDeviceProbe)이 쓰는 androidx.window:window-java는 따로 적지 않는다 — Flutter
+    // 임베딩 POM이 compile 범위로 싣는다(Flutter 엔진이 displayFeatures에 쓰는 것과 같은 라이브러리·버전). 버전을 여기
+    // 고정하면 Flutter를 올릴 때 어긋나도 드러나지 않는다. 임베딩이 이 의존을 빼면 컴파일이 실패해 바로 드러난다.
     mockitoAgent("org.mockito:mockito-core:$mockitoVersion") { isTransitive = false }
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18.1")
+    // 창 배치 정보를 테스트가 정해 보내는 도구 (FoldableDeviceProbeTest — 실제 WindowLayoutFoldingSource의 연결 검사).
+    // 버전은 Flutter 임베딩이 싣는 window-java와 맞춘다(`:app:dependencies`로 확인).
+    testImplementation("androidx.window:window-testing:1.2.0")
     // Flutter 엔진의 네이티브 연결(FlutterJNI)을 대역으로 바꿔 MainActivity 생명주기를 돌린다 (MainActivityLifecycleTest)
     testImplementation("org.mockito:mockito-core:$mockitoVersion")
 }
