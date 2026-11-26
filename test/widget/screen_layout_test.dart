@@ -276,7 +276,7 @@ void main() {
     '12.9인치 iPad를 돌려도 LCD 줄 글자 크기는 크게 바뀌지 않는다 (#71 — #141 뒤로는 LCD 폭이 회전마다 바뀐다)',
     (tester) async {
       // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×362, 가로는 가로형의
-      // 활성 LCD 655×374.5다(#142). 줄 글자는 높이에 묶여 회전해도 10% 안에서 움직인다.
+      // 활성 LCD 655×374.5(블록 폭의 실물 비율 높이, #142 R2)다. 줄 글자(세로 54.1·가로 54.7dp)는 회전해도 10% 안에서 움직인다.
       const padding = EdgeInsets.only(top: 24, bottom: 20);
       double lineFont() => DefaultTextStyle.of(
         tester.element(find.byKey(const ValueKey('lcd-input-text'))),

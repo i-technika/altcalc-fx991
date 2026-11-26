@@ -166,18 +166,24 @@ _divideBodyHeight(
 /// - 높이 나누기: 세로형([CalcScreenLayout])과 같은 규칙을 위 띠 폭 전체(본체 폭)로 쓴다 — 상단 띠 최소 높이를 먼저 떼고,
 ///   LCD 목표 비율([CalcTheme.screenLcdHeightRatio]) · 최소 높이 · 최대 높이(본체 폭 / [CalcTheme.screenLcdMinAspectRatio]) 안에서
 ///   위 띠, 나머지는 키패드가 세로 한계까지 받는다. 위 띠의 높이는 기록 영역 유무와 무관하다 — 그래서 기록 영역이 생기고
-///   없어지는 경계(창 높이·폭 어느 쪽으로 넘어도)에서 키·LCD 높이가 튀지 않는다(#142 R1: 블록 폭으로 최대 높이를 정하면
-///   폭 방향 경계에서 LCD가 228.8 → 128dp로 줄었다). 기록 영역이 있으면 활성 LCD는 블록 폭이라 실물 비율보다 높을 수 있다
-///   (12.9인치 iPad 가로 655×478.8) — 남는 높이를 빈 상단 띠로 두지 않고 활성 LCD와 기록 영역이 나눠 쓴다(화면을 다 채운다).
+///   없어지는 경계(창 높이·폭 어느 쪽으로 넘어도)에서 키·위 띠 높이가 튀지 않는다(#142 R1: 블록 폭으로 위 띠 최대 높이를
+///   정하면 본체 폭 461 → 461.5에서 LCD가 228.8 → 128dp로 줄고 빈 띠가 생겼다).
+/// - 기록 영역이 있을 때: 기록 영역은 위 띠 전체이고, 활성 LCD는 블록 폭의 실물 비율 높이(블록 /
+///   [CalcTheme.screenLcdMinAspectRatio], 하한 [CalcTheme.screenLcdMinHeight])까지만 위 띠 아래쪽(키패드 바로 위)에 둔다
+///   (#142 R2) — 그보다 높이면 글자는 폭에 묶여 커지지 않고 식과 답만 세로로 멀어진다. 위 띠가 그보다 높으면 활성 LCD 위가
+///   빈다(12.9인치 iPad 가로: 위 띠 479.1, 활성 LCD 655×374.5 — 기록 영역은 위 띠 전체를 쓴다).
 /// - 띠를 내용 줄 전체 높이까지 늘리기: LCD가 목표 높이(와 최소 높이)보다 높아진 몫(키패드가 세로 한계에 닿아 남는 높이)
 ///   에서 띠를 [CalcTheme.topStripRowMaxHeight](화면 여백 포함)까지 늘린다. 키패드에서는 떼지 않는다 — 태블릿 가로는 키패드가
 ///   세로 한계에 닿고 LCD가 남는 높이를 받아, 띠가 최소 높이(줄 20dp)로 남으면 설정 아이콘이 줄고 태양전지가 숨는다
 ///   (세로형 큰 창의 띠 #141 R1과 같은 이유).
 /// - 위 띠: 키패드 블록에 맞춰 둘로 나눈다. 숫자부 위가 활성 LCD, 함수부 위가 계산 기록 영역(`HistoryPanel`, 내용은 #145)이고
 ///   둘 사이는 키패드의 블록 사이 간격과 같다. LCD 하나를 전체 폭으로 늘이면 식은 왼쪽 끝, 답은 오른쪽 끝으로 멀어진다
-///   (사용자 결정). 위 띠가 [CalcTheme.screenLandscapeHistoryMinHeight]보다 낮거나 블록이
-///   [CalcTheme.screenLandscapeHistoryMinLcdWidth]보다 좁으면 기록 영역을 두지 않고([history]가 `null`) 활성 LCD가 띠 폭
-///   전체를 쓴다(가로 폰 등 — 띠가 LCD 최소 높이에 묶인 창과, 좁은 창).
+///   (사용자 결정). 다음 중 하나면 기록 영역을 두지 않고([history]가 `null`) 활성 LCD가 띠 폭 전체를 쓴다.
+///   - 위 띠가 [CalcTheme.screenLandscapeHistoryMinHeight]보다 낮다 (가로 폰 등 — 띠가 LCD 최소 높이에 묶인 창)
+///   - 블록이 [CalcTheme.screenLandscapeHistoryMinLcdWidth]보다 좁다 (좁은 창)
+///   - 블록 폭 활성 LCD의 줄 글자가 띠 폭 전체 LCD의 [CalcTheme.screenLandscapeHistoryMinLcdFontRatio]배보다 작다 (#142 R2 —
+///     위 띠가 높은데 블록이 좁은 창. 경계에서 줄 글자가 30%보다 많이 줄지 않게 한다)
+///   기록 영역이 없는 가로형의 무과금 광고 자리는 #18에서 정한다(기록 영역을 줄여 넣을 곳이 없다).
 /// - 설정 버튼·장식: 상단 띠의 내용 줄([CalcTopStripLayout])이 위 띠 폭 전체를 쓴다 — 세로형과 같이 워드마크는 왼쪽 끝,
 ///   설정 버튼은 오른쪽 끝, 태양전지는 그 왼쪽이다. 손잡이와 무관하다.
 /// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
@@ -242,9 +248,25 @@ class CalcLandscapeLayout {
     );
     final top = base.top + grow;
     final lcdHeight = base.lcd - grow;
+    // 기록 영역이 있을 때 활성 LCD 높이 — 블록 폭의 실물 비율 높이(블록 / [CalcTheme.screenLcdMinAspectRatio])까지만이다
+    // (#142 R2). 그보다 높이면 글자는 폭에 묶여 커지지 않고 식과 답만 세로로 멀어진다. 남는 높이는 기록 영역만 쓴다.
+    final blockLcdHeight = math.min(
+      lcdHeight,
+      math.max(
+        CalcTheme.screenLcdMinHeight,
+        block / CalcTheme.screenLcdMinAspectRatio,
+      ),
+    );
+    // 기록 영역을 두면 활성 LCD 줄 글자가 띠 폭 전체일 때보다 많이 작아지지 않아야 한다 — 폭 방향 경계에서 글자가 절반으로
+    // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다.
+    double lineFontOf(Size lcd) =>
+        LcdFontSizes.forSize(lcd, TextScaler.noScaling).input;
     final withHistory =
         lcdHeight >= CalcTheme.screenLandscapeHistoryMinHeight &&
-        block >= CalcTheme.screenLandscapeHistoryMinLcdWidth;
+        block >= CalcTheme.screenLandscapeHistoryMinLcdWidth &&
+        lineFontOf(Size(block, blockLcdHeight)) >=
+            lineFontOf(Size(width, lcdHeight)) *
+                CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
     // 남는 높이(반올림 오차 등)는 키패드가 받는다 (세로형 `_Body._stackedRects`와 같다).
     final keypadTop = math.min(top + lcdHeight + base.gap, height);
     final keypad = Rect.fromLTRB(0, keypadTop, width, height);
@@ -252,10 +274,14 @@ class CalcLandscapeLayout {
     final Rect lcd;
     Rect? history;
     if (withHistory) {
-      final left = Rect.fromLTWH(0, top, block, lcdHeight);
-      final right = Rect.fromLTWH(width - block, top, block, lcdHeight);
+      // 활성 LCD는 위 띠 아래(키패드 바로 위)에 붙이고, 기록 영역은 위 띠 높이 전체를 쓴다.
+      final lcdTop = top + lcdHeight - blockLcdHeight;
+      final left = Rect.fromLTWH(0, lcdTop, block, blockLcdHeight);
+      final right = Rect.fromLTWH(width - block, lcdTop, block, blockLcdHeight);
+      final leftBand = Rect.fromLTWH(0, top, block, lcdHeight);
+      final rightBand = Rect.fromLTWH(width - block, top, block, lcdHeight);
       lcd = numbersOnLeft ? left : right;
-      history = numbersOnLeft ? right : left;
+      history = numbersOnLeft ? rightBand : leftBand;
     } else {
       lcd = Rect.fromLTWH(0, top, width, lcdHeight);
     }

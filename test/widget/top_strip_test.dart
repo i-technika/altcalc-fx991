@@ -10,6 +10,7 @@ import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/top_strip.dart';
@@ -1253,13 +1254,14 @@ void main() {
           await tester.pump();
           expect(tester.takeException(), isNull);
           expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
-          final lcd = tester.getRect(_lcd);
+          // 띠 장식은 위 띠(기록 영역 = 위 띠 전체 높이) 위에 놓인다. 활성 LCD는 위 띠 아래쪽이다(#142 R2).
+          final lcd = tester.getRect(find.byKey(HistoryPanel.panelKey));
           final left = padding.left + CalcTheme.screenPadding;
           final right = size.width - padding.right - CalcTheme.screenPadding;
           final button = tester.getRect(_button);
           expect(button.right, moreOrLessEquals(right));
           expect(button.height, moreOrLessEquals(CalcTheme.settingsButtonSize));
-          // 줄 전체 높이라 버튼 터치 영역이 LCD·기록 영역에 겹치지 않는다.
+          // 줄 전체 높이라 버튼 터치 영역이 위 띠(LCD·기록 영역)에 겹치지 않는다.
           expect(button.bottom, lessThanOrEqualTo(lcd.top + _tolerance));
 
           final wordmark = tester.getRect(_wordmark);
@@ -1284,6 +1286,36 @@ void main() {
           expect(_button.hitTestable(), findsOneWidget);
         });
       }
+    }
+
+    // 낮은 띠의 가로형(1280×500, 띠 최소 높이): 보이는 버튼은 줄(20dp) 안이고, 48dp 터치 영역은 그 아래 위 띠 위쪽에
+    // 겹친다 — 오른손잡이는 활성 LCD, 왼손잡이는 기록 영역 위쪽이다. 기록을 누를 수 있게 만들 때(#145) 이 자리를 비운다.
+    for (final handedness in Handedness.values) {
+      testWidgets(
+        '낮은 띠 가로형 1280×500·${handedness.name}: 설정 터치 영역 48dp가 손잡이에 따라 LCD·기록 영역 위쪽에 겹친다',
+        (tester) async {
+          final container = await _pump(tester, size: const Size(1280, 500));
+          container.read(handednessProvider.notifier).set(handedness);
+          await tester.pump();
+          expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+          // 설정 버튼 자리 전체 = 터치 영역
+          final touch = tester.getRect(find.byType(SettingsButton));
+          expect(touch.width, moreOrLessEquals(CalcTheme.settingsButtonSize));
+          expect(touch.height, moreOrLessEquals(CalcTheme.settingsButtonSize));
+          expect(touch.right, moreOrLessEquals(1280 - CalcTheme.screenPadding));
+          final lcd = tester.getRect(_lcd);
+          final history = tester.getRect(find.byKey(HistoryPanel.panelKey));
+          final under = handedness.keypadOnRight ? lcd : history;
+          final other = handedness.keypadOnRight ? history : lcd;
+          expect(touch.overlaps(under), isTrue);
+          expect(touch.overlaps(other), isFalse);
+          expect(touch.bottom - under.top, moreOrLessEquals(28, epsilon: 0.5));
+          // 겹친 곳을 눌러도 설정이 열린다.
+          await tester.tapAt(Offset(touch.center.dx, under.top + 10));
+          await tester.pumpAndSettle();
+          expect(_dialog, findsOneWidget);
+        },
+      );
     }
 
     testWidgets('반 접은 테이블톱: 장식은 LCD 위에 두고 위 절반 모서리의 설정 버튼과 겹치지 않는다', (

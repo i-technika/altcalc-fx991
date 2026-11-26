@@ -154,38 +154,64 @@ void main() {
                 keypad.top - lcd.bottom,
                 moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
               );
-              expect(_history, findsOneWidget);
-              final history = tester.getRect(_history);
-              final block = KeypadMetrics.wideBlockWidthOf(body.width);
-              expect(lcd.width, moreOrLessEquals(block));
-              expect(history.width, moreOrLessEquals(block));
-              expect(history.top, moreOrLessEquals(lcd.top));
-              expect(history.height, moreOrLessEquals(lcd.height));
-              if (handedness.keypadOnRight) {
-                expect(lcd.right, moreOrLessEquals(body.right));
-                expect(history.left, moreOrLessEquals(body.left));
-              } else {
-                expect(lcd.left, moreOrLessEquals(body.left));
-                expect(history.right, moreOrLessEquals(body.right));
+              // 그린 영역이 배치 계산과 같다.
+              final expected = CalcLandscapeLayout.of(body.size, handedness);
+              expect(
+                lcd,
+                rectMoreOrLessEquals(expected.lcd.shift(body.topLeft)),
+              );
+              expect(
+                keypad,
+                rectMoreOrLessEquals(expected.keypad.shift(body.topLeft)),
+              );
+              // 이 창들은 모두 기록 영역이 있다(좌우 인셋 창은 계산대로).
+              if (padding.horizontal == 0) {
+                expect(expected.history, isNotNull, reason: '$expected');
               }
-              // 기록 영역과 활성 LCD 사이는 키패드 블록 사이 간격과 같다.
-              expect(
-                (handedness.keypadOnRight
-                        ? lcd.left - history.right
-                        : history.left - lcd.right)
-                    .abs(),
-                moreOrLessEquals(body.width - 2 * block),
-              );
-              expect(
-                lcd.height,
-                lessThanOrEqualTo(
-                  body.width / CalcTheme.screenLcdMinAspectRatio + 0.01,
-                ),
-              );
-              expect(
-                lcd.height,
-                greaterThanOrEqualTo(CalcTheme.screenLandscapeHistoryMinHeight),
-              );
+              final block = KeypadMetrics.wideBlockWidthOf(body.width);
+              if (expected.history == null) {
+                expect(_history, findsNothing);
+                expect(lcd.width, moreOrLessEquals(body.width));
+              } else {
+                expect(_history, findsOneWidget);
+                final history = tester.getRect(_history);
+                expect(lcd.width, moreOrLessEquals(block));
+                expect(history.width, moreOrLessEquals(block));
+                // 기록 영역은 위 띠 전체, 활성 LCD는 그 아래쪽(키패드 바로 위)이고 실물 비율보다 높지 않다 (#142 R2).
+                expect(history.bottom, moreOrLessEquals(lcd.bottom));
+                expect(history.top, lessThanOrEqualTo(lcd.top + 0.01));
+                expect(
+                  lcd.height,
+                  lessThanOrEqualTo(
+                    math.max(
+                          CalcTheme.screenLcdMinHeight,
+                          block / CalcTheme.screenLcdMinAspectRatio,
+                        ) +
+                        0.01,
+                  ),
+                );
+                expect(
+                  history.height,
+                  greaterThanOrEqualTo(
+                    CalcTheme.screenLandscapeHistoryMinHeight,
+                  ),
+                );
+                if (handedness.keypadOnRight) {
+                  expect(lcd.right, moreOrLessEquals(body.right));
+                  expect(history.left, moreOrLessEquals(body.left));
+                } else {
+                  expect(lcd.left, moreOrLessEquals(body.left));
+                  expect(history.right, moreOrLessEquals(body.right));
+                }
+                // 기록 영역과 활성 LCD 사이는 키패드 블록 사이 간격과 같다.
+                expect(
+                  (handedness.keypadOnRight
+                          ? lcd.left - history.right
+                          : history.left - lcd.right)
+                      .abs(),
+                  moreOrLessEquals(body.width - 2 * block),
+                );
+              }
 
               // 설정 버튼: 상단 띠의 오른쪽 끝(손잡이와 무관), 48dp, 눌리고 키패드와 겹치지 않는다.
               expect(settings.right, moreOrLessEquals(body.right));
@@ -486,125 +512,159 @@ void main() {
       }
     });
 
-    test('본체 높이를 늘릴 때 키·LCD·띠가 줄지 않고, 기록 영역이 생기는 경계에서도 높이가 튀지 않는다', () {
-      for (final width in const [1264.0, 984.0, 640.0, 395.0]) {
-        CalcLandscapeLayout? previous;
-        var sawHistoryAppear = false;
-        for (var height = 150.0; height <= 1000; height += 0.5) {
-          final l = CalcLandscapeLayout.of(
-            Size(width, height),
-            Handedness.right,
-          );
-          final p = previous;
-          if (p != null) {
-            final reason = '$width×$height $p → $l';
-            expect(
-              l.keypad.height,
-              greaterThanOrEqualTo(p.keypad.height - 1e-6),
-              reason: reason,
-            );
-            expect(
-              l.lcd.height,
-              greaterThanOrEqualTo(p.lcd.height - 1e-6),
-              reason: reason,
-            );
-            // 높이 0.5dp에 LCD·띠는 0.5dp보다 많이 바뀌지 않는다(연속).
-            expect(
-              (l.lcd.height - p.lcd.height).abs(),
-              lessThanOrEqualTo(0.5 + 1e-6),
-              reason: reason,
-            );
-            expect(
-              (l.top - p.top).abs(),
-              lessThanOrEqualTo(0.5 + 1e-6),
-              reason: reason,
-            );
-            if (p.history == null && l.history != null) {
-              sawHistoryAppear = true;
-            }
-          }
-          previous = l;
-        }
-        // 넓은 창은 기록 영역이 생기는 경계를 지난다.
-        if (width >= 640) expect(sawHistoryAppear, isTrue, reason: '$width');
+    /// 본체 [body] 가로형의 활성 LCD 줄 글자 (배율 반영 전)
+    double lineFont(CalcLandscapeLayout l) =>
+        LcdFontSizes.forSize(l.lcd.size, TextScaler.noScaling).input;
+
+    /// 앞 배치 [p] → 다음 배치 [l]로 창이 조금 커질 때의 연속성 (#142 R1·R2): 키패드는 줄지 않고, 위 띠·상단 띠 높이는
+    /// 한 걸음([step]) 넘게 바뀌지 않으며, 활성 LCD 줄 글자는 기록 영역이 생기고 없어질 때만 바뀌되 그때도 문턱 비율
+    /// ([CalcTheme.screenLandscapeHistoryMinLcdFontRatio])보다 많이 줄지 않는다.
+    void expectContinuous(
+      CalcLandscapeLayout p,
+      CalcLandscapeLayout l,
+      double step,
+      String reason,
+    ) {
+      expect(
+        l.keypad.height,
+        greaterThanOrEqualTo(p.keypad.height - 1e-6),
+        reason: reason,
+      );
+      expect(
+        (l.band.height - p.band.height).abs(),
+        lessThanOrEqualTo(step + 1e-6),
+        reason: reason,
+      );
+      expect(
+        (l.top - p.top).abs(),
+        lessThanOrEqualTo(step + 1e-6),
+        reason: reason,
+      );
+      final before = lineFont(p);
+      final after = lineFont(l);
+      if ((p.history == null) == (l.history == null)) {
+        // 같은 배치 안에서는 글자가 조금씩만 변한다(한 걸음에 3% 이하).
+        expect(
+          (after - before).abs(),
+          lessThanOrEqualTo(before * 0.03 + 1e-6),
+          reason: reason,
+        );
+      } else {
+        expect(
+          after,
+          greaterThanOrEqualTo(
+            // 경계 한 걸음 전후의 글자 변화(0.5dp 걸음에 1% 미만)만큼 여유를 둔다.
+            before * CalcTheme.screenLandscapeHistoryMinLcdFontRatio * 0.99,
+          ),
+          reason: reason,
+        );
       }
-    });
+    }
 
     test(
-      '본체 폭을 늘릴 때도 위 띠·키 높이가 연속이고, 기록 영역이 생기는 경계에서 활성 LCD 높이가 튀지 않는다 (#142 R1)',
+      '본체 높이를 늘릴 때 키는 줄지 않고 위 띠·글자가 연속이며, 기록 영역 경계에서 글자가 문턱보다 많이 줄지 않는다',
       () {
-        // R1 재현: 본체 높이 426(창 442)·폭 461 → 461.5에서 활성 LCD가 228.8 → 128dp로 줄었다.
-        for (final height in const [330.0, 380.0, 426.0, 450.0, 584.0, 712.0]) {
+        for (final width in const [1350.0, 1264.0, 984.0, 640.0, 395.0]) {
           CalcLandscapeLayout? previous;
-          for (var width = 300.0; width <= 1400; width += 0.5) {
+          var sawHistory = false;
+          for (var height = 150.0; height <= 1400; height += 0.5) {
             final l = CalcLandscapeLayout.of(
               Size(width, height),
               Handedness.right,
             );
             final p = previous;
             if (p != null) {
-              final reason = '$width×$height $p → $l';
-              expect(
-                l.keypad.height,
-                greaterThanOrEqualTo(p.keypad.height - 1e-6),
-                reason: reason,
-              );
-              expect(
-                (l.lcd.height - p.lcd.height).abs(),
-                lessThanOrEqualTo(0.5 + 1e-6),
-                reason: reason,
-              );
-              expect(
-                (l.top - p.top).abs(),
-                lessThanOrEqualTo(0.5 + 1e-6),
-                reason: reason,
-              );
+              expectContinuous(p, l, 0.5, '$width×$height $p → $l');
             }
+            if (l.history != null) sawHistory = true;
             previous = l;
           }
+          if (width >= 640) expect(sawHistory, isTrue, reason: '$width');
         }
       },
     );
 
-    test(
-      '기록 영역 문턱: 위 띠가 문턱 이상이고 블록이 최소 폭 이상일 때만 기록이 있고, 위 띠 높이는 기록 유무와 무관하다',
-      () {
-        for (var height = 150.0; height <= 1000; height += 7) {
-          for (final width in const [
-            1264.0,
-            984.0,
-            640.0,
-            626.0,
-            461.0,
-            395.0,
-          ]) {
-            final l = CalcLandscapeLayout.of(
-              Size(width, height),
-              Handedness.right,
-            );
-            final block = KeypadMetrics.wideBlockWidthOf(width);
-            expect(
-              l.history != null,
-              l.lcd.height >= CalcTheme.screenLandscapeHistoryMinHeight &&
-                  block >= CalcTheme.screenLandscapeHistoryMinLcdWidth,
-              reason: '$width×$height $l',
-            );
-            // 위 띠 높이는 세로형과 같은 규칙을 본체 폭으로 쓴 값이다(기록 영역과 무관 — 최대 높이는 본체 폭 기준).
-            expect(
-              l.lcd.height,
-              lessThanOrEqualTo(
-                math.max(
-                      CalcTheme.screenLcdMinHeight,
-                      width / CalcTheme.screenLcdMinAspectRatio,
-                    ) +
-                    1e-6,
-              ),
-              reason: '$width×$height $l',
-            );
+    test('본체 폭을 늘릴 때도 키는 줄지 않고 위 띠·글자가 연속이다 (#142 R1·R2)', () {
+      // R1 재현: 본체 높이 426·폭 461 → 461.5에서 활성 LCD가 228.8 → 128dp로 줄었다.
+      // R2 재현: 본체 높이 584·폭 626 → 626.5에서 줄 글자가 49.5 → 23.6dp로 줄었다.
+      for (final height in const [
+        330.0,
+        380.0,
+        426.0,
+        450.0,
+        500.0,
+        584.0,
+        712.0,
+        964.0,
+      ]) {
+        CalcLandscapeLayout? previous;
+        for (var width = 300.0; width <= 2000; width += 0.5) {
+          final l = CalcLandscapeLayout.of(
+            Size(width, height),
+            Handedness.right,
+          );
+          final p = previous;
+          if (p != null) {
+            expectContinuous(p, l, 0.5, '$width×$height $p → $l');
           }
+          previous = l;
         }
-      },
-    );
+      }
+    });
+
+    test('기록 영역 문턱: 위 띠 높이·블록 폭·글자 비율 조건을 모두 만족할 때만 기록이 있고, 그때 활성 LCD는 실물 비율 이하 높이다', () {
+      for (var height = 150.0; height <= 1400; height += 7) {
+        for (final width in const [
+          1984.0,
+          1350.0,
+          1264.0,
+          984.0,
+          640.0,
+          626.0,
+          461.0,
+          395.0,
+        ]) {
+          final l = CalcLandscapeLayout.of(
+            Size(width, height),
+            Handedness.right,
+          );
+          final block = KeypadMetrics.wideBlockWidthOf(width);
+          final band = l.band;
+          final cap = math.max(
+            CalcTheme.screenLcdMinHeight,
+            block / CalcTheme.screenLcdMinAspectRatio,
+          );
+          double font(Size s) =>
+              LcdFontSizes.forSize(s, TextScaler.noScaling).input;
+          final expected =
+              band.height >= CalcTheme.screenLandscapeHistoryMinHeight &&
+              block >= CalcTheme.screenLandscapeHistoryMinLcdWidth &&
+              font(Size(block, math.min(band.height, cap))) >=
+                  font(Size(width, band.height)) *
+                      CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
+          final reason = '$width×$height $l';
+          expect(l.history != null, expected, reason: reason);
+          if (l.history != null) {
+            expect(l.lcd.height, lessThanOrEqualTo(cap + 1e-6), reason: reason);
+            expect(l.history!.height, moreOrLessEquals(band.height));
+          } else {
+            expect(l.lcd.width, moreOrLessEquals(width), reason: reason);
+          }
+          // 위 띠 높이는 세로형과 같은 규칙을 본체 폭으로 쓴 값이다(기록 영역과 무관).
+          expect(
+            band.height,
+            lessThanOrEqualTo(
+              math.max(
+                    CalcTheme.screenLcdMinHeight,
+                    width / CalcTheme.screenLcdMinAspectRatio,
+                  ) +
+                  1e-6,
+            ),
+            reason: reason,
+          );
+        }
+      }
+    });
 
     test('음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
@@ -654,7 +714,7 @@ void main() {
           .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
           .first
           .mainLabelFontSize!;
-      // 활성 LCD 655×374.5(블록 폭의 최대 높이) — 줄 글자 약 54.7dp. 키 메인 각인은 상한 16.5dp.
+      // 활성 LCD 655×374.5(블록 폭의 실물 비율 높이 — 위 띠 479.1dp 중 아래쪽, #142 R2) — 줄 글자 약 54.7dp. 키 메인 각인은 상한 16.5dp.
       expect(keyFont, moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize));
       expect(lineFont, greaterThan(keyFont));
       expect(
