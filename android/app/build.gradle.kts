@@ -63,6 +63,10 @@ val mockitoVersion = "5.24.0"
 val mockitoAgent: Configuration by configurations.creating
 
 dependencies {
+    // 시작 시 폴더블 판정의 창 배치 정보 (#70, FoldableDeviceProbe). Flutter 엔진이 displayFeatures에 쓰는 것과 같은
+    // 라이브러리라 Flutter 임베딩이 이미 싣는다 — 앱 코드가 직접 쓰므로 명시한다. 버전은 임베딩 POM의 값과 맞춘다
+    // (Gradle은 둘 중 높은 버전을 고른다).
+    implementation("androidx.window:window-java:1.2.0")
     mockitoAgent("org.mockito:mockito-core:$mockitoVersion") { isTransitive = false }
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18.1")

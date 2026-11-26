@@ -21,9 +21,9 @@ Future<void> main() async {
   // 방향 요청과 설정 저장소 열기를 함께 진행한다. 손잡이 설정이 첫 화면부터 반영되도록 둘 다 기다린다 (#24).
   // Android "고대비 텍스트" 첫 값도 함께 기다려 첫 화면부터 맞는 팔레트로 그린다 (#95).
   final (foldable, settings, _) = await (
-    FormFactor.queryHingeSensor().then((hinge) async {
-      await DeviceOrientationLock.instance.start(hasHingeSensor: hinge);
-      return hinge;
+    FormFactor.queryFoldableDevice().then((foldable) async {
+      await DeviceOrientationLock.instance.start(foldableDevice: foldable);
+      return foldable;
     }),
     openSettingsStorage(),
     SystemHighTextContrast.instance.start(),
@@ -47,9 +47,11 @@ Future<void> main() async {
 ///   ([FormFactor] 참조). 그래서 화면 배치는 방향이 아니라 창 크기로 정한다(`CalculatorScreen`).
 /// - 폴더블 내부 화면: 네 방향 모두 — 배치가 접힘선 방향을 따른다.
 ///
-/// 폴더블은 시작 시 힌지 센서로 판정한다([FormFactor.queryHingeSensor]). 힌지 센서를 알리지 않는 폴더블과
+/// 폴더블은 시작 시 판정한다([FormFactor.queryFoldableDevice]). 시작 시 판정이 놓친 폴더블과
 /// 접기·펼치기(물리 화면이 커버 ↔ 내부로 바뀜)에 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는
-/// 부분 정보 도착 등) 정책을 다시 판정해 바뀌었을 때만 다시 요청한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
+/// 부분 정보 도착 등) 정책을 다시 판정해 바뀌었을 때만 다시 요청한다. 접히는 부분을 한 번 본 기기는 그 뒤로
+/// 폴더블로 기억한다 (#70) — 다시 펼칠 때 접힘 정보가 오기 전 몇 프레임 동안 태블릿(가로)으로 판정해 화면이
+/// 돌았다가 돌아오지 않게 한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
 /// 요청은 한 번에 하나씩 차례로 보내고, 성공한 요청만 기록한다 — 겹친 요청이 실패해도 기록이 어긋나지 않는다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
@@ -58,7 +60,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   static final DeviceOrientationLock instance = DeviceOrientationLock._();
 
   OrientationPolicy? _applied;
-  bool _hasHingeSensor = false;
+  bool _foldableDevice = false;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -71,8 +73,9 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   OrientationPolicy? get appliedPolicy => _applied;
 
   /// 지금 화면의 방향 정책으로 방향을 요청하고, 이후 화면 정보 변화를 관찰한다. 여러 번 불러도 관찰은 한 번이다.
-  Future<void> start({bool hasHingeSensor = false}) {
-    _hasHingeSensor = hasHingeSensor;
+  /// [foldableDevice]는 앱 시작 시 판정한 폴더블 기기 여부다([FormFactor.queryFoldableDevice]).
+  Future<void> start({bool foldableDevice = false}) {
+    _foldableDevice = foldableDevice;
     if (!_observing) {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
@@ -86,7 +89,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     if (_observing) WidgetsBinding.instance.removeObserver(this);
     _observing = false;
     _applied = null;
-    _hasHingeSensor = false;
+    _foldableDevice = false;
     _pending = null;
   }
 
@@ -96,10 +99,12 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     final view = dispatcher.implicitView ?? dispatcher.views.firstOrNull;
     if (view == null) return OrientationPolicy.portrait;
     final displaySize = FormFactor.displaySizeOf(view);
+    // 접히는 부분을 한 번이라도 보면 폴더블로 기억한다 — 접은 커버 화면에서 시작해 시작 시 판정이 놓친 기기 (#70)
+    if (FormFactor.hasFoldOrHinge(view.displayFeatures)) _foldableDevice = true;
     final kind = FormFactor.deviceKindOf(
       displaySize,
       view.displayFeatures,
-      hasHingeSensor: _hasHingeSensor,
+      foldableDevice: _foldableDevice,
     );
     return FormFactor.orientationPolicyOf(kind, displaySize);
   }

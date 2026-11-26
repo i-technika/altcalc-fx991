@@ -91,16 +91,16 @@ void main() {
       expect(FormFactor.hasFoldOrHinge(const [_cutout, _fold]), isTrue);
     });
 
-    test('힌지 센서가 있으면 접힘 정보가 오기 전에도 폴더블이다 (커버 화면 포함)', () {
+    test('시작 시 폴더블로 판정했으면 접힘 정보가 오기 전에도 폴더블이다 (커버 화면 포함)', () {
       for (final size in const [Size(841, 701), Size(344, 882)]) {
         expect(
-          FormFactor.deviceKindOf(size, const [], hasHingeSensor: true),
+          FormFactor.deviceKindOf(size, const [], foldableDevice: true),
           DeviceKind.foldable,
         );
       }
     });
 
-    group('힌지 센서 조회', () {
+    group('폴더블 판정 조회', () {
       tearDown(() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
@@ -118,25 +118,28 @@ void main() {
           methods.add(call.method);
           return true;
         });
-        expect(await FormFactor.queryHingeSensor(), isTrue);
-        expect(methods, ['hasHingeSensor']);
+        expect(await FormFactor.queryFoldableDevice(), isTrue);
+        expect(methods, [FormFactor.foldableDeviceMethod]);
       });
 
       test('Android: 채널 오류·미등록·null 응답이면 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         mockChannel((_) async => throw PlatformException(code: 'x'));
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         mockChannel((_) async => null);
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(FormFactor.deviceChannel, null);
-        expect(await FormFactor.queryHingeSensor(), isFalse); // MissingPlugin
+        expect(
+          await FormFactor.queryFoldableDevice(),
+          isFalse,
+        ); // MissingPlugin
       });
 
       test('Android: 그 밖의 오류(응답 타입 등)도 false', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         mockChannel((_) async => 'not a bool');
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
       });
 
       test('Android: 제한 시간 안에 응답이 없으면 false (앱 시작이 멈추지 않는다)', () async {
@@ -154,10 +157,10 @@ void main() {
               .setMockMessageHandler(FormFactor.deviceChannel.name, null),
         );
         final watch = Stopwatch()..start();
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         expect(
           watch.elapsed,
-          greaterThanOrEqualTo(FormFactor.hingeQueryTimeout),
+          greaterThanOrEqualTo(FormFactor.foldableQueryTimeout),
         );
       });
 
@@ -168,7 +171,7 @@ void main() {
           called = true;
           return true;
         });
-        expect(await FormFactor.queryHingeSensor(), isFalse);
+        expect(await FormFactor.queryFoldableDevice(), isFalse);
         expect(called, isFalse);
       });
     });

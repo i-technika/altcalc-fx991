@@ -14,6 +14,8 @@ import 'package:itechnika_altcalc_fx991/core/theme/high_text_contrast.dart';
 
 const _mainActivity =
     'android/app/src/main/kotlin/com/example/itechnika_altcalc_fx991/MainActivity.kt';
+const _foldableProbe =
+    'android/app/src/main/kotlin/com/example/itechnika_altcalc_fx991/FoldableDeviceProbe.kt';
 
 /// `MainActivity.kt`의 `private const val <name> = "<값>"` 값
 String _kotlinConstant(String source, String name) {
@@ -41,6 +43,28 @@ void main() {
       FormFactor.deviceChannel.name,
       _kotlinConstant(source, 'DEVICE_CHANNEL'),
     );
+  });
+
+  test('폴더블 판정: Dart 제한 시간이 Android 쪽 창 배치 정보 기다림보다 넉넉히 길다 (#70)', () {
+    // Android가 창 배치 정보를 끝까지 기다린 뒤 답해도 Dart가 먼저 시간 초과로 포기하지 않아야 한다.
+    // 채널 왕복·메인 스레드 지연 몫으로 300ms 이상 여유를 둔다.
+    final probe = File(_foldableProbe).readAsStringSync();
+    final match = RegExp(
+      r'^\s*const val LAYOUT_TIMEOUT_MILLIS = (\d+)L\s*$',
+      multiLine: true,
+    ).firstMatch(probe);
+    expect(
+      match,
+      isNotNull,
+      reason: '$_foldableProbe에 LAYOUT_TIMEOUT_MILLIS가 있어야 한다',
+    );
+    final androidWait = Duration(milliseconds: int.parse(match![1]!));
+    expect(
+      FormFactor.foldableQueryTimeout - androidWait,
+      greaterThanOrEqualTo(const Duration(milliseconds: 300)),
+    );
+    // 메서드 이름도 맞댄다 — 한쪽만 바꾸면 Dart는 notImplemented(→ false)를 받아 늘 폴더블 아님이 된다
+    expect(source, contains('"${FormFactor.foldableDeviceMethod}" ->'));
   });
 
   test('고대비 텍스트 이벤트 채널 (#95)', () {

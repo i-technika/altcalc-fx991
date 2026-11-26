@@ -15,7 +15,8 @@ enum DeviceKind {
   /// 일반 폰
   phone,
 
-  /// 폴더블 — 힌지 각도 센서가 있거나 접히는 부분(fold/hinge)이 보고되는 기기 (커버 화면 포함)
+  /// 폴더블 — 시작 시 폴더블로 판정했거나([FormFactor.queryFoldableDevice]) 접히는 부분(fold/hinge)이 보고되는
+  /// 기기 (커버 화면 포함)
   foldable,
 
   /// 태블릿 — 짧은 변 [FormFactor.largeScreenMinShortestSide] 이상인 폴더블이 아닌 기기
@@ -81,52 +82,65 @@ abstract final class FormFactor {
   @visibleForTesting
   static const MethodChannel deviceChannel = MethodChannel('altcalc/device');
 
+  /// [deviceChannel]의 폴더블 판정 메서드 이름 ([queryFoldableDevice])
+  @visibleForTesting
+  static const String foldableDeviceMethod = 'isFoldableDevice';
+
   /// [features]에 접히는 부분(fold·hinge)이 있는지. 화면 구멍(cutout)은 세지 않는다.
   static bool hasFoldOrHinge(Iterable<DisplayFeature> features) => features.any(
     (f) =>
         f.type == DisplayFeatureType.fold || f.type == DisplayFeatureType.hinge,
   );
 
-  /// 기기에 힌지 각도 센서가 있는지 (Android `FEATURE_SENSOR_HINGE_ANGLE`). 폴더블 기기를 앱 시작 시점에
-  /// 구분하는 데 쓴다 — 접히는 부분 정보([FlutterView.displayFeatures])는 화면이 붙은 뒤 비동기로 와서
-  /// 시작 시점에는 비어 있다. Android가 아니거나, 조회에 실패하거나, [hingeQueryTimeout] 안에 응답이 없으면
-  /// `false` — 앱 시작(`main()`)이 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  /// 폴더블 기기인지 (#24, 보강 #70). 폴더블 기기를 앱 시작 시점에 구분하는 데 쓴다 — 접히는 부분 정보
+  /// ([FlutterView.displayFeatures])는 화면이 붙은 뒤 비동기로 와서 시작 시점에는 비어 있고, 비어 있어도
+  /// "아직 안 옴"인지 "없음"인지 구분할 수 없다.
   ///
-  /// 한계: 힌지 센서 선언은 제조사 몫이라, 선언하지 않는 폴더블은 접히는 부분 정보가 도착할 때까지 태블릿으로
-  /// 판정된다(`DeviceOrientationLock`이 정보 도착 후 바로잡는다). 실기기 확인은 후속 과제다.
-  static Future<bool> queryHingeSensor() async {
+  /// Android `MainActivity`(`FoldableDeviceProbe`)가 다음 중 하나라도 있으면 폴더블로 답한다.
+  /// 1. 힌지 각도 센서 기능 선언 (`FEATURE_SENSOR_HINGE_ANGLE`, API 30+) — 제조사가 선언해야만 보고된다.
+  /// 2. 힌지 각도 센서 자체 (`Sensor.TYPE_HINGE_ANGLE`, API 30+)
+  /// 3. Jetpack WindowManager 창 배치 정보 첫 값의 접히는 부분 — Samsung처럼 OEM 확장으로 접힘 정보만 주는 기기 대비.
+  ///    창이 붙은 뒤 오므로 Android 쪽이 최대 500ms 기다린다(그동안 시작 화면이 남는다).
+  ///
+  /// Android가 아니거나, 조회에 실패하거나, [foldableQueryTimeout] 안에 응답이 없으면 `false` — 앱 시작(`main()`)이
+  /// 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
+  ///
+  /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
+  /// 펼친 뒤 접힘 정보가 오면 `DeviceOrientationLock`이 바로잡고 그 뒤로는 폴더블로 기억한다. 실기기 확인은 #70의 후속 과제다.
+  static Future<bool> queryFoldableDevice() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return false;
     }
     try {
       final result = await deviceChannel
-          .invokeMethod<bool>('hasHingeSensor')
-          .timeout(hingeQueryTimeout);
+          .invokeMethod<bool>(foldableDeviceMethod)
+          .timeout(foldableQueryTimeout);
       return result ?? false;
     } on MissingPluginException {
       return false;
     } catch (error) {
-      debugPrint('힌지 센서 조회 실패: $error');
+      debugPrint('폴더블 판정 조회 실패: $error');
       return false;
     }
   }
 
-  /// 힌지 센서 조회 응답 제한 시간
-  static const Duration hingeQueryTimeout = Duration(seconds: 1);
+  /// 폴더블 판정 조회 응답 제한 시간. Android 쪽이 창 배치 정보를 기다리는 최대 시간(`FoldableDeviceProbe`
+  /// `LAYOUT_TIMEOUT_MILLIS`)보다 넉넉히 길어야 한다 — `test/unit/main_activity_source_test.dart`가 대조한다.
+  static const Duration foldableQueryTimeout = Duration(seconds: 1);
 
   /// 기기 종류를 정한다.
   /// - [displaySize]: 물리 화면 크기 (dp)
   /// - [features]: 화면 특징 (접히는 부분 등)
-  /// - [hasHingeSensor]: 힌지 각도 센서 유무 ([queryHingeSensor])
+  /// - [foldableDevice]: 앱 시작 시 판정한 폴더블 기기 여부 ([queryFoldableDevice])
   ///
-  /// 폴더블 내부 화면은 짧은 변이 600dp를 넘어 크기로는 태블릿과 구분되지 않으므로, 힌지 센서나 접히는
+  /// 폴더블 내부 화면은 짧은 변이 600dp를 넘어 크기로는 태블릿과 구분되지 않으므로, 시작 시 판정이나 접히는
   /// 부분 정보로 구분한다. 폴더블은 접은 커버 화면에서도 [DeviceKind.foldable]이다.
   static DeviceKind deviceKindOf(
     Size displaySize,
     Iterable<DisplayFeature> features, {
-    bool hasHingeSensor = false,
+    bool foldableDevice = false,
   }) {
-    if (hasHingeSensor || hasFoldOrHinge(features)) return DeviceKind.foldable;
+    if (foldableDevice || hasFoldOrHinge(features)) return DeviceKind.foldable;
     if (displaySize.shortestSide >= largeScreenMinShortestSide) {
       return DeviceKind.tablet;
     }

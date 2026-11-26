@@ -357,7 +357,8 @@ cd android
   실패·건너뛴 테스트는 이름과 단언 문구·스택이 콘솔에 나오고, 결과 보고서는 `build/app/reports/tests/testDebugUnitTest/index.html`이다.
 - 테스트 구성:
   - `HighTextContrastStreamHandlerTest` — 고대비 텍스트 처리기의 구독·전송 규칙과 API 35 이하/36 이상 분기
-  - `MainActivityChannelsTest` — 채널 등록 부분을 가짜 메신저로 부른다(채널·메서드 이름, `hasHingeSensor`, 정리)
+  - `FoldableDeviceProbeTest` — 시작 시 폴더블 판정(#70)의 신호 조합·창 배치 정보 기다림·제한 시간·정리 규칙
+  - `MainActivityChannelsTest` — 채널 등록 부분을 가짜 메신저로 부른다(채널·메서드 이름, `isFoldableDevice`, 정리)
   - `MainActivityLifecycleTest` — `FlutterJNI`를 Mockito 대역으로 바꾼 캐시 엔진으로 액티비티를 생명주기대로 돌려
     `configureFlutterEngine`·`cleanUpFlutterEngine`·`onResume`의 연결을 본다(Flutter 자체 `FlutterActivityTest`와 같은 방식)
   - `AndroidTestSetupTest` — 테스트 대상 API 수준(`TestSupport.kt`의 `MIN_SDK` 등)을 앱 minSdk·targetSdk와 대조한다.
