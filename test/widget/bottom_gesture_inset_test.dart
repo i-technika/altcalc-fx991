@@ -18,7 +18,7 @@ import '../support/screen_arrangement.dart';
 /// 맨 아래 행도 누르는 순간 입력된다. 규칙 함수 자체는 `test/unit/calc_theme_test.dart`가 검사한다.
 ///
 /// 값의 출처: "실측"은 [CalcTheme.screenBottomMargin] 문서의 에뮬레이터 실측이고, "인셋 0 / 제스처 32"는
-/// 에뮬레이터로 만들 수 없어 실측하지 못한 가정이다(내비게이션 힌트를 숨긴 제스처 내비게이션 등, 실기기 확인은 #118).
+/// 에뮬레이터로 만들 수 없어 실측하지 못한 가정이다(내비게이션 힌트를 숨긴 제스처 내비게이션 등, 실기기 확인은 #177).
 
 /// 화면 크기·인셋·제스처 영역·화면 특징을 지정해 [CalculatorScreen]을 띄운다.
 /// [viewPadding]을 주지 않으면 [padding]과 같다(키보드 없음).

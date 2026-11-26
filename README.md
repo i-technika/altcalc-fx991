@@ -112,6 +112,30 @@ Dependabot(`github-actions` 생태계)은 쓰지 않는다.
 flutter run            # 연결된 기기·에뮬레이터
 ```
 
+### 에뮬레이터로 접근성 확인 (#185)
+
+TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인은 그 과제가 속한 마일스톤에서 하고,
+실기기가 있어야 하는 확인만 M6로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
+
+- **TalkBack**: 시스템 앱으로 들어 있다(설치 확인 2대, 켜서 읽혀 본 기록은 아직 없다).
+  - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
+    `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
+    `AltCalc_Pixel_Fold_API36`(폴더블)은 `Medium_Phone_API_36.1`과 같은 시스템 이미지(`android-36.1/google_apis_playstore`)다.
+  - `google_apis` API 33·Play 이미지 API 37.0은 띄워 보지 않았고, 시스템 이미지(`system.img`)에 같은 패키지 이름이 있는 것만 봤다.
+- **Accessibility Scanner**(`com.google.android.apps.accessibility.auditor`): 미리 들어 있지 않아 Play 스토어로 설치한다.
+  - `Medium_Phone_API_36.1`(Play 이미지, `PlayStore.enabled=true`)을 쓴다. 이 AVD에는 Play 스토어(`com.android.vending`)가 있고
+    Scanner는 없었다 (실측). Google 계정 로그인은 사용자가 한다(세션은 로그인할 수 없다 — 필요하면 사용자에게 요청한다).
+    아래의 `-read-only`로 띄우면 끌 때 로그인·설치가 사라지므로, Scanner를 쓸 때는 `-read-only` 없이 띄운다(그 AVD를 쓰는 다른 세션이 없을 때).
+  - `google_apis` 이미지에는 Play 스토어가 없다(`AltCalc_Phone_API34`의 `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이었다, 실측).
+  - Play 이미지이지만 `PlayStore.enabled=no`인 `Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)에서 설치되는지는 확인하지 않았다.
+- **한국어 음성**: Play 이미지 36.1에는 Google 음성 엔진(`com.google.android.tts`)이 설치돼 있다 (실측).
+  한국어 음성 데이터가 들어 있는지, 내려받아야 하는지, `google_apis` 이미지에도 엔진이 있는지는 확인하지 않았다.
+- 이미지 종류는 `~/.android/avd/<AVD ID>.ini`의 `path`가 가리키는 폴더(이름이 AVD ID와 다를 수 있다)의 `config.ini`에서
+  `tag.id`(`google_apis` / `google_apis_playstore`)와 `PlayStore.enabled`로 본다.
+  이 PC의 `google_apis` AVD는 `AltCalc_Phone_API33`·`AltCalc_Phone_API34`·`AltCalc_Flip67_API34`·`AltCalc_Fold76_API34`다.
+- 다른 세션이 쓰는 에뮬레이터는 건드리지 않는다. 확인용으로 따로 띄울 때는 `-read-only`로 띄워 AVD 상태를 바꾸지 않는다
+  (예: `emulator -avd Medium_Phone_API_36.1 -port 5580 -read-only`).
+
 ## 개발용 미리보기 (`preview/`)
 
 실제 계산기 화면(`CalculatorScreen`)을 데스크톱 브라우저 창에 띄워, 휴대폰·에뮬레이터 없이
