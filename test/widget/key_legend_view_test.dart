@@ -138,6 +138,23 @@ void main() {
       }
     });
 
+    test('글자 배율 100%에서는 2차원 각인의 높이가 통일 글자 크기를 줄이지 않는다', () {
+      // 높이 기준 글자 크기는 띠(키캡) 높이 × 비율이다. 가장 높은 각인 × 비율이 1을 넘지 않으면
+      // 그 각인도 띠(키캡) 안에 들어가므로, 높이 측정(#155)이 다른 키 글자를 줄이는 일은 배율을 키웠을 때만 생긴다.
+      double tallest(TextStyle style, Iterable<KeyLegend> legends) => legends
+          .map((l) => KeyLegendView.emSize(l, style).height)
+          .reduce((a, b) => a > b ? a : b);
+      final legends = tallest(CalcTheme.keyShiftLabelStyle, [
+        for (final k in allKeys) ...[?k.shiftLegend, ?k.alphaLegend],
+      ]);
+      final mains = tallest(CalcTheme.keyMainLabelStyle, [
+        for (final k in allKeys) k.mainLegend,
+      ]);
+      expect(legends * CalcTheme.keyLegendFontRatio, lessThan(1));
+      // 키캡 안쪽 높이는 눌림 여유·테두리(3dp)만큼 작다 — 비율에 여유를 둔다.
+      expect(mains * CalcTheme.keyMainLabelFontRatio, lessThan(0.8));
+    });
+
     testWidgets('기준선은 같은 글자 크기의 Text 기준선과 같고(아래로 넘치지 않는 각인), 글자 배율을 따른다', (
       tester,
     ) async {
