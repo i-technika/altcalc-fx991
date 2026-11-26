@@ -26,35 +26,61 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
 
 void main() {
   group('LcdIndicatorSlot 불변식', () {
-    test('슬롯 순서는 사용자 제공 fx-991EX 실물 순서를 따른다 (잠정 슬롯 제외)', () {
-      // 출처: LcdIndicatorSlot 문서 주석 — S, A, M, →x, D/R/G, FIX, SCI, √▭✎, ▼/▲, Disp ‖ (☀ 제외)
-      final confirmed = [
-        for (final slot in LcdIndicatorSlot.values)
-          if (!LcdIndicatorSlot.provisional.contains(slot)) slot.template,
-      ];
-      expect(confirmed, [
+    test('슬롯 순서는 fx-991EX 실물 LCD 세그먼트 순서를 따른다 (#58)', () {
+      // 출처: LcdIndicatorSlot 문서 주석 — 실물 사진·ClassWiz 세그먼트 좌표 대조.
+      // ⇩·◀·▶·☀는 앱에 해당 상태가 없어 슬롯이 없다(자리만 비워 둔다).
+      expect(LcdIndicatorSlot.values.map((s) => s.template), [
         'S',
         'A',
         'M',
         '→x',
+        '√◻',
         'D',
+        'R',
+        'G',
         'FIX',
         'SCI',
-        '√◻',
+        'E',
+        'i',
+        '∠',
         '▼',
         '▲',
         '‖',
       ]);
     });
 
-    test('잠정 슬롯은 문서에 적은 자리에 있다: E는 SCI 바로 뒤, i/∠는 √◻ 바로 뒤', () {
-      expect(
-        LcdIndicatorSlot.engineering.index,
-        LcdIndicatorSlot.sciFormat.index + 1,
-      );
-      expect(LcdIndicatorSlot.complex.index, LcdIndicatorSlot.math.index + 1);
-      // 잠정 슬롯이 늘면 위 자리 단언과 문서 주석도 함께 갱신한다.
-      expect(LcdIndicatorSlot.provisional, hasLength(2));
+    test('세그먼트 가운데 위치는 실물 좌표다 (192도트 기준, 사진으로 대조한 값)', () {
+      // 사진(Wikimedia Commons "Casio fx-991EX Scientific Calculator.jpg")에서 켜진 세 표시기의 위치를
+      // 표시줄 폭 대비 비율로 잰 값과 1도트 안쪽으로 맞는다(☀는 슬롯이 없어 제외).
+      for (final (slot, measured) in [
+        (LcdIndicatorSlot.math, 46.6),
+        (LcdIndicatorSlot.angleDegree, 60.0),
+        (LcdIndicatorSlot.historyUp, 158.6),
+      ]) {
+        expect(slot.dotCenter, closeTo(measured, 1.0), reason: slot.name);
+      }
+      expect(LcdIndicatorSlot.dotColumns, 192);
+    });
+
+    test('세그먼트 위치는 선언 순서대로 커지고 표시줄 안에 있다', () {
+      final slots = LcdIndicatorSlot.values;
+      for (final slot in slots) {
+        expect(slot.centerFraction, inExclusiveRange(0, 1), reason: slot.name);
+      }
+      for (var i = 1; i < slots.length; i++) {
+        expect(
+          slots[i].dotCenter,
+          greaterThan(slots[i - 1].dotCenter),
+          reason: '${slots[i - 1].name} → ${slots[i].name}',
+        );
+      }
+    });
+
+    test('▼와 ▲는 한 자리에 겹치지 않고 나란한 두 자리다 (▼ 왼쪽)', () {
+      final down = LcdIndicatorSlot.historyDown;
+      final up = LcdIndicatorSlot.historyUp;
+      expect(up.index, down.index + 1);
+      expect(up.dotCenter - down.dotCenter, greaterThan(5));
     });
 
     test('가이드의 표시기를 모두 표시할 수 있다 (☀는 앱에 해당 상태가 없어 제외, RCL은 가이드 표에 없음)', () {
@@ -152,14 +178,39 @@ void main() {
 
   group('LcdStatus', () {
     test('초기 상태는 Deg·Norm·MathI/MathO로 D와 √◻만 켜진다', () {
-      expect(LcdStatus.initial.activeIndicators, ['D', '√◻']);
+      expect(LcdStatus.initial.activeIndicators, ['√◻', 'D']);
     });
 
-    test('각도 단위는 항상 켜져 있다', () {
+    test('각도 단위는 항상 켜져 있고, D/R/G 세 자리 중 그 단위의 자리 하나만 켜진다', () {
+      const angleSlots = {
+        AngleUnit.degree: LcdIndicatorSlot.angleDegree,
+        AngleUnit.radian: LcdIndicatorSlot.angleRadian,
+        AngleUnit.gradian: LcdIndicatorSlot.angleGradian,
+      };
       for (final u in AngleUnit.values) {
+        final s = LcdStatus(angleUnit: u);
+        for (final MapEntry(key: unit, value: slot) in angleSlots.entries) {
+          expect(
+            s.indicatorFor(slot),
+            unit == u ? u.indicator : null,
+            reason: '${u.name} → ${slot.name}',
+          );
+        }
+      }
+    });
+
+    test('복소수 형식은 i와 ∠ 두 자리 중 설정된 자리 하나만 켜진다', () {
+      for (final c in ComplexResultIndicator.values) {
+        final s = LcdStatus(complex: c);
         expect(
-          LcdStatus(angleUnit: u).indicatorFor(LcdIndicatorSlot.angleUnit),
-          u.indicator,
+          s.indicatorFor(LcdIndicatorSlot.complexRectangular),
+          c == ComplexResultIndicator.rectangular ? 'i' : null,
+          reason: c.name,
+        );
+        expect(
+          s.indicatorFor(LcdIndicatorSlot.complexPolar),
+          c == ComplexResultIndicator.polar ? '∠' : null,
+          reason: c.name,
         );
       }
     });
@@ -168,7 +219,8 @@ void main() {
       const s = LcdStatus();
       expect(s.indicatorFor(LcdIndicatorSlot.fixFormat), isNull);
       expect(s.indicatorFor(LcdIndicatorSlot.sciFormat), isNull);
-      expect(s.indicatorFor(LcdIndicatorSlot.complex), isNull);
+      expect(s.indicatorFor(LcdIndicatorSlot.complexRectangular), isNull);
+      expect(s.indicatorFor(LcdIndicatorSlot.complexPolar), isNull);
     });
 
     test('FIX와 SCI는 서로 다른 자리이고 동시에 켜지지 않는다', () {

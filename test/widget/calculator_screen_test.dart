@@ -1155,7 +1155,7 @@ void main() {
       await _pumpScreen(tester);
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)).label,
-        'Degrees, Math input output',
+        'Math input output, Degrees',
       );
       final sin = tester.getSemantics(
         find.byWidgetPredicate(

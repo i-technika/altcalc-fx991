@@ -121,12 +121,16 @@ void main() {
         ),
       );
       expect(_colorOf(tester, _statusText('S')), CalcTheme.lcdStatusActive);
-      expect(_statusText('R'), findsOneWidget);
-      expect(_statusText('D'), findsNothing);
+      // D/R/G는 자리가 따로 있다 — R만 켜지고 D·G는 꺼진 색으로 남는다 (#58).
+      expect(_colorOf(tester, _statusText('R')), CalcTheme.lcdStatusActive);
+      expect(_colorOf(tester, _statusText('D')), CalcTheme.lcdStatusInactive);
+      expect(_colorOf(tester, _statusText('G')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('SCI')), CalcTheme.lcdStatusActive);
       // FIX는 SCI와 다른 자리라 꺼진 색으로 남는다 (#44).
       expect(_colorOf(tester, _statusText('FIX')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('i')), CalcTheme.lcdStatusActive);
+      // i와 ∠도 자리가 따로 있다 (#58).
+      expect(_colorOf(tester, _statusText('∠')), CalcTheme.lcdStatusInactive);
       expect(_colorOf(tester, _statusText('▼')), CalcTheme.lcdStatusActive);
     });
 
@@ -187,20 +191,56 @@ void main() {
       expect(on, off);
     });
 
-    for (final width in [360.0, 1000.0]) {
-      testWidgets('폭 $width에서 슬롯이 LCD 폭 전체에 순서대로 분포한다', (tester) async {
-        await _pump(tester, const LcdDisplay(), width: width);
-        final bar = tester.getRect(find.byType(LcdStatusBar));
-        final rects = [
-          for (final slot in LcdIndicatorSlot.values)
-            tester.getRect(find.byKey(ValueKey(slot))),
-        ];
-        expect(rects.first.left, closeTo(bar.left, 0.5));
-        expect(rects.last.right, closeTo(bar.right, 0.5));
-        for (var i = 1; i < rects.length; i++) {
-          expect(rects[i].left, greaterThan(rects[i - 1].right));
-        }
-      });
+    testWidgets('폭이 넉넉하면 슬롯 가운데가 실물 세그먼트 위치에 온다 (#58)', (tester) async {
+      await _pump(tester, const LcdDisplay(), width: 1000);
+      final bar = tester.getRect(find.byType(LcdStatusBar));
+      for (final slot in LcdIndicatorSlot.values) {
+        expect(
+          tester.getCenter(find.byKey(ValueKey(slot))).dx,
+          closeTo(bar.left + slot.centerFraction * bar.width, 0.5),
+          reason: slot.name,
+        );
+      }
+    });
+
+    // 실제 화면처럼 LCD 크기에서 글자 크기를 산출하고(fitFontsToSize), 큰 글자 배율까지 본다.
+    for (final (w, h) in [(200.0, 130.0), (300.0, 200.0), (360.0, 200.0)]) {
+      for (final scale in [1.0, 1.3]) {
+        testWidgets('LCD $w×$h·배율 $scale: 슬롯이 겹치지 않고 실물 위치 가까이에 있다', (
+          tester,
+        ) async {
+          await _pump(
+            tester,
+            const LcdDisplay(fitFontsToSize: true),
+            width: w,
+            height: h,
+            textScale: scale,
+          );
+          final bar = tester.getRect(find.byType(LcdStatusBar));
+          final rects = [
+            for (final slot in LcdIndicatorSlot.values)
+              tester.getRect(find.byKey(ValueKey(slot))),
+          ];
+          for (final r in rects) {
+            expect(_containsRect(bar, r), isTrue);
+          }
+          for (var i = 1; i < rects.length; i++) {
+            expect(rects[i].left, greaterThan(rects[i - 1].right));
+          }
+          // 실물에서 붙어 있는 세그먼트(D·R·G, FIX·SCI 등)는 글자가 넓어 밀리지만, 실물 위치에서 표시줄 폭의
+          // 4%(약 8도트)를 넘게 벗어나지 않는다. 실측 최대 3.0%(300×200·배율 1.3, E).
+          // 슬롯 최소 간격이 크면 줄 전체를 붙여 축소하는 쪽으로 넘어가 15% 안팎까지 벌어진다.
+          for (final (i, slot) in LcdIndicatorSlot.values.indexed) {
+            expect(
+              (rects[i].center.dx -
+                      (bar.left + slot.centerFraction * bar.width))
+                  .abs(),
+              lessThan(bar.width * 0.04),
+              reason: slot.name,
+            );
+          }
+        });
+      }
     }
 
     testWidgets('글리프 폭보다 큰 음수 자간을 넘겨도 예외 없이 그린다 (#44 리뷰 R2)', (tester) async {
@@ -248,7 +288,7 @@ void main() {
       );
       expect(
         tester.getSemantics(find.byType(LcdStatusBar)),
-        matchesSemantics(label: '알파, 메모리, 각도 단위 도, 수학 입출력'),
+        matchesSemantics(label: '알파, 메모리, 수학 입출력, 각도 단위 도'),
       );
       handle.dispose();
     });
@@ -990,6 +1030,62 @@ void main() {
       expect(
         const LcdLineOverflow(left: true).hashCode,
         const LcdLineOverflow(left: true).hashCode,
+      );
+    });
+  });
+
+  group('lcdStatusSlotLefts (#58)', () {
+    test('겹치지 않으면 가운데를 실물 위치에 그대로 둔다', () {
+      final lefts = lcdStatusSlotLefts(
+        centers: const [0.1, 0.5, 0.9],
+        widths: const [10, 20, 10],
+        barWidth: 100,
+        minGap: 1,
+      );
+      expect(lefts, [5, 40, 85]);
+    });
+
+    test('겹치는 슬롯만 순서를 지키며 최소 간격까지 민다', () {
+      // 가운데 두 슬롯이 겹친다(40~50, 45~55) — 뒤 슬롯을 오른쪽으로 민다.
+      final lefts = lcdStatusSlotLefts(
+        centers: const [0.1, 0.45, 0.5, 0.9],
+        widths: const [10, 10, 10, 10],
+        barWidth: 100,
+        minGap: 2,
+      )!;
+      expect(lefts, [5, 40, 52, 85]);
+    });
+
+    test('표시줄 밖으로 나가는 슬롯은 안으로 들이고, 이웃도 따라 민다', () {
+      final lefts = lcdStatusSlotLefts(
+        centers: const [0.0, 0.92, 1.0],
+        widths: const [10, 10, 10],
+        barWidth: 100,
+        minGap: 2,
+      )!;
+      expect(lefts.first, 0);
+      expect(lefts.last, 90);
+      expect(lefts[1], 78); // 90 - 2 - 10
+    });
+
+    test('슬롯 폭과 최소 간격의 합이 폭과 같으면 꽉 붙이고, 넘으면 null', () {
+      expect(
+        lcdStatusSlotLefts(
+          centers: const [0.5, 0.5, 0.5],
+          widths: const [10, 10, 10],
+          barWidth: 34,
+          minGap: 2,
+        ),
+        [0, 12, 24],
+      );
+      expect(
+        lcdStatusSlotLefts(
+          centers: const [0.5, 0.5, 0.5],
+          widths: const [10, 10, 10],
+          barWidth: 33.9,
+          minGap: 2,
+        ),
+        isNull,
       );
     });
   });

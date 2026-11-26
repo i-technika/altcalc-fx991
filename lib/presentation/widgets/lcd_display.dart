@@ -437,15 +437,16 @@ class LcdDisplay extends StatelessWidget {
 
 /// LCD 상단 상태 표시줄.
 ///
-/// [LcdIndicatorSlot] 순서대로 고정 너비 슬롯을 배치한다. 폭이 남으면 슬롯 사이를 고르게 벌려
-/// LCD 폭 전체에 분포시키고, 모자라면 줄 전체를 축소한다. 표시기가 꺼져도 슬롯은 남으므로
+/// [LcdIndicatorSlot] 순서대로 고정 너비 슬롯을 놓는다. 각 슬롯의 가운데는 실물 세그먼트의 위치
+/// ([LcdIndicatorSlot.centerFraction] — 표시줄 폭 대비 비율)에 둔다(#58). 표시기가 꺼져도 슬롯은 남으므로
 /// 다른 표시기의 위치가 바뀌지 않는다.
 ///
-/// 가로 위치는 이 균등 분포로 정한다(#44). 실물 표시기의 가로 좌표 자료가 없어 LCD 폭 대비 비율 좌표를
-/// 정할 수 없기 때문이다 — 자료가 생기면 비율 좌표로 바꾼다(#58).
+/// 앱의 글자는 실물 세그먼트보다 넓을 수 있다. 그래서 이웃과 겹치거나 표시줄 밖으로 나가는 슬롯은
+/// 실물 위치에서 가장 가까운 자리로 민다([lcdStatusSlotLefts]). 밀어도 들어가지 않을 만큼 좁으면,
+/// 슬롯을 최소 간격으로 붙인 줄 전체를 축소한다.
 ///
 /// 스크린리더에는 켜진 표시기의 의미만 화면 순서대로 읽힌다
-/// (예: "시프트, 메모리, 각도 단위 도, 수학 입출력" — [CalcSemanticStrings.statusBar]).
+/// (예: "시프트, 메모리, 수학 입출력, 각도 단위 도" — [CalcSemanticStrings.statusBar]).
 ///
 /// 왼쪽 → 오른쪽 배치를 전제한다. [LcdDisplay]는 주변이 RTL이어도 LTR로 고정하므로, 단독으로 쓸 때도
 /// `Directionality(textDirection: TextDirection.ltr)` 아래에 둔다.
@@ -496,29 +497,36 @@ class LcdStatusBar extends StatelessWidget {
       fontSize * CalcTheme.lcdStatusCharWidthRatio +
           (resolvedStyle.letterSpacing ?? 0),
     );
-    double slotWidth(LcdIndicatorSlot s) => charWidth * s.columns;
-    final slotsWidth = slots.map(slotWidth).fold(0.0, (a, b) => a + b);
+    final widths = [for (final s in slots) charWidth * s.columns];
+    final centers = [for (final s in slots) s.centerFraction];
     final minGap = fontSize * CalcTheme.lcdStatusSlotGapRatio;
 
-    Widget row(double gap) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (i, slot) in slots.indexed) ...[
-          if (i > 0) SizedBox(width: gap),
-          _IndicatorSlot(
-            key: ValueKey(slot),
-            slot: slot,
-            label: status.indicatorFor(slot),
-            width: slotWidth(slot),
-            height: slotHeight,
-            iconMetrics: iconMetrics,
-            style: resolvedStyle,
-            textScaler: textScaler,
-            showInactive: showInactive,
-            inactiveColor: inactiveColor,
-          ),
+    Widget bar(double width, List<double> lefts) => SizedBox(
+      width: width,
+      height: slotHeight,
+      child: Stack(
+        children: [
+          for (final (i, slot) in slots.indexed)
+            Positioned(
+              left: lefts[i],
+              top: 0,
+              width: widths[i],
+              height: slotHeight,
+              child: _IndicatorSlot(
+                key: ValueKey(slot),
+                slot: slot,
+                label: status.indicatorFor(slot),
+                width: widths[i],
+                height: slotHeight,
+                iconMetrics: iconMetrics,
+                style: resolvedStyle,
+                textScaler: textScaler,
+                showInactive: showInactive,
+                inactiveColor: inactiveColor,
+              ),
+            ),
         ],
-      ],
+      ),
     );
 
     return Semantics(
@@ -528,23 +536,87 @@ class LcdStatusBar extends StatelessWidget {
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final natural = slotsWidth + minGap * (slots.length - 1);
-          if (constraints.hasBoundedWidth && natural <= constraints.maxWidth) {
-            // 폭이 남으면 실물처럼 LCD 폭 전체에 고르게 펼친다.
-            final gap =
-                (constraints.maxWidth - slotsWidth) / (slots.length - 1);
-            return Align(alignment: Alignment.centerLeft, child: row(gap));
+          if (constraints.hasBoundedWidth) {
+            final lefts = lcdStatusSlotLefts(
+              centers: centers,
+              widths: widths,
+              barWidth: constraints.maxWidth,
+              minGap: minGap,
+            );
+            if (lefts != null) {
+              // 실물 세그먼트 위치에 놓는다(겹치는 슬롯만 가까운 자리로 민다).
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: bar(constraints.maxWidth, lefts),
+              );
+            }
           }
-          // 좁은 화면이나 큰 글자 배율에서는 줄 전체를 축소해 넘치지 않게 한다.
+          // 좁은 화면이나 큰 글자 배율에서는 최소 간격으로 붙인 줄 전체를 축소해 넘치지 않게 한다.
+          final packed =
+              widths.fold(0.0, (a, b) => a + b) + minGap * (slots.length - 1);
           return FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: row(minGap),
+            child: bar(
+              packed,
+              lcdStatusSlotLefts(
+                    centers: centers,
+                    widths: widths,
+                    barWidth: packed,
+                    minGap: minGap,
+                  ) ??
+                  _packedLefts(widths, minGap),
+            ),
           );
         },
       ),
     );
   }
+
+  /// 슬롯을 왼쪽부터 [minGap] 간격으로 붙인 왼쪽 위치 (부동소수 오차로 [lcdStatusSlotLefts]가 실패할 때의 대비)
+  static List<double> _packedLefts(List<double> widths, double minGap) {
+    final lefts = <double>[];
+    var x = 0.0;
+    for (final w in widths) {
+      lefts.add(x);
+      x += w + minGap;
+    }
+    return lefts;
+  }
+}
+
+/// 상태 표시줄 슬롯의 왼쪽 위치를 정한다 (#58). 들어가지 않으면 `null`.
+///
+/// 각 슬롯은 가운데가 실물 위치([centers] — 0~1 비율 × [barWidth])에 오도록 놓는다. 이웃과 [minGap]보다
+/// 가깝거나 표시줄 밖으로 나가는 슬롯은 순서를 지키면서 가장 덜 움직이는 쪽으로 민다.
+/// - 앞→뒤로 한 번 훑어 왼쪽 경계·앞 슬롯과 겹치는 슬롯을 오른쪽으로 민다.
+/// - 뒤→앞으로 한 번 훑어 오른쪽 경계·뒤 슬롯과 겹치는 슬롯을 왼쪽으로 민다.
+/// 그 뒤에도 첫 슬롯이 왼쪽 경계를 넘으면, 슬롯 폭과 최소 간격의 합이 [barWidth]보다 큰 것이다.
+@visibleForTesting
+List<double>? lcdStatusSlotLefts({
+  required List<double> centers,
+  required List<double> widths,
+  required double barWidth,
+  required double minGap,
+}) {
+  assert(centers.length == widths.length);
+  final n = widths.length;
+  if (n == 0) return const [];
+  final lefts = [
+    for (var i = 0; i < n; i++) centers[i] * barWidth - widths[i] / 2,
+  ];
+  lefts[0] = math.max(lefts[0], 0);
+  for (var i = 1; i < n; i++) {
+    lefts[i] = math.max(lefts[i], lefts[i - 1] + widths[i - 1] + minGap);
+  }
+  lefts[n - 1] = math.min(lefts[n - 1], barWidth - widths[n - 1]);
+  for (var i = n - 2; i >= 0; i--) {
+    lefts[i] = math.min(lefts[i], lefts[i + 1] - minGap - widths[i]);
+  }
+  // 부동소수 오차만큼은 허용한다(꽉 차게 붙인 경우).
+  if (lefts[0] < -1e-6 * math.max(1, barWidth)) return null;
+  lefts[0] = math.max(lefts[0], 0);
+  return lefts;
 }
 
 /// 상태 표시줄의 고정 너비 슬롯 하나.
