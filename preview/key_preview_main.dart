@@ -265,6 +265,23 @@ const DisplayFeature previewFlipInnerFold = DisplayFeature(
   state: DisplayFeatureState.postureFlat,
 );
 
+/// 펼친 트라이폴드 화면(960×704, 가로가 기본 방향)의 두 세로 접힘선 근사값 (#144) — 왼쪽(x=320)·오른쪽(x=640).
+///
+/// 이슈 #144의 가정 값이다: 세 장이 같은 폭이라 보고 화면을 셋으로 나눈 자리에 폭 0인 접힘선(`fold`·`postureFlat`)이
+/// 위에서 아래까지 가로지른다. 화면 크기·접힘선 개수·위치 모두 실기기 미확인이다(`FormFactor.arrangementOf` "트라이폴드").
+const DisplayFeature previewTriFoldLeftFold = DisplayFeature(
+  bounds: Rect.fromLTWH(320, 0, 0, 704),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
+);
+
+/// [previewTriFoldLeftFold]의 오른쪽 짝 (x=640)
+const DisplayFeature previewTriFoldRightFold = DisplayFeature(
+  bounds: Rect.fromLTWH(640, 0, 0, 704),
+  type: DisplayFeatureType.fold,
+  state: DisplayFeatureState.postureFlat,
+);
+
 /// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
 /// 높게 잡았다(배치 테스트 `screen_layout_test`·`top_strip_test`의 Flip 근사와 같다). 실기기 미확인이다.
 const double _flipStatusBarHeight = 32;
@@ -333,6 +350,17 @@ const List<PreviewDevice> previewDevices = [
       24,
     ),
     displayFeatures: [previewFlipInnerFold],
+    foldable: true,
+  ),
+  // 펼친 트라이폴드 (#144, Galaxy Z TriFold 가정 — 크기·접힘선은 실기기 미확인). 접힘선이 2개라 앱이 접힘선을 무시하고
+  // 태블릿처럼 그린다: 가로로 들면 가로형, 세로로 돌리면 세로형. 두 접힘선이 LCD·키 열 위를 지나가는 것을 여기서 본다.
+  // 자세(반 접힘)를 골라도 배치는 같다. 인셋은 폴더블 내부와 같게 근사했다.
+  PreviewDevice(
+    '트라이폴드',
+    Size(960, 704),
+    padding: EdgeInsets.only(top: 24, bottom: 24),
+    systemGestureInsets: _gestureNavInsets,
+    displayFeatures: [previewTriFoldLeftFold, previewTriFoldRightFold],
     foldable: true,
   ),
   // 10인치급 Android 태블릿, 작업 표시줄 48dp (3버튼 — 좌우 제스처 영역 없음)
@@ -773,9 +801,10 @@ Iterable<DisplayFeature> _drawableFolds(List<DisplayFeature> features) =>
 
 /// 앱이 [screen] 크기 화면을 나누는 데 쓰는 접힘선. 없으면 `null`.
 ///
-/// 앱의 배치 규칙([FormFactor.arrangementOf])과 같다: 화면을 가로지르는 접힘선 중 **첫 번째**
-/// ([FormFactor.hingeOf]) 하나만 보고, 양쪽 패널 길이([FormFactor.hingeMinPanelExtent])와 가로 접힘선의
-/// 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가 될 때만 그 접힘선이다.
+/// 앱의 배치 규칙([FormFactor.arrangementOf])과 같다: 화면을 가로지르는 접힘선이 **하나뿐일 때**
+/// ([FormFactor.hingeOf] — 둘 이상이면 모두 무시한다, 트라이폴드 #144) 그 접힘선만 보고, 양쪽 패널 길이
+/// ([FormFactor.hingeMinPanelExtent])와 가로 접힘선의 나눔 여부([FormFactor.separates])까지 맞아 접힘선 기준 배치가
+/// 될 때만 그 접힘선이다.
 /// 화면이 키 터치 하한 때문에 위아래 배치로 되돌아가는 경우(`CalculatorScreen`, 본체 크기로 판정)는
 /// 반영하지 않는다. 지금 프리셋에서는 테이블톱 조합(#93, Flip 내부 #104)도 완화된 하한(`tabletopKeyTouchHeightFloor`)을
 /// 넘어 되돌아가지 않는다(테스트가 조합마다 되돌아가지 않음을 확인 — 테이블톱은 실물·넓은 키패드 배열(#80) 중 키가 큰
@@ -794,7 +823,8 @@ DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
 ///
 /// 세로 접힘선은 가운데 x, 가로 접힘선은 가운데 y를 화면 좌표(dp)로 적는다. 폭이 있는 힌지는 폭도 적고,
 /// 앱이 [screen] 크기 화면을 나누는 데 쓰지 않는 접힘선([_splittingFold]가 아닌 것 — 화면을 끝까지
-/// 가로지르지 않음, 한쪽 패널이 너무 좁음, 펼친 가로 접힘선, 두 번째 접힘선)은 `(배치에 안 씀)`을 붙인다.
+/// 가로지르지 않음, 한쪽 패널이 너무 좁음, 펼친 가로 접힘선, 화면을 가로지르는 접힘선이 둘 이상인 화면의 모든 접힘선)은
+/// `(배치에 안 씀)`을 붙인다.
 /// 점선은 있는데 배치가 나뉘지 않는 것을 오류로 오인하지 않게 하기 위해서다(점선도 회색으로 구분한다).
 /// 폴더블 프리셋을 펼친 채 접힘선이 가로가 되게 돌린 화면(펼친 가로 접힘선)이 그렇다(#93).
 /// 반 접힌 접힘선(`postureHalfOpened`)은 위치 뒤에 `반 접힘`을 적는다 — 세로 접힘선은 펼침과 반 접힘의

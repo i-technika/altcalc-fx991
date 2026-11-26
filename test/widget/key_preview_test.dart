@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
@@ -153,8 +154,8 @@ typedef _PoseExpectation = ({
   /// 화면 크기 (dp)
   Size size,
 
-  /// 접힘선 영역 (화면 좌표 dp)
-  Rect hinge,
+  /// 접힘선 영역들 (화면 좌표 dp, 프리셋의 접힘 정보 순서 — 트라이폴드는 2개, #144)
+  List<Rect> hinges,
 
   /// 캡션의 접힘선 설명 (`previewDisplayFeatureCaption` 전체 문자열)
   String caption,
@@ -167,7 +168,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.hingeSplit,
     usesHinge: true,
     size: const Size(690, 829),
-    hinge: const Rect.fromLTRB(345, 0, 345, 829),
+    hinges: const [Rect.fromLTRB(345, 0, 345, 829)],
     caption: ' · 접힘선(점선) 세로 x=345',
   ),
   // 책 자세
@@ -175,7 +176,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.hingeSplit,
     usesHinge: true,
     size: const Size(690, 829),
-    hinge: const Rect.fromLTRB(345, 0, 345, 829),
+    hinges: const [Rect.fromLTRB(345, 0, 345, 829)],
     caption: ' · 접힘선(점선) 세로 x=345 반 접힘',
   ),
   // 펼친 채 가로로 돌림 — 펼친 폭 0 가로 접힘선은 나누지 않는다
@@ -183,7 +184,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.stacked,
     usesHinge: false,
     size: const Size(829, 690),
-    hinge: const Rect.fromLTRB(0, 345, 829, 345),
+    hinges: const [Rect.fromLTRB(0, 345, 829, 345)],
     caption: ' · 접힘선(점선) 가로 y=345 (배치에 안 씀)',
   ),
   // 테이블톱 자세
@@ -191,7 +192,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.hingeStacked,
     usesHinge: true,
     size: const Size(829, 690),
-    hinge: const Rect.fromLTRB(0, 345, 829, 345),
+    hinges: const [Rect.fromLTRB(0, 345, 829, 345)],
     caption: ' · 접힘선(점선) 가로 y=345 반 접힘',
   ),
   // Pixel Fold 내부 (가로가 기본 방향 841×701, 접힘선 x=420.5)
@@ -199,28 +200,28 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.hingeSplit,
     usesHinge: true,
     size: const Size(841, 701),
-    hinge: const Rect.fromLTRB(420.5, 0, 420.5, 701),
+    hinges: const [Rect.fromLTRB(420.5, 0, 420.5, 701)],
     caption: ' · 접힘선(점선) 세로 x=420.5',
   ),
   ('가로형 폴더블 내부', PreviewFoldPosture.halfOpened, PreviewOrientation.landscape): (
     arrangement: ScreenArrangement.hingeSplit,
     usesHinge: true,
     size: const Size(841, 701),
-    hinge: const Rect.fromLTRB(420.5, 0, 420.5, 701),
+    hinges: const [Rect.fromLTRB(420.5, 0, 420.5, 701)],
     caption: ' · 접힘선(점선) 세로 x=420.5 반 접힘',
   ),
   ('가로형 폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
     arrangement: ScreenArrangement.stacked,
     usesHinge: false,
     size: const Size(701, 841),
-    hinge: const Rect.fromLTRB(0, 420.5, 701, 420.5),
+    hinges: const [Rect.fromLTRB(0, 420.5, 701, 420.5)],
     caption: ' · 접힘선(점선) 가로 y=420.5 (배치에 안 씀)',
   ),
   ('가로형 폴더블 내부', PreviewFoldPosture.halfOpened, PreviewOrientation.portrait): (
     arrangement: ScreenArrangement.hingeStacked,
     usesHinge: true,
     size: const Size(701, 841),
-    hinge: const Rect.fromLTRB(0, 420.5, 701, 420.5),
+    hinges: const [Rect.fromLTRB(0, 420.5, 701, 420.5)],
     caption: ' · 접힘선(점선) 가로 y=420.5 반 접힘',
   ),
   // Galaxy Z Flip 내부 (세로 고정 411×1006, 접힘선 y=503, #104) — 앱이 가로로 돌지 않아 방향은 세로뿐이다.
@@ -229,7 +230,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.stacked,
     usesHinge: false,
     size: const Size(411, 1006),
-    hinge: const Rect.fromLTRB(0, 503, 411, 503),
+    hinges: const [Rect.fromLTRB(0, 503, 411, 503)],
     caption: ' · 접힘선(점선) 가로 y=503 (배치에 안 씀)',
   ),
   // Flex 모드 (테이블톱 자세)
@@ -237,8 +238,55 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     arrangement: ScreenArrangement.hingeStacked,
     usesHinge: true,
     size: const Size(411, 1006),
-    hinge: const Rect.fromLTRB(0, 503, 411, 503),
+    hinges: const [Rect.fromLTRB(0, 503, 411, 503)],
     caption: ' · 접힘선(점선) 가로 y=503 반 접힘',
+  ),
+  // 펼친 트라이폴드 (가로가 기본 방향 960×704, 접힘선 x=320·640, #144) — 접힘선이 2개라 자세와 상관없이 접힘선을
+  // 무시하고 태블릿처럼 가로면 가로형, 세로로 돌리면 세로형이다.
+  ('트라이폴드', PreviewFoldPosture.flat, PreviewOrientation.landscape): (
+    arrangement: ScreenArrangement.landscape,
+    usesHinge: false,
+    size: const Size(960, 704),
+    hinges: const [
+      Rect.fromLTRB(320, 0, 320, 704),
+      Rect.fromLTRB(640, 0, 640, 704),
+    ],
+    caption: ' · 접힘선(점선) 세로 x=320 (배치에 안 씀), 세로 x=640 (배치에 안 씀)',
+  ),
+  ('트라이폴드', PreviewFoldPosture.halfOpened, PreviewOrientation.landscape): (
+    arrangement: ScreenArrangement.landscape,
+    usesHinge: false,
+    size: const Size(960, 704),
+    hinges: const [
+      Rect.fromLTRB(320, 0, 320, 704),
+      Rect.fromLTRB(640, 0, 640, 704),
+    ],
+    caption:
+        ' · 접힘선(점선) 세로 x=320 반 접힘 (배치에 안 씀), '
+        '세로 x=640 반 접힘 (배치에 안 씀)',
+  ),
+  // 반시계 방향으로 돌리면 기본 방향의 왼쪽 접힘선(x=320)이 아래(y=640)로 간다
+  ('트라이폴드', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
+    arrangement: ScreenArrangement.stacked,
+    usesHinge: false,
+    size: const Size(704, 960),
+    hinges: const [
+      Rect.fromLTRB(0, 640, 704, 640),
+      Rect.fromLTRB(0, 320, 704, 320),
+    ],
+    caption: ' · 접힘선(점선) 가로 y=640 (배치에 안 씀), 가로 y=320 (배치에 안 씀)',
+  ),
+  ('트라이폴드', PreviewFoldPosture.halfOpened, PreviewOrientation.portrait): (
+    arrangement: ScreenArrangement.stacked,
+    usesHinge: false,
+    size: const Size(704, 960),
+    hinges: const [
+      Rect.fromLTRB(0, 640, 704, 640),
+      Rect.fromLTRB(0, 320, 704, 320),
+    ],
+    caption:
+        ' · 접힘선(점선) 가로 y=640 반 접힘 (배치에 안 씀), '
+        '가로 y=320 반 접힘 (배치에 안 씀)',
   ),
 };
 
@@ -469,6 +517,8 @@ void main() {
           PreviewOrientation.landscape,
         ],
         '플립형 폴더블 내부': [PreviewOrientation.portrait],
+        // 펼친 트라이폴드도 폴더블 대화면이라 네 방향 허용 (#144)
+        '트라이폴드': [PreviewOrientation.portrait, PreviewOrientation.landscape],
       };
       for (final d in previewDevices) {
         expect(
@@ -533,7 +583,7 @@ void main() {
           expect(f.state, DisplayFeatureState.postureFlat, reason: d.name);
         }
       }
-      expect(previewDevices.where((d) => d.foldable), hasLength(3));
+      expect(previewDevices.where((d) => d.foldable), hasLength(4));
     });
 
     test('폴더블 자세·방향: 돌리면 크기의 가로·세로가 바뀌고, 자세는 접힘선 상태만 바꾼다', () {
@@ -546,25 +596,37 @@ void main() {
         final other = PreviewOrientation.values.singleWhere(
           (o) => o != d.naturalOrientation,
         );
-        final b = d.displayFeatures.single.bounds;
         for (final p in PreviewFoldPosture.values) {
           final reason = '${d.name} ${p.name}';
           final unrotated = d.posed(p, d.naturalOrientation);
           expect(unrotated.size, d.size, reason: reason);
-          expect(unrotated.displayFeatures.single.bounds, b, reason: reason);
           expect(
-            unrotated.displayFeatures.single.state,
-            p.state,
+            unrotated.displayFeatures.map((f) => f.bounds),
+            d.displayFeatures.map((f) => f.bounds),
+            reason: reason,
+          );
+          expect(
+            unrotated.displayFeatures.map((f) => f.state),
+            everyElement(p.state),
             reason: reason,
           );
 
           final rotated = d.posed(p, other);
           expect(rotated.name, d.name, reason: reason);
           expect(rotated.size, d.size.flipped, reason: reason);
-          expect(rotated.displayFeatures.single.state, p.state, reason: reason);
           expect(
-            rotated.displayFeatures.single.type,
-            d.displayFeatures.single.type,
+            rotated.displayFeatures,
+            hasLength(d.displayFeatures.length),
+            reason: reason,
+          );
+          expect(
+            rotated.displayFeatures.map((f) => f.state),
+            everyElement(p.state),
+            reason: reason,
+          );
+          expect(
+            rotated.displayFeatures.map((f) => f.type),
+            d.displayFeatures.map((f) => f.type),
             reason: reason,
           );
           // 인셋은 화면 기준으로 그대로다 (상태 표시줄 위, 내비게이션 아래, 뒤로가기 좌우).
@@ -662,17 +724,18 @@ void main() {
           for (final o in d.orientations) {
             final pose = (d.name, p, o);
             final key = _poseName(pose);
-            final (:arrangement, :usesHinge, :size, :hinge, :caption) =
+            final (:arrangement, :usesHinge, :size, :hinges, :caption) =
                 expected[pose]!;
             final posed = d.posed(p, o);
             // 화면 크기·접힘선 영역·상태 (적어 둔 값과 비교한다)
             expect(posed.size, size, reason: key);
             expect(posed.displayFeatures, [
-              DisplayFeature(
-                bounds: hinge,
-                type: DisplayFeatureType.fold,
-                state: p.state,
-              ),
+              for (final hinge in hinges)
+                DisplayFeature(
+                  bounds: hinge,
+                  type: DisplayFeatureType.fold,
+                  state: p.state,
+                ),
             ], reason: key);
             expect(
               previewDisplayFeatureCaption(posed.size, posed.displayFeatures),
@@ -680,9 +743,15 @@ void main() {
               reason: key,
             );
             expect(caption.contains('(배치에 안 씀)'), !usesHinge, reason: key);
+            // 모든 접힘선이 화면을 가로지른다(앱이 접힘선으로 인식한다) — 둘 이상이면 배치에 쓰지 않는다(#144)
+            expect(
+              FormFactor.crossingHingesOf(posed.size, posed.displayFeatures),
+              posed.displayFeatures,
+              reason: key,
+            );
             expect(
               FormFactor.hingeOf(posed.size, posed.displayFeatures),
-              isNotNull,
+              hinges.length == 1 ? isNotNull : isNull,
               reason: key,
             );
             expect(
@@ -710,6 +779,8 @@ void main() {
         containsAll([
           ScreenArrangement.hingeSplit,
           ScreenArrangement.hingeStacked,
+          // 트라이폴드 (#144)
+          ScreenArrangement.landscape,
         ]),
       );
       expect(expected.values.where((e) => !e.usesHinge), isNotEmpty);
@@ -732,22 +803,28 @@ void main() {
           ),
         );
         expect(tester.getSize(find.byKey(const ValueKey('painter'))), e.size);
-        final from = FormFactor.isVerticalHinge(e.hinge)
-            ? e.hinge.topCenter
-            : e.hinge.centerLeft;
-        final to = FormFactor.isVerticalHinge(e.hinge)
-            ? from + const Offset(0, 8)
-            : from + const Offset(8, 0);
-        expect(
-          find.byKey(const ValueKey('painter')),
-          paints..line(
-            p1: from,
-            p2: to,
-            color: e.usesHinge
-                ? PreviewDisplayFeaturePainter.splittingColor
-                : PreviewDisplayFeaturePainter.otherColor,
-          ),
-        );
+        // 접힘선마다 첫 점선 조각 (접힘선이 둘이면 앞 접힘선의 나머지 조각을 건너뛰고 찾는다)
+        final color = e.usesHinge
+            ? PreviewDisplayFeaturePainter.splittingColor
+            : PreviewDisplayFeaturePainter.otherColor;
+        var pattern = paints;
+        for (final hinge in e.hinges) {
+          final from = FormFactor.isVerticalHinge(hinge)
+              ? hinge.topCenter
+              : hinge.centerLeft;
+          final to = FormFactor.isVerticalHinge(hinge)
+              ? from + const Offset(0, 8)
+              : from + const Offset(8, 0);
+          pattern = pattern
+            ..something(
+              (method, args) =>
+                  method == #drawLine &&
+                  args[0] == from &&
+                  args[1] == to &&
+                  (args[2] as Paint).color.toARGB32() == color.toARGB32(),
+            );
+        }
+        expect(find.byKey(const ValueKey('painter')), pattern);
       });
     }
 
@@ -798,13 +875,13 @@ void main() {
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureHalfOpened,
           ),
+          // 화면을 끝까지 가로지르지 않는 힌지·접힘선 — 앱이 배치에 쓰지 않는다(가로지르면 접힘선이 둘이 되어
+          // 모두 배치에 쓰지 않는다 — 아래 트라이폴드 경우).
           DisplayFeature(
-            bounds: Rect.fromLTWH(400, 0, 20, 841),
+            bounds: Rect.fromLTWH(400, 0, 20, 600),
             type: DisplayFeatureType.hinge,
             state: DisplayFeatureState.postureFlat,
           ),
-          // 위 힌지도 화면을 가로지르지만 앱은 첫 번째 접힘선(위 가로 접힘선)만 쓴다.
-          // 화면을 끝까지 가로지르지 않는 접힘선 — 앱이 배치에 쓰지 않는다.
           DisplayFeature(
             bounds: Rect.fromLTWH(200, 100, 0, 300),
             type: DisplayFeatureType.fold,
@@ -845,6 +922,22 @@ void main() {
           ),
         ]),
         ' · 접힘선(점선) 세로 x=200 (배치에 안 씀)',
+      );
+      // 화면을 가로지르는 접힘선이 둘이면(트라이폴드, #144) 둘 다 배치에 쓰지 않는다
+      expect(
+        previewDisplayFeatureCaption(screen, const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 420.5, 701, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureHalfOpened,
+          ),
+          DisplayFeature(
+            bounds: Rect.fromLTWH(400, 0, 20, 841),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]),
+        ' · 접힘선(점선) 가로 y=420.5 반 접힘 (배치에 안 씀), 세로 x=410 폭 20 (배치에 안 씀)',
       );
       // 반 접혔지만 배치에 쓰지 않는 접힘선: 자세 다음에 `(배치에 안 씀)`
       expect(
@@ -1864,7 +1957,7 @@ void main() {
         );
       });
 
-      testWidgets('화면을 가로지르는 접힘선이 둘이면 앱이 쓰는 첫 번째만 주황, 두 번째는 회색', (
+      testWidgets('화면을 가로지르는 접힘선이 둘이면 앱이 접힘선을 무시하므로 둘 다 회색 (#144)', (
         tester,
       ) async {
         await pumpPainter(tester, const [
@@ -1885,7 +1978,7 @@ void main() {
             ..line(
               p1: const Offset(300, 0),
               p2: const Offset(300, 8),
-              color: PreviewDisplayFeaturePainter.splittingColor,
+              color: PreviewDisplayFeaturePainter.otherColor,
             )
             // 첫 접힘선의 나머지 점선 조각을 건너뛰고 두 번째 접힘선의 첫 조각을 찾는다.
             ..something(
@@ -2061,13 +2154,15 @@ void main() {
                 final posed = device.posed(p, o);
                 final want = _foldPoseExpectations[pose]!;
                 final arrangement = want.arrangement;
-                final hinge = want.hinge;
+                // 접힘선 기준 배치(접힘선 1개)에서 경계로 쓰는 접힘선
+                final hinge = want.hinges.first;
                 final features = [
-                  DisplayFeature(
-                    bounds: hinge,
-                    type: DisplayFeatureType.fold,
-                    state: p.state,
-                  ),
+                  for (final h in want.hinges)
+                    DisplayFeature(
+                      bounds: h,
+                      type: DisplayFeatureType.fold,
+                      state: p.state,
+                    ),
                 ];
 
                 final screenElement = tester.element(
@@ -2193,7 +2288,14 @@ void main() {
                         lessThanOrEqualTo(keypad.top + e),
                         reason: reason,
                       );
-                      expect(keypad.top, lessThan(hinge.top), reason: reason);
+                      // 키패드가 (아래쪽) 접힘선을 가로지른다
+                      expect(
+                        keypad.top,
+                        lessThan(
+                          want.hinges.map((r) => r.top).reduce(math.max),
+                        ),
+                        reason: reason,
+                      );
                       final s = rectOf(settings);
                       expect(s.top, lessThan(lcd.top), reason: reason);
                       expect(
@@ -2202,7 +2304,38 @@ void main() {
                         reason: reason,
                       );
                     case ScreenArrangement.landscape:
-                      fail('$reason: 폴더블 프리셋에서 접힘선을 무시한 가로형');
+                      // 접힘선이 둘 이상인 트라이폴드만(#144): 접힘선을 모두 무시한 가로형 — 위 띠 아래에 넓은 배열
+                      // 키패드가 본체 폭을 다 쓰며 모든 접힘선을 가로지른다.
+                      expect(
+                        want.hinges.length,
+                        greaterThanOrEqualTo(FormFactor.multiHingeMinCount),
+                        reason: '$reason: 접힘선 1개 폴더블 프리셋에서 접힘선을 무시한 가로형',
+                      );
+                      expect(
+                        tester
+                            .widget<CalcKeypad>(find.byType(CalcKeypad))
+                            .arrangement,
+                        KeypadArrangement.wide,
+                        reason: reason,
+                      );
+                      expect(
+                        lcd.bottom,
+                        lessThanOrEqualTo(keypad.top + e),
+                        reason: reason,
+                      );
+                      for (final r in want.hinges) {
+                        expect(keypad.left, lessThan(r.left), reason: reason);
+                        expect(
+                          keypad.right,
+                          greaterThan(r.right),
+                          reason: reason,
+                        );
+                      }
+                      expect(
+                        rectOf(settings).top,
+                        lessThan(lcd.top),
+                        reason: reason,
+                      );
                   }
                 }
                 // 키도 눌린다.
