@@ -279,7 +279,8 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 - **켜져 있는 동안 `pubspec.yaml`·`pubspec_overrides.yaml`이 생기거나 바뀌면** (소스, `dart.runPubGetOnPubspecChanges` 기본값 `always`)
   - 바뀐 파일의 절대경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 이 동작은 브랜치와 무관하다.
     - 그래서 `.claude/worktrees/`에서 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다(실측. 대조군이라 수정 전에도 같다).
-      실사용 창에서도 나흘 동안 워크트리를 만들 때마다 `Skipping pubspec change for ignored folder`만 남았다.
+      실사용 창에서도 나흘 동안 워크트리 쪽 pubspec 변경에 남은 로그는 `Skipping pubspec change for ignored folder`뿐이었고,
+      출력 패널에도 루트의 `flutter (package:...)` 채널만 생겨 워크트리에 pub get이 돈 적이 없었다.
     - 반대로 워크트리 자체를 VS Code로 열면 그 창에서는 이 자동 실행이 늘 꺼진다. pubspec을 바꾼 뒤 직접 `flutter pub get`을 한다.
   - 그 밖에는 걸러진 목록에서 오래된 프로젝트를 센다.
     - 0개이면 바뀐 폴더에, **1개이면 그 프로젝트에** 묻지 않고 돌린다. 2개 이상이면 알림을 띄운다.
