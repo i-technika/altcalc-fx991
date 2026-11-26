@@ -8,7 +8,7 @@
 // 앱 릴리스 빌드에 포함되지 않는다 — 앱 진입점은 lib/main.dart이고 lib/에서 이 파일로 가는 import가 없으며
 // pubspec 에셋에도 preview/가 없다(test/widget/key_preview_test.dart가 검증).
 //
-// TODO(#18): M6의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 자리를 빈 자리로
+// TODO(#18): M7의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 자리를 빈 자리로
 // 덮어쓸 수 있게(provider 주입 등) 연결 구조를 정한다. CI가 이 파일을 웹으로 빌드한다(Sub-issue Linux CI).
 import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;

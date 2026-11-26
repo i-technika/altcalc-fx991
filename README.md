@@ -115,7 +115,7 @@ flutter run            # 연결된 기기·에뮬레이터
 ### 에뮬레이터로 접근성 확인 (#185)
 
 TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인은 그 과제가 속한 마일스톤에서 하고,
-실기기가 있어야 하는 확인만 M6로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
+실기기가 있어야 하는 확인만 M8 출시 QA(에픽 #6)로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
 
 - **TalkBack**: 시스템 앱으로 들어 있다(설치 확인 2대, 켜서 읽혀 본 기록은 아직 없다).
   - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:

@@ -32,16 +32,17 @@ TodoWrite 등으로 단계를 추적하고, 각 단계 완료 시 짧게 진행 
 ```bash
 gh issue view <번호> --json number,title,body,labels,milestone,parent,state,issueType
 ```
-- 상위 에픽(`parent.number`)으로 마일스톤 번호 N을 정하고 베이스 브랜치 `milestone/m<N>`을 확인한다.
+- 마일스톤의 M 번호 N은 `milestone.title`의 `M<N>:`(또는 상위 에픽 제목의 `[M<N>]`)에서 읽고 베이스 브랜치 `milestone/m<N>`을 확인한다.
+  에픽 번호(`parent.number`)나 `milestone.number`는 M 번호와 다르다(CLAUDE.md "마일스톤 대응 표" — 예: 에픽 #6 = M8, 브랜치 `milestone/m8`).
 - 같은 마일스톤의 다른 서브이슈 본문도 훑어 **이번 이슈의 범위 경계**를 파악한다(다음 이슈의 일을 미리 하지 않는다).
 - 원격/로컬에 이미 `issue/<번호>-*` 브랜치나 미커밋 작업물(이전 에이전트의 WIP 등)이 있으면 내용을 검토해 재사용 여부를 판단한다.
-- **M1~M5 이슈 본문에 실기기 확인 항목이 있으면**(예: "실기기 태블릿에서 잰다", "iPhone에서 확인") 이 이슈에서 하지 않는다 (#185).
-  M6 이슈(실기기 확인 이슈 자체)와 M7~ 이슈의 실기기 항목은 그 이슈에서 한다.
+- **M1~M7 이슈 본문에 실기기 확인 항목이 있으면**(예: "실기기 태블릿에서 잰다", "iPhone에서 확인") 이 이슈에서 하지 않는다 (#185).
+  M 구분은 위의 N(마일스톤 제목)으로 한다. M8 이슈(출시 QA 마일스톤 전체)와 M9~ 이슈의 실기기 항목은 그 이슈에서 한다.
   - "실기기"가 휴대폰·태블릿 기기를 뜻하는지 문맥으로 가린다 — 옛 주석·이슈에는 실물 fx-991EX 계산기를 "실기기"라고 쓴 곳이 있다(실물 대조는 실기기 확인이 아니다).
   - "실기기나 에뮬레이터에서"처럼 둘 중 하나로 되는 항목은 에뮬레이터로 하고, 실기기로만 남는 부분이 있을 때만 나눈다.
-  - 먼저 겹치는 M6 이슈를 찾는다: 에픽 #6 서브이슈(`gh issue view 6 --json subIssues --jq '.subIssues.nodes[] | "\(.number)\t\(.state)\t\(.title)"'`)와
+  - 먼저 겹치는 M8 이슈를 찾는다: 에픽 #6 서브이슈(`gh issue view 6 --json subIssues --jq '.subIssues.nodes[] | "\(.number)\t\(.state)\t\(.title)"'`)와
     이 이슈의 코멘트·본문에 적힌 분기 번호. 있으면 새로 만들지 않고 그 이슈에 코멘트로 보탠다. 없을 때만 9단계 규칙대로 A·B 블록으로 만든다.
-  - 원래 이슈 본문의 그 항목은 체크박스를 없애고 `- ~~원래 항목~~ → 실기기 분기: #N (M6)`으로 바꾼다
+  - 원래 이슈 본문의 그 항목은 체크박스를 없애고 `- ~~원래 항목~~ → 실기기 분기: #N (M8)`으로 바꾼다
     (`gh issue view <번호> --json body -q .body` → 파일 수정 → `gh issue edit <번호> --body-file ...`). 12단계 보고에 적는다.
 - 담당자 지정: `gh issue edit <번호> --add-assignee i-technika` (이미 지정돼 있으면 그대로 둔다)
 - 프로젝트 보드: `bash .claude/scripts/set-project-status.sh <번호> "In Progress"`
@@ -135,14 +136,19 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   - 12단계 보고에 등록한 것·등록하지 않은 것과 각각의 이유를 적는다.
 - 제목에는 순번 접두사(`[M<N>-<순번>]`)를 붙이지 않는다 — 이슈 번호·마일스톤·상위 에픽으로 식별한다.
 - **마일스톤 기준**: `<마일스톤 이름>`·`<에픽번호>`는 지금 작업 중인 마일스톤이 아니라 **그 후속 이슈가 속할 마일스톤** 기준이다
-  (실물 대조 등 다른 마일스톤 과제는 그 마일스톤과 에픽으로 만든다 — 예: M3 과제면 M3 마일스톤, 에픽 #3).
-  - **실기기 확인은 M6**(CLAUDE.md "브랜치/PR 규칙", #185): M1~M5 과제에서 Android·iOS(iPhone·iPad) 실기기가 있어야 하는
-    확인은 M6 마일스톤·에픽 #6으로 만든다. M6 이후 마일스톤(M7~)의 실기기 확인은 그 마일스톤에 둔다.
+  (실물 대조 등 다른 마일스톤 과제는 그 마일스톤과 에픽으로 만든다 — 에픽·마일스톤 번호는 CLAUDE.md "마일스톤 대응 표"에서 찾는다.
+  예: M3 과제면 M3 마일스톤·에픽 #3, M6 앱 설정 과제면 M6 마일스톤(GitHub 번호 8)·에픽 #191 — 에픽 #6이 아니다).
+  - **실기기 확인은 M8**(CLAUDE.md "브랜치/PR 규칙", #185): M1~M7 과제에서 Android·iOS(iPhone·iPad) 실기기가 있어야 하는
+    확인은 M8 출시 QA 마일스톤·에픽 #6으로 만든다. M8 이후 마일스톤(M9~)의 실기기 확인은 그 마일스톤에 둔다.
+    (2026-11-27 마일스톤 재구성 전에는 이 마일스톤이 M6였다. 그 무렵의 이슈·코멘트에 적힌 "M6 실기기"는 지금의 M8이다.)
+    M1~M7로 정한 근거: 재구성 전에는 광고·결제(지금의 M7)까지 포함한 모든 앞 마일스톤의 실기기 확인을 출시 직전 마일스톤에서 했다.
+    재구성은 그 마일스톤을 M8로 옮기고 앞에 M6·M7을 끼워 넣은 것이므로 M6·M7의 실기기 확인도 M8로 간다(2026-11-27 사용자 확인, #185).
     - 마일스톤 이름은 번호로 조회해 `--milestone`에 그대로 쓴다: `gh api repos/i-technika/altcalc-fx991/milestones/6 --jq .title`
+      (GitHub 마일스톤 번호 6 = M8 출시 QA. 번호와 제목의 M 번호가 다르다)
     - 제목은 "… 실기기 확인 (…)" 꼴로 한다. B 블록의 `EPIC=6`이 에픽 #6 서브이슈로 연결하므로, 에픽 #6 본문에 번호 목록을 따로 쓰지 않는다
       (에픽 #6 "실기기 점검" 절이 서브이슈 목록을 가리킨다).
     - 한 과제에 에뮬레이터·CI로 되는 부분과 실기기가 있어야 하는 부분이 섞이면, 앞부분은 그 과제가 속한 마일스톤에 두고
-      실기기 부분만 따로 M6 이슈로 만든다. 두 이슈 본문에 서로를 적는다 — 원래 이슈 "실기기 분기: #N (M6)", M6 이슈 "분기 원본: #M".
+      실기기 부분만 따로 M8 이슈로 만든다. 두 이슈 본문에 서로를 적는다 — 원래 이슈 "실기기 분기: #N (M8)", M8 이슈 "분기 원본: #M".
     - 원격 테스트 기기(Samsung Remote Test Lab 등)도 실기기다.
     - iOS 화면·동작 확인(VoiceOver·Metal 렌더링 포함)은 실기기로 본다 — 개발 PC에 Mac이 없어 iOS 시뮬레이터를 쓸 수 없다.
       CI macOS 러너로 되는 iOS 빌드 확인(`flutter build ios --no-codesign`)은 그 과제의 마일스톤에 둔다.
@@ -190,6 +196,14 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   NUM=<A가 출력한 번호>; EPIC=<에픽번호>; TYPE=<타입 id>
   # 프로젝트 추가 — 이미 들어 있으면 그대로다(A의 실패 원인일 수 있어 항상 한 번 더 한다)
   gh issue edit "$NUM" --add-project "AltCalc FX-991" >/dev/null
+  # 에픽과 마일스톤이 같은 M인지 **연결 전에** 확인 — 에픽 번호는 M 번호와 다르다(CLAUDE.md "마일스톤 대응 표").
+  # 조회 결과는 변수로 먼저 받는다(파이프는 gh 실패를 삼킨다). 다르면 아무것도 연결하지 않고 멈춘다 —
+  # EPIC 또는 이슈의 마일스톤(`gh issue edit "$NUM" --milestone "<이름>"`)을 고친 뒤 B를 다시 실행한다.
+  EPIC_TITLE=$(gh issue view "$EPIC" --json title --jq .title)
+  ISSUE_MS=$(gh issue view "$NUM" --json milestone --jq '.milestone.title // ""')
+  EPIC_M=$(printf '%s' "$EPIC_TITLE" | sed -nE 's/^\[(M[0-9]+)\].*/\1/p')
+  ISSUE_M=$(printf '%s' "$ISSUE_MS" | sed -nE 's/^(M[0-9]+):.*/\1/p')
+  [ -n "$EPIC_M" ] && [ "$EPIC_M" = "$ISSUE_M" ] || { echo "에픽 #$EPIC($EPIC_M)과 이슈 마일스톤($ISSUE_M)이 다르다 — 연결하지 않았다. EPIC 또는 --milestone을 고친 뒤 B를 다시 실행"; exit 1; }
   # 상위 에픽 연결 — 이미 연결돼 있으면 건너뛴다(addSubIssue는 중복 연결 시 오류)
   PARENT=$(gh issue view "$NUM" --json parent --jq '.parent.number // empty')
   ISSUE_ID=$(gh issue view "$NUM" --json id --jq .id)   # ID는 변수로 먼저 받는다 — 인자 안의 $(...) 실패는 set -e가 잡지 못한다
@@ -198,7 +212,9 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
     gh api graphql -f query='mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
       -f p="$EPIC_ID" -f c="$ISSUE_ID" >/dev/null
   elif [ "$PARENT" != "$EPIC" ]; then
-    echo "#$NUM 은 이미 다른 에픽 #$PARENT 에 연결돼 있다 — 확인 필요"; exit 1
+    # 옛 에픽에서 떼려면: gh api graphql -f query='mutation($p:ID!,$c:ID!){removeSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' \
+    #   -f p="$(gh issue view <옛 에픽> --json id --jq .id)" -f c="$ISSUE_ID"   — 뗀 뒤 B를 다시 실행
+    echo "#$NUM 은 이미 다른 에픽 #$PARENT 에 연결돼 있다 — 맞는 에픽인지 확인하고, 아니면 removeSubIssue 뒤 B를 다시 실행"; exit 1
   fi
   # 이슈 타입(Task/Bug/Feature) 지정 — 같은 값으로 다시 지정해도 무방
   gh api graphql -f query='mutation($i:ID!,$t:ID!){updateIssueIssueType(input:{issueId:$i,issueTypeId:$t}){issue{number}}}' \
@@ -231,4 +247,4 @@ gh pr merge <PR> --squash --delete-branch \
 - 로컬 정리: `git checkout milestone/m<N> && git pull --ff-only origin milestone/m<N>`
 
 ### 12. 보고
-- PR/머지 커밋 링크, 변경 요약, 리뷰 R1/R2에서 고친 것, 기각한 지적(이유), 1단계에서 M6로 분기한 실기기 항목, 후속 이슈(등록한 것·등록하지 않은 것과 이유), 다음 서브이슈 번호를 짧게 보고한다.
+- PR/머지 커밋 링크, 변경 요약, 리뷰 R1/R2에서 고친 것, 기각한 지적(이유), 1단계에서 M8로 분기한 실기기 항목, 후속 이슈(등록한 것·등록하지 않은 것과 이유), 다음 서브이슈 번호를 짧게 보고한다.
