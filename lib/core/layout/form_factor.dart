@@ -16,8 +16,8 @@ enum DeviceKind {
   /// 일반 폰
   phone,
 
-  /// 폴더블 — 시작 시 폴더블로 판정했거나([FormFactor.queryFoldableDevice]) 접히는 부분(fold/hinge)이 보고되는
-  /// 기기 (커버 화면 포함)
+  /// 폴더블 — 시작 시 폴더블로 판정했거나([FormFactor.queryFoldableDevice]) 그 뒤 화면 정보로 알아본
+  /// (`DeviceOrientationLock.foldableDevice` — 접히는 부분 보고, [FormFactor.isOtherScreen]) 기기 (커버 화면 포함)
   foldable,
 
   /// 태블릿 — 짧은 변 [FormFactor.largeScreenMinShortestSide] 이상인 폴더블이 아닌 기기
@@ -164,14 +164,23 @@ abstract final class FormFactor {
   /// 화면은 비율이 크게 다르다(Galaxy Z Fold 커버 약 2.6 ↔ 내부 약 1.2, Z Flip 내부 약 2.4 ↔ 커버 약 1.0).
   static const double otherScreenAspectTolerance = 0.15;
 
-  /// 물리 화면 크기 [before]에서 [after]로 바뀐 것이 **다른 화면**으로 바뀐 것인지 (#70) — 화면이 둘인 기기, 곧 폴더블의
-  /// 커버 ↔ 내부 화면 전환이다. 회전(가로·세로가 맞바뀜)과 화면 크기·글자 확대 설정(dp 크기만 바뀌고 비율은 같다)은
-  /// 비율이 그대로라 세지 않는다. 비율이 [otherScreenAspectTolerance]보다 많이 다를 때만 참이다.
+  /// 물리 화면 크기 [before]에서 [after]로 바뀐 것이 **폴더블의 다른 화면**으로 바뀐 것인지 (#70) — 커버 ↔ 내부 화면
+  /// 전환이다. 다음 두 조건을 모두 만족할 때만 참이다.
+  /// - 비율(긴 변 ÷ 짧은 변)이 [otherScreenAspectTolerance]보다 많이 다르다. 회전(가로·세로가 맞바뀜)과 화면 크기·글자
+  ///   확대 설정(dp 크기만 바뀐다)은 비율이 그대로라 세지 않는다.
+  /// - 적어도 한쪽이 폰 크기(짧은 변 [largeScreenMinShortestSide] 미만)다. 폴더블은 한쪽이 늘 폰 크기다(Fold·Flip의 커버,
+  ///   Flip의 내부). 양쪽이 모두 대화면인 전환 — 노트북 화면 ↔ 모니터(ChromeOS·Mac), iPad ↔ 외부 모니터, 태블릿 ↔
+  ///   모니터 — 은 다른 디스플레이로 옮긴 것이라 세지 않는다. 플랫폼은 창이 놓인 디스플레이의 크기를 알려 주는데,
+  ///   어느 디스플레이인지는 알 수 없다(Android는 늘 같은 디스플레이 번호를 준다).
   ///
-  /// 한계: 앱을 외부 디스플레이(DeX 등)로 옮겨 물리 화면 자체가 바뀌어도 참이 된다 — 그러면 폴더블로 기억해
-  /// 접힘선 없는 넓은 창도 위아래 배치가 된다([arrangementOf]의 폴더블 외부 디스플레이 제약과 같다).
+  /// 한계: 폰을 외부 디스플레이(DeX 등)로 옮기면 참이 된다 — 그러면 폴더블로 기억해 접힘선 없는 넓은 창도 위아래 배치가
+  /// 된다([arrangementOf]의 폴더블 외부 디스플레이 제약과 같다). 폰 화면 자체의 정책은 폴더블이어도 같다(세로).
   static bool isOtherScreen(Size before, Size after) {
     if (before.isEmpty || after.isEmpty) return false;
+    if (before.shortestSide >= largeScreenMinShortestSide &&
+        after.shortestSide >= largeScreenMinShortestSide) {
+      return false;
+    }
     double aspect(Size s) => s.longestSide / s.shortestSide;
     final a = aspect(before);
     final b = aspect(after);

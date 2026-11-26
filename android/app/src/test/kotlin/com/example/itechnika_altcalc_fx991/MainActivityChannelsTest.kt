@@ -50,8 +50,8 @@ class MainActivityChannelsTest {
     fun `isFoldableDevice - API 30 이상은 힌지 기능 선언이 있으면 바로 true`() {
         declareHingeSensor()
 
+        // 창 배치 정보를 기다리지 않고 바로 답한다(창 배치 정보는 진단 로그용으로만 구독한다)
         assertEquals(listOf<MethodReply>(MethodReply.Success(true)), isFoldableDevice())
-        assertEquals("창 배치 정보를 기다리지 않는다", 0, layout.subscribeCount)
     }
 
     @Test

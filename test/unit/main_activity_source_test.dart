@@ -63,6 +63,10 @@ void main() {
       FormFactor.foldableQueryTimeout - androidWait,
       greaterThanOrEqualTo(const Duration(milliseconds: 300)),
     );
+    // 힌지 센서는 목록으로 센다 — getDefaultSensor는 이 종류를 wake-up 센서로만 찾아 non-wake-up 센서를 놓친다.
+    // (Kotlin 테스트의 Robolectric 섀도는 센서 조회를 대신 구현해 이 차이를 볼 수 없어 소스에서 본다.)
+    expect(probe, contains('getSensorList(Sensor.TYPE_HINGE_ANGLE)'));
+    expect(probe, isNot(contains('getDefaultSensor(')));
     // 메서드 이름도 맞댄다 — 한쪽만 바꾸면 Dart는 notImplemented(→ false)를 받아 늘 폴더블 아님이 된다
     expect(source, contains('"${FormFactor.foldableDeviceMethod}" ->'));
   });

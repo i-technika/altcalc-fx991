@@ -687,7 +687,7 @@ void main() {
               arrangement,
               reason: key,
             );
-            // 폴더블 기기로 판정되어도(앱의 힌지 센서) 배치는 같다.
+            // 폴더블 기기로 판정되어도(앱의 시작 판정·화면 정보 기억) 배치는 같다.
             expect(
               FormFactor.arrangementOf(
                 posed.size,

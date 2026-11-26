@@ -128,17 +128,30 @@ void main() {
       });
 
       test('허용치 경계: 비율 차이가 허용치 이하면 같은 화면, 넘으면 다른 화면', () {
-        const base = Size(1000, 2000); // 비율 2.0
+        const base = Size(400, 800); // 비율 2.0, 폰 크기
         final within = Size(
-          1000,
-          2000 * (1 + FormFactor.otherScreenAspectTolerance) - 1,
+          400,
+          800 * (1 + FormFactor.otherScreenAspectTolerance) - 1,
         );
         final beyond = Size(
-          1000,
-          2000 * (1 + FormFactor.otherScreenAspectTolerance) + 1,
+          400,
+          800 * (1 + FormFactor.otherScreenAspectTolerance) + 1,
         );
         expect(FormFactor.isOtherScreen(base, within), isFalse);
         expect(FormFactor.isOtherScreen(base, beyond), isTrue);
+      });
+
+      test('양쪽 모두 대화면인 전환(다른 디스플레이로 옮김)은 다른 화면이 아니다', () {
+        const pairs = [
+          (Size(1280, 853), Size(1440, 810)), // ChromeOS 3:2 노트북 ↔ 16:9 모니터
+          (Size(1024, 1366), Size(1920, 1080)), // iPad ↔ 외부 모니터 (Stage Manager)
+          (Size(1470, 956), Size(1920, 1080)), // MacBook ↔ 16:9 모니터
+          (Size(1280, 800), Size(2560, 1080)), // 태블릿 ↔ 울트라와이드 모니터
+        ];
+        for (final (a, b) in pairs) {
+          expect(FormFactor.isOtherScreen(a, b), isFalse, reason: '$a → $b');
+          expect(FormFactor.isOtherScreen(b, a), isFalse, reason: '$b → $a');
+        }
       });
 
       test('크기를 모르면(빈 크기) 다른 화면으로 보지 않는다', () {

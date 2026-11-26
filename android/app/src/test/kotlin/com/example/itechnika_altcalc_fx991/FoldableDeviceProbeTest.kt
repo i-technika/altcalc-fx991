@@ -61,7 +61,48 @@ class FoldableDeviceProbeTest {
             probe(declared, sensor).query { replies += it }
             assertEquals("declared=$declared sensor=$sensor", listOf(true), replies)
         }
-        assertEquals("구독하지 않는다", 0, layout.subscribeCount)
+    }
+
+    @Test
+    fun `힌지 신호로 바로 답해도 창 배치 첫 값을 진단 로그로 남기고, 진단 시간이 지나면 구독을 푼다`() {
+        val probe = probe(declared = true)
+        probe.query { replies += it }
+        assertEquals(listOf(true), replies)
+        assertEquals("진단용 구독", 1, layout.activeCount)
+        assertEquals(0, probe.pendingCount)
+
+        layout.emit(false)
+        idle()
+
+        assertEquals("답은 그대로", listOf(true), replies)
+        val diagnostics = logs().filter { it.startsWith("폴더블 판정 진단: 창 배치 첫 값 접힘=없음") }
+        assertEquals(logs().toString(), 1, diagnostics.size)
+
+        idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
+        assertEquals(0, layout.activeCount)
+        assertEquals(0, probe.activeCount)
+        assertEquals(listOf(true), replies)
+    }
+
+    @Test
+    fun `힌지 신호로 바로 답한 뒤 진단 구독이 실패해도 다시 답하지 않는다`() {
+        layout.failure = IllegalStateException("구독 실패 (테스트)")
+        val probe = probe(sensor = true)
+        probe.query { replies += it }
+
+        assertEquals(listOf(true), replies)
+        assertEquals(0, probe.activeCount)
+    }
+
+    @Test
+    fun `cancel - 힌지 신호로 답한 진단 구독도 풀고 다시 답하지 않는다`() {
+        val probe = probe(declared = true)
+        probe.query { replies += it }
+
+        probe.cancel()
+
+        assertEquals(listOf(true), replies)
+        assertEquals(0, layout.activeCount)
     }
 
     @Test
