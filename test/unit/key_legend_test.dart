@@ -144,6 +144,77 @@ void main() {
     );
   });
 
+  group('위아래 끝(LegendLimits)·직접 그리는 칸(LegendBox)·기준선 아래첨자 (#169)', () {
+    test('LegendLimits의 한 줄 표기는 바탕 → 아래 끝 → 위 끝 순서다', () {
+      // 순서가 드러나도록 위 끝만 채운 칸으로 둔다(실제 ∑ 각인은 둘 다 빈 칸).
+      const limits = LegendLimits(
+        LegendText('∑'),
+        over: LegendBox(LegendBoxShape.sumLimit, filled: true),
+        under: LegendBox(LegendBoxShape.sumLimit, filled: false),
+      );
+      expect(limits.plainText, '∑◻◼');
+      expect(limits.texts.map((t) => t.text).toList(), ['∑', '◼', '◻']);
+    });
+
+    test('LegendLimits는 같은 조각의 LegendScript와 다르고, 구조가 같으면 같다(상수가 아니어도)', () {
+      KeyLegend limits(bool overFilled) => LegendLimits(
+        LegendText('∑'),
+        over: LegendBox(LegendBoxShape.sumLimit, filled: overFilled),
+        under: LegendBox(LegendBoxShape.sumLimit, filled: false),
+      );
+      expect(limits(false), limits(false));
+      expect(limits(false).hashCode, limits(false).hashCode);
+      expect(limits(false), isNot(limits(true)));
+      expect(
+        limits(false),
+        isNot(
+          const LegendScript(
+            LegendText('∑'),
+            superscript: LegendBox(LegendBoxShape.sumLimit, filled: false),
+            subscript: LegendBox(LegendBoxShape.sumLimit, filled: false),
+          ),
+        ),
+      );
+    });
+
+    test('LegendBox는 한 줄 표기·글자 조각이 ◼(채움)·◻(빈 칸)이고, 모양·채움이 같으면 같다', () {
+      const filled = LegendBox(LegendBoxShape.sumOperand, filled: true);
+      const empty = LegendBox(LegendBoxShape.sumLimit, filled: false);
+      expect(filled.plainText, '◼');
+      expect(empty.plainText, '◻');
+      expect(filled.texts.map((t) => t.text).toList(), ['◼']);
+      expect(empty.texts.map((t) => t.text).toList(), ['◻']);
+      expect(
+        LegendBox(LegendBoxShape.values.first, filled: true),
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+      );
+      expect(
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+        isNot(const LegendBox(LegendBoxShape.sumOperand, filled: true)),
+      );
+      expect(
+        const LegendBox(LegendBoxShape.sumLimit, filled: true),
+        isNot(const LegendBox(LegendBoxShape.sumLimit, filled: false)),
+      );
+      expect(filled, isNot(const LegendText('◼')));
+    });
+
+    test('기준선 아래첨자(subscriptOnBaseline)는 한 줄 표기는 같고 구조는 다르다', () {
+      const onBaseline = LegendScript(
+        LegendText('log'),
+        subscript: LegendText('◼'),
+        subscriptOnBaseline: true,
+      );
+      const dropped = LegendScript(
+        LegendText('log'),
+        subscript: LegendText('◼'),
+      );
+      expect(onBaseline.plainText, dropped.plainText);
+      expect(onBaseline, isNot(dropped));
+      expect(onBaseline.hashCode, isNot(dropped.hashCode));
+    });
+  });
+
   test('texts는 구조 안의 모든 글자 조각을 돌려준다', () {
     const legend = LegendRow([
       LegendScript(
