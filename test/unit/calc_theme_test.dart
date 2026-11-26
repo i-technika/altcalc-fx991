@@ -815,6 +815,72 @@ void main() {
       );
     });
 
+    test('2차원 각인 배치 상수 (#155)', () {
+      // 크기 비율은 바탕 글자보다 작다(첨자·분자·분모·근호 지수). 각인 전체가 분수 하나일 때만 더 크게 그린다.
+      for (final scale in [
+        CalcTheme.keyLegendScriptScale,
+        CalcTheme.keyLegendFractionScale,
+        CalcTheme.keyLegendRadicalIndexScale,
+      ]) {
+        expect(scale, inExclusiveRange(0.4, 1));
+      }
+      expect(
+        CalcTheme.keyLegendFractionScale,
+        lessThan(CalcTheme.keyLegendDisplayFractionScale),
+      );
+      expect(CalcTheme.keyLegendDisplayFractionScale, lessThanOrEqualTo(1));
+      // 위치·두께·간격 비율은 글자 크기보다 작은 양수다.
+      for (final ratio in [
+        CalcTheme.keyLegendSuperscriptRaise,
+        CalcTheme.keyLegendSubscriptDrop,
+        CalcTheme.keyLegendScriptGap,
+        CalcTheme.keyLegendFractionAxis,
+        CalcTheme.keyLegendFractionBarThickness,
+        CalcTheme.keyLegendFractionGap,
+        CalcTheme.keyLegendFractionOverhang,
+        CalcTheme.keyLegendRadicalStroke,
+        CalcTheme.keyLegendRadicalGap,
+        CalcTheme.keyLegendRadicalSignWidth,
+      ]) {
+        expect(ratio, inExclusiveRange(0, 1));
+      }
+      // 분수 가로줄 아래 가장자리와 간격을 빼도 기준선 위다 — 분모가 바탕 글자보다 지나치게 내려가지 않는다.
+      expect(
+        CalcTheme.keyLegendFractionAxis -
+            CalcTheme.keyLegendFractionBarThickness / 2 -
+            CalcTheme.keyLegendFractionGap,
+        greaterThan(0),
+      );
+      // 선은 아무리 작은 각인에서도 보인다(1dp 미만의 얇은 선은 화면에 따라 흐려진다 — 1dp를 넘지 않게 둔다).
+      expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
+    });
+
+    test('최소 선 두께로 굵게 칠해도 각인 글자 4dp 이상에서 분수·근호 가로줄 옆 여백이 남는다 (#155 R2)', () {
+      // 배치는 비율 두께로 하고 칠은 최소 두께로 굵게 한다. 굵어진 만큼은 가로줄 옆 여백을 덮는다
+      // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
+      // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
+      for (var f = 4.0; f <= 12; f += 0.1) {
+        final bar = f * CalcTheme.keyLegendFractionBarThickness;
+        final paintBar = bar > CalcTheme.keyLegendMinStroke
+            ? bar
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendFractionGap - (paintBar - bar) / 2,
+          greaterThan(0),
+          reason: '분수 $f',
+        );
+        final stroke = f * CalcTheme.keyLegendRadicalStroke;
+        final paintStroke = stroke > CalcTheme.keyLegendMinStroke
+            ? stroke
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendRadicalGap - (paintStroke - stroke),
+          greaterThan(0),
+          reason: '근호 $f',
+        );
+      }
+    });
+
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));

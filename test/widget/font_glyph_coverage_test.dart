@@ -108,7 +108,28 @@ void main() {
   });
 
   group('글리프 커버리지 (플랫폼 대체 글꼴 없이 그려진다)', () {
-    test('50키의 모든 라벨 글자는 기본 글꼴 또는 번들 대체 글꼴에 있다', () {
+    test('50키의 모든 각인 글자는 기본 글꼴 또는 번들 대체 글꼴에 있다', () {
+      // 2차원 각인(#155)은 글자 조각(texts)만 글꼴로 그리고, 분수 가로줄·근호는 선으로 그린다.
+      final missing = <String>{};
+      for (final key in allKeys) {
+        for (final legend in [
+          key.mainLegend,
+          ?key.shiftLegend,
+          ?key.alphaLegend,
+        ]) {
+          for (final code in legend.texts.expand((t) => t.text.runes)) {
+            if (!mono.contains(code) && !fallback.contains(code)) {
+              missing.add('${key.id.name}: ${_describe(code)}');
+            }
+          }
+        }
+      }
+      expect(missing, isEmpty);
+    });
+
+    test('M1 LCD 임시 표시가 그리는 한 줄 표기(plainText) 글자도 모두 번들 글꼴에 있다', () {
+      // 마지막 입력 기능의 각인을 LCD에 한 줄 표기로 그린다(`_LcdPanel`, M2에서 수식 렌더링으로 대체).
+      // 키캡에서는 그림으로 바꾼 `√`·`∛`·위첨자도 여기서는 글자로 그린다.
       final missing = <String>{};
       for (final key in allKeys) {
         for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
@@ -122,16 +143,20 @@ void main() {
       expect(missing, isEmpty);
     });
 
-    test('대체 글꼴이 필요한 라벨 글자는 ∑·∛·∫뿐이다', () {
+    test('대체 글꼴이 필요한 각인 글자는 ∑·∫뿐이다', () {
       // 대체 글꼴(Noto Sans Math)은 고정폭이 아니고 Regular뿐이다. 대체 글꼴로 그리는 글자가 늘면
-      // 라벨 폭이 글자 수에 비례한다는 가정(각인 배분)과 굵기 통일이 더 어긋나므로 목록을 고정해 둔다.
+      // 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 근호를 그림으로 그려 쓰지 않는다.)
       final viaFallback = {
         for (final key in allKeys)
-          for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel])
-            for (final code in (label ?? '').runes)
+          for (final legend in [
+            key.mainLegend,
+            ?key.shiftLegend,
+            ?key.alphaLegend,
+          ])
+            for (final code in legend.texts.expand((t) => t.text.runes))
               if (!mono.contains(code)) String.fromCharCode(code),
       };
-      expect(viaFallback, {'∑', '∛', '∫'});
+      expect(viaFallback, {'∑', '∫'});
     });
 
     test('LCD 줄·상태 표시줄 글자는 모두 고정폭 기본 글꼴에 있다', () {
