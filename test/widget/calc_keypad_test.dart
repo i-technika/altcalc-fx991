@@ -37,6 +37,15 @@ Widget _host(
   );
 }
 
+/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 키패드 크기 — 실제 창에서 생기는 크기를 포함한다.
+const _wideCellAreas = <Size>[
+  Size(800, 300), // _areas의 가로 모드 폰 (화면은 짧은 창이라 좌우 분할로 그린다)
+  Size(584, 411.04), // 600×610 창의 위아래 배치
+  Size(752, 524.8), // 768×768 정사각형 창의 위아래 배치
+  Size(624, 384), // 1280×400 데스크톱 창의 좌우 분할
+  Size(1600, 300),
+];
+
 /// 테스트 화면(기본 800×600)을 [size]로 넓힌다 — [_host]의 영역이 화면보다 크면 화면 크기로 잘리기 때문이다.
 void _setViewSize(WidgetTester tester, Size size) {
   tester.view.devicePixelRatio = 1;
@@ -397,26 +406,6 @@ void main() {
     });
 
     group('글자 크기 상한 (#141)', () {
-      test('폰 키패드(가장 넓은 폰 본체 424dp 이하)에는 상한이 걸리지 않는다', () {
-        // 세로 폰의 키패드는 폭 기준 최대 높이(폭 / 가로세로비 하한)를 넘지 않는다.
-        for (final width in [304.0, 374.0, 424.0]) {
-          final area = Size(width, width / CalcTheme.keypadMinAspectRatio);
-          for (final scale in [1.0, 1.3]) {
-            final m = KeypadMetrics.compute(area, TextScaler.linear(scale));
-            expect(
-              m.mainLabelFontSize,
-              lessThan(CalcTheme.keyMainLabelMaxFontSize),
-              reason: '$area ×$scale',
-            );
-            expect(
-              m.legendFontSize,
-              lessThan(CalcTheme.keyLegendMaxFontSize),
-              reason: '$area ×$scale',
-            );
-          }
-        }
-      });
-
       test('태블릿처럼 큰 키패드는 키가 아무리 커져도 상한에서 멈춘다 (가로로 넓어져도 커지지 않는다)', () {
         for (final area in const [
           Size(784, 842), // 10인치 800×1280 세로
@@ -562,42 +551,42 @@ void main() {
   _cursorPadShapeTests();
   _cursorPadHitTests();
 
-  testWidgets('키패드가 가로로 넓어져도 방향 키 터치 영역은 줄지 않는다 (#141 — 폭 상한 없음)', (
-    tester,
-  ) async {
-    // 같은 높이에서 폭만 넓힌다: 375dp는 #141 전 가로 폰 800×300의 키패드 폭(높이 × 1.25)이다.
-    Map<CursorPadSector, double> hitAreas() {
-      final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-      final cell = tester.getRect(find.byType(CursorPad));
-      final g = CursorPadGeometry(pad.size);
-      final bounds = cell.shift(-pad.topLeft);
-      return {
-        for (final sector in CursorPadSector.values)
-          sector: g.hitArea(sector, bounds),
-      };
-    }
+  for (final area in _wideCellAreas) {
+    testWidgets(
+      '${area.width}×${area.height}: 키패드가 가로로 넓어져도 방향 키 터치 영역은 #141 전 폭보다 줄지 않는다',
+      (tester) async {
+        // 같은 높이에서 #141 전 키패드 폭(높이 × 1.25, 480dp 이하)과 견준다. 패드는 비율 상한에서 멈추고 남는 폭은
+        // ◀·▶가 받으므로, 어느 방향도 그때보다 좁아지지 않는다.
+        Map<CursorPadSector, double> hitAreas() {
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final g = CursorPadGeometry(pad.size);
+          final bounds = cell.shift(-pad.topLeft);
+          return {
+            for (final sector in CursorPadSector.values)
+              sector: g.hitArea(sector, bounds),
+          };
+        }
 
-    Map<CursorPadSector, double>? previous;
-    _setViewSize(tester, const Size(1600, 300));
-    for (final area in const [
-      Size(375, 300),
-      Size(800, 300),
-      Size(1600, 300),
-    ]) {
-      await tester.pumpWidget(_host(const CalcKeypad(), size: area));
-      final areas = hitAreas();
-      if (previous != null) {
+        _setViewSize(tester, area);
+        final before = Size(
+          math.min(area.height * 1.25, math.min(480.0, area.width)),
+          area.height,
+        );
+        await tester.pumpWidget(_host(const CalcKeypad(), size: before));
+        final old = hitAreas();
+        await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+        final now = hitAreas();
         for (final sector in CursorPadSector.values) {
           expect(
-            areas[sector],
-            greaterThanOrEqualTo(previous[sector]! - 1e-6),
-            reason: '${sector.name} $area',
+            now[sector],
+            greaterThanOrEqualTo(old[sector]! - 1e-6),
+            reason: '${sector.name} $area (전 $before)',
           );
         }
-      }
-      previous = areas;
-    }
-  });
+      },
+    );
+  }
 
   group('KeypadMetrics.fitSize', () {
     test('비율 범위 안이면 영역을 그대로 쓴다', () {
@@ -679,6 +668,26 @@ void main() {
   // main의 맨 끝 그룹에 둔다.
   group('실제 글꼴 기준 글자 크기 상한 (#141)', () {
     setUpAll(loadBundledFonts);
+
+    test('폰 키패드(가장 넓은 폰 본체 424dp 이하)에는 상한이 걸리지 않는다 (실제 글꼴 — 폭 기준이 덜 줄인다)', () {
+      // 세로 폰의 키패드는 폭 기준 최대 높이(폭 / 가로세로비 하한)를 넘지 않는다.
+      for (final width in [304.0, 374.0, 424.0]) {
+        final area = Size(width, width / CalcTheme.keypadMinAspectRatio);
+        for (final scale in [1.0, 1.3]) {
+          final m = KeypadMetrics.compute(area, TextScaler.linear(scale));
+          expect(
+            m.mainLabelFontSize,
+            lessThan(CalcTheme.keyMainLabelMaxFontSize),
+            reason: '$area ×$scale',
+          );
+          expect(
+            m.legendFontSize,
+            lessThan(CalcTheme.keyLegendMaxFontSize),
+            reason: '$area ×$scale',
+          );
+        }
+      }
+    });
 
     test('실물 크기 키패드(480×640dp)의 글자는 상한 이하이고, 상한은 그 글자를 크게 넘지 않는다', () {
       // 상한의 근거 (CalcTheme.keyMainLabelMaxFontSize): #141 전 최대 키패드의 글자 크기를 올림한 값이다.
@@ -1777,13 +1786,19 @@ void _cursorPadShapeTests() {
         (tester) async {
           // #64 전에는 그림 구역만 눌려 ◀·▶가 함수 키 셀의 0.48~0.59배였다(가로로 긴 셀일수록 작았다).
           // 셀 여백과 외곽 밖을 터치 영역에 넣어 ◀·▶ 0.81배 이상, ▲·▼ 1.27배 이상이 된다(측정값).
+          // 화면을 영역 크기로 넓혀 키패드가 테스트 화면(800×600)에 잘리지 않게 한다(780×900 등).
+          _setViewSize(tester, area);
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
           final cell = tester.getRect(find.byType(CursorPad));
           // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
-          // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춘다. 그 경우는 "가로로 넓어져도"
-          // 테스트가 절대 넓이로 본다.
-          if (cell.width / cell.height > 2.2) return;
+          // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 1.2배 아래로 내려간다
+          // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 후속 이슈). 그 크기([_wideCellAreas])는
+          // 아래 "가로로 넓어져도" 테스트가 절대 넓이로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
+          if (cell.width / cell.height > 2.2) {
+            expect(_wideCellAreas, contains(area));
+            return;
+          }
           final sin = tester.getSize(_button(CalcKeyId.sin));
           final g = CursorPadGeometry(pad.size);
           final bounds = cell.shift(-pad.topLeft);

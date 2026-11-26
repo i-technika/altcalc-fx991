@@ -149,17 +149,18 @@ void main() {
             greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
           );
           // 키가 넓어져도 각인 글자는 상한에서 멈춘다.
-          final button = tester.widget<CalcKeyButton>(
-            find.byType(CalcKeyButton).first,
-          );
-          expect(
-            button.mainLabelFontSize,
-            lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
-          );
-          expect(
-            button.legendFontSize,
-            lessThanOrEqualTo(CalcTheme.keyLegendMaxFontSize),
-          );
+          for (final button in tester.widgetList<CalcKeyButton>(
+            find.byType(CalcKeyButton),
+          )) {
+            expect(
+              button.mainLabelFontSize,
+              lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
+            );
+            expect(
+              button.legendFontSize,
+              lessThanOrEqualTo(CalcTheme.keyLegendMaxFontSize),
+            );
+          }
         },
       );
     }
@@ -726,29 +727,68 @@ void main() {
     test(
       '태블릿 세로 본체: 폭 상한이 없어 키패드 최대 높이에 닿지 않고, LCD는 목표 비율·키패드는 나머지 전부다 (#141)',
       () {
-        // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 최대 1008 / 1.75 = 576
+        // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 최대 1008 / 1.75 = 576.
+        // 키패드가 실물 크기(640)보다 높아 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다(#141 R1).
+        const fullRow =
+            CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
         const body = Size(1008, 1306);
         final l = CalcScreenLayout.of(body);
-        expect(l.lcdHeight, moreOrLessEquals((1306 - strip) * 0.28));
+        expect(l.lcdHeight, moreOrLessEquals((1306 - fullRow) * 0.28));
         expect(
           l.keypadHeight,
           moreOrLessEquals(
-            1306 - strip - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
+            1306 - fullRow - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
           ),
         );
-        expect(l.top, moreOrLessEquals(strip));
+        expect(l.top, moreOrLessEquals(fullRow));
         expectSumsToBody(body, l);
 
-        // 10인치 Android 세로 본체 784×1192: 설계 시안(2026-11-26 확정안)의 LCD 약 330·키패드 약 840과 같다.
+        // 10인치 Android 세로 본체 784×1192: 설계 시안(2026-11-26 확정안)의 띠 44·LCD 약 330·키패드 약 840에 가깝다.
         final android = CalcScreenLayout.of(const Size(784, 1192));
-        expect(android.lcdHeight, moreOrLessEquals(330.4, epsilon: 0.1));
-        expect(android.keypadHeight, moreOrLessEquals(841.6, epsilon: 0.1));
-        expect(android.top, moreOrLessEquals(strip));
+        expect(android.lcdHeight, moreOrLessEquals(322.6, epsilon: 0.1));
+        expect(android.keypadHeight, moreOrLessEquals(821.4, epsilon: 0.1));
+        expect(android.top, moreOrLessEquals(fullRow));
 
         // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 좌우 분할로 그린다(#38).
         final short = CalcScreenLayout.of(const Size(2000, 300));
         expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
         expectSumsToBody(const Size(2000, 300), short);
+      },
+    );
+
+    test(
+      '큰 세로 창의 띠: 키패드를 실물 크기(640dp) 아래로 줄이지 않는 만큼만 줄 전체 높이까지 늘린다 (#141 R1)',
+      () {
+        const fullRow =
+            CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
+        const floor = CalcTheme.screenTopStripFullRowKeypadMinHeight;
+        // 키패드가 640 미만이면 최소 띠 그대로 (정사각형 창 752×752, 752×900)
+        for (final body in const [Size(752, 752), Size(752, 900)]) {
+          final l = CalcScreenLayout.of(body);
+          expect(l.keypadHeight, lessThan(floor), reason: '$l');
+          expect(l.top, moreOrLessEquals(strip), reason: '$l');
+        }
+        // 가장 넓은 폰(본체 424×844)은 키패드가 폭 기준 최대 높이(565dp)에 닿아 남는 높이가 띠가 될 뿐, 띠를 늘리지 않는다.
+        final phone = CalcScreenLayout.of(const Size(424, 844));
+        expect(phone.keypadHeight, moreOrLessEquals(424 / 0.75));
+        expect(phone.top, lessThan(fullRow));
+        // 그 사이: 키패드가 정확히 640이 되는 만큼만 띠가 늘어난다.
+        final partial = CalcScreenLayout.of(const Size(752, 920));
+        expect(partial.keypadHeight, moreOrLessEquals(floor, epsilon: 1e-6));
+        expect(partial.top, inExclusiveRange(strip, fullRow));
+        expectSumsToBody(const Size(752, 920), partial);
+        // 높이를 늘려도 키패드는 줄지 않고, 띠는 줄 전체 높이에서 멈춘다(남는 높이가 생기면 그만큼 더 커진다).
+        var previousKeypad = 0.0;
+        var previousTop = 0.0;
+        for (var h = 700.0; h <= 1400; h += 5) {
+          final l = CalcScreenLayout.of(Size(752, h));
+          expect(l.keypadHeight, greaterThanOrEqualTo(previousKeypad - 1e-6));
+          expect(l.top, greaterThanOrEqualTo(previousTop - 1e-6));
+          expectSumsToBody(Size(752, h), l);
+          previousKeypad = l.keypadHeight;
+          previousTop = l.top;
+        }
+        expect(previousTop, greaterThanOrEqualTo(fullRow));
       },
     );
 

@@ -921,6 +921,36 @@ void main() {
       expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
     });
 
+    test('테이블톱 키패드 임시 상한 (#143까지): 블록은 실물 본체 폭 이하·폰보다 넓고, 가로세로비 상한 > 하한', () {
+      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
+      expect(
+        CalcTheme.screenTabletopKeypadMaxBlockWidth,
+        greaterThan(widestPhoneBody),
+      );
+      // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
+      expect(
+        CalcTheme.screenTabletopKeypadMaxBlockWidth,
+        lessThanOrEqualTo(77 / 25.4 * 160),
+      );
+      expect(
+        CalcTheme.screenTabletopKeypadMaxAspectRatio,
+        greaterThan(CalcTheme.keypadMinAspectRatio),
+      );
+    });
+
+    test('큰 세로 창 띠 늘리기의 키패드 하한 (#141 R1): 가장 넓은 폰의 키패드 최대 높이보다 높다', () {
+      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
+      expect(
+        CalcTheme.screenTopStripFullRowKeypadMinHeight,
+        greaterThan(widestPhoneBody / CalcTheme.keypadMinAspectRatio),
+      );
+      // 늘린 띠의 본체 안 몫은 최소 띠보다 높다.
+      expect(
+        CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding,
+        greaterThan(CalcTheme.screenTopStripMinHeight),
+      );
+    });
+
     test(
       '테이블톱 LCD 최대 폭 (#143까지의 임시 상한): 가장 넓은 폰 본체보다 넓고 최대 높이가 최소 높이 이상이다',
       () {

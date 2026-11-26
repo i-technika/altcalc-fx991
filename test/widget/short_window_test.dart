@@ -663,8 +663,9 @@ void main() {
         }
         // 가로로 조금 긴 창: 600dp 미만에서는 위아래 배치의 키가 더 커 위아래 배치이고, 600dp부터는 비교 없이 좌우
         // 분할(FormFactor 대화면 가로 창)이라 키가 약간 작아진다. 가로형 배치(#142)가 이 비교를 다시 정한다.
-        const below = Size(620, 599.9);
-        const at = Size(620, 600);
+        // 키 차이가 가장 큰 폭 601 근처를 본다 (620에서는 약 3%).
+        const below = Size(601, 599.9);
+        const at = Size(601, 600);
         await _pump(tester, size: below);
         expect(isStackedArrangement(tester), isTrue);
         final belowTouch = _lowestDrawnTouch(tester);
@@ -677,8 +678,8 @@ void main() {
         expect(_lowestDrawnTouch(tester), lessThan(belowTouch));
         expect(
           _lowestDrawnTouch(tester),
-          greaterThan(belowTouch * 0.95),
-        ); // 경계의 키 차이는 5% 미만이다
+          greaterThan(belowTouch * 0.93),
+        ); // 경계의 키 차이는 7% 미만이다 (601: 약 6%)
       },
     );
   });

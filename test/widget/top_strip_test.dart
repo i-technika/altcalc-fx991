@@ -343,7 +343,7 @@ void main() {
                   CalcTheme.screenLcdKeypadGap) {
             expect(b.bottom, lessThanOrEqualTo(lcd.bottom), reason: reason);
           }
-          // 터치 영역은 줄 아래로 넓어져도 본체 아래(광고 슬롯 쪽)로는 나가지 않는다.
+          // 터치 영역은 줄 아래로 넓어져도 본체 아래로는 나가지 않는다.
           expect(
             b.bottom,
             lessThanOrEqualTo(
@@ -436,8 +436,8 @@ void main() {
 
   group('위아래 배치: 화면비별 띠 내용', () {
     // (이름, 창, 인셋, 워드마크, 태양전지, 터치 영역이 LCD 위에 겹치는지) — #141(맨 아래 광고 슬롯 제거·폭 상한 해제)로
-    // 폰은 띠가 높아지고(iPhone 390×844·430×932는 태양전지가 보인다), 태블릿 세로는 키패드가 남는 높이를 다 써 띠가
-    // 최소 높이가 되었다(태양전지 숨김).
+    // 폰은 띠가 높아지고(iPhone 390×844·430×932는 태양전지가 보인다), 태블릿 세로는 키패드가 남는 높이를 다 쓰되
+    // 띠를 줄 전체 높이(48dp)까지 늘린다(#141 R1). 키패드가 실물 크기보다 낮은 정사각형 창은 최소 띠다.
     const devices = [
       ('16:9 소형 320×568', Size(320, 568), EdgeInsets.zero, true, false, true),
       (
@@ -504,14 +504,16 @@ void main() {
         true,
         false,
       ),
+      // 띠를 줄 전체 높이까지 늘린다 (키패드가 실물 크기보다 높다 — #141 R1)
       (
         '태블릿 세로 800×1280',
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
         true,
-        false,
         true,
+        false,
       ),
+      ('정사각형 창 768×768', Size(768, 768), EdgeInsets.zero, true, false, true),
     ];
 
     for (final (name, size, padding, wordmark, solar, overlapsLcd) in devices) {
