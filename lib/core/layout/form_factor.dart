@@ -118,7 +118,7 @@ abstract final class FormFactor {
   ///
   /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
   /// 펼치면 `DeviceOrientationLock`이 물리 화면이 바뀐 것([isOtherScreen])을 보고 폴더블로 기억한다.
-  /// 에뮬레이터 기록은 Android `FoldableDeviceProbe` 주석에 있다. Samsung 실기기 기록은 #158에서 이어 한다.
+  /// 에뮬레이터 기록은 Android `FoldableDeviceProbe` 주석에 있다. Samsung 실기기 기록은 #175에서 이어 한다.
   static Future<FoldableStartup> queryFoldableDevice() async {
     const none = (foldable: false, fold: null);
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {

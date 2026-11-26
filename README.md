@@ -112,6 +112,28 @@ Dependabot(`github-actions` 생태계)은 쓰지 않는다.
 flutter run            # 연결된 기기·에뮬레이터
 ```
 
+### 에뮬레이터로 접근성 확인 (#185)
+
+TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인은 그 과제가 속한 마일스톤에서 하고,
+실기기가 있어야 하는 확인만 M6로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
+
+- **TalkBack**: 시스템 앱으로 들어 있어 아무 AVD에서나 켤 수 있다.
+  - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
+    `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
+  - `google_apis` API 33·Play 이미지 API 37.0은 띄워 보지 않았고, 시스템 이미지(`system.img`)에 같은 패키지 이름이 있는 것만 봤다.
+- **Accessibility Scanner**(`com.google.android.apps.accessibility.auditor`): 미리 들어 있지 않아 Play 스토어로 설치한다.
+  - `Medium_Phone_API_36.1`(Play 이미지, `PlayStore.enabled=true`)을 쓴다. 이 AVD에는 Play 스토어(`com.android.vending`)가 있고
+    Scanner는 없었다 (실측). Google 계정으로 로그인해 설치한다.
+  - `google_apis` 이미지에는 Play 스토어가 없다(`AltCalc_Phone_API34`의 `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이었다, 실측).
+  - Play 이미지이지만 `PlayStore.enabled=no`인 `Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)에서 설치되는지는 확인하지 않았다.
+- **한국어 음성**: Play 이미지 36.1에는 Google 음성 엔진(`com.google.android.tts`)이 설치돼 있다 (실측).
+  한국어 음성 데이터가 들어 있는지, 내려받아야 하는지, `google_apis` 이미지에도 엔진이 있는지는 확인하지 않았다.
+- 이미지 종류는 `~/.android/avd/<AVD ID>.ini`의 `path`가 가리키는 폴더(이름이 AVD ID와 다를 수 있다)의 `config.ini`에서
+  `tag.id`(`google_apis` / `google_apis_playstore`)와 `PlayStore.enabled`로 본다.
+  이 PC의 `google_apis` AVD는 `AltCalc_Phone_API33`·`AltCalc_Phone_API34`·`AltCalc_Flip67_API34`·`AltCalc_Fold76_API34`다.
+- 다른 세션이 쓰는 에뮬레이터는 건드리지 않는다. 확인용으로 따로 띄울 때는 `-read-only`로 띄워 AVD 상태를 바꾸지 않는다
+  (예: `emulator -avd Medium_Phone_API_36.1 -port 5580 -read-only`).
+
 ## 개발용 미리보기 (`preview/`)
 
 실제 계산기 화면(`CalculatorScreen`)을 데스크톱 브라우저 창에 띄워, 휴대폰·에뮬레이터 없이
@@ -264,21 +286,6 @@ flutter run -d chrome -t preview/key_preview_main.dart
   - AVD ID는 `emulator -list-avds`로 본다. 표시 이름과 다르다(예: ID `AltCalc_Phone_API33`, 표시 이름 `AltCalc Phone API33`).
   - `-port`는 5554~5682 사이 짝수다. 기기 ID가 `emulator-<포트>`가 된다.
   - `-read-only` 인스턴스는 끄면 바뀐 상태가 남지 않는다.
-
-#### 접근성 확인용 AVD (#185)
-
-에뮬레이터로 되는 접근성 확인(TalkBack·Accessibility Scanner)은 그 마일스톤에서 하고, 실기기가 있어야 하는 확인만 M6로 넘긴다
-([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
-
-- **TalkBack**: 이 PC의 AVD 이미지에는 모두 시스템 앱으로 들어 있다.
-  - `google_apis` API 34(`AltCalc_Phone_API34`): `pm path com.google.android.marvin.talkback` → `/product/app/talkback/talkback.apk` (실측)
-  - `google_apis` API 33과 `google_apis_playstore` API 36.1·37.0: 시스템 이미지(`system.img`) 안에 같은 패키지 이름이 있다
-- **Accessibility Scanner**(`com.google.android.apps.accessibility.auditor`): 어느 이미지에도 미리 들어 있지 않다.
-  Play 스토어로 설치하므로 **Google Play 이미지(`google_apis_playstore`)** 에서 Google 계정으로 로그인해야 한다.
-  `google_apis` 이미지에는 Play 스토어가 없다(API 34 실측: `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이다).
-- 이 PC의 Play 이미지 AVD는 `Medium_Phone_API_36.1`·`Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)이다.
-  `AltCalc_Phone_API33`·`AltCalc_Phone_API34`·`AltCalc_Flip67_API34`·`AltCalc_Fold76_API34`는 `google_apis` 이미지다.
-  - 이미지 종류는 `~/.android/avd/<AVD ID>.ini`의 `path`가 가리키는 폴더(이름이 AVD ID와 다를 수 있다)의 `config.ini`에서 `tag.id`로 본다.
 
 #### 확인 방법 (#68)
 
