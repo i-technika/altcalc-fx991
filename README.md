@@ -250,6 +250,11 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
 **(실사용)** 은 평소 쓰는 VS Code 1.147 창(사용자 설정·다른 확장 그대로)이 남긴 확장 로그로 본 것이다(#89).
 사용자 설정에 Dart 설정이 없어 SDK는 `.dart_tool`의 `flutterRoot`로 찾는 창이다. 창을 켤 때는 기기가 없었고,
 켜져 있는 동안 에뮬레이터가 연결됐다. 2026-11-22 오전(#66 머지 전)과 같은 날 밤(#66 머지 뒤)에 켠 창의 로그를 비교했다.
+2026-11-26 밤에 다시 켠 창의 로그도 더했다(#149, 이때도 기기 없이 켜졌다).
+기기를 연결한 채 켜는 경우는 사용자 설정(`settings.json`)과 Dart·Flutter 확장 3.146을 복사한 분리 창(VS Code 1.147)으로 실측했다(#149).
+이때 Flutter 데몬 로그(`dart.flutterDaemonLogFile`)도 켜서 확장이 받은 기기 목록(`device.added`)을 함께 봤다.
+VS Code 업데이트가 설치를 기다리는 동안(설치 폴더에 `updating_version`이 있을 때)에는 분리 창도
+`Code is currently being updated`로 뜨지 않는다. 평소 창을 다시 켜 업데이트를 끝낸 뒤 실측한다.
 
 확장 로그는 설정 없이도 남는다 (소스·실사용). `dart.extensionLogFile`이 비어 있으면 Dart 확장이 켜진 창마다
 임시 폴더(Windows는 `%TEMP%`)의 `dart-code-startup-log-<16진수>.txt`에 로그를 쓴다. 일반(General) 범주 전부와 다른 범주의 경고·오류가 들어간다.
@@ -284,7 +289,15 @@ SDK 경로는 기기마다 다르므로 저장소의 워크스페이스 설정(`
     - #66 머지 전에 켠 창: 워크트리 2개가 `package_config.json` 없음으로 `Found pub status for 2 folders`에 들어 알림 대상이 됐다.
     - #66 머지 뒤에 켠 창: 워크트리 1개가 루트와 함께 잡혔지만 `1 projects remain.`으로 빠졌고, `Found pub status for 0 folders`로 알림이 없었다.
       이때 빠진 워크트리에 `.dart_tool`이 있었는지는 기록되지 않았다.
+    - 2026-11-26 밤에 다시 켠 창: 워크트리 4개가 잡혔지만 모두 빠져 `1 projects remain.`이었고, `Found pub status for 0 folders`로 알림이 없었다.
+      그중 3개는 그때 `.dart_tool`이 있었다(폴더 만든 시각으로 확인). 나머지 1개는 이미 지워져 확인하지 못했다.
+  - (실측) `.dart_tool` 없는 워크트리와 기기 연결이 겹쳐도 같다 (#149).
+    - `.dart_tool` 없는 워크트리 2개를 포함해 워크트리 7개가 있었고, 에뮬레이터를 연결한 채 창을 켰다.
+    - 결과: 7개 모두 빠져 `1 projects remain.`이었고, `Found pub status for 0 folders`로 알림이 없었다. 창을 닫은 뒤에도 두 워크트리에는 `.dart_tool`이 생기지 않았다.
+    - 기기 목록은 pub 상태 확인보다 2~3초 늦게 들어왔다(Flutter 데몬 `device.added`로 에뮬레이터·Chrome·Edge·Windows).
+      그래서 로그 머리말의 `Flutter (…) (No device)`는 기기가 연결돼 있어도 찍힌다. 이 값으로 연결 여부를 판단하지 않는다.
   - (소스) 알림 대상은 걸러진 목록에서만 고른다. 그래서 빠진 워크트리는 `.dart_tool`이 있든 없든 알림에 나오지 않는다.
+    기기 연결 여부도 이 판정에 쓰이지 않는다.
 - **켜져 있는 동안 `pubspec.yaml`·`pubspec_overrides.yaml`이 생기거나 바뀌면** (소스, `dart.runPubGetOnPubspecChanges` 기본값 `always`)
   - 바뀐 파일의 절대경로에 점으로 시작하는 폴더가 있으면 아무것도 하지 않는다. 이 동작은 브랜치와 무관하다.
     - 그래서 `.claude/worktrees/`에서 워크트리를 만들거나 브랜치를 바꿔도 돌지 않는다(실측. 대조군이라 수정 전에도 같다).
