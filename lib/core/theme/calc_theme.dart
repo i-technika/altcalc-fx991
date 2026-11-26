@@ -533,11 +533,12 @@ abstract final class CalcTheme {
   /// 위첨자·아래첨자 글자 크기 비율
   static const double keyLegendScriptScale = 0.66;
 
-  /// 위첨자 기준선 기본 올림 — 글자 바탕은 이 높이에 두어 `sin⁻¹`·`cos⁻¹`·`tan⁻¹`의 −1이 같은 높이다.
-  /// 바탕 잉크가 더 높으면(∫·∑·`10`) 위첨자 위끝을 바탕 위끝에 맞춘다.
+  /// 위첨자 기준선 기본 올림 (`x²`·`x^◼`·`e^◼`·`sin⁻¹`·`cos⁻¹`·`tan⁻¹`은 이 높이 — −1이 같은 높이다).
+  /// 이 높이에서 위첨자 위끝이 바탕 잉크 위끝보다 낮으면 바탕 위끝까지 올린다(`10^◼`·`×10ˣ`·∫·∑의 위 끝 칸).
   static const double keyLegendSuperscriptRaise = 0.36;
 
-  /// 아래첨자 기준선 기본 내림 (`log`의 밑 칸, ∫·∑의 아래 끝 칸). 바탕 잉크가 더 깊으면 아래끝을 바탕 아래끝에 맞춘다.
+  /// 아래첨자 기준선 기본 내림. 이 깊이에서 아래첨자 아래끝이 바탕 잉크 아래끝보다 높으면 바탕 아래끝까지
+  /// 내린다(`log`의 g 아래로 맞춘 밑 칸, ∫·∑의 아래 끝 칸).
   static const double keyLegendSubscriptDrop = 0.22;
 
   /// 바탕 글자와 첨자 사이 간격
@@ -574,7 +575,9 @@ abstract final class CalcTheme {
   static const double keyLegendRadicalSignWidth = 0.46;
 
   /// 분수 가로줄·근호 선의 최소 두께 (dp) — 작은 각인에서도 선이 사라지지 않게 한다
-  static const double keyLegendMinStroke = 0.75;
+  /// 0.5dp는 기기 배율 2~3에서 1~1.5 물리 픽셀이다. 더 굵게 하면 작은 각인(글자 5~7dp)에서 굵어진 만큼이
+  /// 분수 가로줄·근호 가로줄 옆 여백을 다 덮는다(#155 R2 — 0.75dp일 때 5.7dp 글자의 분수 여백 0.02dp).
+  static const double keyLegendMinStroke = 0.5;
 
   /// 키캡 그림자 색
   static const Color keyShadow = Color(0x66000000);

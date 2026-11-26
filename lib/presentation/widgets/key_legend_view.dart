@@ -85,7 +85,40 @@ class KeyLegendView extends LeafRenderObjectWidget {
   static Size emSize(KeyLegend legend, TextStyle style) =>
       emMetrics(legend, style).size;
 
-  /// [emSize]와 함께, 위에서 기준선까지 거리(em)를 잰다.
+  /// [legend]를 [style]의 글자 크기(배율 반영 후) 그대로 배치했을 때의 실제 크기 (캐시하지 않는다).
+  ///
+  /// [emSize]는 큰 글자 크기로 잰 비율이라, 작은 글자에서 한 줄 상자 반올림만큼 실제와 다를 수 있다.
+  /// 그 차이를 판정하는 테스트가 쓴다.
+  static Size layoutSize(KeyLegend legend, TextStyle style) {
+    final layout = _LegendLayout.build(legend, style);
+    final size = layout.size;
+    layout.dispose();
+    return size;
+  }
+
+  /// em 치수 [legends]의 각인을 [style]의 글꼴, 배율 반영 글자 크기 [scaledFontSize]로 그렸을 때 가장 높은 높이.
+  ///
+  /// 실제 배치([layoutSize])와 같은 값을 한 줄 상자 하나만 재어 구한다 — 글자 크기를 찾는 이분 탐색
+  /// (`KeypadMetrics`의 높이 기준)에서 매번 각인 전체를 배치하지 않기 위해서다.
+  static double tallestAt(
+    Iterable<KeyLegendEmMetrics> legends,
+    TextStyle style,
+    double scaledFontSize,
+  ) {
+    final (lineAscent, lineDescent) = _Builder(style)
+        .lineMetrics(scaledFontSize);
+    var tallest = 0.0;
+    for (final m in legends) {
+      final height = m.plain
+          ? lineAscent + lineDescent
+          : math.max(lineAscent, m.inkTop * scaledFontSize) +
+                math.max(lineDescent, -m.inkBottom * scaledFontSize);
+      tallest = math.max(tallest, height);
+    }
+    return tallest;
+  }
+
+  /// [emSize]와 함께, 위에서 기준선까지 거리와 잉크 범위(em)를 잰다.
   static KeyLegendEmMetrics emMetrics(KeyLegend legend, TextStyle style) {
     if (!_listeningSystemFonts) {
       _listeningSystemFonts = true;
@@ -100,6 +133,9 @@ class KeyLegendView extends LeafRenderObjectWidget {
       final metrics = (
         size: layout.size / _probeFontSize,
         baseline: layout.baseline / _probeFontSize,
+        inkTop: layout.inkTop / _probeFontSize,
+        inkBottom: layout.inkBottom / _probeFontSize,
+        plain: legend is LegendText,
       );
       layout.dispose();
       return metrics;
@@ -126,7 +162,17 @@ class KeyLegendView extends LeafRenderObjectWidget {
 }
 
 /// 각인의 em 치수: 크기와 위에서 기준선까지 거리 (글자 크기 1dp당 값)
-typedef KeyLegendEmMetrics = ({Size size, double baseline});
+///
+/// [inkTop]·[inkBottom]은 잉크(첨자·분수·근호 선 포함)의 위끝·아래끝(기준선 위가 +)이고, [plain]이면 글자만 있는
+/// 각인이라 크기는 한 줄 상자로만 정해진다. 잉크는 글자 크기에 정확히 비례하지만 한 줄 상자는 작은 글자에서
+/// 반올림되므로, 실제 글자 크기의 높이는 [KeyLegendView.tallestAt]이 한 줄 상자만 그 크기로 재어 합친다.
+typedef KeyLegendEmMetrics = ({
+  Size size,
+  double baseline,
+  double inkTop,
+  double inkBottom,
+  bool plain,
+});
 
 /// [KeyLegendView]의 렌더 객체.
 ///
@@ -287,10 +333,21 @@ class _LegendLayout {
   /// 위에서 기준선까지 거리
   final double baseline;
 
+  /// 잉크 위끝·아래끝 (기준선 위가 +)
+  final double inkTop;
+  final double inkBottom;
+
   final List<(Offset, _Op)> _ops;
   Color color;
 
-  _LegendLayout._(this.size, this.baseline, this._ops, this.color);
+  _LegendLayout._(
+    this.size,
+    this.baseline,
+    this.inkTop,
+    this.inkBottom,
+    this._ops,
+    this.color,
+  );
 
   /// 배치는 그대로 두고 색만 바꾼다. 글자 스타일의 색만 바뀌면 `TextPainter`는 다시 배치하지 않는다.
   void recolor(Color? value) {
@@ -331,6 +388,8 @@ class _LegendLayout {
     return _LegendLayout._(
       Size(piece.width, top + bottom),
       top,
+      piece.inkTop,
+      piece.inkBottom,
       piece.ops,
       style.color ?? const Color(0xFF000000),
     );

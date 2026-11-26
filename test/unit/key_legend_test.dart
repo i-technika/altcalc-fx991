@@ -108,6 +108,42 @@ void main() {
     });
   });
 
+  test('구조가 같은 각인은 같고 해시도 같다 (상수가 아니어도) — 크기 측정 캐시 키', () {
+    KeyLegend build(String exponent) => LegendRow([
+      LegendScript(
+        LegendText('x'.toString()),
+        superscript: LegendText(exponent),
+      ),
+      LegendFraction(LegendText('a'), LegendText('b')),
+      LegendRadical(LegendText('◻'), index: LegendText('◼')),
+    ]);
+    final a = build('2');
+    final b = build('2');
+    expect(identical(a, b), isFalse);
+    expect(a, b);
+    expect(a.hashCode, b.hashCode);
+    expect(a, isNot(build('3')));
+    // 종류가 다르면 같은 글자라도 다르다.
+    expect(
+      const LegendText('x'),
+      isNot(const LegendScript(LegendText('x'), superscript: LegendText('2'))),
+    );
+    expect(
+      const LegendScript(LegendText('x'), superscript: LegendText('2')),
+      isNot(const LegendScript(LegendText('x'), subscript: LegendText('2'))),
+    );
+    expect(
+      const LegendRadical(LegendText('◼')),
+      isNot(const LegendRadical(LegendText('◼'), index: LegendText('3'))),
+    );
+    expect(
+      const LegendRow([LegendText('a'), LegendText('b')]),
+      isNot(
+        const LegendRow([LegendText('a'), LegendText('b'), LegendText('c')]),
+      ),
+    );
+  });
+
   test('texts는 구조 안의 모든 글자 조각을 돌려준다', () {
     const legend = LegendRow([
       LegendScript(

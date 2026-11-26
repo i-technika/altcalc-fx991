@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -142,61 +143,89 @@ void main() {
       }
     });
 
-    test('높이 측정은 2차원 각인이 실제로 넘지 않는 한 통일 글자 크기를 줄이지 않는다 (배율 100%)', () {
-      // KeypadMetrics의 높이 기준 계산을 각인 띠·키캡 높이 격자에서 그대로 재현해, 가장 높은 각인의 잉크 높이를
-      // 넣었을 때와 뺐을 때(#155 이전과 같은 한 줄 높이만)를 비교한다. 잉크 높이는 정수로 올림하지 않는다 —
-      // 올림하면 띠 높이의 소수부 때문에 한 줄은 들어가는데도 글자가 줄어든다(R1에서 실측한 회귀).
-      double tallest(TextStyle style, Iterable<KeyLegend> legends) => legends
-          .map((l) => KeyLegendView.emSize(l, style).height)
-          .reduce((a, b) => a > b ? a : b);
-      final legendInk = tallest(CalcTheme.keyShiftLabelStyle, [
-        for (final k in allKeys) ...[?k.shiftLegend, ?k.alphaLegend],
-      ]);
-      final mainInk = tallest(CalcTheme.keyMainLabelStyle, [
-        for (final k in allKeys) k.mainLegend,
-      ]);
-      const scaler = TextScaler.noScaling;
-      for (var band = 3.0; band <= 40; band += 0.01) {
-        final start = math.max(
-          minFittedFontSize,
-          math.min(
-            band * CalcTheme.keyLegendFontRatio,
-            CalcTheme.keyLegendMaxFontSize,
-          ),
-        );
-        expect(
-          fitFontSizeToHeight(
-            start,
-            maxHeight: band,
-            textScaler: scaler,
-            inkHeightFactor: legendInk,
-          ),
-          fitFontSizeToHeight(start, maxHeight: band, textScaler: scaler),
-          reason: '각인 띠 $band',
-        );
-      }
-      for (var cap = 8.0; cap <= 120; cap += 0.01) {
-        final inner =
-            cap -
-            math.min(CalcTheme.keyPressedOffset, cap) -
-            2 * CalcTheme.keyBorderWidth;
-        final start = math.max(
-          minFittedFontSize,
-          math.min(
-            cap * CalcTheme.keyMainLabelFontRatio,
-            CalcTheme.keyMainLabelMaxFontSize,
-          ),
-        );
-        expect(
-          fitFontSizeToHeight(
-            start,
-            maxHeight: inner,
-            textScaler: scaler,
-            inkHeightFactor: mainInk,
-          ),
-          fitFontSizeToHeight(start, maxHeight: inner, textScaler: scaler),
-          reason: '키캡 $cap',
-        );
+    test('높이 기준 글자 크기에서 2차원 각인이 실제로 띠·키캡에 들어가고, 실제로 넘칠 때만 줄인다', () {
+      // KeypadMetrics의 높이 기준 판정(KeypadMetrics.fitToHeight)을 각인 띠·키캡 높이 격자와 글자 배율에서 돌리고,
+      // 고른 크기에서 실제로 배치한 크기(KeyLegendView.layoutSize — 작은 글자의 줄 상자 반올림 포함)로 확인한다.
+      // - 고른 크기에서 모든 2차원 각인의 실제 높이 ≤ 띠(키캡 안쪽) 높이 — FittedBox가 높이 때문에 줄이지 않는다(#155 R2).
+      // - 잉크 높이를 넣어 #155 이전(한 줄 높이만)보다 작아졌다면, 이전 크기에서는 어떤 각인이 실제로 넘친다
+      //   — 높이 측정이 불필요하게 다른 키 글자를 줄이지 않는다(#155 R1).
+      for (final (style, ratio, maxFont, legends) in [
+        (
+          CalcTheme.keyShiftLabelStyle,
+          CalcTheme.keyLegendFontRatio,
+          CalcTheme.keyLegendMaxFontSize,
+          [
+            for (final (k, l, _) in _twoDimensional())
+              if (!identical(l, k.mainLegend)) l,
+          ],
+        ),
+        (
+          CalcTheme.keyMainLabelStyle,
+          CalcTheme.keyMainLabelFontRatio,
+          CalcTheme.keyMainLabelMaxFontSize,
+          [
+            for (final (k, l, _) in _twoDimensional())
+              if (identical(l, k.mainLegend)) l,
+          ],
+        ),
+      ]) {
+        final tall = [
+          for (final l in legends) KeyLegendView.emMetrics(l, style),
+        ];
+        final isMain = identical(style, CalcTheme.keyMainLabelStyle);
+        double tallestAt(double scaledFontSize) => legends
+            .map(
+              (l) => KeyLegendView.layoutSize(
+                l,
+                style.copyWith(fontSize: scaledFontSize),
+              ).height,
+            )
+            .reduce(math.max);
+        for (final scale in [1.0, 1.1, 1.2, 1.3]) {
+          final scaler = TextScaler.linear(scale);
+          for (
+            var box = isMain ? 8.0 : 4.0;
+            box <= 40;
+            box += isMain ? 0.1 : 0.05
+          ) {
+            // 각인 띠는 띠 높이 그대로, 키캡은 눌림 여유·테두리를 뺀 안쪽 높이에 맞춘다.
+            final max = isMain
+                ? box -
+                      math.min(CalcTheme.keyPressedOffset, box) -
+                      2 * CalcTheme.keyBorderWidth
+                : box;
+            final start = math.max(
+              minFittedFontSize,
+              math.min(box * ratio, maxFont),
+            );
+            final withInk = KeypadMetrics.fitToHeight(
+              start,
+              maxHeight: max,
+              textScaler: scaler,
+              style: style,
+              tallLegends: tall,
+            );
+            final lineOnly = fitFontSizeToHeight(
+              start,
+              maxHeight: max,
+              textScaler: scaler,
+              heightFactor: style.height ?? 1.0,
+            );
+            final reason = '${isMain ? '키캡' : '각인 띠'} $box, 배율 $scale';
+            expect(
+              tallestAt(scaler.scale(withInk)),
+              lessThanOrEqualTo(max + 1e-6),
+              reason: reason,
+            );
+            if (withInk < lineOnly - 1e-9) {
+              expect(
+                tallestAt(scaler.scale(lineOnly)),
+                greaterThan(max),
+                reason: '$reason: 넘치지 않는데 줄였다',
+              );
+            }
+          }
+        }
       }
     });
 
@@ -342,7 +371,66 @@ void main() {
         ),
       );
       expect(render.debugLayoutBuildCount, built + 1);
+
+      // 시스템 글꼴이 바뀌면(글꼴 지연 로드 등) Text처럼 다시 배치한다.
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        SystemChannels.system.name,
+        SystemChannels.system.codec.encodeMessage(<String, Object?>{
+          'type': 'fontsChange',
+        }),
+        (_) {},
+      );
+      await tester.pump();
+      expect(render.debugLayoutBuildCount, built + 2);
     });
+  });
+
+  testWidgets('색만 바뀌어도 글자 조각까지 새 색으로 그린다 (배치 재사용, 그린 픽셀 검사)', (tester) async {
+    // 같은 위젯 자리에서 색만 바꾼다 — 렌더 객체·배치를 재사용하므로 글자 조각의 span 색을 바꿔야 새 색이 된다.
+    Future<(int, int)> countColors(Color fill) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          RepaintBoundary(
+            key: key,
+            child: KeyLegendView(
+              legend: keyDefOf(CalcKeyId.logBase).mainLegend,
+              style: CalcTheme.keyMainLabelStyle.copyWith(
+                fontSize: 60,
+                color: fill,
+              ),
+            ),
+          ),
+        ),
+      );
+      return (await tester.runAsync(() async {
+        final boundary =
+            key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!;
+        var red = 0;
+        var green = 0;
+        for (var p = 0; p < data.lengthInBytes; p += 4) {
+          final (r, g, b, a) = (
+            data.getUint8(p),
+            data.getUint8(p + 1),
+            data.getUint8(p + 2),
+            data.getUint8(p + 3),
+          );
+          if (a < 128 || b > 80) continue;
+          if (r > 180 && g < 80) red++;
+          if (g > 180 && r < 80) green++;
+        }
+        image.dispose();
+        return (red, green);
+      }))!;
+    }
+
+    final (redBefore, _) = await countColors(const Color(0xFFFF0000));
+    expect(redBefore, greaterThan(0));
+    final (redAfter, greenAfter) = await countColors(const Color(0xFF00FF00));
+    expect(redAfter, 0, reason: '글자 조각이 옛 색으로 남았다');
+    expect(greenAfter, greaterThan(redBefore ~/ 2));
   });
 
   group('키 버튼에서 (#155 체크리스트)', () {
@@ -399,42 +487,27 @@ void main() {
         Size(600, 700),
       ]) {
         testWidgets(
-          '${size.width}×${size.height} 글자 배율 $scale: 2차원 각인이 키캡·각인 띠 밖으로 나가지 않는다',
+          '${size.width}×${size.height} 글자 배율 $scale: 2차원 각인이 키캡·각인 띠에 줄지 않고 들어간다',
           (tester) async {
+            // 각인은 키캡·각인 띠 안의 FittedBox(scaleDown)에 들어 있어, 넘치면 상자가 아니라 축소 비율로 드러난다.
+            // 화면상 높이(getRect)가 배치 높이(getSize)와 같으면 줄지 않고 그대로 들어간 것이다.
             await tester.pumpWidget(
               _host(
                 SizedBox.fromSize(size: size, child: const CalcKeypad()),
                 textScale: scale,
               ),
             );
-            // 2차원 각인의 상자는 모든 잉크(첨자·분수·근호 선)를 품는다. 메인 각인은 키캡, SHIFT·ALPHA 각인은
-            // 키캡 위 각인 띠(버튼 위끝 ~ 키캡 위끝) 안에 있어야 한다.
             for (final (k, legend, _) in _twoDimensional()) {
-              final button = find.byWidgetPredicate(
-                (w) => w is CalcKeyButton && w.keyDef.id == k.id,
+              final f = find.descendant(
+                of: find.byWidgetPredicate(
+                  (w) => w is CalcKeyButton && w.keyDef.id == k.id,
+                ),
+                matching: findLegend(legend),
               );
-              final rect = tester.getRect(
-                find.descendant(of: button, matching: findLegend(legend)),
-              );
-              final cap = tester.getRect(
-                find.byKey(CalcKeyButton.keycapKeyOf(k.id)),
-              );
-              final buttonRect = tester.getRect(button);
-              final bounds =
-                  (identical(legend, k.mainLegend)
-                          ? cap
-                          : Rect.fromLTRB(
-                              buttonRect.left,
-                              buttonRect.top,
-                              buttonRect.right,
-                              cap.top,
-                            ))
-                      .inflate(0.01);
               expect(
-                bounds.contains(rect.topLeft) &&
-                    bounds.contains(rect.bottomRight),
-                isTrue,
-                reason: '${k.id.name} ${legend.plainText}: $rect ⊄ $bounds',
+                tester.getRect(f).height,
+                moreOrLessEquals(tester.getSize(f).height, epsilon: 0.01),
+                reason: '${k.id.name} ${legend.plainText}',
               );
             }
             expect(tester.takeException(), isNull);
@@ -442,5 +515,56 @@ void main() {
         );
       }
     }
+
+    testWidgets('그린 분수 가로줄·근호 선은 최소 두께로 굵어져도 각인 상자 안에 있다', (tester) async {
+      // 선은 글자 크기가 작으면 CalcTheme.keyLegendMinStroke로 굵게 칠한다(#155 R1 m8). 굵어진 선(반 두께 포함)이
+      // 상자 밖에 그려지면 키캡·각인 띠 경계를 넘는다.
+      for (final fontSize in [4.0, 6.0, 9.0, 20.0]) {
+        for (final (k, legend, style) in _twoDimensional()) {
+          await tester.pumpWidget(
+            _host(
+              KeyLegendView(
+                legend: legend,
+                style: style.copyWith(fontSize: fontSize),
+              ),
+            ),
+          );
+          final render = tester.renderObject<RenderKeyLegend>(
+            find.byType(KeyLegendView),
+          );
+          final canvas = TestRecordingCanvas();
+          render.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+          final box = (Offset.zero & render.size).inflate(1e-6);
+          final reason = '${k.id.name} ${legend.plainText} @$fontSize';
+          for (final call in canvas.invocations) {
+            final drawn = switch (call.invocation.memberName) {
+              #drawRect => call.invocation.positionalArguments[0] as Rect,
+              // 선 두께의 절반만큼 위아래·왼쪽으로 넓힌다. 오른쪽 끝은 가로줄의 butt 끝이라 넓어지지 않는다.
+              #drawPath => () {
+                final b = (call.invocation.positionalArguments[0] as Path)
+                    .getBounds();
+                final half =
+                    (call.invocation.positionalArguments[1] as Paint)
+                        .strokeWidth /
+                    2;
+                return Rect.fromLTRB(
+                  b.left - half,
+                  b.top - half,
+                  b.right,
+                  b.bottom + half,
+                );
+              }(),
+              _ => null,
+            };
+            if (drawn == null) continue;
+            expect(
+              box.contains(drawn.topLeft) && box.contains(drawn.bottomRight),
+              isTrue,
+              reason: '$reason: $drawn ⊄ $box',
+            );
+          }
+        }
+      }
+    });
   });
 }

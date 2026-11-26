@@ -226,6 +226,43 @@ class KeypadMetrics {
     return math.min(touchOf(functionRowHeight), touchOf(numberRowHeight));
   }
 
+  /// 높이 기준 글자 크기: 배율을 반영한 한 줄 높이(정수 올림, [fitFontSizeToHeight])와 [tallLegends]
+  /// (한 줄보다 높을 수 있는 2차원 각인, #155)의 실제 높이([KeyLegendView.tallestAt])가 모두 [maxHeight] 이하인
+  /// 가장 큰 글자 크기 (배율 반영 전).
+  ///
+  /// 2차원 각인의 높이는 잉크(비례)와 한 줄 상자(작은 글자에서 반올림)를 합친 값이다. 비례 높이로만 판정하면
+  /// 작은 글자에서 넘치고(#155 R2), 전체를 정수로 올리면 실제로는 들어가는데도 줄어든다(#155 R1). 그래서 실제
+  /// 높이로 판정한다. 테스트가 같은 판정을 쓰도록 공개한다.
+  @visibleForTesting
+  static double fitToHeight(
+    double fontSize, {
+    required double maxHeight,
+    required TextScaler textScaler,
+    required TextStyle style,
+    required List<KeyLegendEmMetrics> tallLegends,
+  }) => _fitToHeight(
+    fontSize,
+    maxHeight: maxHeight,
+    textScaler: textScaler,
+    style: style,
+    tallLegends: tallLegends,
+  );
+
+  static double _fitToHeight(
+    double fontSize, {
+    required double maxHeight,
+    required TextScaler textScaler,
+    required TextStyle style,
+    required List<KeyLegendEmMetrics> tallLegends,
+  }) => fitFontSize(
+    fontSize,
+    textScaler: textScaler,
+    fits: (scaled) =>
+        (scaled * (style.height ?? 1.0)).ceilToDouble() <= maxHeight &&
+        (tallLegends.isEmpty ||
+            KeyLegendView.tallestAt(tallLegends, style, scaled) <= maxHeight),
+  );
+
   /// [available] 영역과 시스템 글자 배율([textScaler], `MediaQuery` 값 그대로)로 치수를 계산한다.
   ///
   /// ## 글자 크기 통일
@@ -281,7 +318,7 @@ class KeypadMetrics {
 
     // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141). 가장 높은 각인(분수 등 2차원 각인, #155)까지
     //    띠·키캡 안에 들어가게 한다.
-    final legendByHeight = fitFontSizeToHeight(
+    final legendByHeight = _fitToHeight(
       math.max(
         minFittedFontSize,
         math.min(
@@ -291,15 +328,15 @@ class KeypadMetrics {
       ),
       maxHeight: legendHeight,
       textScaler: scaler,
-      heightFactor: CalcTheme.keyShiftLabelStyle.height ?? 1.0,
-      inkHeightFactor: limits.legendEmHeight,
+      style: CalcTheme.keyShiftLabelStyle,
+      tallLegends: limits.tallLegends,
     );
     // 키캡 안쪽 높이: 눌림 이동 여유와 테두리를 뺀다.
     final capInnerHeight =
         capHeight -
         math.min(CalcTheme.keyPressedOffset, capHeight) -
         2 * CalcTheme.keyBorderWidth;
-    final mainByHeight = fitFontSizeToHeight(
+    final mainByHeight = _fitToHeight(
       math.max(
         minFittedFontSize,
         math.min(
@@ -309,8 +346,8 @@ class KeypadMetrics {
       ),
       maxHeight: capInnerHeight,
       textScaler: scaler,
-      heightFactor: CalcTheme.keyMainLabelStyle.height ?? 1.0,
-      inkHeightFactor: limits.mainEmHeight,
+      style: CalcTheme.keyMainLabelStyle,
+      tallLegends: limits.tallMains,
     );
 
     // 2·3. 폭 기준 + 하한
@@ -353,18 +390,13 @@ class _LabelLimits {
   /// 각인 최대 글자 크기 (배율 반영 후, dp)
   final double legend;
 
-  /// 가장 높은 메인 라벨의 높이 (글자 크기 대비 — 글자만 있는 라벨은 한 줄 높이 1.0)
-  final double mainEmHeight;
+  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155)
+  final List<KeyLegendEmMetrics> tallMains;
 
-  /// 가장 높은 SHIFT·ALPHA 각인의 높이 (글자 크기 대비)
-  final double legendEmHeight;
+  /// 2차원 SHIFT·ALPHA 각인의 em 치수
+  final List<KeyLegendEmMetrics> tallLegends;
 
-  const _LabelLimits(
-    this.main,
-    this.legend,
-    this.mainEmHeight,
-    this.legendEmHeight,
-  );
+  const _LabelLimits(this.main, this.legend, this.tallMains, this.tallLegends);
 
   static double _emWidth(KeyLegend legend, TextStyle style) =>
       KeyLegendView.emSize(legend, style).width;
@@ -375,8 +407,8 @@ class _LabelLimits {
   }) {
     var main = double.infinity;
     var legend = double.infinity;
-    var mainEmHeight = CalcTheme.keyMainLabelStyle.height ?? 1.0;
-    var legendEmHeight = CalcTheme.keyShiftLabelStyle.height ?? 1.0;
+    final tallMains = <KeyLegendEmMetrics>[];
+    final tallLegends = <KeyLegendEmMetrics>[];
     final numberIds = {
       for (final row in numberRows)
         for (final def in row) def.id,
@@ -398,22 +430,17 @@ class _LabelLimits {
         math.max(0.0, capInner) /
             _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle),
       );
-      mainEmHeight = math.max(
-        mainEmHeight,
-        KeyLegendView.emSize(
-          def.mainLegend,
-          CalcTheme.keyMainLabelStyle,
-        ).height,
-      );
+      if (!def.mainLegend.isPlain) {
+        tallMains.add(
+          KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
+        );
+      }
       for (final (l, style) in [
         (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
         (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
       ]) {
-        if (l != null) {
-          legendEmHeight = math.max(
-            legendEmHeight,
-            KeyLegendView.emSize(l, style).height,
-          );
+        if (l != null && !l.isPlain) {
+          tallLegends.add(KeyLegendView.emMetrics(l, style));
         }
       }
 
@@ -446,7 +473,7 @@ class _LabelLimits {
         legend = math.min(legend, usable / 2 / shortEm);
       }
     }
-    return _LabelLimits(main, legend, mainEmHeight, legendEmHeight);
+    return _LabelLimits(main, legend, tallMains, tallLegends);
   }
 }
 

@@ -855,6 +855,32 @@ void main() {
       expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
     });
 
+    test('최소 선 두께로 굵게 칠해도 각인 글자 4dp 이상에서 분수·근호 가로줄 옆 여백이 남는다 (#155 R2)', () {
+      // 배치는 비율 두께로 하고 칠은 최소 두께로 굵게 한다. 굵어진 만큼은 가로줄 옆 여백을 덮는다
+      // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
+      // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
+      for (var f = 4.0; f <= 12; f += 0.1) {
+        final bar = f * CalcTheme.keyLegendFractionBarThickness;
+        final paintBar = bar > CalcTheme.keyLegendMinStroke
+            ? bar
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendFractionGap - (paintBar - bar) / 2,
+          greaterThan(0),
+          reason: '분수 $f',
+        );
+        final stroke = f * CalcTheme.keyLegendRadicalStroke;
+        final paintStroke = stroke > CalcTheme.keyLegendMinStroke
+            ? stroke
+            : CalcTheme.keyLegendMinStroke;
+        expect(
+          f * CalcTheme.keyLegendRadicalGap - (paintStroke - stroke),
+          greaterThan(0),
+          reason: '근호 $f',
+        );
+      }
+    });
+
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
       expect(CalcTheme.keyVerticalGapRatio, inExclusiveRange(0, 0.1));
