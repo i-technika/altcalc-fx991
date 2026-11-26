@@ -27,8 +27,8 @@ const _cutout = DisplayFeature(
   state: DisplayFeatureState.unknown,
 );
 
-/// 좌우 분할 배치인지
-bool _split(
+/// 가로형 배치인지 (#142 — 창 모양으로 본 답)
+bool _landscape(
   Size window,
   List<DisplayFeature> features, {
   bool foldableDevice = false,
@@ -38,7 +38,7 @@ bool _split(
       features,
       foldableDevice: foldableDevice,
     ) ==
-    ScreenArrangement.split;
+    ScreenArrangement.landscape;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -462,30 +462,42 @@ void main() {
     });
   });
 
-  group('좌우 분할 배치 판정 (창 크기 기준)', () {
-    test('대화면 가로 창은 좌우 분할이다', () {
+  group('가로형 배치 판정 (창 모양 기준, #142)', () {
+    test('접힘선 없는 가로 창은 크기와 무관하게 가로형이다 (화면이 본체 크기로 세로형과 다시 비교한다)', () {
       for (final size in const [
         Size(1280, 800),
         Size(1024, 768),
         Size(1194, 834),
         Size(1366, 1024),
         Size(960, 600),
+        Size(844, 390), // 가로 폰 — 예전에는 짧은 변 600dp 미만이라 위아래 배치였다
+        Size(1280, 599), // 낮고 넓은 팝업 창
+        Size(769, 768),
       ]) {
-        expect(_split(size, const []), isTrue, reason: '$size');
+        expect(_landscape(size, const []), isTrue, reason: '$size');
       }
     });
 
-    test('세로 창·정사각형 창·짧은 변 600dp 미만 창은 위아래 배치다', () {
+    test('세로 창·정사각형 창은 위아래 배치다', () {
       for (final size in const [
         Size(800, 1280), // 태블릿 세로 (방향 고정 무시)
         Size(768, 768), // 정사각형
         Size(678, 1024), // iPad Split View 절반
         Size(390, 844), // 폰
-        Size(844, 390), // 가로 폰 — 창 크기로는 위아래 배치(화면이 짧은 창 규칙으로 좌우 분할로 그린다, #38)
-        Size(1280, 599), // 낮고 넓은 팝업 창
       ]) {
-        expect(_split(size, const []), isFalse, reason: '$size');
+        expect(_landscape(size, const []), isFalse, reason: '$size');
       }
+    });
+
+    test('세로형과 가로형을 키 크기로 고르는 창은 접힘 정보가 없는 폴더블이 아닌 창이다', () {
+      expect(FormFactor.picksFormByKeySize(const []), isTrue);
+      expect(FormFactor.picksFormByKeySize(const [_cutout]), isTrue);
+      expect(FormFactor.picksFormByKeySize(const [_fold]), isFalse);
+      expect(FormFactor.picksFormByKeySize(const [_hinge]), isFalse);
+      expect(
+        FormFactor.picksFormByKeySize(const [], foldableDevice: true),
+        isFalse,
+      );
     });
 
     test('폴더블 기기는 접힘 정보가 오기 전에는 위아래 배치다 (깜빡임 방지)', () {
@@ -500,9 +512,9 @@ void main() {
 
     test('창을 다 가로지르지 않는 접힘 정보가 있으면 위아래 배치다', () {
       // _fold는 높이 701 — 1280×800 창을 끝까지 가로지르지 않는다.
-      expect(_split(const Size(1280, 800), [_fold]), isFalse);
-      expect(_split(const Size(1280, 800), [_hinge]), isFalse);
-      expect(_split(const Size(1280, 800), const [_cutout]), isTrue);
+      expect(_landscape(const Size(1280, 800), [_fold]), isFalse);
+      expect(_landscape(const Size(1280, 800), [_hinge]), isFalse);
+      expect(_landscape(const Size(1280, 800), const [_cutout]), isTrue);
     });
   });
 

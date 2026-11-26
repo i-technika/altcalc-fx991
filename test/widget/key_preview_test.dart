@@ -16,7 +16,9 @@ import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
@@ -332,7 +334,7 @@ void main() {
       }
     });
 
-    test('태블릿 가로 (제스처): 태블릿 가로와 같은 화면을 제스처 내비게이션으로 쓴 좌우 분할 배치다 (#62)', () {
+    test('태블릿 가로 (제스처): 태블릿 가로와 같은 화면을 제스처 내비게이션으로 쓴 가로형 배치다 (#62)', () {
       final gesture = previewDevices.singleWhere(
         (d) => d.name == '태블릿 가로 (제스처)',
       );
@@ -342,7 +344,7 @@ void main() {
       expect(gesture.foldable, isFalse);
       expect(
         FormFactor.arrangementOf(gesture.size, gesture.displayFeatures),
-        ScreenArrangement.split,
+        ScreenArrangement.landscape,
       );
       // 3버튼 작업 표시줄 쪽은 좌우 제스처 영역이 없고, 제스처 쪽은 양쪽에 뒤로가기 영역이 있다.
       expect(buttons.systemGestureInsets.horizontal, 0);
@@ -1129,9 +1131,10 @@ void main() {
       );
     }
 
-    // 좌우 분할 배치(#24)에서 키패드는 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62). 제스처 내비게이션이면 그 바깥쪽
-    // 끝 열 키의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가
-    // 아니라 터치 위치 기준이라 같은 키의 가운데와 LCD 쪽을 향한 안쪽 끝 열은 누르는 순간 입력된다.
+    // 가로형(#142)에서는 숫자부가, 접힘선 기준 좌우 배치(#25)에서는 키패드가 주로 쓰는 손 쪽 화면 끝에 붙는다 (#62).
+    // 제스처 내비게이션이면 그 바깥쪽 끝 열 키(숫자부의 7·AC)의 화면 가장자리 쪽 일부가 뒤로가기 영역에 걸려, 거기서
+    // 시작한 터치는 손을 뗄 때 입력된다. 보류는 키가 아니라 터치 위치 기준이라 같은 키의 가운데와 안쪽 끝 열은 누르는
+    // 순간 입력된다.
     // 같은 화면의 3버튼 프리셋(태블릿 가로)은 좌우 제스처 영역이 없어 같은 자리를 눌러도 누르는 순간 입력된다 — 대조군.
     // 폴더블 내부 화면도 펼치면 접힘선 기준 좌우 배치라 바깥쪽 열이 뒤로가기 영역에 걸린다(README 안내) —
     // 이 화면은 기본 창에 축소 없이 들어간다.
@@ -1170,12 +1173,28 @@ void main() {
             bool inBackZone(double x) =>
                 x < gesture.left || x > device.size.width - gesture.right;
 
-            // 좌우 분할 배치: 키패드가 주로 쓰는 손 쪽에 있다.
+            // 숫자부(가로형)·키패드(접힘선 기준 좌우 배치)가 주로 쓰는 손 쪽에 있다.
             final keypad = tester.getRect(
               find.byKey(const ValueKey('calc-keypad')),
             );
             final lcd = tester.getRect(find.byType(LcdDisplay));
-            expect(keypad.center.dx > lcd.center.dx, handedness.keypadOnRight);
+            if (tester
+                    .widget<CalcKeypad>(find.byType(CalcKeypad))
+                    .arrangement ==
+                KeypadArrangement.wide) {
+              // (축소 표시라 배치 판정 도우미의 간격 비교는 쓰지 않는다 — 넓은 배열이면 가로형이다)
+              final number = tester.getRect(_keycap(CalcKeyId.num7));
+              final function = tester.getRect(_keycap(CalcKeyId.sin));
+              expect(
+                number.center.dx > function.center.dx,
+                handedness.keypadOnRight,
+              );
+            } else {
+              expect(
+                keypad.center.dx > lcd.center.dx,
+                handedness.keypadOnRight,
+              );
+            }
 
             // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
             final num7 = tester.getRect(_keycap(CalcKeyId.num7));
@@ -1263,22 +1282,41 @@ void main() {
       });
     }
 
-    testWidgets('짧은 창 프리셋: 분할 화면 위는 좌우 분할, 작은 팝업 창은 안내다 (README, #38·#141)', (
-      tester,
-    ) async {
-      await _pumpPreview(tester);
-      int indexOf(String name) =>
-          previewDevices.indexWhere((d) => d.name == name);
+    testWidgets(
+      '짧은 창 프리셋: 분할 화면 위는 가로형, 작은 팝업 창은 안내다 (README, #38·#141·#142)',
+      (tester) async {
+        await _pumpPreview(tester);
+        int indexOf(String name) =>
+            previewDevices.indexWhere((d) => d.name == name);
 
-      await _selectDevice(tester, indexOf('분할 화면 위'));
-      expect(tester.takeException(), isNull);
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+        await _selectDevice(tester, indexOf('분할 화면 위'));
+        expect(tester.takeException(), isNull);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+        expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
 
-      await _selectDevice(tester, indexOf('작은 팝업 창'));
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsOneWidget);
-    });
+        // 가로 폰: 가로형, 위 띠가 낮아 기록 영역 없이 활성 LCD가 띠 폭 전체다 (#142).
+        await _selectDevice(tester, indexOf('가로 폰'));
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+          KeypadArrangement.wide,
+        );
+        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
+        expect(
+          tester.getRect(find.byType(LcdDisplay)).width,
+          moreOrLessEquals(
+            tester.getRect(find.byKey(const ValueKey('calc-keypad'))).width,
+          ),
+        );
+        // 태블릿 가로: 기록 영역이 활성 LCD 옆에 있다.
+        await _selectDevice(tester, indexOf('태블릿 가로'));
+        expect(find.byKey(HistoryPanel.panelKey), findsOneWidget);
+
+        await _selectDevice(tester, indexOf('작은 팝업 창'));
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(WindowTooSmallNotice.noticeKey), findsOneWidget);
+      },
+    );
 
     testWidgets('창이 기기 화면을 그릴 수 없을 만큼 좁으면 안내 문구를 보인다', (tester) async {
       // 넓은 배치에서 창 높이가 여백(16×2)+캡션(24)보다 낮은 경우
@@ -1294,7 +1332,7 @@ void main() {
   });
 
   group('기기 틀 안의 대화상자 (#72)', () {
-    /// 좌우 분할 배치(설정 버튼이 있는) 3버튼 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블, 제스처 프리셋은 뺀다)
+    /// 가로형 배치(#142)의 3버튼 태블릿 가로 프리셋 (접힘선 기준 배치인 가로형 폴더블, 제스처 프리셋은 뺀다)
     int tabletLandscape() {
       final i = previewDevices.indexWhere(
         (d) =>
@@ -1398,7 +1436,7 @@ void main() {
       expect(dialog, findsNothing);
     });
 
-    testWidgets('축소 표시 중에도 선택지·닫기 버튼을 누를 수 있고, 뒤의 키패드가 바로 옮겨진다', (
+    testWidgets('축소 표시 중에도 선택지·닫기 버튼을 누를 수 있고, 뒤의 숫자부가 바로 옮겨진다', (
       tester,
     ) async {
       await _pumpPreview(tester, window: const Size(1000, 700));
@@ -1406,9 +1444,10 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(CalculatorScreen)),
       );
-      final keypad = find.byKey(const ValueKey('calc-keypad'));
+      // 가로형(#142): 손잡이가 숫자부 쪽을 정한다.
+      final numbers = _keycap(CalcKeyId.num7);
       final screen = tester.getRect(_deviceScreen);
-      expect(tester.getRect(keypad).center.dx, greaterThan(screen.center.dx));
+      expect(tester.getRect(numbers).center.dx, greaterThan(screen.center.dx));
 
       await openSettings(tester);
       await tester.tap(
@@ -1416,7 +1455,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(container.read(handednessProvider), Handedness.left);
-      expect(tester.getRect(keypad).center.dx, lessThan(screen.center.dx));
+      expect(tester.getRect(numbers).center.dx, lessThan(screen.center.dx));
 
       await tester.tap(find.byKey(HandednessDialog.closeKey));
       await tester.pumpAndSettle();
@@ -2162,8 +2201,8 @@ void main() {
                         moreOrLessEquals(lcd.right, epsilon: e),
                         reason: reason,
                       );
-                    case ScreenArrangement.split:
-                      fail('$reason: 폴더블 프리셋에서 접힘선을 무시한 좌우 분할');
+                    case ScreenArrangement.landscape:
+                      fail('$reason: 폴더블 프리셋에서 접힘선을 무시한 가로형');
                   }
                 }
                 // 키도 눌린다.

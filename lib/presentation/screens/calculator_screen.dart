@@ -17,6 +17,7 @@ import '../providers/calc_provider.dart';
 import '../providers/device_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/calc_keypad.dart';
+import '../widgets/history_panel.dart';
 import '../widgets/lcd_display.dart';
 import '../widgets/screen_coordinate_root.dart';
 import '../widgets/settings_button.dart';
@@ -39,8 +40,8 @@ import '../widgets/top_strip.dart';
 ///   (그래서 남는 높이가 최소 띠 이상인 화면의 배치는 최소 띠가 없을 때와 같다).
 /// - 본체가 아주 낮으면 키패드 높이가 0이 될 때까지만 LCD를 최소 높이로 지킨다.
 ///   짧은 창에서도 상단 띠 최소 높이를 먼저 떼므로 우선순위는 띠 > LCD 최소 높이 > 키패드다 (#38에서 유지하기로 정함).
-///   키가 작아지는 짧은 창은 이 배치 안에서 높이를 나누는 대신 화면이 좌우 분할로 바꾸거나 안내를 띄운다
-///   ([CalculatorScreen], [CalcTheme] "짧은 창" 절).
+///   키가 작아지는 짧은 창은 이 배치 안에서 높이를 나누는 대신 화면이 가로형([CalcLandscapeLayout])으로 바꾸거나 안내를
+///   띄운다([CalculatorScreen], [CalcTheme] "짧은 창" 절).
 ///   본체가 최소 띠 + 간격보다 낮으면 띠, 간격 순으로 본체 높이까지만 받아, 어떤 경우에도 합계가 본체 높이를
 ///   넘지 않는다.
 @immutable
@@ -71,10 +72,17 @@ class CalcScreenLayout {
     double finite(double v) => v.isFinite ? math.max(0.0, v) : 0.0;
     final width = finite(body.width);
     final bodyHeight = finite(body.height);
-    final base = _withStrip(
-      width,
+    final divided = _divideBodyHeight(
       bodyHeight,
-      CalcTheme.screenTopStripMinHeight,
+      lcdWidth: width,
+      keypadMaxHeight: KeypadMetrics.fitSize(Size(width, double.infinity))
+          .height,
+    );
+    final base = CalcScreenLayout._(
+      top: divided.top,
+      lcdHeight: divided.lcd,
+      gap: divided.gap,
+      keypadHeight: divided.keypad,
     );
     // 큰 세로 창은 키패드를 실물 크기 아래로 줄이지 않는 만큼 띠를 내용 줄 전체 높이까지 늘린다 (#141 R1).
     // 늘린 몫은 키패드에서만 뺀다 — LCD까지 다시 나누면 키패드가 폭에 묶인 창(폭 약 480~570dp)에서 폭이 늘 때
@@ -92,81 +100,238 @@ class CalcScreenLayout {
     );
   }
 
-  /// 띠 최소 높이를 [minStrip]으로 떼어 둔 배치 (본체 폭 [width]·높이 [bodyHeight]는 유한한 0 이상 값).
-  static CalcScreenLayout _withStrip(
-    double width,
-    double bodyHeight,
-    double minStrip,
-  ) {
-    // 상단 띠 최소 높이를 먼저 떼고, 나머지를 LCD·간격·키패드가 나눈다 (#41).
-    final strip = math.min(minStrip, bodyHeight);
-    final height = bodyHeight - strip;
-    final gap = math.min(CalcTheme.screenLcdKeypadGap, height);
-    final available = height - gap;
-    final keypadMax = width / CalcTheme.keypadMinAspectRatio;
-    final lcdMax = math.max(
-      CalcTheme.screenLcdMinHeight,
-      width / CalcTheme.screenLcdMinAspectRatio,
-    );
-    final lcd = math.min(
-      math
-          .max(height * CalcTheme.screenLcdHeightRatio, available - keypadMax)
-          .clamp(CalcTheme.screenLcdMinHeight, lcdMax),
-      available,
-    );
-    final keypad = math.min(available - lcd, keypadMax);
-    return CalcScreenLayout._(
-      // 남는 높이를 먼저 구한 뒤 띠에 더한다 — `strip + available - lcd - keypad` 순서로 계산하면 남는 높이가
-      // 0이어도 부동소수점 오차로 띠가 최소 높이보다 작아진다(본체 376×718 등, #41 R1).
-      top: strip + ((available - lcd) - keypad),
-      lcdHeight: lcd,
-      gap: gap,
-      keypadHeight: keypad,
-    );
-  }
-
   @override
   String toString() =>
       'CalcScreenLayout(top: $top, lcd: $lcdHeight, gap: $gap, '
       'keypad: $keypadHeight)';
 }
 
-/// 대화면 가로 창의 좌우 분할 배치 (#24). 기준은 [CalcTheme]의 "좌우 분할 배치" 절을 따른다.
+/// 본체 높이 [bodyHeight](유한한 0 이상 값)를 위 → 아래 (상단 띠 · LCD · 간격 · 키패드)로 나눈다 — 세로형([CalcScreenLayout])과
+/// 가로형([CalcLandscapeLayout])이 같이 쓰는 규칙이다 (#23, #41, #142).
+/// - 상단 띠 최소 높이([CalcTheme.screenTopStripMinHeight])를 먼저 떼고, 나머지를 LCD·간격·키패드가 나눈다.
+/// - LCD: 목표 높이 [lcdTarget](= 나머지 × [CalcTheme.screenLcdHeightRatio])를 [CalcTheme.screenLcdMinHeight] ~
+///   ([lcdWidth] / [CalcTheme.screenLcdMinAspectRatio]) 범위로 제한한다. 키패드가 세로 한계([keypadMaxHeight])에 닿아 쓰지 못하는
+///   높이는 LCD 최대 높이까지 LCD가 받는다.
+/// - 키패드: 나머지 높이, [keypadMaxHeight]까지. 그래도 남는 높이는 띠에 더한다.
+/// - 본체가 아주 낮으면 키패드 높이가 0이 될 때까지만 LCD를 최소 높이로 지킨다. 띠, 간격 순으로 본체 높이까지만 받아 합계가
+///   본체 높이를 넘지 않는다.
+({double top, double lcd, double gap, double keypad, double lcdTarget})
+_divideBodyHeight(
+  double bodyHeight, {
+  required double lcdWidth,
+  required double keypadMaxHeight,
+}) {
+  final strip = math.min(CalcTheme.screenTopStripMinHeight, bodyHeight);
+  final height = bodyHeight - strip;
+  final gap = math.min(CalcTheme.screenLcdKeypadGap, height);
+  final available = height - gap;
+  final lcdMax = math.max(
+    CalcTheme.screenLcdMinHeight,
+    lcdWidth / CalcTheme.screenLcdMinAspectRatio,
+  );
+  final lcdTarget = height * CalcTheme.screenLcdHeightRatio;
+  final lcd = math.min(
+    math
+        .max(lcdTarget, available - keypadMaxHeight)
+        .clamp(CalcTheme.screenLcdMinHeight, lcdMax),
+    available,
+  );
+  final keypad = math.min(available - lcd, keypadMaxHeight);
+  return (
+    // 남는 높이를 먼저 구한 뒤 띠에 더한다 — `strip + available - lcd - keypad` 순서로 계산하면 남는 높이가
+    // 0이어도 부동소수점 오차로 띠가 최소 높이보다 작아진다(본체 376×718 등, #41 R1).
+    top: strip + ((available - lcd) - keypad),
+    lcd: lcd,
+    gap: gap,
+    keypad: keypad,
+    lcdTarget: lcdTarget,
+  );
+}
+
+/// 접힘선 없는 가로로 넓은 창의 "가로형" 배치 (#142, [ScreenArrangement.landscape]). 기준은 [CalcTheme]의 "가로형 배치"
+/// 절을 따른다.
+///
+/// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭 — 숫자부와 활성 LCD가 왼쪽):
+/// ```
+///  ┌──────────────────────────────────────────────┐
+///  │ AltCalc                          ▮▮▮▮     ⚙ │ ← 상단 띠 (위 띠 폭 전체, [top])
+///  ├────────────────────┐  ┌──────────────────────┤
+///  │ 계산 기록 [history] │  │    활성 LCD [lcd]     │ ← 위 띠 ([band])
+///  ├────────────────────┘  └──────────────────────┤
+///  │ 상단 조작부 + 함수부 │  │       숫자부          │ ← 넓은 배열 키패드 [keypad]
+///  │      5행 × 6열      │  │      4행 × 5열        │
+///  └────────────────────┴──┴──────────────────────┘ ← 본체 아래
+///   └──── 블록 ────────┘ 간격 └──── 블록 ─────────┘
+/// ```
+/// - 키패드: 넓은 배열([KeypadArrangement.wide])로 본체 폭 전체를 쓰고 본체 아래에 붙인다. 높이는 넓은 배열의 세로 한계
+///   ([KeypadMetrics.fitSize])까지다. 숫자부는 주로 쓰는 손 쪽 블록이다([numbersOnLeft]).
+/// - 높이 나누기: 세로형([CalcScreenLayout])과 같은 규칙을 위 띠 폭 전체(본체 폭)로 쓴다 — 상단 띠 최소 높이를 먼저 떼고,
+///   LCD 목표 비율([CalcTheme.screenLcdHeightRatio]) · 최소 높이 · 최대 높이(본체 폭 / [CalcTheme.screenLcdMinAspectRatio]) 안에서
+///   위 띠, 나머지는 키패드가 세로 한계까지 받는다. 위 띠의 높이는 기록 영역 유무와 무관하다 — 그래서 기록 영역이 생기고
+///   없어지는 경계(창 높이·폭 어느 쪽으로 넘어도)에서 키·위 띠 높이가 튀지 않는다(#142 R1: 블록 폭으로 위 띠 최대 높이를
+///   정하면 본체 폭 461 → 461.5에서 LCD가 228.8 → 128dp로 줄고 빈 띠가 생겼다).
+/// - 기록 영역이 있을 때: 기록 영역은 위 띠 전체이고, 활성 LCD는 블록 폭의 실물 비율 높이(블록 /
+///   [CalcTheme.screenLcdMinAspectRatio], 하한 [CalcTheme.screenLcdMinHeight])까지만 위 띠 아래쪽(키패드 바로 위)에 둔다
+///   (#142 R2) — 그보다 높이면 글자는 폭에 묶여 커지지 않고 식과 답만 세로로 멀어진다. 위 띠가 그보다 높으면 활성 LCD 위가
+///   빈다(12.9인치 iPad 가로: 위 띠 479.1, 활성 LCD 655×374.5 — 기록 영역은 위 띠 전체를 쓴다).
+/// - 띠를 내용 줄 전체 높이까지 늘리기: LCD가 목표 높이(와 최소 높이)보다 높아진 몫(키패드가 세로 한계에 닿아 남는 높이)
+///   에서 띠를 [CalcTheme.topStripRowMaxHeight](화면 여백 포함)까지 늘린다. 키패드에서는 떼지 않는다 — 태블릿 가로는 키패드가
+///   세로 한계에 닿고 LCD가 남는 높이를 받아, 띠가 최소 높이(줄 20dp)로 남으면 설정 아이콘이 줄고 태양전지가 숨는다
+///   (세로형 큰 창의 띠 #141 R1과 같은 이유).
+/// - 위 띠: 키패드 블록에 맞춰 둘로 나눈다. 숫자부 위가 활성 LCD, 함수부 위가 계산 기록 영역(`HistoryPanel`, 내용은 #145)이고
+///   둘 사이는 키패드의 블록 사이 간격과 같다. LCD 하나를 전체 폭으로 늘이면 식은 왼쪽 끝, 답은 오른쪽 끝으로 멀어진다
+///   (사용자 결정). 다음 중 하나면 기록 영역을 두지 않고([history]가 `null`) 활성 LCD가 띠 폭 전체를 쓴다.
+///   - 위 띠가 [CalcTheme.screenLandscapeHistoryMinHeight]보다 낮다 (가로 폰 등 — 띠가 LCD 최소 높이에 묶인 창)
+///   - 블록이 [CalcTheme.screenLandscapeHistoryMinLcdWidth]보다 좁다 (좁은 창)
+///   - 블록 폭 활성 LCD의 줄 글자가 띠 폭 전체 LCD의 [CalcTheme.screenLandscapeHistoryMinLcdFontRatio]배보다 작다 (#142 R2 —
+///     위 띠가 높은데 블록이 좁은 창. 경계에서 줄 글자가 30%보다 많이 줄지 않게 한다)
+///   기록 영역이 없는 가로형의 무과금 광고 자리는 #18에서 정한다(기록 영역을 줄여 넣을 곳이 없다).
+/// - 설정 버튼·장식: 상단 띠의 내용 줄([CalcTopStripLayout])이 위 띠 폭 전체를 쓴다 — 세로형과 같이 워드마크는 왼쪽 끝,
+///   설정 버튼은 오른쪽 끝, 태양전지는 그 왼쪽이다. 손잡이와 무관하다.
+/// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
+@immutable
+class CalcLandscapeLayout {
+  /// LCD 위 상단 띠 높이 (dp) — 본체 안쪽만 센 값이다(본체 위 화면 여백 제외). [CalcScreenLayout.top]과 같은 뜻이다.
+  final double top;
+
+  /// 활성 LCD 영역 (본체 좌표, dp)
+  final Rect lcd;
+
+  /// 계산 기록 영역 (본체 좌표, dp). 위 띠가 낮거나 좁아 두지 않으면 `null`.
+  final Rect? history;
+
+  /// 키패드 영역 (본체 좌표, dp) — [KeypadArrangement.wide] 배열
+  final Rect keypad;
+
+  /// 숫자부(와 활성 LCD)를 왼쪽에 두는지 — 왼손잡이
+  final bool numbersOnLeft;
+
+  const CalcLandscapeLayout._({
+    required this.top,
+    required this.lcd,
+    required this.history,
+    required this.keypad,
+    required this.numbersOnLeft,
+  });
+
+  /// 위 띠 전체 (활성 LCD + 기록 영역, 본체 좌표) — 상단 띠의 내용 줄이 이 폭을 쓴다.
+  Rect get band {
+    final history = this.history;
+    return history == null ? lcd : lcd.expandToInclude(history);
+  }
+
+  /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)의 가로형 배치. [handedness]가 숫자부·활성 LCD 쪽을 정한다.
+  factory CalcLandscapeLayout.of(Size body, Handedness handedness) {
+    double finite(double v) => v.isFinite ? math.max(0.0, v) : 0.0;
+    final width = finite(body.width);
+    final height = finite(body.height);
+    final numbersOnLeft = !handedness.keypadOnRight;
+    final block = KeypadMetrics.wideBlockWidthOf(width);
+    final keypadMaxHeight = KeypadMetrics.fitSize(
+      Size(width, double.infinity),
+      KeypadArrangement.wide,
+    ).height;
+    // 위 띠의 높이는 띠 폭 전체로 정한다 — 기록 영역 유무와 무관하다.
+    final base = _divideBodyHeight(
+      height,
+      lcdWidth: width,
+      keypadMaxHeight: keypadMaxHeight,
+    );
+    // LCD가 목표 높이(와 최소 높이)보다 높아진 몫에서만 띠를 줄 전체 높이까지 늘린다 — 키는 그대로다.
+    // 늘린 뒤 LCD = max(하한, LCD − 늘릴 수 있는 최대)라 창 크기에 대해 연속이고, 창이 높아질 때 줄지 않는다.
+    const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
+    final lcdFloor = math.max(
+      base.lcdTarget,
+      math.min(CalcTheme.screenLcdMinHeight, base.lcd),
+    );
+    final grow = (base.lcd - lcdFloor).clamp(
+      0.0,
+      math.max(0.0, fullRow - base.top),
+    );
+    final top = base.top + grow;
+    final lcdHeight = base.lcd - grow;
+    // 기록 영역이 있을 때 활성 LCD 높이 — 블록 폭의 실물 비율 높이(블록 / [CalcTheme.screenLcdMinAspectRatio])까지만이다
+    // (#142 R2). 그보다 높이면 글자는 폭에 묶여 커지지 않고 식과 답만 세로로 멀어진다. 남는 높이는 기록 영역만 쓴다.
+    final blockLcdHeight = math.min(
+      lcdHeight,
+      math.max(
+        CalcTheme.screenLcdMinHeight,
+        block / CalcTheme.screenLcdMinAspectRatio,
+      ),
+    );
+    // 기록 영역을 두면 활성 LCD 줄 글자가 띠 폭 전체일 때보다 많이 작아지지 않아야 한다 — 폭 방향 경계에서 글자가 절반으로
+    // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다.
+    double lineFontOf(Size lcd) =>
+        LcdFontSizes.forSize(lcd, TextScaler.noScaling).input;
+    final withHistory =
+        lcdHeight >= CalcTheme.screenLandscapeHistoryMinHeight &&
+        block >= CalcTheme.screenLandscapeHistoryMinLcdWidth &&
+        lineFontOf(Size(block, blockLcdHeight)) >=
+            lineFontOf(Size(width, lcdHeight)) *
+                CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
+    // 남는 높이(반올림 오차 등)는 키패드가 받는다 (세로형 `_Body._stackedRects`와 같다).
+    final keypadTop = math.min(top + lcdHeight + base.gap, height);
+    final keypad = Rect.fromLTRB(0, keypadTop, width, height);
+
+    final Rect lcd;
+    Rect? history;
+    if (withHistory) {
+      // 활성 LCD는 위 띠 아래(키패드 바로 위)에 붙이고, 기록 영역은 위 띠 높이 전체를 쓴다.
+      final lcdTop = top + lcdHeight - blockLcdHeight;
+      final left = Rect.fromLTWH(0, lcdTop, block, blockLcdHeight);
+      final right = Rect.fromLTWH(width - block, lcdTop, block, blockLcdHeight);
+      final leftBand = Rect.fromLTWH(0, top, block, lcdHeight);
+      final rightBand = Rect.fromLTWH(width - block, top, block, lcdHeight);
+      lcd = numbersOnLeft ? left : right;
+      history = numbersOnLeft ? rightBand : leftBand;
+    } else {
+      lcd = Rect.fromLTWH(0, top, width, lcdHeight);
+    }
+    return CalcLandscapeLayout._(
+      top: top,
+      lcd: lcd,
+      history: history,
+      keypad: keypad,
+      numbersOnLeft: numbersOnLeft,
+    );
+  }
+
+  @override
+  String toString() =>
+      'CalcLandscapeLayout(top: $top, lcd: $lcd, history: $history, '
+      'keypad: $keypad, numbersOnLeft: $numbersOnLeft)';
+}
+
+/// 세로 접힘선 기준 좌우 배치 (#25, [ScreenArrangement.hingeSplit] — 폴더블 책 자세). 기준은 [CalcTheme]의 "접힘선 기준
+/// 배치" 절을 따른다. 손 쪽 패널을 세로형으로, 반대쪽 패널을 기록으로 다시 정하는 것은 #143이다 — 그때까지 예전 좌우 분할
+/// 배치(#24)의 접힘선 규칙을 그대로 쓴다(접힘선 없는 좌우 분할은 가로형 #142가 대체했다).
 ///
 /// 오른손잡이([Handedness.right]) 기준 (왼손잡이는 좌우 대칭):
 /// ```
-///  ┌────────────────────┬──┬────────────────────┐
-///  │  (띠 — 장식 줄)    │  │                    │
-///  ├────────────────────┤  ├────────────────────┤ ← 키패드 윗변 = LCD 윗변
-///  │        LCD         │간│                    │
-///  ├────────────────────┤격│    50키 키패드     │
-///  │ [설정]             │  │                    │
-///  └────────────────────┴──┴────────────────────┘ ← 본체 아래
-///  └── LCD 쪽 패널 ─────┘
+///  ┌────────────────────┆──────────────────────┐
+///  │  (띠 — 장식 줄)    ┆                      │
+///  ├────────────────────┆──────────────────────┤ ← 키패드 윗변 = LCD 윗변
+///  │        LCD         ┆                      │
+///  ├────────────────────┆    50키 키패드        │
+///  │ [설정]             ┆                      │
+///  └────────────────────┆──────────────────────┘ ← 본체 아래
+///  └── LCD 쪽 절반 ─────┘ 접힘선
 /// ```
-/// - 키패드: 주로 쓰는 손 쪽 가장자리·본체 아래에 붙인다. 크기는 [KeypadMetrics.fitSize]
-///   (폭 ≤ (본체 폭 − 간격) × [CalcTheme.screenSplitKeypadMaxWidthRatio], 높이 ≤ 본체 높이).
-/// - LCD 쪽 패널: 나머지 폭 전체.
-/// - LCD: 폭은 패널 폭과 키패드 폭 × [CalcTheme.screenLcdMaxWidthRatio] 중 작은 쪽이고 (#71),
-///   패널 안에서 키패드 쪽에 붙인다 — 그래서 LCD와 키패드 사이는 간격만큼이다. 접힘선이 없으면 키패드가
-///   (본체 폭 − 간격)의 절반을 다 쓰고(#141 — 폭 상한 없음) 패널도 같은 폭이라 LCD가 패널을 다 쓴다(바깥 여백 없음).
-///   높이는 그 폭의 최대 높이(폭 / [CalcTheme.screenLcdMinAspectRatio], 하한 [CalcTheme.screenLcdMinHeight])이되,
-///   아래에 설정 버튼 자리를 남기도록 키패드 높이에서 버튼 자리를 뺀 높이를 넘지 않는다.
+/// - 접힘선([hinge], 본체 좌표) 양쪽에 [CalcTheme.screenHingeMargin]씩 비우고, 주로 쓰는 손 쪽 절반 전체가 키패드 자리,
+///   다른 절반 전체가 LCD 쪽 패널이다.
+/// - 키패드: 손 쪽 절반에 [KeypadMetrics.fitSize](실물 배열)로 맞춰 손 쪽 가장자리·본체 아래에 붙인다.
+/// - LCD: 폭은 패널 폭과 키패드 폭 × [CalcTheme.screenLcdMaxWidthRatio] 중 작은 쪽이고 (#71), 상한에 걸리면(LCD 쪽 절반이
+///   키패드 쪽보다 넓을 때) 접힘선 쪽에 붙어 눈 이동을 줄인다. 높이는 그 폭의 최대 높이(폭 /
+///   [CalcTheme.screenLcdMinAspectRatio], 하한 [CalcTheme.screenLcdMinHeight])이되, 아래에 설정 버튼 자리를 남기도록 키패드
+///   높이에서 버튼 자리를 뺀 높이를 넘지 않는다. 윗변은 키패드 윗변에 맞춘다.
 /// - 설정 버튼: LCD 바로 아래, LCD의 키패드에서 먼 쪽 끝.
-/// - 본체가 키패드 최대 높이보다 높으면 위쪽 남는 높이는 LCD 위 띠다 — 위아래 배치의 상단 띠처럼 키패드를 본체
-///   아래에 붙인 채로 둔다. 띠가 충분히 높으면 LCD 바로 위에 장식 줄을 둔다([CalcTopStripLayout], #41).
+/// - 본체가 키패드 최대 높이보다 높으면 위쪽 남는 높이는 LCD 위 띠다. 띠가 충분히 높으면 LCD 바로 위에 장식 줄을 둔다
+///   ([CalcTopStripLayout], #41).
+/// - 키패드는 손 쪽 절반 폭을 다 쓰므로(#141) LCD와 키패드 사이는 접힘선 + 양쪽 간격이다(두 화면 기기 1114×720: 50dp).
+///   그래서 LCD·키패드·설정 버튼 어느 것도 접힘선 위에 놓이지 않는다.
 /// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
-///
-/// ## 세로 접힘선 기준 (#25, [ScreenArrangement.hingeSplit])
-/// 접힘선([hinge], 본체 좌표)을 주면 키패드 쪽과 LCD 쪽의 경계를 접힘선으로 고정한다. 접힘선 양쪽에
-/// [CalcTheme.screenHingeMargin]씩 비우고, 주로 쓰는 손 쪽 절반 전체가 키패드 자리(폭 비율 상한 없음),
-/// 다른 절반 전체가 LCD 쪽 패널이다. 나머지 규칙은 같다 — LCD 폭 상한에
-/// 걸리면(LCD 쪽 절반이 키패드 쪽보다 넓을 때) LCD는 접힘선 쪽에 붙어 눈 이동을 줄인다. 키패드는 손 쪽 절반 폭을
-/// 다 쓰므로(#141) LCD와 키패드 사이는 접힘선 + 양쪽 간격이다(두 화면 기기 1114×720: 50dp — #141 전에는 키패드가
-/// 480dp에서 멈춰 94dp였다).
-/// 그래서 LCD·키패드·설정 버튼 어느 것도 접힘선 위에 놓이지 않는다.
 @immutable
-class CalcSplitLayout {
+class CalcHingeSplitLayout {
   /// LCD 영역 (본체 좌표, dp)
   final Rect lcd;
 
@@ -176,47 +341,39 @@ class CalcSplitLayout {
   /// 설정 버튼 영역 (본체 좌표, dp)
   final Rect settingsButton;
 
-  const CalcSplitLayout._({
+  const CalcHingeSplitLayout._({
     required this.lcd,
     required this.keypad,
     required this.settingsButton,
   });
 
-  /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)를 [handedness]에 따라 좌우로 나눈다.
-  /// [hinge]를 주면(본체 좌표의 세로 접힘선) 그 접힘선을 경계로 나눈다.
-  factory CalcSplitLayout.of(Size body, Handedness handedness, {Rect? hinge}) {
+  /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)를 세로 접힘선 [hinge](본체 좌표)로 나눠 [handedness] 쪽 절반에 키패드를
+  /// 둔다.
+  factory CalcHingeSplitLayout.of(
+    Size body,
+    Rect hinge,
+    Handedness handedness,
+  ) {
     double finite(double v) => v.isFinite ? math.max(0.0, v) : 0.0;
     final width = finite(body.width);
     final height = finite(body.height);
     final onRight = handedness.keypadOnRight;
 
-    final Size keypadSize;
-    final double panelLeft;
-    final double panelWidth;
-    if (hinge == null) {
-      final gap = math.min(CalcTheme.screenSplitGap, width);
-      keypadSize = KeypadMetrics.fitSize(
-        Size((width - gap) * CalcTheme.screenSplitKeypadMaxWidthRatio, height),
-      );
-      panelWidth = math.max(0.0, width - gap - keypadSize.width);
-      panelLeft = onRight ? 0.0 : keypadSize.width + gap;
-    } else {
-      // 접힘선 왼쪽 끝·오른쪽 시작 (본체 밖이면 본체 가장자리로 자른다)
-      final leftEnd = (finite(hinge.left) - CalcTheme.screenHingeMargin).clamp(
-        0.0,
-        width,
-      );
-      final rightStart = (finite(hinge.right) + CalcTheme.screenHingeMargin)
-          .clamp(leftEnd, width);
-      final keypadRegion = onRight ? width - rightStart : leftEnd;
-      keypadSize = KeypadMetrics.fitSize(Size(keypadRegion, height));
-      panelLeft = onRight ? 0.0 : rightStart;
-      panelWidth = onRight ? leftEnd : width - rightStart;
-    }
+    // 접힘선 왼쪽 끝·오른쪽 시작 (본체 밖이면 본체 가장자리로 자른다)
+    final leftEnd = (finite(hinge.left) - CalcTheme.screenHingeMargin).clamp(
+      0.0,
+      width,
+    );
+    final rightStart = (finite(hinge.right) + CalcTheme.screenHingeMargin)
+        .clamp(leftEnd, width);
+    final keypadRegion = onRight ? width - rightStart : leftEnd;
+    final keypadSize = KeypadMetrics.fitSize(Size(keypadRegion, height));
+    final panelLeft = onRight ? 0.0 : rightStart;
+    final panelWidth = onRight ? leftEnd : width - rightStart;
     final keypadLeft = onRight ? width - keypadSize.width : 0.0;
     final keypadTop = height - keypadSize.height;
 
-    // LCD 폭 상한 (#71) — 상한에 걸리면 패널 안에서 키패드 쪽에 붙인다.
+    // LCD 폭 상한 (#71) — 상한에 걸리면 패널 안에서 키패드 쪽(접힘선 쪽)에 붙인다.
     final lcdWidth = math.min(
       panelWidth,
       keypadSize.width * CalcTheme.screenLcdMaxWidthRatio,
@@ -225,7 +382,7 @@ class CalcSplitLayout {
 
     // LCD 아래에 설정 버튼 자리(간격 + 버튼)를 남긴다.
     const buttonBlock =
-        CalcTheme.screenSplitSettingsGap + CalcTheme.settingsButtonSize;
+        CalcTheme.screenSettingsGap + CalcTheme.settingsButtonSize;
     final lcdMax = math.max(0.0, keypadSize.height - buttonBlock);
     final lcdHeight = math.min(
       math.max(
@@ -236,10 +393,9 @@ class CalcSplitLayout {
     );
     final lcd = Rect.fromLTWH(lcdLeft, keypadTop, lcdWidth, lcdHeight);
     // 버튼은 항상 LCD 아래에 둔다. 본체가 버튼 자리보다 낮은 비정상 크기에서만 버튼이 줄어든다
-    // (짧은 창의 좌우 분할(#38)도 그 전에 키가 [CalcTheme.keyTouchHeightUsableMin] 미만이 되어 안내로 바뀌므로
-    // 화면에서는 생기지 않는다).
+    // (그 전에 키가 [CalcTheme.keyTouchHeightUsableMin] 미만이 되어 화면이 이 배치를 쓰지 않는다).
     final buttonTop = math.min(
-      lcd.bottom + CalcTheme.screenSplitSettingsGap,
+      lcd.bottom + CalcTheme.screenSettingsGap,
       height,
     );
     final button = math.min(CalcTheme.settingsButtonSize, height - buttonTop);
@@ -248,7 +404,7 @@ class CalcSplitLayout {
     final buttonLeft = onRight
         ? math.min(lcd.left, panelLeft + panelWidth - buttonWidth)
         : math.max(lcd.right - buttonWidth, panelLeft);
-    return CalcSplitLayout._(
+    return CalcHingeSplitLayout._(
       lcd: lcd,
       keypad: Rect.fromLTWH(
         keypadLeft,
@@ -262,7 +418,7 @@ class CalcSplitLayout {
 
   @override
   String toString() =>
-      'CalcSplitLayout(lcd: $lcd, keypad: $keypad, '
+      'CalcHingeSplitLayout(lcd: $lcd, keypad: $keypad, '
       'settings: $settingsButton)';
 }
 
@@ -308,7 +464,7 @@ class CalcSplitLayout {
 ///   장식은 [CalcTopStripLayout]).
 /// - 설정 버튼: 아래 절반에서 키패드 반대쪽 끝, 키패드 윗변 높이. 그 자리가 없으면(키패드가 아래 절반 폭을
 ///   거의 다 쓰면) 위 절반의 키패드 반대쪽 위 모서리에 둔다. LCD가 그 버튼과 가로로 겹치면 LCD를 버튼 아래로
-///   줄이고, 폭 상한 덕에 버튼 옆(간격 [CalcTheme.screenSplitSettingsGap] 이상)으로 비켜 있으면 줄이지 않는다.
+///   줄이고, 폭 상한 덕에 버튼 옆(간격 [CalcTheme.screenSettingsGap] 이상)으로 비켜 있으면 줄이지 않는다.
 /// - 모든 영역은 본체 안에 있고 접힘선 위에 놓이지 않는다 (음수·비유한 크기는 0으로 본다).
 @immutable
 class CalcTabletopLayout {
@@ -381,7 +537,7 @@ class CalcTabletopLayout {
     const button = CalcTheme.settingsButtonSize;
     final buttonWidth = math.min(button, width);
     final besideKeypad =
-        width - keypadSize.width >= CalcTheme.screenSplitGap + button &&
+        width - keypadSize.width >= CalcTheme.screenPanelGap + button &&
         keypadSize.height >= button;
     final buttonLeft = onRight ? 0.0 : width - buttonWidth;
     final Rect settings;
@@ -393,12 +549,11 @@ class CalcTabletopLayout {
       final buttonHeight = math.min(button, topEnd);
       settings = Rect.fromLTWH(buttonLeft, 0, buttonWidth, buttonHeight);
       final clearOfButton = onRight
-          ? lcdLeft >= settings.right + CalcTheme.screenSplitSettingsGap
-          : lcdLeft + lcdWidth <=
-                settings.left - CalcTheme.screenSplitSettingsGap;
+          ? lcdLeft >= settings.right + CalcTheme.screenSettingsGap
+          : lcdLeft + lcdWidth <= settings.left - CalcTheme.screenSettingsGap;
       if (!clearOfButton) {
         lcdRegionTop = math.min(
-          buttonHeight + CalcTheme.screenSplitSettingsGap,
+          buttonHeight + CalcTheme.screenSettingsGap,
           topEnd,
         );
       }
@@ -454,7 +609,7 @@ class CalcTabletopLayout {
 /// - 내용 줄: 높이는 띠 높이와 [CalcTheme.topStripRowMaxHeight] 중 작은 쪽.
 /// - 설정 버튼([settingsButton]): 줄 오른쪽 끝의 [CalcTheme.settingsButtonSize] 정사각형 터치 영역.
 ///   줄이 그보다 낮으면 줄 윗변에서 아래로 LCD 위에 겹치고, 아이콘은 위쪽 [settingsVisualHeight](= 줄 높이)
-///   구간 가운데에 그린다. 위아래 배치에서만 띠에 둔다 — 버튼이 다른 곳에 있는 배치는 그 영역을
+///   구간 가운데에 그린다. 위아래 배치·가로형은 띠에 둔다 — 버튼이 다른 곳에 있는 배치는 그 영역을
 ///   `settingsButton` 인자로 넘기고, 이때 [settingsButton]은 `null`이다.
 /// - 워드마크([wordmark])·태양전지 장식([solarPanel]): 줄 높이·폭이 모자라면 `null`(그리지 않음).
 ///   다른 곳의 설정 버튼과 겹치면 둘 다 `null`이다.
@@ -594,13 +749,19 @@ class CalcTopStripLayout {
 /// 창 크기와 접힘선에 따라 배치를 고른다 ([FormFactor.arrangementOf]).
 /// - **위아래 배치("세로형")** (폰 세로 화면, 태블릿 세로·좁은 창, 폴더블 커버 화면): 아래 그림, [CalcScreenLayout].
 ///   LCD와 키패드가 본체 폭 전체를 쓴다(#141).
-/// - **좌우 분할 배치** (대화면 가로 창): LCD와 키패드를 좌우로 나누고, 주로 쓰는 손([handednessProvider])
-///   쪽에 키패드를 둔다. [CalcSplitLayout].
-/// - **접힘선 기준 배치** (폴더블 내부 화면, #25): 세로 접힘선이면 접힘선을 경계로 좌우 분할
-///   ([CalcSplitLayout]의 `hinge`), 가로 접힘선이면 위 절반 LCD·아래 절반 키패드([CalcTabletopLayout]).
-/// - **짧은 창** (분할 화면·팝업 창·가로로 돈 폰, #38): 짧은 변 600dp 미만 창은 위아래 배치와 좌우 분할 중 키가
-///   큰 쪽으로 그린다(세로 폰은 위아래 배치가 늘 크다). 어느 배치든 그린 키가
-///   [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을 키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
+/// - **가로형 배치** (태블릿 가로, 가로로 돌린 폰, 분할 화면·데스크톱의 가로 창, #142): 아래에 넓은 키패드 배열, 위 띠에
+///   활성 LCD(숫자부 위)와 계산 기록(함수부 위). 숫자부와 활성 LCD는 주로 쓰는 손([handednessProvider]) 쪽이다.
+///   [CalcLandscapeLayout].
+/// - **접힘선 없는 창은 세로형과 가로형 중 키가 큰 쪽**으로 그린다(#142, [FormFactor.picksFormByKeySize]) — 키 크기는 가장
+///   낮은 키의 셀 높이([KeypadMetrics.minKeyCellHeightOf])로 비교하고, 같으면 세로형이다. 두 키 크기가 창 크기에 따라
+///   연속으로 변하므로 바뀌는 경계에서 키가 튀지 않는다([CalcTheme] "가로형 배치" 절).
+/// - **접힘선 기준 배치** (폴더블 내부 화면, #25): 세로 접힘선이면 접힘선을 경계로 좌우 배치([CalcHingeSplitLayout]),
+///   가로 접힘선이면 위 절반 LCD·아래 절반 키패드([CalcTabletopLayout]).
+/// - **짧은 창** (#38): 폴더블 기기·접힘 정보가 있어 위아래 배치로 그리는 창도 짧은 변 600dp 미만이면 위아래 배치와 가로형
+///   중 키가 큰 쪽으로 그린다. 어느 배치든 그린 키가 [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을
+///   키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
+/// - 스크린리더 읽기 순서: 활성 LCD → 계산 기록 → 키패드 → 설정 버튼 (#142). 화면 위치와 무관하게 모든 배치에서 같다
+///   (가로형은 기록이 활성 LCD 왼쪽에 있어도 LCD를 먼저 읽는다). 키패드 안은 함수부 다음 숫자부다(`CalcKeypad`).
 /// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 아래
 ///   여백([CalcTheme.screenBottomMargin] — 보통 화면 여백, 아래 제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 초과분만큼,
 ///   #63)까지 쓴다.
@@ -629,7 +790,7 @@ class CalcTopStripLayout {
 ///   아래 제스처 영역은 반대로 여백으로 피한다(위 광고 슬롯 항목) — 깊이 차이가 작아 대부분 기기에서 비용이 없다.
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
-///   규칙으로 좌우 분할일 수 있다 — 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같다, #38). 앱 시작 때는
+///   규칙으로 가로형일 수 있다, #38). 앱 시작 때는
 ///   Android가 창 배치 첫 값에 접힘선이 있다고 알리면 `main()`이 그 정보가 올 때까지(최대 300ms) 첫 화면을 미룬다(#158) —
 ///   제때 오면 첫 프레임부터 접힘선 기준 배치다.
 /// - 접기·펼치기·회전으로 배치가 바뀌어도 상태는 [calcProvider]에 있고 LCD·키패드 element도 유지된다(`_Body`).
@@ -697,6 +858,10 @@ class CalculatorScreen extends ConsumerWidget {
                   math.max(0.0, constraints.maxHeight - _Body.origin.dy),
                 ),
                 arrangement: arrangement,
+                picksFormByKeySize: FormFactor.picksFormByKeySize(
+                  features,
+                  foldableDevice: foldableDevice,
+                ),
                 smallWindow:
                     window.shortestSide < FormFactor.largeScreenMinShortestSide,
                 hinge: hinge,
@@ -901,25 +1066,33 @@ class _KeypadPanel extends ConsumerWidget {
   /// 키패드 구역 배열 (#80)
   final KeypadArrangement arrangement;
 
-  const _KeypadPanel({required this.arrangement});
+  /// 넓은 배열에서 숫자부를 왼쪽에 둘지 (#142)
+  final bool numbersOnLeft;
+
+  const _KeypadPanel({required this.arrangement, this.numbersOnLeft = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return CalcKeypad(
       arrangement: arrangement,
+      numbersOnLeft: numbersOnLeft,
       onKeyPressed: (id) => ref.read(calcProvider.notifier).pressKey(id),
       onKeyRepeat: (id) => ref.read(calcProvider.notifier).repeatKey(id),
     );
   }
 }
 
-/// 본체: LCD·키패드·상단 띠 장식·설정 버튼을 [arrangement]에 맞는 영역에 놓는다.
+/// 본체: LCD·기록 영역·키패드·상단 띠 장식·설정 버튼을 [arrangement]에 맞는 영역에 놓는다.
 ///
 /// 모든 배치를 **같은 위젯 트리**(`Stack` + `Positioned.fromRect`, 자식 수·순서 고정)로 그린다. 그래서 회전·창
 /// 크기 변경으로 배치가 바뀌어도 LCD·키패드 element가 유지되어 키 눌림 상태와 스크린리더 포커스가 사라지지 않는다
 /// (#24 R2 — Android 16 태블릿·iPad는 방향 고정이 무시되어 회전이 잦다). 손잡이 설정이 바뀌어도
-/// 영역 위치만 옮기고, LCD·키패드 위젯은 같은 인스턴스라 다시 빌드되지 않는다.
-/// 폴더블을 접고 펴거나(#25) 내부 화면을 돌려 접힘선 방향이 바뀔 때도 마찬가지다.
+/// 영역 위치만 옮기고, LCD·키패드 위젯은 같은 인스턴스라 다시 빌드되지 않는다(가로형의 숫자부 좌우 대칭은 키패드 안 블록
+/// 순서만 바꾼다 — 키 element는 그대로다, #142).
+/// 폴더블을 접고 펴거나(#25) 내부 화면을 돌려 접힘선 방향이 바뀔 때도 마찬가지다. 기록 영역(#142)이 없는 배치에서도
+/// 기록 영역 자식은 보이지 않게 남는다.
+///
+/// 스크린리더 읽기 순서는 영역마다 붙인 순서 키([OrdinalSortKey])로 정한다: 활성 LCD → 기록 → 키패드 → 설정 버튼 (#142).
 ///
 /// 이 위젯은 본체 위 화면 여백([CalcTheme.screenPadding])까지 차지한다 — 상단 띠가 그 여백을 쓴다 (#41).
 /// 배치 클래스들의 본체 좌표는 이 위젯 안에서 [origin]만큼 내려간 곳이 원점이다.
@@ -930,11 +1103,14 @@ class _Body extends ConsumerWidget {
   /// 본체 크기 (시스템 인셋·화면 여백 제외)
   final Size body;
 
-  /// 배치 종류
+  /// 배치 종류 ([FormFactor.arrangementOf] — 창 크기·접힘선으로 정한 배치)
   final ScreenArrangement arrangement;
 
   /// 창을 가로지르는 접힘선 (본체 좌표, 없으면 `null`) — 접힘선 기준 배치에서 쓴다.
   final Rect? hinge;
+
+  /// 세로형과 가로형 중 키가 큰 쪽을 늘 고르는 창인지 ([FormFactor.picksFormByKeySize], #142)
+  final bool picksFormByKeySize;
 
   /// 창의 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인지 — 짧은 창 판정 (#38 R1)
   final bool smallWindow;
@@ -947,25 +1123,38 @@ class _Body extends ConsumerWidget {
   const _Body({
     required this.body,
     required this.arrangement,
+    required this.picksFormByKeySize,
     required this.smallWindow,
     this.hinge,
     this.diagnostics,
   });
 
+  /// 영역별 스크린리더 읽기 순서 (#142)
+  static const double _lcdOrder = 0;
+  static const double _historyOrder = 1;
+  static const double _keypadOrder = 2;
+  static const double _settingsOrder = 3;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final Rect lcd;
     final Rect keypad;
-    // 키패드 구역 배열 — 테이블톱 배치만 넓은 배열을 쓸 수 있다 (#80)
+    // 키패드 구역 배열 — 가로형·테이블톱 배치는 넓은 배열을 쓸 수 있다 (#80, #142)
     var keypadArrangement = KeypadArrangement.standard;
-    // 띠 밖에 놓는 설정 버튼 (좌우 분할·접힘선 기준 배치). 위아래 배치는 상단 띠 안에 둔다.
+    // 넓은 배열에서 숫자부를 왼쪽에 둘지 — 가로형의 왼손잡이 (#142)
+    var numbersOnLeft = false;
+    // 계산 기록 영역 — 가로형에서 위 띠가 충분히 클 때만 있다 (#142)
+    Rect? history;
+    // 상단 띠 내용 줄의 기준 영역 — LCD, 가로형은 위 띠 전체(활성 LCD + 기록)
+    Rect? stripBase;
+    // 띠 밖에 놓는 설정 버튼 (접힘선 기준 배치). 위아래 배치·가로형은 상단 띠 안에 둔다.
     Rect? settings;
     // 실제로 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래 배치로 그리면 [ScreenArrangement.stacked]다.
     // 설정 대화상자가 접힘선으로 나뉠지·손잡이 설정이 이 배치에 적용되는지 고를 때 쓴다 (#41 R1).
     final ScreenArrangement drawn;
     final hinge = this.hinge;
     final handedness = ref.watch(handednessProvider);
-    // 위아래 배치 — 접힘선 기준 배치·짧은 창 판정이 이 배치의 키 크기와 비교한다.
+    // 위아래 배치 — 접힘선 기준 배치·가로형과의 비교가 이 배치의 키 크기를 본다.
     final stacked = _stackedRects(body);
     final stackedTouch = KeypadMetrics.minKeyTouchHeightOf(
       stacked.keypad.size,
@@ -999,7 +1188,7 @@ class _Body extends ConsumerWidget {
       if (hinge == null) return null;
       switch (arrangement) {
         case ScreenArrangement.hingeSplit:
-          final l = CalcSplitLayout.of(body, h, hinge: hinge);
+          final l = CalcHingeSplitLayout.of(body, hinge, h);
           if (acceptsHingeKeypad(
             l.keypad,
             KeypadArrangement.standard,
@@ -1027,7 +1216,7 @@ class _Body extends ConsumerWidget {
               settings: l.settingsButton,
             );
           }
-        case ScreenArrangement.stacked || ScreenArrangement.split:
+        case ScreenArrangement.stacked || ScreenArrangement.landscape:
           break;
       }
       return null;
@@ -1039,12 +1228,6 @@ class _Body extends ConsumerWidget {
     };
     final hingeLayout = hingeLayouts[handedness];
     switch (arrangement) {
-      case ScreenArrangement.split:
-        final layout = CalcSplitLayout.of(body, handedness);
-        lcd = layout.lcd;
-        keypad = layout.keypad;
-        settings = layout.settingsButton;
-        drawn = arrangement;
       case ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked
           when hingeLayout != null:
         lcd = hingeLayout.lcd;
@@ -1052,23 +1235,29 @@ class _Body extends ConsumerWidget {
         keypadArrangement = hingeLayout.keypadArrangement;
         settings = hingeLayout.settings;
         drawn = arrangement;
-      // 접힘선 기준 배치를 쓸 수 없으면(키가 너무 작음, 호출 측 불일치) 위아래 배치로 그린다.
+      // 접힘선 없는 창(#142)과, 접힘선 기준 배치를 쓸 수 없어(키가 너무 작음, 호출 측 불일치) 위아래 배치로 대체하는
+      // 창: 가로형의 키가 더 크면 가로형으로 그린다.
       case ScreenArrangement.stacked ||
+          ScreenArrangement.landscape ||
           ScreenArrangement.hingeSplit ||
           ScreenArrangement.hingeStacked:
-        // 짧은 창 (#38): 좌우 분할의 키가 더 크면 좌우 분할로 그린다. 접힘선 기준 배치를 쓸 수 없어 위아래
-        // 배치로 대체하는 화면에도 적용한다 — 위아래 배치도 접힘선을 가로지른다(#38 R1).
-        final shortWindow = _shortWindowSplit(
+        final landscape = _landscapeAlternative(
           body,
           handedness,
-          stackedTouch,
-          smallWindow: smallWindow,
+          stacked.keypad.size,
+          compare:
+              picksFormByKeySize ||
+              smallWindow ||
+              stackedTouch < CalcTheme.keyTouchHeightFloor,
         );
-        if (shortWindow != null) {
-          lcd = shortWindow.lcd;
-          keypad = shortWindow.keypad;
-          settings = shortWindow.settingsButton;
-          drawn = ScreenArrangement.split;
+        if (landscape != null) {
+          lcd = landscape.lcd;
+          history = landscape.history;
+          stripBase = landscape.band;
+          keypad = landscape.keypad;
+          keypadArrangement = KeypadArrangement.wide;
+          numbersOnLeft = landscape.numbersOnLeft;
+          drawn = ScreenArrangement.landscape;
         } else {
           lcd = stacked.lcd;
           keypad = stacked.keypad;
@@ -1100,12 +1289,13 @@ class _Body extends ConsumerWidget {
     // 될 수 있다(세로 접힘선 양쪽 폭이 다르면 키패드가 들어갈 절반이 손잡이마다 다르다).
     // 접힘선 기준 배치는 반대 손잡이로도 같은 배치이고 키패드 자리가 같으면 키패드가 옮겨 가지 않는다 — 넓은
     // 키패드 배열(#80)이 아래 절반 폭을 다 쓰는 테이블톱(Fold 가로·Pixel Fold 세로 반 접힘)이 그렇다(#80 R1).
+    // 가로형은 숫자부와 활성 LCD가 손 쪽으로 옮겨 간다(#142).
     final otherLayout =
         hingeLayouts[handedness == Handedness.right
             ? Handedness.left
             : Handedness.right];
     final keypadMoves = switch (drawn) {
-      ScreenArrangement.split => true,
+      ScreenArrangement.landscape => true,
       ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked =>
         otherLayout == null || !_keypadStaysPut(otherLayout.keypad, keypad),
       ScreenArrangement.stacked => false,
@@ -1117,34 +1307,62 @@ class _Body extends ConsumerWidget {
               (e) => e.key != handedness && e.value != null,
             ));
     // 손잡이를 바꿔도 그린 배치가 같은지 (#129): 접힘선 기준 배치는 두 손잡이 모두 그 배치를 쓸 수 있을 때다.
-    // 좌우 분할·위아래 배치는 손잡이와 무관하다(위아래 배치로 대체한 화면은 위 판정처럼 반대 손잡이로 달라질 수 있다).
+    // 가로형·위아래 배치는 손잡이와 무관하다(위아래 배치로 대체한 화면은 위 판정처럼 반대 손잡이로 달라질 수 있다).
     final handednessKeepsArrangement = hingeLayouts.values.every(
       (l) => (l == null) == (hingeLayout == null),
     );
-    // 상단 띠 (#41): LCD 위에 장식 줄을 두고, 위아래 배치는 설정 버튼도 그 줄에 둔다.
-    final strip = CalcTopStripLayout.of(body, lcd, settingsButton: settings);
+    // 상단 띠 (#41): LCD(가로형은 위 띠 전체) 위에 장식 줄을 두고, 위아래 배치·가로형은 설정 버튼도 그 줄에 둔다.
+    final strip = CalcTopStripLayout.of(
+      body,
+      stripBase ?? lcd,
+      settingsButton: settings,
+    );
     final stripButton = strip.settingsButton;
     // 안내 중에는 보이지 않게 하되 element·상태는 유지한다 (`maintainState` — 트리 모양이 바뀌지 않는다).
-    Widget shown(Widget child) =>
-        Visibility(visible: !tooSmall, maintainState: true, child: child);
+    Widget shown(Widget child, {bool visible = true}) => Visibility(
+      visible: visible && !tooSmall,
+      maintainState: true,
+      child: child,
+    );
+    // 스크린리더 읽기 순서를 정하는 영역 노드 (#142)
+    Widget ordered(double order, Widget child) => Semantics(
+      container: true,
+      explicitChildNodes: true,
+      sortKey: OrdinalSortKey(order),
+      child: child,
+    );
     return Stack(
       children: [
         Positioned.fromRect(
           rect: lcd.shift(origin),
-          child: shown(const _LcdPanel()),
+          child: shown(ordered(_lcdOrder, const _LcdPanel())),
+        ),
+        // 기록 영역이 없는 배치에서도 자식 자리를 지켜 트리 모양을 고정한다.
+        Positioned.fromRect(
+          rect: (history ?? Rect.zero).shift(origin),
+          child: shown(
+            ordered(_historyOrder, const HistoryPanel()),
+            visible: history != null,
+          ),
         ),
         Positioned.fromRect(
           rect: keypad.shift(origin),
           // 배열마다 const 인스턴스라, 손잡이만 바뀌고 키패드 크기·배열이 같으면 키패드 50개를 다시 빌드하지 않는다
-          // (크기가 바뀌면 `CalcKeypad`가 새 치수로 다시 빌드한다).
-          child: shown(switch (keypadArrangement) {
-            KeypadArrangement.standard => const _KeypadPanel(
-              arrangement: KeypadArrangement.standard,
-            ),
-            KeypadArrangement.wide => const _KeypadPanel(
-              arrangement: KeypadArrangement.wide,
-            ),
-          }),
+          // (크기가 바뀌면 `CalcKeypad`가 새 치수로 다시 빌드한다). 가로형의 손잡이 변경은 숫자부 쪽이 바뀌어 다시 빌드한다.
+          child: shown(
+            ordered(_keypadOrder, switch ((keypadArrangement, numbersOnLeft)) {
+              (KeypadArrangement.standard, _) => const _KeypadPanel(
+                arrangement: KeypadArrangement.standard,
+              ),
+              (KeypadArrangement.wide, false) => const _KeypadPanel(
+                arrangement: KeypadArrangement.wide,
+              ),
+              (KeypadArrangement.wide, true) => const _KeypadPanel(
+                arrangement: KeypadArrangement.wide,
+                numbersOnLeft: true,
+              ),
+            }),
+          ),
         ),
         Positioned.fromRect(
           rect: strip.row.shift(origin),
@@ -1156,23 +1374,26 @@ class _Body extends ConsumerWidget {
             ),
           ),
         ),
-        // 띠 안의 버튼은 터치 영역이 LCD 위쪽에 겹칠 수 있어 LCD보다 나중에(위에) 둔다.
+        // 띠 안의 버튼은 터치 영역이 LCD·기록 영역 위쪽에 겹칠 수 있어 그보다 나중에(위에) 둔다.
         Positioned.fromRect(
           rect: (settings ?? stripButton!).shift(origin),
           child: shown(
-            stripButton == null
-                ? SettingsButton(
-                    arrangement: drawn,
-                    handednessApplies: handednessApplies,
-                    handednessKeepsArrangement: handednessKeepsArrangement,
-                  )
-                : SettingsButton(
-                    arrangement: drawn,
-                    handednessApplies: handednessApplies,
-                    handednessKeepsArrangement: handednessKeepsArrangement,
-                    visualHeight: strip.settingsVisualHeight,
-                    iconSize: strip.settingsIconSize,
-                  ),
+            ordered(
+              _settingsOrder,
+              stripButton == null
+                  ? SettingsButton(
+                      arrangement: drawn,
+                      handednessApplies: handednessApplies,
+                      handednessKeepsArrangement: handednessKeepsArrangement,
+                    )
+                  : SettingsButton(
+                      arrangement: drawn,
+                      handednessApplies: handednessApplies,
+                      handednessKeepsArrangement: handednessKeepsArrangement,
+                      visualHeight: strip.settingsVisualHeight,
+                      iconSize: strip.settingsIconSize,
+                    ),
+            ),
           ),
         ),
         // 마지막 자식이라 있다가 없어져도 앞 자식들의 element는 그대로다.
@@ -1182,14 +1403,14 @@ class _Body extends ConsumerWidget {
   }
 
   /// 손잡이를 바꿔도 키패드가 [a] → [b]로 사실상 같은 자리인지. 크기는 같고(부동소수점 오차 0.5dp 미만), 가로 이동이
-  /// [CalcTheme.screenSplitGap](16dp) 미만이면 같은 자리로 본다 — 넓은 배열 블록 폭이 상한에 걸려 아래 절반 폭에서
+  /// [CalcTheme.screenPanelGap](16dp) 미만이면 같은 자리로 본다 — 넓은 배열 블록 폭이 상한에 걸려 아래 절반 폭에서
   /// 몇 dp만 남는 창(반 접힌 폭 약 1010dp: 5.2dp 이동)은 키패드가 옮겨 갔다고 느낄 수 없다(#80 R2).
   static bool _keypadStaysPut(Rect a, Rect b) {
     const e = 0.5;
     return (a.width - b.width).abs() < e &&
         (a.top - b.top).abs() < e &&
         (a.bottom - b.bottom).abs() < e &&
-        (a.left - b.left).abs() < CalcTheme.screenSplitGap;
+        (a.left - b.left).abs() < CalcTheme.screenPanelGap;
   }
 
   /// 위아래 배치의 LCD·키패드 영역 (본체 좌표) — [CalcScreenLayout].
@@ -1209,31 +1430,35 @@ class _Body extends ConsumerWidget {
     return (lcd: lcd, keypad: keypad);
   }
 
-  /// 짧은 창에서 위아래 배치 대신 쓸 좌우 분할 배치 (#38). 위아래 배치의 키([stackedTouch])보다 좌우 분할의
-  /// 키가 크지 않으면 `null`(위아래 배치 그대로). 비교하는 창은 둘이다([CalcTheme] "짧은 창" 절).
-  /// - [smallWindow]: 짧은 변 600dp 미만 창 — 키 크기와 무관하게 늘 비교한다(#38 R1). 두 배치의 키 크기는
-  ///   창 크기에 따라 연속으로 변하므로 큰 쪽을 고르면 창을 키울 때 키가 줄지 않는다. 28dp 미만일 때만 비교하면
-  ///   가로 창의 높이를 늘릴 때 좌우 → 위아래(키가 31% 줄어듦, 844×548 → 549) → 좌우(짧은 변 600dp부터
-  ///   `FormFactor`가 좌우 분할)로 튄다. 세로 폰은 좌우 분할이 늘 더 작아 그대로다.
-  /// - 그 밖의 창(접힘선 기준 배치를 쓸 수 없어 위아래 배치로 대체한 대화면 등): 위아래 배치의 키가
-  ///   [CalcTheme.keyTouchHeightFloor]보다 낮을 때만 비교한다.
-  /// 좌우 분할(접힘선 없음) 키패드 크기는 손잡이와 무관하다.
-  static CalcSplitLayout? _shortWindowSplit(
+  /// 위아래 배치 대신 쓸 가로형 배치 (#142, 짧은 창 #38). 위아래 배치 키패드([stackedKeypad])보다 가로형의 가장 낮은 키
+  /// 셀이 높지 않으면 `null`(위아래 배치 그대로 — 같으면 키가 더 넓은 위아래 배치). [compare]가 거짓이면 비교하지 않는다.
+  ///
+  /// 키 크기는 [KeypadMetrics.minKeyCellHeightOf]로 비교한다 — 터치 높이([KeypadMetrics.minKeyTouchHeightOf])는 큰 키에서
+  /// 각인 띠를 터치 영역에서 빼며 한 번 줄어 큰 화면의 비교가 뒤집힌다. 두 셀 높이는 창 크기에 따라 연속으로 변하므로
+  /// 큰 쪽을 고르면 배치가 바뀌는 경계에서 키가 튀지 않는다([CalcTheme] "가로형 배치" 절).
+  /// 비교하는 창([CalculatorScreen]이 정한다):
+  /// - 접힘선 없는 창([FormFactor.picksFormByKeySize]): 늘 비교한다.
+  /// - 폴더블 기기·접힘 정보가 있어 위아래 배치로 그리는 창: 짧은 변 600dp 미만이거나(#38 R1) 위아래 배치의 키가
+  ///   [CalcTheme.keyTouchHeightFloor]보다 낮을 때만 비교한다 — 접힘 정보가 늦게 오는 폴더블 내부 화면을 가로형으로
+  ///   그렸다가 바꾸는 깜빡임을 막는다(#25). 이 창들의 배치는 #143·#144에서 다시 정한다.
+  /// 가로형 키패드 크기는 손잡이와 무관하다.
+  static CalcLandscapeLayout? _landscapeAlternative(
     Size body,
     Handedness handedness,
-    double stackedTouch, {
-    required bool smallWindow,
+    Size stackedKeypad, {
+    required bool compare,
   }) {
-    if (!smallWindow && stackedTouch >= CalcTheme.keyTouchHeightFloor) {
-      return null;
-    }
-    final split = CalcSplitLayout.of(body, handedness);
-    return KeypadMetrics.minKeyTouchHeightOf(
-              split.keypad.size,
-              KeypadArrangement.standard,
+    if (!compare) return null;
+    final landscape = CalcLandscapeLayout.of(body, handedness);
+    return KeypadMetrics.minKeyCellHeightOf(
+              landscape.keypad.size,
+              KeypadArrangement.wide,
             ) >
-            stackedTouch
-        ? split
+            KeypadMetrics.minKeyCellHeightOf(
+              stackedKeypad,
+              KeypadArrangement.standard,
+            )
+        ? landscape
         : null;
   }
 }

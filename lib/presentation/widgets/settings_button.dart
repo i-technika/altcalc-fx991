@@ -12,7 +12,7 @@ import 'handedness_dialog.dart';
 /// 설정 진입 버튼 (#24). 누르면 키패드 위치(손잡이) 선택 대화상자([HandednessDialog])를 띄운다.
 ///
 /// 크기는 부모가 정한다(`CalculatorScreen`은 [CalcTheme.settingsButtonSize] 정사각형 자리를 준다).
-/// 모든 배치에 하나씩 있다 — 좌우 분할·접힘선 기준 배치는 LCD 아래 등 #24·#25의 자리, 위아래 배치는 LCD 위
+/// 모든 배치에 하나씩 있다 — 접힘선 기준 배치는 LCD 아래 등 #25의 자리, 위아래 배치·가로형(#142)은 LCD 위
 /// 상단 띠의 오른쪽 끝이다 (#41, `CalcTopStripLayout`).
 ///
 /// ## 낮은 상단 띠 (#41)
@@ -92,10 +92,10 @@ import 'handedness_dialog.dart';
 ///   최소 크기를 넘으면 어느 손잡이로 열어도 넓은 절반이다 — 위 "좁은 하위 화면"). 펼친 폭 0 접힘선은 위 절대로
 ///   버튼 중심을 다시 재지만, 이런 화면은 [handednessKeepsArrangement]가 `false`이고 접힘선 기준 배치일 때 버튼이
 ///   있는 LCD 쪽은 키패드가 들어가지 못한 좁은 절반이라 하한([FormFactor.hingeMinPanelExtent])보다 좁아, 대화상자는
-///   화면 전체에 그대로 뜬다(하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `split_layout_test`가 검사한다).
+///   화면 전체에 그대로 뜬다(하한 폭 절반에는 키패드가 늘 들어간다는 전제는 `screen_layout_test`가 검사한다).
 /// - 가로 접힘선 기준 배치(테이블톱): 버튼은 키패드 옆 자리면 아래 절반, 폭이 모자라면 위 절반 위쪽 모서리이고
 ///   어느 쪽인지는 손잡이와 무관하다(`CalcTabletopLayout`) — 손잡이를 바꾸면 같은 절반 안에서 좌우로만 옮겨 간다.
-/// - 좌우 분할 배치(접힘선 없음): 대화상자가 화면 가운데 한 자리다.
+/// - 가로형 배치(접힘선 없음, #142): 대화상자가 화면 가운데 한 자리다.
 class SettingsButton extends StatefulWidget {
   /// 이 버튼이 놓인 화면의 실제 배치 (`CalculatorScreen`이 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래
   /// 배치로 그렸으면 [ScreenArrangement.stacked])
@@ -105,7 +105,7 @@ class SettingsButton extends StatefulWidget {
   /// 접힘선 기준 배치라도 반대 손잡이의 키패드 자리가 같으면(키패드가 아래 절반 폭을 다 쓰는 테이블톱 — Fold 가로의
   /// 넓은 키패드 배열, Flip 내부, #80 R1) 키패드는 옮겨 가지 않는다 — 설정 버튼(과 폭 상한에 걸려 좁게 남는 LCD)만
   /// 좌우로 옮겨 간다. 블록 폭 상한에 걸린 넓은 배열처럼 몇 dp만 옮겨 가는 것도 옮겨 가지 않는 것으로 본다
-  /// (`CalculatorScreen`, [CalcTheme.screenSplitGap] 미만).
+  /// (`CalculatorScreen`, [CalcTheme.screenPanelGap] 미만).
   ///
   /// 그린 배치만으로는 정할 수 없다 — 세로 접힘선 기준 배치는 키패드가 들어갈 절반의 폭이 손잡이마다 달라,
   /// 지금 손잡이로는 위아래 배치로 대체했어도 반대 손잡이로는 접힘선 기준 배치가 될 수 있다(#41 R2).

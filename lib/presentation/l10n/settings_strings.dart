@@ -34,14 +34,18 @@ abstract class SettingsStrings {
 
   /// 지금 화면에서는 키패드 위치가 바뀌지 않는다는 안내 (#41) — 설정 버튼이 폰에도 보이므로 손잡이를 골라도
   /// 키패드가 그대로인 이유를 알린다. 위아래 배치(키패드 가운데)와, 키패드가 아래 절반 폭을 다 쓰는 테이블톱(#80 —
-  /// 그때도 설정 버튼, 폭 상한에 걸린 LCD는 좌우로 옮겨 간다)에서 보인다. 기기 종류가 아니라 키패드를 한쪽 가장자리에
-  /// 붙이는지로 말한다: 같은 폴더블도 펼친 방향·접은 정도에 따라 배치가 다르다.
+  /// 그때도 설정 버튼, 폭 상한에 걸린 LCD는 좌우로 옮겨 간다)에서 보인다. 기기 종류가 아니라 숫자 키를 한쪽 가장자리에
+  /// 두는지로 말한다: 같은 폴더블도 펼친 방향·접은 정도에 따라 배치가 다르다. 적용되는 화면의 예는 가로형(#142 — 숫자부와
+  /// 활성 LCD가 손 쪽으로 옮겨 간다)이다. "키패드 위치" 대신 "키 배치"로 말한다(#142 R1) — 넓은 배열 테이블톱(#80)은 숫자
+  /// 키가 이미 오른쪽 가장자리에 있어 "가장자리에 두는 화면에서 적용"이라고 하면 화면과 어긋난다.
+  /// 선택지 설명("숫자 키를 왼쪽에 둡니다")은 블록 폭 상한에 걸린 넓은 테이블톱(아래 절반 폭 약 990dp 초과)에서 맞지 않는다 —
+  /// 키패드만 왼쪽으로 가고 숫자부는 키패드 오른쪽에 남는다. 테이블톱의 숫자부 위치는 #143에서 손잡이를 따르게 한다.
   String get handednessNote;
 
   /// 손잡이 선택지 이름
   String handedness(Handedness value);
 
-  /// 손잡이 선택지 설명 (키패드가 어느 쪽에 오는지)
+  /// 손잡이 선택지 설명 (숫자 키가 어느 쪽에 오는지 — 가로형은 숫자부, 접힘선 기준 배치는 키패드 전체가 그쪽이다)
   String handednessDetail(Handedness value);
 
   /// 대화상자 닫기 버튼
@@ -63,8 +67,8 @@ class KoSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessNote =>
-      '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-      'LCD와 키패드가 좌우로 나뉜 화면처럼 키패드를 한쪽 가장자리에 붙이는 화면에서 적용됩니다.';
+      '지금 화면에서는 손잡이를 바꿔도 키 배치가 바뀌지 않습니다. '
+      '가로로 넓은 화면 등에서 숫자 키를 고른 손 쪽으로 옮깁니다.';
 
   @override
   String handedness(Handedness value) => switch (value) {
@@ -74,8 +78,8 @@ class KoSettingsStrings extends SettingsStrings {
 
   @override
   String handednessDetail(Handedness value) => switch (value) {
-    Handedness.right => '키패드를 오른쪽에 둡니다',
-    Handedness.left => '키패드를 왼쪽에 둡니다',
+    Handedness.right => '숫자 키를 오른쪽에 둡니다',
+    Handedness.left => '숫자 키를 왼쪽에 둡니다',
   };
 
   @override
@@ -97,9 +101,9 @@ class EnSettingsStrings extends SettingsStrings {
 
   @override
   String get handednessNote =>
-      'The keypad position does not change on this screen. '
-      'It applies when the keypad sits against one side, '
-      'such as when the LCD and keypad are side by side.';
+      'Changing this does not move the keys on this screen. '
+      'On wide screens and similar layouts, '
+      'the number keys move to the side you choose.';
 
   @override
   String handedness(Handedness value) => switch (value) {
@@ -109,8 +113,8 @@ class EnSettingsStrings extends SettingsStrings {
 
   @override
   String handednessDetail(Handedness value) => switch (value) {
-    Handedness.right => 'Keypad on the right',
-    Handedness.left => 'Keypad on the left',
+    Handedness.right => 'Number keys on the right',
+    Handedness.left => 'Number keys on the left',
   };
 
   @override

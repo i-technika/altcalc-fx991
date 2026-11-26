@@ -255,7 +255,7 @@ const DisplayFeature previewLandscapeFoldInnerFold = DisplayFeature(
 ///
 /// 물리 화면 1080×2640 px(Samsung 공개 사양의 내부 화면 해상도) 가운데(y=1320 px)를 왼쪽에서 오른쪽까지 가로지르는
 /// 가로 접힘선을 밀도 2.625(420dpi, 기본 화면 크기 설정) 가정으로 dp로 바꾼 값이다(화면 411.43×1005.71, 접힘선
-/// y=502.86 — 프리셋 크기를 정수로 반올림하고 접힘선은 그 가운데 503으로 맞췄다). 배치 테스트(`split_layout_test` 등)의
+/// y=502.86 — 프리셋 크기를 정수로 반올림하고 접힘선은 그 가운데 503으로 맞췄다). 배치 테스트(`screen_layout_test` 등)의
 /// Flip 근사도 같은 값을 쓴다. 밀도는 자료에 따라 2.75(393×960dp)로 적힌 것도 있다 — 그 크기로도 반 접힘 테이블톱의
 /// 가장 낮은 키 터치 높이가 일반 하한(28dp)을 넘어(#104 리뷰 실측 약 31~33dp) 배치·방향 판정은 같다.
 /// 보고 값·밀도 모두 실기기 미확인이다.
@@ -266,7 +266,7 @@ const DisplayFeature previewFlipInnerFold = DisplayFeature(
 );
 
 /// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
-/// 높게 잡았다(배치 테스트 `split_layout_test`·`top_strip_test`의 Flip 근사와 같다). 실기기 미확인이다.
+/// 높게 잡았다(배치 테스트 `screen_layout_test`·`top_strip_test`의 Flip 근사와 같다). 실기기 미확인이다.
 const double _flipStatusBarHeight = 32;
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -342,7 +342,8 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 48),
     systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
-  // 태블릿 가로: LCD/키패드 좌우 분할 배치 (#24). 손잡이는 화면의 설정 버튼으로 바꾼다 —
+  // 태블릿 가로: 가로형 배치 (#142) — 위 띠에 계산 기록(빈 영역, #145)과 활성 LCD, 아래에 넓은 키패드 배열.
+  // 손잡이는 화면의 설정 버튼으로 바꾼다(숫자부와 활성 LCD가 그쪽으로 옮겨 간다) —
   // 대화상자는 기기 틀 안에 그 기기의 크기·글자 배율로 뜬다 (#72).
   PreviewDevice(
     '태블릿 가로',
@@ -350,8 +351,8 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 48),
     systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
-  // 같은 태블릿을 제스처 내비게이션으로 쓰는 경우 (#62): 좌우에 뒤로가기 영역이 생겨, 화면 오른쪽(왼손잡이면
-  // 왼쪽) 끝에 붙은 키패드의 바깥쪽 열 키 중 화면 가장자리 쪽 일부(뒤로가기 영역 안)에서 시작한 터치는 손을 뗄 때
+  // 같은 태블릿을 제스처 내비게이션으로 쓰는 경우 (#62): 좌우에 뒤로가기 영역이 생겨, 화면 양쪽 끝 열 키(가로형 키패드는
+  // 본체 폭 전체다 — 숫자부의 7·AC 쪽과 함수부 쪽) 중 화면 가장자리 쪽 일부(뒤로가기 영역 안)에서 시작한 터치는 손을 뗄 때
   // 입력된다 — 같은 키라도 가운데를 누르면 바로 입력된다. 아래는 AOSP·Pixel 대화면의 임시 작업 표시줄(평소에는
   // 숨고 제스처 핸들만 남음)을 가정해 폴더블 내부와 같게 근사했다. Samsung 등 제스처 내비게이션에서도 작업
   // 표시줄을 항상 보이게 하는 기기는 아래 인셋이 이보다 크다. 값은 실기기 미확인이다.
@@ -361,10 +362,17 @@ const List<PreviewDevice> previewDevices = [
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
   ),
+  // 가로로 돌린 폰 (iPhone 근사 — 좌우 노치 47·아래 홈 표시줄 21). 실제 앱은 폰을 세로로 고정하지만 방향 고정이 무시되는
+  // 창(Android 16 이상의 대화면 모드, 데스크톱 창 등)을 보려고 둔다. 가로형으로 그리되 위 띠가 LCD 최소 높이라 기록
+  // 영역 없이 활성 LCD가 띠 폭 전체를 쓴다(#142, 키 셀 위아래 18.8 → 37.6dp).
+  PreviewDevice(
+    '가로 폰',
+    Size(844, 390),
+    padding: EdgeInsets.only(left: 47, right: 47, bottom: 21),
+  ),
   // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음).
-  // 짧은 창이라 위아래 배치보다 키가 큰 좌우 분할로 그린다(#38, 키 위아래 19.4 → 좌우 21.5dp) — 손잡이를 바꾸면
-  // 키패드가 옮겨 간다. 맨 아래 광고 슬롯이 빠진 뒤(#141) 예전 크기 390×420은 위아래 배치의 키가 더 커져(21.1 > 20.3dp)
-  // 좌우 분할을 보여 주지 못해 창 높이를 400으로 낮췄다.
+  // 짧은 창이라 위아래 배치보다 키가 큰 가로형으로 그린다(#38·#142, 키 셀 위아래 19.4 → 가로형 21.7dp) — 손잡이를 바꾸면
+  // 숫자부가 옮겨 간다. 넓은 배열이 폭에 묶여 남는 높이는 띠 폭 전체의 활성 LCD가 받는다.
   PreviewDevice(
     '분할 화면 위',
     Size(411, 400),
@@ -372,8 +380,7 @@ const List<PreviewDevice> previewDevices = [
     systemGestureInsets: EdgeInsets.only(top: 24),
   ),
   // 키를 쓸 수 없을 만큼 작은 팝업 창 — 계산기 대신 창을 키워 달라는 안내가 나온다(#38). 다른 기기로 바꾸면
-  // 계산기가 입력 상태 그대로 돌아온다. 맨 아래 광고 슬롯이 빠진 뒤(#141) 예전 크기 320×240은 좌우 분할의 키가 16.3dp로
-  // 안내 기준(16dp)을 넘어 창 높이를 200으로 낮췄다(좌우 분할 15.6dp).
+  // 계산기가 입력 상태 그대로 돌아온다(가로형 8.8dp — 320×240도 15.6dp로 안내지만 #141 때 정한 크기를 그대로 둔다).
   PreviewDevice('작은 팝업 창', Size(320, 200)),
 ];
 
@@ -779,7 +786,7 @@ DisplayFeature? _splittingFold(Size screen, List<DisplayFeature> features) {
   if (used == null) return null;
   return switch (FormFactor.arrangementOf(screen, features)) {
     ScreenArrangement.hingeSplit || ScreenArrangement.hingeStacked => used,
-    ScreenArrangement.stacked || ScreenArrangement.split => null,
+    ScreenArrangement.stacked || ScreenArrangement.landscape => null,
   };
 }
 

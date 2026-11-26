@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -26,13 +27,14 @@ enum KeypadArrangement {
   /// 실물 배열 — 숫자부가 함수부 아래에 있다.
   standard,
 
-  /// 숫자부를 함수부 오른쪽에 나란히 둔다. 반 접은 테이블톱 자세의 아래 절반처럼 낮고 넓은 영역에서
-  /// [standard]보다 키가 클 때만 쓴다([KeypadMetrics.preferredArrangementFor]). 높이가 [standard]의 약 절반이라
+  /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 반 접은 테이블톱 자세의 아래
+  /// 절반처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
-  /// 숫자부는 손잡이와 무관하게 늘 오른쪽이다(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것).
-  /// 이 배열을 쓰는 테이블톱 배치는 #143까지 블록 폭 상한(`CalcTheme.screenTabletopKeypadMaxBlockWidth`)을 남겨 두어,
-  /// 블록 폭이 상한에 걸리는 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽 가장자리로 가고 왼손잡이면
-  /// 숫자부가 화면 가운데 쪽에 온다. 손잡이에 따라 블록을 좌우 대칭으로 놓는 것은 가로형 배치(#142)에서 정한다.
+  /// 숫자부는 기본으로 오른쪽이고(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것), `CalcKeypad.numbersOnLeft`로
+  /// 좌우를 맞바꿀 수 있다 — 가로형 배치는 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, 사용자 결정).
+  /// 테이블톱 배치는 #143까지 손잡이와 무관하게 숫자부가 오른쪽이고, 블록 폭 상한
+  /// (`CalcTheme.screenTabletopKeypadMaxBlockWidth`)에 걸리는 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
+  /// 가장자리로 가서 왼손잡이면 숫자부가 화면 가운데 쪽에 온다.
   wide,
 }
 
@@ -123,6 +125,11 @@ class KeypadMetrics {
   /// [KeypadArrangement.wide] 키패드 폭을 블록 폭 단위로 센 값 (블록 2개 + 블록 사이 간격)
   static const double _wideWidthUnits = 2 + CalcTheme.keypadWideSectionGapRatio;
 
+  /// [KeypadArrangement.wide] 키패드 폭 [width]에서 블록 하나의 폭 (dp) — 가로형 배치가 위 띠를 블록에 맞춰 나눌 때
+  /// 쓴다(#142). 블록 사이 간격은 `width - 2 × 블록 폭`이다.
+  static double wideBlockWidthOf(double width) =>
+      math.max(0.0, width) / _wideWidthUnits;
+
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
   double get functionKeyWidth =>
       math.max(0.0, blockWidth / functionColumns - horizontalGap);
@@ -203,6 +210,25 @@ class KeypadMetrics {
           size.height / numberRows.length,
         );
     }
+  }
+
+  /// [available] 영역에 [arrangement] 배열 키패드를 놓았을 때 가장 낮은 키의 셀 높이 (dp, 키 사이 간격 제외 — 각인 띠와
+  /// 키캡을 합친 높이, 커서 패드 제외). 두 배열 모두 함수부 행이 가장 낮다.
+  ///
+  /// 키패드 크기에 대해 단조 증가한다 — 세로형과 가로형 중 키가 큰 쪽을 고를 때 쓴다(#142). [minKeyTouchHeightOf]는
+  /// 키캡이 [CalcTheme.keyMinTouchTargetHeight]를 넘는 순간 각인 띠를 터치 영역에서 빼므로 키가 커질 때 한 번 줄어든다
+  /// (셀 66.7dp에서 66.7 → 48dp). 그 값으로 비교하면 키가 큰 배치를 버리게 된다 — 12.9인치 iPad 세로 1024×1366은
+  /// 세로형(셀 76.1dp, 터치 54.8dp)이 가로형(셀·터치 55.4dp)보다 키가 큰데 터치 높이로는 가로형이 이긴다.
+  static double minKeyCellHeightOf(
+    Size available,
+    KeypadArrangement arrangement,
+  ) {
+    final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
+        _geometryOf(fitSize(available, arrangement), arrangement);
+    return math.max(
+      0.0,
+      math.min(functionRowHeight, numberRowHeight) - verticalGap,
+    );
   }
 
   /// [available] 영역에 [arrangement] 배열 키패드를 놓았을 때 가장 낮은 키의 터치 높이 (dp, 커서 패드 제외).
@@ -507,6 +533,10 @@ class CalcKeypad extends StatelessWidget {
   /// 구역 배열 (#80)
   final KeypadArrangement arrangement;
 
+  /// [KeypadArrangement.wide]에서 숫자부를 함수부 왼쪽에 둘지 (#142 — 가로형 배치의 왼손잡이). 구역 안의 키 배열과
+  /// 스크린리더 읽기 순서(함수부 다음 숫자부)는 그대로이고 블록의 좌우만 바뀐다. [KeypadArrangement.standard]에서는 쓰지 않는다.
+  final bool numbersOnLeft;
+
   /// 제약이 무한한 축에 쓰는 기본 크기
   static const Size fallbackSize = Size(360, 420);
 
@@ -516,6 +546,7 @@ class CalcKeypad extends StatelessWidget {
     this.onKeyRepeat,
     this.enableHaptics = true,
     this.arrangement = KeypadArrangement.standard,
+    this.numbersOnLeft = false,
   });
 
   @override
@@ -552,6 +583,7 @@ class CalcKeypad extends StatelessWidget {
             size: metrics.size,
             child: _KeypadBody(
               metrics: metrics,
+              numbersOnLeft: numbersOnLeft,
               onKeyPressed: onKeyPressed,
               onKeyRepeat: onKeyRepeat,
               enableHaptics: enableHaptics,
@@ -565,12 +597,14 @@ class CalcKeypad extends StatelessWidget {
 
 class _KeypadBody extends StatelessWidget {
   final KeypadMetrics metrics;
+  final bool numbersOnLeft;
   final ValueChanged<CalcKeyId>? onKeyPressed;
   final ValueChanged<CalcKeyId>? onKeyRepeat;
   final bool enableHaptics;
 
   const _KeypadBody({
     required this.metrics,
+    required this.numbersOnLeft,
     required this.onKeyPressed,
     required this.onKeyRepeat,
     required this.enableHaptics,
@@ -630,8 +664,13 @@ class _KeypadBody extends StatelessWidget {
 
   /// 구역 하나를 스크린리더 탐색 단위로 묶는다 — 넓은 배열에서 두 구역의 행 높이가 달라, 묶지 않으면 화면 위치순
   /// 정렬이 함수부와 숫자부 키를 섞어 읽는다. 키는 각자 노드로 남는다(`explicitChildNodes`).
-  static Widget _section(Widget child) =>
-      Semantics(container: true, explicitChildNodes: true, child: child);
+  /// 구역 순서는 [order]로 정한다 — 숫자부를 왼쪽에 둔 넓은 배열(#142)도 화면 위치와 무관하게 함수부를 먼저 읽는다.
+  static Widget _section(Widget child, double order) => Semantics(
+    container: true,
+    explicitChildNodes: true,
+    sortKey: OrdinalSortKey(order),
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -643,6 +682,11 @@ class _KeypadBody extends StatelessWidget {
     // 키 element가 유지되어 키 눌림 상태와 스크린리더 포커스가 사라지지 않는다 (#80, `_Body`의 배치 전환과 같은 이유).
     return Flex(
       direction: wide ? Axis.horizontal : Axis.vertical,
+      // 넓은 배열의 좌우 대칭(#142)은 블록 순서만 거꾸로 놓는다 — 자식 순서·종류가 그대로라 손잡이를 바꿔도 키
+      // element가 유지된다. 구역 안의 키 줄(`Row`)은 이 값을 물려받지 않아 키 배열은 실물 그대로다.
+      textDirection: wide && numbersOnLeft
+          ? TextDirection.rtl
+          : TextDirection.ltr,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // 상단 조작부 + 함수부 — 표준 배열은 위, 넓은 배열은 왼쪽 블록
@@ -661,6 +705,7 @@ class _KeypadBody extends StatelessWidget {
                 ),
               ],
             ),
+            0,
           ),
         ),
         SizedBox(
@@ -671,6 +716,7 @@ class _KeypadBody extends StatelessWidget {
         Expanded(
           child: _section(
             _grid(numberRows, extendHitArea: metrics.extendNumberHitArea),
+            1,
           ),
         ),
       ],

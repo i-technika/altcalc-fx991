@@ -8,9 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 값이 아니라 [ValueListenable]인 것은 화면 정보 변화를 받은 그 프레임에 화면 배치가 따라가게 하려는 것이다
 /// (`CalculatorScreen`이 [ValueListenableBuilder]로 듣는다).
 ///
-/// 폴더블 기기는 접힘 정보(접힘선)가 오기 전까지 좌우 분할 대신 위아래 배치를 쓴다(`FormFactor.arrangementOf`, #25).
-/// 단 짧은 변 600dp 미만 창은 화면이 짧은 창 규칙으로 키가 큰 좌우 분할을 고를 수 있다(`CalculatorScreen`, #38) —
-/// 접힘선이 가운데면 접힘선 기준 좌우 배치와 영역이 같아 접힘 정보가 와도 거의 튀지 않는다.
+/// 폴더블 기기는 접힘 정보(접힘선)가 오기 전까지 가로형(#142) 대신 위아래 배치를 쓴다(`FormFactor.arrangementOf`, #25).
+/// 단 짧은 변 600dp 미만 창은 화면이 짧은 창 규칙으로 키가 큰 가로형을 고를 수 있다(`CalculatorScreen`, #38).
 ///
 /// 앱 시작 때는 Android가 창 배치 첫 값에 접힘선이 있다고 알리면 그 정보가 올 때까지(최대 300ms) 첫 화면을 미룬다(#158).
 /// 그 정보가 제때 오면 펼친 내부 화면에서 시작해도 위아래 배치가 먼저 보이지 않는다. Android가 첫 값을 제한 시간 안에

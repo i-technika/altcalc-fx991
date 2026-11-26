@@ -43,7 +43,7 @@ void _setDevice(
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
 }
 
-/// 실제 앱 루트([AltCalcApp])로 좌우 분할 배치(설정 버튼이 보이는 태블릿 가로 창)를 띄운다.
+/// 실제 앱 루트([AltCalcApp])로 가로형 배치(설정 버튼이 보이는 태블릿 가로 창, #142)를 띄운다.
 Future<void> _pumpApp(
   WidgetTester tester, {
   Widget? home,

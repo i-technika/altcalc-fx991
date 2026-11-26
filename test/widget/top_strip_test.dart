@@ -10,6 +10,7 @@ import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/top_strip.dart';
@@ -248,7 +249,7 @@ void main() {
     test('설정 버튼이 다른 곳에 있는 배치: 띠에 버튼을 두지 않고 태양전지를 줄 오른쪽 끝에 둔다', () {
       const body = Size(1000, 900);
       const lcd = Rect.fromLTWH(20, 260, 480, 274);
-      const elsewhere = Rect.fromLTWH(20, 542, 48, 48); // LCD 아래 (좌우 분할)
+      const elsewhere = Rect.fromLTWH(20, 542, 48, 48); // LCD 아래 (접힘선 기준 배치)
       final s = CalcTopStripLayout.of(body, lcd, settingsButton: elsewhere);
       expect(s.settingsButton, isNull);
       expect(s.row, const Rect.fromLTWH(20, 212, 480, 48));
@@ -694,9 +695,9 @@ void main() {
       // 테스트 기본 로캘(en_US)
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        'The keypad position does not change on this screen. '
-        'It applies when the keypad sits against one side, '
-        'such as when the LCD and keypad are side by side.',
+        'Changing this does not move the keys on this screen. '
+        'On wide screens and similar layouts, '
+        'the number keys move to the side you choose.',
       );
       // 안내 글은 선택지 아래에 있고, 라디오 그룹 밖에 있다.
       final note = tester.getRect(find.byKey(HandednessDialog.noteKey));
@@ -732,8 +733,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<Text>(find.byKey(HandednessDialog.noteKey)).data,
-        '지금 화면에서는 키패드 위치가 바뀌지 않습니다. '
-        'LCD와 키패드가 좌우로 나뉜 화면처럼 키패드를 한쪽 가장자리에 붙이는 화면에서 적용됩니다.',
+        '지금 화면에서는 손잡이를 바꿔도 키 배치가 바뀌지 않습니다. '
+        '가로로 넓은 화면 등에서 숫자 키를 고른 손 쪽으로 옮깁니다.',
       );
     });
 
@@ -746,12 +747,12 @@ void main() {
     ];
     for (final (name, size, padding, features, handedness, expected) in [
       (
-        '좌우 분할 1280×800',
+        '가로형 1280×800',
         const Size(1280, 800),
         const EdgeInsets.only(top: 24, bottom: 48),
         const <DisplayFeature>[],
         Handedness.right,
-        DrawnArrangement.sideBySide,
+        DrawnArrangement.landscape,
       ),
       // 테이블톱에서 키패드 옆에 자리가 남아 손잡이로 키패드가 옮겨 가는 화면 (세로로 긴 대화면 근사)
       (
@@ -883,7 +884,7 @@ void main() {
       (tester) async {
         // 세로 접힘선 x=560, 오른쪽 인셋 48 → 오른쪽 절반은 233dp뿐이다.
         // - 오른손잡이: 키패드가 오른쪽 절반에 들어가 키가 터치 하한보다 낮다 → 위아래 배치로 대체한다
-        //   (split_layout_test의 #25 R2 경우). 설정 버튼은 접힘선 오른쪽(LCD 오른쪽 끝)에 있다.
+        //   (screen_layout_test의 #25 R2 경우). 설정 버튼은 접힘선 오른쪽(LCD 오른쪽 끝)에 있다.
         // - 왼손잡이: 키패드가 넓은 왼쪽 절반에 들어가 접힘선 기준 배치가 된다 — 그래서 손잡이 설정이 이 화면에
         //   적용된다(안내 글을 보이면 안 된다).
         const fold = DisplayFeature(
@@ -986,7 +987,7 @@ void main() {
     testWidgets(
       '대화상자가 열린 채 접힘선 나뉨이 바뀌어도 대화상자 element와 키보드 포커스가 유지된다 (#41 R2)',
       (tester) async {
-        // 세로 접힘선 기준 배치(대화상자를 절반에 둔다) → 접힘선이 없어짐(좌우 분할, 나누지 않음)
+        // 세로 접힘선 기준 배치(대화상자를 절반에 둔다) → 접힘선이 없어짐(가로형, 나누지 않음)
         const fold = DisplayFeature(
           bounds: Rect.fromLTWH(420, 0, 0, 701),
           type: DisplayFeatureType.fold,
@@ -1051,7 +1052,7 @@ void main() {
       },
     );
 
-    // 작은 창 — 위아래 배치로 남는 창은 안내 글이 나오고, 짧은 창 규칙으로 좌우 분할이 된 창(#38)은 손잡이가
+    // 작은 창 — 위아래 배치로 남는 창은 안내 글이 나오고, 가로형이 된 짧은 창(#38, #142)은 손잡이가
     // 적용되므로 안내 글이 없다. 어느 쪽이든 첫 선택지가 스크롤 없이 눌린다.
     for (final (size, stacked) in const [
       (Size(300, 420), true),
@@ -1060,14 +1061,14 @@ void main() {
       (Size(640, 360), false),
     ]) {
       testWidgets('작은 창 ${size.width}×${size.height}: '
-          '${stacked ? '안내 글이 있어도' : '좌우 분할(#38)에서'} 첫 선택지가 스크롤 없이 눌린다', (
+          '${stacked ? '안내 글이 있어도' : '가로형(#38, #142)에서'} 첫 선택지가 스크롤 없이 눌린다', (
         tester,
       ) async {
         final container = await _pump(tester, size: size);
         expect(tester.takeException(), isNull);
         expect(
           drawnArrangementOf(tester),
-          stacked ? DrawnArrangement.stacked : DrawnArrangement.sideBySide,
+          stacked ? DrawnArrangement.stacked : DrawnArrangement.landscape,
         );
         // 첫 선택지(오른손잡이)를 눌러 바뀌는지 보려고 왼손잡이로 시작한다.
         container.read(handednessProvider.notifier).set(Handedness.left);
@@ -1212,7 +1213,7 @@ void main() {
         size: const Size(1280, 800),
         padding: padding,
       );
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
       final element = tester.element(_button);
 
       await _pump(
@@ -1234,53 +1235,89 @@ void main() {
     });
   });
 
-  group('좌우 분할·접힘선 기준 배치의 띠 장식', () {
-    testWidgets('12.9인치 iPad 가로: LCD 위 띠에 장식 줄을 두고, 설정 버튼은 LCD 아래 그대로다', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        size: const Size(1366, 1024),
-        padding: const EdgeInsets.only(top: 24, bottom: 20),
-      );
-      expect(tester.takeException(), isNull);
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-      final lcd = tester.getRect(_lcd);
-      final button = tester.getRect(_button);
-      expect(button.top, greaterThanOrEqualTo(lcd.bottom));
-      expect(button.height, moreOrLessEquals(CalcTheme.settingsButtonSize));
+  group('가로형·접힘선 기준 배치의 띠 장식', () {
+    // 가로형(#142): 내용 줄이 위 띠(기록 + 활성 LCD) 폭 전체다. 워드마크는 왼쪽 끝, 설정 버튼은 오른쪽 끝(손잡이와
+    // 무관), 태양전지는 그 왼쪽이다. 10인치 태블릿은 LCD가 목표보다 커진 몫에서 띠를 줄 전체 높이까지 늘린다.
+    for (final (name, size, padding) in const [
+      (
+        '12.9인치 iPad 가로',
+        Size(1366, 1024),
+        EdgeInsets.only(top: 24, bottom: 20),
+      ),
+      ('10인치 태블릿 가로', Size(1280, 800), EdgeInsets.only(top: 24, bottom: 48)),
+    ]) {
+      for (final handedness in Handedness.values) {
+        testWidgets('$name·${handedness.name}: 위 띠 폭 전체의 줄에 워드마크·태양전지·설정 버튼', (
+          tester,
+        ) async {
+          final container = await _pump(tester, size: size, padding: padding);
+          container.read(handednessProvider.notifier).set(handedness);
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+          // 띠 장식은 위 띠(기록 영역 = 위 띠 전체 높이) 위에 놓인다. 활성 LCD는 위 띠 아래쪽이다(#142 R2).
+          final lcd = tester.getRect(find.byKey(HistoryPanel.panelKey));
+          final left = padding.left + CalcTheme.screenPadding;
+          final right = size.width - padding.right - CalcTheme.screenPadding;
+          final button = tester.getRect(_button);
+          expect(button.right, moreOrLessEquals(right));
+          expect(button.height, moreOrLessEquals(CalcTheme.settingsButtonSize));
+          // 줄 전체 높이라 버튼 터치 영역이 위 띠(LCD·기록 영역)에 겹치지 않는다.
+          expect(button.bottom, lessThanOrEqualTo(lcd.top + _tolerance));
 
-      final wordmark = tester.getRect(_wordmark);
-      final solar = tester.getRect(_solar);
-      for (final r in [wordmark, solar]) {
-        expect(r.left, greaterThanOrEqualTo(lcd.left));
-        expect(r.right, lessThanOrEqualTo(lcd.right));
-        expect(r.bottom, lessThanOrEqualTo(lcd.top + _tolerance));
-        expect(
-          r.top,
-          greaterThanOrEqualTo(
-            lcd.top - CalcTheme.topStripRowMaxHeight - _tolerance,
-          ),
-        );
+          final wordmark = tester.getRect(_wordmark);
+          final solar = tester.getRect(_solar);
+          expect(
+            wordmark.left,
+            moreOrLessEquals(left + CalcTheme.topStripInset),
+          );
+          expect(
+            solar.right,
+            moreOrLessEquals(button.left - CalcTheme.topStripGap),
+          );
+          for (final r in [wordmark, solar]) {
+            expect(r.bottom, lessThanOrEqualTo(lcd.top + _tolerance));
+            expect(
+              r.top,
+              greaterThanOrEqualTo(
+                lcd.top - CalcTheme.topStripRowMaxHeight - _tolerance,
+              ),
+            );
+          }
+          expect(_button.hitTestable(), findsOneWidget);
+        });
       }
-      // 띠에 버튼이 없으므로 태양전지는 줄 오른쪽 끝(안쪽 여백)에 붙는다.
-      expect(
-        solar.right,
-        moreOrLessEquals(lcd.right - CalcTheme.topStripInset),
-      );
-    });
+    }
 
-    testWidgets('10인치 태블릿 가로: 띠가 낮아 장식을 그리지 않는다', (tester) async {
-      await _pump(
-        tester,
-        size: const Size(1280, 800),
-        padding: const EdgeInsets.only(top: 24, bottom: 48),
+    // 낮은 띠의 가로형(1280×500, 띠 최소 높이): 보이는 버튼은 줄(20dp) 안이고, 48dp 터치 영역은 그 아래 위 띠 위쪽에
+    // 겹친다 — 오른손잡이는 활성 LCD, 왼손잡이는 기록 영역 위쪽이다. 기록을 누를 수 있게 만들 때(#145) 이 자리를 비운다.
+    for (final handedness in Handedness.values) {
+      testWidgets(
+        '낮은 띠 가로형 1280×500·${handedness.name}: 설정 터치 영역 48dp가 손잡이에 따라 LCD·기록 영역 위쪽에 겹친다',
+        (tester) async {
+          final container = await _pump(tester, size: const Size(1280, 500));
+          container.read(handednessProvider.notifier).set(handedness);
+          await tester.pump();
+          expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+          // 설정 버튼 자리 전체 = 터치 영역
+          final touch = tester.getRect(find.byType(SettingsButton));
+          expect(touch.width, moreOrLessEquals(CalcTheme.settingsButtonSize));
+          expect(touch.height, moreOrLessEquals(CalcTheme.settingsButtonSize));
+          expect(touch.right, moreOrLessEquals(1280 - CalcTheme.screenPadding));
+          final lcd = tester.getRect(_lcd);
+          final history = tester.getRect(find.byKey(HistoryPanel.panelKey));
+          final under = handedness.keypadOnRight ? lcd : history;
+          final other = handedness.keypadOnRight ? history : lcd;
+          expect(touch.overlaps(under), isTrue);
+          expect(touch.overlaps(other), isFalse);
+          expect(touch.bottom - under.top, moreOrLessEquals(28, epsilon: 0.5));
+          // 겹친 곳을 눌러도 설정이 열린다.
+          await tester.tapAt(Offset(touch.center.dx, under.top + 10));
+          await tester.pumpAndSettle();
+          expect(_dialog, findsOneWidget);
+        },
       );
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-      expect(_wordmark, findsNothing);
-      expect(_solar, findsNothing);
-      expect(_button.hitTestable(), findsOneWidget);
-    });
+    }
 
     testWidgets('반 접은 테이블톱: 장식은 LCD 위에 두고 위 절반 모서리의 설정 버튼과 겹치지 않는다', (
       tester,

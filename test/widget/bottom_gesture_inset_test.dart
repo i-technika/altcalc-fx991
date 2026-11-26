@@ -144,12 +144,12 @@ void main() {
             914.29 - 0 - 32, // 여백 32
           ),
           (
-            '태블릿 가로 좌우 분할 (인셋 0 / 제스처 32, 미실측 가정)',
+            '태블릿 가로 가로형 (인셋 0 / 제스처 32, 미실측 가정)',
             Size(1280, 800),
             EdgeInsets.only(top: 24),
             _gestureNav,
             [],
-            DrawnArrangement.sideBySide,
+            DrawnArrangement.landscape,
             800 - 0 - 32,
           ),
           (
@@ -201,10 +201,10 @@ void main() {
       });
     }
 
-    // 3버튼(폰, 위아래 배치)·작업 표시줄(태블릿 가로, 좌우 분할): 제스처 영역이 시스템 바 안이라 배치가 바뀌지 않는다.
+    // 3버튼(폰, 위아래 배치)·작업 표시줄(태블릿 가로, 가로형 #142): 제스처 영역이 시스템 바 안이라 배치가 바뀌지 않는다.
     for (final (size, arrangement) in const [
       (Size(411.43, 914.29), DrawnArrangement.stacked),
-      (Size(1280, 800), DrawnArrangement.sideBySide),
+      (Size(1280, 800), DrawnArrangement.landscape),
     ]) {
       testWidgets('인셋이 제스처 영역과 같으면 제스처 영역이 없을 때와 배치가 같다 — $size', (
         tester,
@@ -323,7 +323,7 @@ void main() {
             [],
           ),
           (
-            '좌우 분할, 인셋 0',
+            '가로형, 인셋 0',
             Size(1280, 800),
             EdgeInsets.only(top: 24),
             _gestureNav,

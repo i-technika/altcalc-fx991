@@ -170,7 +170,7 @@ abstract final class LayoutLog {
 
   /// 화면 배치 — 지난번과 달라졌을 때만 남긴다(빌드마다 불러도 된다).
   /// - [chosen]: 창 크기·접힘선으로 고른 배치 ([FormFactor.arrangementOf])
-  /// - [drawn]: 실제로 그린 배치 (키가 작아 접힘선 기준 배치를 못 쓰면 위아래·좌우 분할로 대체)
+  /// - [drawn]: 실제로 그린 배치 (키가 작아 접힘선 기준 배치를 못 쓰면 위아래 배치·가로형으로 대체)
   /// - [tooSmall]: 계산기 대신 창을 키워 달라는 안내를 띄웠는지
   static void layout({
     required ScreenArrangement chosen,
