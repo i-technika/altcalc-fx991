@@ -888,7 +888,8 @@ void _cursorPadR2Tests() {
           reason: '$size',
         );
         // 고리의 일부를 덮는다. 사각형 네 개라 가운데 십자 사이(|dx| < X, |dy| < Y)는 비어
-        // 약 22~50%다(비율 상한 1.8의 200×111이 22.7%로 가장 낮다). #43 규칙(허브를 덮지 않음)에서는 0%였다.
+        // 약 21~48%다(0.05dp 격자 측정, 200×111이 21.6%로 가장 낮다 — 이 테스트의 0.25dp 격자로는 22.7%).
+        // #43 규칙(허브를 덮지 않음)에서는 0%였다.
         var ringPoints = 0;
         var covered = 0;
         for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
@@ -901,7 +902,7 @@ void _cursorPadR2Tests() {
             }
           }
         }
-        expect(covered / ringPoints, greaterThan(0.2), reason: '$size');
+        expect(covered / ringPoints, greaterThan(0.18), reason: '$size');
       }
     });
 
@@ -1230,6 +1231,52 @@ void _cursorPadHitTests() {
             CursorPadSector.down,
             reason: '$name 아랫변 $x',
           );
+        }
+      }
+    });
+
+    test('아주 작은 패드·높은 셀에서도 시맨틱 영역은 뒤집히지 않고 자기 방향의 터치 영역 안이다 (#166 R2)', () {
+      for (final size in const [
+        Size(4, 3),
+        Size(3, 2.5),
+        Size(2.5, 2.2),
+        Size(60, 40),
+      ]) {
+        final small = CursorPadGeometry(size);
+        for (final tall in [1.0, 2.0, 6.0]) {
+          final extra = size.height * (tall - 1) / 2;
+          final cell = Rect.fromLTRB(
+            0,
+            -extra,
+            size.width,
+            size.height + extra,
+          );
+          for (final s in CursorPadSector.values) {
+            for (final r in [
+              small.semanticRect(s),
+              small.semanticRect(s, cell),
+            ]) {
+              final name = '$size ×$tall ${s.name} $r';
+              expect(r.left, lessThanOrEqualTo(r.right), reason: name);
+              expect(r.top, lessThanOrEqualTo(r.bottom), reason: name);
+            }
+            final r = small.semanticRect(s, cell);
+            if (r.isEmpty) continue;
+            final inner = r.deflate(math.min(r.shortestSide / 4, 0.05));
+            for (var i = 0; i <= 6; i++) {
+              for (var j = 0; j <= 6; j++) {
+                final p = Offset(
+                  inner.left + inner.width * i / 6,
+                  inner.top + inner.height * j / 6,
+                );
+                expect(
+                  small.hitSectorAt(p, cell),
+                  s,
+                  reason: '$size ×$tall ${s.name} $p',
+                );
+              }
+            }
+          }
         }
       }
     });

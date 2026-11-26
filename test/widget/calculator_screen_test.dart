@@ -731,8 +731,8 @@ void main() {
               reason: '${sector.name} 넓이 ${pad.size}',
             );
             // 스크린리더 시맨틱 영역(#166): 허브 고리까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
-            // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 R1 측정은 568×320 창 약 19dp, 360×300 분할 화면 약 13dp)
-            // (측정 22.6~32.4dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
+            // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 측정은 568×320 창 약 18.7dp, 360×300 분할 화면 약 13.5dp)
+            // (측정 22.6~34.9dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
             final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
             expect(
               semantic.shortestSide,
@@ -740,6 +740,19 @@ void main() {
               reason: '${sector.name} 시맨틱 영역 $semantic',
             );
           }
+          // 셀 여백은 ▲·▼와 ◀·▶가 고르게 나눠 갖는다 — 두 영역 높이가 같다(#166 R2: 패드에만 묶으면
+          // 셀이 패드보다 조금 높은 390×844 등에서 ◀·▶가 2dp쯤 낮아진다).
+          expect(
+            CursorPad.semanticRect(CursorPadSector.up, pad.size, bounds).height,
+            moreOrLessEquals(
+              CursorPad.semanticRect(
+                CursorPadSector.left,
+                pad.size,
+                bounds,
+              ).height,
+              epsilon: 1e-6,
+            ),
+          );
         });
       }
     }
