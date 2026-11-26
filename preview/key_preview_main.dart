@@ -8,7 +8,7 @@
 // 앱 릴리스 빌드에 포함되지 않는다 — 앱 진입점은 lib/main.dart이고 lib/에서 이 파일로 가는 import가 없으며
 // pubspec 에셋에도 preview/가 없다(test/widget/key_preview_test.dart가 검증).
 //
-// TODO(#18): M6의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 슬롯을 빈 슬롯으로
+// TODO(#18): M6의 광고·인앱결제 플러그인은 웹 구현이 없으므로, 미리보기에서는 광고 자리를 빈 자리로
 // 덮어쓸 수 있게(provider 주입 등) 연결 구조를 정한다. CI가 이 파일을 웹으로 빌드한다(Sub-issue Linux CI).
 import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
@@ -362,16 +362,19 @@ const List<PreviewDevice> previewDevices = [
     systemGestureInsets: _gestureNavInsets,
   ),
   // 분할 화면의 위쪽 창 (상태 표시줄만 걸친다, 3버튼 내비게이션 가정 — 좌우 제스처 영역 없음).
-  // 짧은 창이라 위아래 배치보다 키가 큰 좌우 분할로 그린다(#38) — 손잡이를 바꾸면 키패드가 옮겨 간다.
+  // 짧은 창이라 위아래 배치보다 키가 큰 좌우 분할로 그린다(#38, 키 위아래 19.4 → 좌우 21.5dp) — 손잡이를 바꾸면
+  // 키패드가 옮겨 간다. 맨 아래 광고 슬롯이 빠진 뒤(#141) 예전 크기 390×420은 위아래 배치의 키가 더 커져(21.1 > 20.3dp)
+  // 좌우 분할을 보여 주지 못해 창 높이를 400으로 낮췄다.
   PreviewDevice(
     '분할 화면 위',
-    Size(390, 420),
+    Size(411, 400),
     padding: EdgeInsets.only(top: 24),
     systemGestureInsets: EdgeInsets.only(top: 24),
   ),
   // 키를 쓸 수 없을 만큼 작은 팝업 창 — 계산기 대신 창을 키워 달라는 안내가 나온다(#38). 다른 기기로 바꾸면
-  // 계산기가 입력 상태 그대로 돌아온다.
-  PreviewDevice('작은 팝업 창', Size(320, 240)),
+  // 계산기가 입력 상태 그대로 돌아온다. 맨 아래 광고 슬롯이 빠진 뒤(#141) 예전 크기 320×240은 좌우 분할의 키가 16.3dp로
+  // 안내 기준(16dp)을 넘어 창 높이를 200으로 낮췄다(좌우 분할 15.6dp).
+  PreviewDevice('작은 팝업 창', Size(320, 200)),
 ];
 
 /// 기본 시스템 글자 배율

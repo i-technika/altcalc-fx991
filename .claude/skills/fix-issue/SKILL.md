@@ -48,7 +48,7 @@ git checkout -b issue/<번호>-<영문-키워드>
   `git checkout -- linux macos windows`처럼 플랫폼 폴더 전체를 되돌리지 않는다.
 
 ### 3. 구현 및 로컬 검증
-- CLAUDE.md 규칙 준수: 한국어 주석, `material_ui` import, `Decimal` 사용, 반응형, 광고 슬롯 여백.
+- CLAUDE.md 규칙 준수: 한국어 주석, `material_ui` import, `Decimal` 사용, 반응형, 광고 배치 규칙(광고 없는 배치가 기준 — #141·#18).
 - 이슈 체크리스트의 산출물을 모두 만든다. 상수/명세 데이터에는 불변식 테스트를 추가한다.
 - ```bash
   flutter analyze   # No issues found! 이어야 함
