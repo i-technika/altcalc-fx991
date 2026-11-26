@@ -26,7 +26,8 @@ import 'screen_coordinate_root.dart';
 ///
 /// ## 크기 계약
 /// - 크기는 부모(그리드 셀)가 정한다. 제약이 무한한 축에만 [fallbackSize]의 해당 축 값을 쓴다.
-/// - 글자 크기는 [CalcTheme]의 비율 상수로 계산하며, 키패드 전체의 글자 크기를 맞추려면
+/// - 글자 크기는 [CalcTheme]의 비율 상수로 계산하되 상한([CalcTheme.keyMainLabelMaxFontSize]·
+///   [CalcTheme.keyLegendMaxFontSize], #141)을 넘지 않으며, 키패드 전체의 글자 크기를 맞추려면
 ///   부모가 [legendFontSize]/[mainLabelFontSize]를 주입한다. 넘치는 라벨은 [FittedBox]로 축소한다.
 /// - 시스템 글자 배율은 [CalcTheme.keyMaxTextScaleFactor]까지 반영하지만, 이미 폭이 꽉 찬
 ///   여러 글자 라벨은 [FittedBox]가 다시 줄이므로 사실상 공간이 남는 라벨(주로 한 글자)에만 효과가 있다.
@@ -370,7 +371,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         enabled: _enabled,
         fontSize:
             widget.mainLabelFontSize ??
-            capHeight * CalcTheme.keyMainLabelFontRatio,
+            math.min(
+              capHeight * CalcTheme.keyMainLabelFontRatio,
+              CalcTheme.keyMainLabelMaxFontSize,
+            ),
         horizontalPadding: width * CalcTheme.keyCapHorizontalPaddingRatio,
         textScaler: textScaler,
       ),
@@ -389,7 +393,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
               width: width,
               fontSize:
                   widget.legendFontSize ??
-                  legendHeight * CalcTheme.keyLegendFontRatio,
+                  math.min(
+                    legendHeight * CalcTheme.keyLegendFontRatio,
+                    CalcTheme.keyLegendMaxFontSize,
+                  ),
               maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
               textScaler: textScaler,
             ),

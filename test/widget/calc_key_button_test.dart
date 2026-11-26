@@ -419,10 +419,24 @@ void main() {
         return tester.getRect(find.text('7')).height;
       }
 
-      final small = await renderedHeight(const Size(40, 48));
-      final large = await renderedHeight(const Size(80, 96));
+      // 두 크기 모두 글자 크기 상한(#141) 아래다(키캡 높이 × 비율: 약 7.3·14.5dp).
+      final small = await renderedHeight(const Size(20, 24));
+      final large = await renderedHeight(const Size(40, 48));
       // 텍스트 줄 높이는 픽셀 단위로 반올림되므로 1dp 오차를 허용한다.
       expect(large, closeTo(small * 2, 1.0));
+    });
+
+    testWidgets('키가 아주 커져도 라벨 글자는 상한에서 멈춘다 (#141)', (tester) async {
+      for (final size in const [Size(80, 96), Size(200, 240)]) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num7)), size: size),
+        );
+        expect(
+          tester.widget<Text>(find.text('7')).style?.fontSize,
+          CalcTheme.keyMainLabelMaxFontSize,
+          reason: '$size',
+        );
+      }
     });
 
     testWidgets('글자 크기를 주입하면 비율 계산 대신 그 값을 쓴다', (tester) async {

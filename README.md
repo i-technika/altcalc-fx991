@@ -180,7 +180,7 @@ flutter run -d chrome -t preview/key_preview_main.dart
    이때 생기는 `.dart_tool/package_config.json`의 `flutterRoot`로 확장이 SDK를 찾으므로,
    Flutter가 VS Code의 PATH에 없는 PC도 따로 설정하지 않아도 된다.
    확장은 SDK를 켜질 때 한 번만 찾으므로, 폴더를 먼저 열어 SDK를 못 찾는다는 알림을 봤다면 `pub get` 뒤
-   명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다.
+   명령 팔레트(Ctrl+Shift+P)에서 `Developer: Reload Window`를 실행한다([Flutter SDK를 찾는 순서](#flutter-sdk를-찾는-순서) 아래 알림 설명).
    개발자 모드가 꺼진 Windows에서는 이 명령이 종료 코드 1로 끝나도 Chrome 실행에는 지장이 없다 ([알아 둘 점](#알아-둘-점)).
 2. **작업 영역 신뢰** — 폴더를 열 때 묻는 "작성자를 신뢰합니까?"에 **신뢰**를 고른다.
    Dart 확장은 제한 모드(Restricted Mode)를 지원하지 않는다. 신뢰하지 않으면 확장이 아예 켜지지 않고
@@ -207,17 +207,49 @@ flutter run -d chrome -t preview/key_preview_main.dart
 6. 고정 위치: `~/snap/flutter/common/flutter`(Linux만), `~/flutter-sdk`, `/google/flutter`, `/opt/flutter` 순서
    (Windows에서 `/`로 시작하는 경로는 현재 드라이브의 루트 기준이다)
 
-3번의 `PATH`가 무엇인지는 확장이 아니라 VS Code가 창을 연 방식에 따라 다르다. 아래는 VS Code 본체 소스로 확인한 내용이며
-실측하지는 않았다.
+3번의 `PATH`가 무엇인지는 확장이 아니라 VS Code가 창을 연 방식에 따라 다르다. **(실측)** 은 Windows에서 창마다
+확장 호스트의 PATH를 기록해 본 것이고(#69), **(소스)** 는 VS Code 본체 소스로만 확인한 것이다.
 
-- 터미널에서 `code .`로 새 창을 열면 그 터미널의 환경을 쓴다. VS Code가 이미 실행 중이어도 같다.
-- 시작 메뉴·Dock·메뉴(파일 > 폴더 열기)로 연 창, 또는 이미 열린 폴더에 `code .`를 해서 기존 창으로 옮겨 간 경우에는
-  VS Code를 처음 켰을 때의 환경을 쓴다. macOS·Linux는 이때 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다.
-- 터미널 세션에서만 `export PATH=...`를 한 뒤 시작 메뉴로 연 창은 그 PATH를 보지 못한다.
+- 터미널에서 `code .`로 새 창을 열면 그 터미널의 환경을 쓴다. VS Code가 이미 실행 중이어도 같다. (실측)
+- VS Code 안에서 새 창을 만들어 연 폴더(파일 > 새 창에서 폴더 열기 등)는 VS Code를 처음 켰을 때의 환경을 쓴다.
+  (실측: 확장 API로 새 창에 폴더를 열어 확인)
+  - 이미 실행 중일 때 시작 메뉴·Dock으로 연 창도 같다(터미널의 `code`가 아니면 그 환경을 넘기지 않는다). (소스)
+  - 터미널의 `code`가 아닌 방법(시작 메뉴·Dock)으로 처음 켤 때, macOS·Linux는 로그인 셸의 환경(예: `~/.zshrc`의 PATH)을 가져온다. (소스)
+- 지금 창에서 파일 > 폴더 열기를 하면 기본 설정에서는 새 창 없이 그 창을 다시 쓰고, 그 창이 받은 환경을 이어 쓴다
+  (`code .`로 연 창이면 그 터미널의 환경). (소스)
+- 이미 열린 폴더에 `code .`를 하면 새 창 없이 기존 창으로 옮겨 가고(실측), 그 창은 자신이 열릴 때 받은 환경을 그대로 쓴다.
+  새 터미널의 환경은 넘어가지 않는다. (소스)
+- 그래서 터미널 세션에서만 `export PATH=...`를 한 뒤 시작 메뉴로 연 창은 그 PATH를 보지 못한다.
 
 `~/develop/flutter`처럼 고정 위치 목록에 없는 곳에 SDK가 있고 PATH에도 없으면, `flutter pub get` 전의 새 클론이나
-`.dart_tool`을 지운 뒤에는 확장이 SDK를 찾지 못한다(확장 소스 기준이다. 이 알림은 실제로 띄워 보지 않았다).
-그때는 알림의 `Locate SDK`로 SDK 폴더를 고르거나, **사용자** 설정에 한 번 지정한다.
+`.dart_tool`을 지운 뒤에는 확장이 SDK를 찾지 못하고 오른쪽 아래에 다음 오류 알림을 띄운다.
+
+> Could not find a Flutter SDK. Please download, or, if already downloaded, click 'Locate SDK'.
+
+버튼은 `Download SDK`·`Locate SDK`·`Show Log`다. `Download SDK`는 이 프로젝트에서 쓰지 않는다. Flutter `stable` 브랜치를
+새로 `git clone`한 뒤 **사용자** 설정 `dart.flutterSdkPath`를 그 폴더로 덮어쓰고 PATH에 넣을지도 묻는다(Dart-Code 소스).
+그 시점의 stable이 `pubspec.yaml`의 고정 버전과 다르면 이 PC의 모든 클론·워크트리에서 `pub get`이 실패한다([개발 환경](#개발-환경)).
+푸는 방법은 아래 둘이며, 어느 쪽이든 그 뒤 `Key Preview (Chrome)`이 실행된다.
+이 알림과 두 방법은 새 클론을 사용자 설정과 분리한 VS Code 1.147(Dart-Code 3.146)로 열어 실측했다
+(#69, 개발자 모드가 켜진 Windows 11. 개발자 모드가 꺼진 Windows는 이번에 확인하지 않았다 — #52의 실측 결과는 [알아 둘 점](#알아-둘-점)).
+
+- **SDK를 PATH에 넣은 셸에서 `flutter pub get` → `Developer: Reload Window`** (권장 — 준비 1단계와 같은 방법)
+  - VS Code 통합 터미널도 그 창의 PATH를 물려받으므로, 셸 프로필이 SDK를 PATH에 넣지 않으면 `flutter`를 전체 경로로 실행한다.
+  - `pub get`만 하고 다시 불러오지 않으면 SDK를 계속 찾지 못한다(30초 기다려도 그대로였다).
+  - 다시 불러오면 `package_config.json`의 `flutterRoot`로 찾는다. 설정을 남기지 않으므로 그 클론에만 해당한다.
+- **`Locate SDK`** — 폴더 선택 창(확인 버튼 이름 `Set Flutter SDK folder`)에서 SDK 폴더(`bin`이 들어 있는 폴더)를 고른다.
+  - 확장이 **사용자** 설정에 `dart.flutterSdkPath`를 절대경로로 저장하고(예: `"C:\Users\<이름>\develop\flutter"`),
+    묻지 않고 확장을 다시 시작해 그 SDK를 쓴다.
+  - 이 설정은 탐지 순서 1번이라 이 PC의 모든 클론·워크트리에서 `flutterRoot`보다 앞선다. SDK 버전을 별도 폴더로 올리는 동안에는
+    [Flutter SDK 버전 올리기](#flutter-sdk-버전-올리기)의 `Flutter: Change SDK` 안내를 따른다.
+  - 이어서 "Some packages are missing or out of sync … would you like to fetch them now?" 알림이 뜬다. `Run 'pub get'`을 누른다.
+  - 패키지를 받기 전에 F5를 누르면 분석 오류가 남아 있어 "Errors exist in your project." 창(`Run Anyway`·`Show Errors`·`Cancel`)이 뜬다.
+    `pub get`이 끝나고 약 15초 뒤에 눌렀을 때도 아직 분석이 끝나지 않아 같은 창이 떴다. `Run Anyway`를 고르면 된다 —
+    패키지를 받기 전이었으면 `flutter run`이 받은 뒤 실행했고, 어느 경우든 앱이 시작됐다.
+
+알림을 닫았으면 위 권장 방법(`pub get` → `Developer: Reload Window`)을 쓴다. 다시 불러오면 알림도 다시 뜬다(Dart-Code 소스).
+다른 SDK를 쓰려면 **사용자** 설정에 직접 지정한다. SDK를 찾지 못한 채 켜진 확장은 설정 변경을 다시 읽지 않으므로,
+지정한 뒤 `Developer: Reload Window`를 실행한다(Dart-Code 소스).
 사용자 설정은 명령 팔레트의 `Preferences: Open User Settings (JSON)`에서 연다. `~/`는 홈 폴더로 풀린다(Windows에서도 `~\`가 아니라 `~/`로 쓴다).
 
 ```jsonc
@@ -358,7 +390,9 @@ cd android
   실패·건너뛴 테스트는 이름과 단언 문구·스택이 콘솔에 나오고, 결과 보고서는 `build/app/reports/tests/testDebugUnitTest/index.html`이다.
 - 테스트 구성:
   - `HighTextContrastStreamHandlerTest` — 고대비 텍스트 처리기의 구독·전송 규칙과 API 35 이하/36 이상 분기
-  - `MainActivityChannelsTest` — 채널 등록 부분을 가짜 메신저로 부른다(채널·메서드 이름, `hasHingeSensor`, 정리)
+  - `FoldableDeviceProbeTest` — 시작 시 폴더블 판정(#70)의 신호 조합·창 배치 정보 기다림·제한 시간·진단 로그·정리 규칙과,
+    `androidx.window:window-testing`으로 창 배치 정보를 정해 보내 실제 출처(`WindowLayoutFoldingSource`)의 연결을 본다
+  - `MainActivityChannelsTest` — 채널 등록 부분을 가짜 메신저로 부른다(채널·메서드 이름, `isFoldableDevice`, 정리)
   - `MainActivityLifecycleTest` — `FlutterJNI`를 Mockito 대역으로 바꾼 캐시 엔진으로 액티비티를 생명주기대로 돌려
     `configureFlutterEngine`·`cleanUpFlutterEngine`·`onResume`의 연결을 본다(Flutter 자체 `FlutterActivityTest`와 같은 방식)
   - `AndroidTestSetupTest` — 테스트 대상 API 수준(`TestSupport.kt`의 `MIN_SDK` 등)을 앱 minSdk·targetSdk와 대조한다.
