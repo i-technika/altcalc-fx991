@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.StandardMethodCodec
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.nio.ByteBuffer
 
 /**
@@ -122,6 +124,9 @@ class MainActivityLifecycleTest {
         // Robolectric에는 WindowManager 확장이 없어 Jetpack WindowManager가 빈 창 배치 정보를 바로 보낸다 —
         // 실제 출처(WindowLayoutFoldingSource)가 구독·응답까지 이어지는지 본다(시계는 그대로, 제한 시간 전).
         assertEquals(false, invokeFromDart(DEVICE_CHANNEL, "isFoldableDevice"))
+        // 구독 실패·제한 시간이 아니라 창 배치 값으로 답했다
+        val logs = ShadowLog.getLogsForTag(FoldableDeviceProbe.LOG_TAG).map { it.msg }
+        assertTrue(logs.toString(), logs.any { it.contains("창 배치 접힘=없음") })
     }
 
     @Test

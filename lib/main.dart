@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FlutterView;
 
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoTheme;
 import 'package:flutter/foundation.dart';
@@ -20,11 +21,11 @@ Future<void> main() async {
   registerFontLicenses();
   // 방향 요청과 설정 저장소 열기를 함께 진행한다. 손잡이 설정이 첫 화면부터 반영되도록 둘 다 기다린다 (#24).
   // Android "고대비 텍스트" 첫 값도 함께 기다려 첫 화면부터 맞는 팔레트로 그린다 (#95).
-  final (foldable, settings, _) = await (
-    FormFactor.queryFoldableDevice().then((foldable) async {
-      await DeviceOrientationLock.instance.start(foldableDevice: foldable);
-      return foldable;
-    }),
+  final (_, settings, _) = await (
+    FormFactor.queryFoldableDevice().then(
+      (foldable) =>
+          DeviceOrientationLock.instance.start(foldableDevice: foldable),
+    ),
     openSettingsStorage(),
     SystemHighTextContrast.instance.start(),
   ).wait;
@@ -32,7 +33,9 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(settings),
-        foldableDeviceProvider.overrideWithValue(foldable),
+        foldableDeviceProvider.overrideWithValue(
+          DeviceOrientationLock.instance.foldableDevice,
+        ),
       ],
       child: const AltCalcApp(),
     ),
@@ -49,10 +52,19 @@ Future<void> main() async {
 ///
 /// 폴더블은 시작 시 판정한다([FormFactor.queryFoldableDevice]). 시작 시 판정이 놓친 폴더블과
 /// 접기·펼치기(물리 화면이 커버 ↔ 내부로 바뀜)에 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는
-/// 부분 정보 도착 등) 정책을 다시 판정해 바뀌었을 때만 다시 요청한다. 접히는 부분을 한 번 본 기기는 그 뒤로
-/// 폴더블로 기억한다 (#70) — 다시 펼칠 때 접힘 정보가 오기 전 몇 프레임 동안 태블릿(가로)으로 판정해 화면이
-/// 돌았다가 돌아오지 않게 한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
+/// 부분 정보 도착 등) 정책을 다시 판정해 바뀌었을 때만 다시 요청한다. 방향 요청이 실패해도 앱은 뜬다(기록만 하고, 다음 화면 정보 변화 때 다시 시도).
 /// 요청은 한 번에 하나씩 차례로 보내고, 성공한 요청만 기록한다 — 겹친 요청이 실패해도 기록이 어긋나지 않는다.
+///
+/// ## 폴더블 기억 (#70)
+/// 시작 시 판정이 놓친 폴더블(접은 커버 화면에서 시작 등)을 화면 정보로 알아보면 그 뒤로 폴더블로 기억한다([foldableDevice]).
+/// - 접히는 부분(fold·hinge)이 한 번이라도 보고됨
+/// - 물리 화면이 비율이 다른 화면으로 바뀜([FormFactor.isOtherScreen]) — 커버 ↔ 내부 화면. 접힘 정보보다 먼저 와서,
+///   처음 펼칠 때도 접힘 정보가 오기 전 프레임부터 폴더블로 판정한다.
+///
+/// 기억한 값은 방향 정책과 화면 배치(`foldableDeviceProvider` → `FormFactor.arrangementOf`)가 함께 쓴다 — 펼친 뒤
+/// 접힘 정보가 오기 전 몇 프레임 동안 태블릿(가로)으로 요청해 화면이 돌았다가 돌아오거나, 좌우 분할로 그렸다가
+/// 위아래로 바뀌는 깜빡임을 막는다. 화면 정보 변화를 받은 그 프레임 안에 바뀐다(앞 방향 요청을 기다리지 않는다).
+/// 앱을 다시 켜면 시작 시 판정부터 다시 한다 — 저장하지 않는 것은 Android 자동 백업이 설정을 다른 기기로 옮기기 때문이다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -60,7 +72,10 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   static final DeviceOrientationLock instance = DeviceOrientationLock._();
 
   OrientationPolicy? _applied;
-  bool _foldableDevice = false;
+  final ValueNotifier<bool> _foldableDevice = ValueNotifier(false);
+
+  /// 마지막으로 본 실제 물리 화면 크기 (dp, 플랫폼이 알려 주지 않으면 갱신하지 않는다) — [FormFactor.isOtherScreen] 비교용
+  Size? _lastDisplay;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -72,10 +87,15 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   @visibleForTesting
   OrientationPolicy? get appliedPolicy => _applied;
 
+  /// 폴더블 기기 여부 — 시작 시 판정([start]의 `foldableDevice`)이거나, 그 뒤 화면 정보로 알아본 값(위 "폴더블 기억").
+  /// 한 번 true가 되면 [stop] 전까지 false로 돌아가지 않는다.
+  ValueListenable<bool> get foldableDevice => _foldableDevice;
+
   /// 지금 화면의 방향 정책으로 방향을 요청하고, 이후 화면 정보 변화를 관찰한다. 여러 번 불러도 관찰은 한 번이다.
   /// [foldableDevice]는 앱 시작 시 판정한 폴더블 기기 여부다([FormFactor.queryFoldableDevice]).
   Future<void> start({bool foldableDevice = false}) {
-    _foldableDevice = foldableDevice;
+    if (foldableDevice) _foldableDevice.value = true;
+    _observeScreen();
     if (!_observing) {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
@@ -89,24 +109,43 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     if (_observing) WidgetsBinding.instance.removeObserver(this);
     _observing = false;
     _applied = null;
-    _foldableDevice = false;
+    _foldableDevice.value = false;
+    _lastDisplay = null;
     _pending = null;
   }
 
   /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다.
   OrientationPolicy currentPolicy() {
-    final dispatcher = WidgetsBinding.instance.platformDispatcher;
-    final view = dispatcher.implicitView ?? dispatcher.views.firstOrNull;
+    final view = _view;
     if (view == null) return OrientationPolicy.portrait;
     final displaySize = FormFactor.displaySizeOf(view);
-    // 접히는 부분을 한 번이라도 보면 폴더블로 기억한다 — 접은 커버 화면에서 시작해 시작 시 판정이 놓친 기기 (#70)
-    if (FormFactor.hasFoldOrHinge(view.displayFeatures)) _foldableDevice = true;
     final kind = FormFactor.deviceKindOf(
       displaySize,
       view.displayFeatures,
-      foldableDevice: _foldableDevice,
+      foldableDevice: _foldableDevice.value,
     );
     return FormFactor.orientationPolicyOf(kind, displaySize);
+  }
+
+  static FlutterView? get _view {
+    final dispatcher = WidgetsBinding.instance.platformDispatcher;
+    return dispatcher.implicitView ?? dispatcher.views.firstOrNull;
+  }
+
+  /// 지금 화면 정보로 폴더블 여부를 갱신한다 (위 "폴더블 기억").
+  void _observeScreen() {
+    final view = _view;
+    if (view == null) return;
+    final display = FormFactor.reportedDisplaySizeOf(view);
+    final previous = _lastDisplay;
+    if (display != null) _lastDisplay = display;
+    if (_foldableDevice.value) return;
+    if (FormFactor.hasFoldOrHinge(view.displayFeatures) ||
+        (previous != null &&
+            display != null &&
+            FormFactor.isOtherScreen(previous, display))) {
+      _foldableDevice.value = true;
+    }
   }
 
   /// 앞 요청이 끝난 뒤 지금 정책으로 요청한다. 실패해도 오류를 내보내지 않는다.
@@ -137,7 +176,11 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeMetrics() => unawaited(_apply());
+  void didChangeMetrics() {
+    // 폴더블 여부는 앞 방향 요청을 기다리지 않고 바로 갱신한다 — 화면 배치가 이 프레임에 쓴다.
+    _observeScreen();
+    unawaited(_apply());
+  }
 }
 
 /// 앱 루트. 상태 관리를 위해 [ProviderScope] 아래에 둔다.

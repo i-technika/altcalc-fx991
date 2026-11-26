@@ -24,19 +24,26 @@ import java.util.concurrent.Executor
  *
  * 아래 신호 중 하나라도 있으면 폴더블이다.
  * 1. 힌지 각도 센서 **기능 선언** (`FEATURE_SENSOR_HINGE_ANGLE`, API 30+) — 제조사가 선언해야만 보고된다.
- * 2. 힌지 각도 **센서 자체** (`Sensor.TYPE_HINGE_ANGLE`, API 30+) — 기능은 선언하지 않고 센서만 싣는 기기 대비.
+ * 2. 힌지 각도 **센서 목록** (`Sensor.TYPE_HINGE_ANGLE`, API 30+) — 기능은 선언하지 않고 센서만 싣는 기기 대비.
+ *    `getDefaultSensor`는 쓰지 않는다 — API 36부터 이 종류의 기본 센서를 wake-up 센서로만 찾아, 기기에 따라
+ *    API 수준별로 센서를 놓친다. 목록은 wake-up 여부와 상관없이 모두 준다.
  * 3. 창 배치 정보(Jetpack WindowManager `WindowLayoutInfo`)의 **첫 값**에 접히는 부분(`FoldingFeature`)이 있음 —
- *    Samsung처럼 OEM 확장으로 접힘 정보만 주는 기기 대비. 창이 붙은 뒤에야 오므로 [layoutTimeoutMillis]까지만
- *    기다린다. Flutter `displayFeatures`도 같은 정보에서 오지만 Dart 쪽에서는 "아직 안 옴"과 "없음"을 구분하지
- *    못한다 — 여기서는 구독 뒤 첫 값이 곧 그 순간의 답이다(접힘 정보가 없는 기기도 빈 값을 한 번 보낸다).
+ *    Samsung처럼 OEM 확장으로 접힘 정보만 주는 기기 대비. Flutter `displayFeatures`도 같은 정보에서 오지만 Dart
+ *    쪽에서는 "아직 안 옴"과 "없음"을 구분하지 못한다 — 여기서는 구독 뒤 첫 값을 그 순간의 답으로 쓴다.
+ *    - 확장이 있는 기기(대부분)는 구독하자마자 확장이 지금 값을 계산해 보낸다(메인 스레드로 한 번 넘긴 뒤).
+ *      확장이 없고 Sidecar만 있는 옛 기기는 창이 붙은 뒤에 온다. 어느 쪽도 없는 기기는 빈 값을 바로 보낸다.
+ *    - 그래도 오지 않는 경우에 대비해 [layoutTimeoutMillis]까지만 기다린다.
  *
- * 1·2가 있으면 기다리지 않고 바로 답한다. 3을 기다리는 시간은 대개 창이 붙을 때까지이고, 첫 프레임은 어차피 창이
- * 붙어야 그려지므로 시작이 그만큼 늦어지지 않는다.
+ * 1·2가 있으면 기다리지 않고 바로 답한다. ChromeOS(`FEATURE_PC`)에서는 1·2를 쓰지 않는다 — 컨버터블 노트북이 힌지
+ * 센서를 알릴 수 있고, 폴더블로 오판하면 접힘선 없는 대화면 가로 창이 계속 위아래 배치가 된다(Dart `FormFactor.arrangementOf`).
+ * ChromeOS 창에는 접히는 부분이 보고되지 않으므로 3도 "없음"이다.
  *
- * 한계 (실기기 확인 전 — #70):
+ * 한계 (실기기 확인 전 — #158):
+ * - 첫 값이 이미 맞는 값이라는 가정은 실기기에서 확인하지 못했다. 확장이 기기 상태를 아직 모르면 빈 값을 먼저 보낼
+ *   수 있다. 그래서 답한 뒤에도 [diagnosticMillis] 동안 구독을 유지해, 처음 답과 다른 값이 오면 로그로 남긴다
+ *   (판정은 바꾸지 않는다 — Dart가 화면 정보로 바로잡는다).
  * - 접은 커버 화면에서 시작하면 3은 "없음"이다(창이 접힘선에 걸치지 않는다). 1·2도 없는 기기는 폰으로 판정되고,
- *   처음 펼칠 때 접힘 정보가 오기 전 몇 프레임 동안 태블릿으로 판정될 수 있다 — Dart `DeviceOrientationLock`이
- *   접힘 정보를 한 번 보면 그 뒤로는 폴더블로 기억한다.
+ *   펼칠 때 Dart `DeviceOrientationLock`이 물리 화면이 바뀐 것을 보고 폴더블로 기억한다.
  * - 펼친 내부 화면이라도 분할 화면·팝업 창처럼 창이 접힘선에 걸치지 않으면 3은 "없음"이다.
  *
  * 판정마다 신호별 값과 걸린 시간을 로그(태그 [LOG_TAG])로 남긴다 — 실기기 확인 때 `adb logcat -s AltCalc`로 읽는다.
@@ -46,16 +53,20 @@ internal class FoldableDeviceProbe(
     private val layoutSource: FoldingLayoutSource,
     private val handler: Handler = Handler(Looper.getMainLooper()),
     private val layoutTimeoutMillis: Long = LAYOUT_TIMEOUT_MILLIS,
+    private val diagnosticMillis: Long = DIAGNOSTIC_MILLIS,
 ) {
-    /** 시작 즉시 알 수 있는 힌지 신호 (위 1·2) */
-    data class HingeSignals(val declared: Boolean, val sensor: Boolean) {
-        val any: Boolean get() = declared || sensor
+    /** 시작 즉시 알 수 있는 힌지 신호 (위 1·2). [pc]면 둘 다 쓰지 않는다. */
+    data class HingeSignals(val declared: Boolean, val sensor: Boolean, val pc: Boolean = false) {
+        val foldable: Boolean get() = !pc && (declared || sensor)
     }
 
-    private val pending = mutableListOf<Query>()
+    private val queries = mutableListOf<Query>()
+
+    /** 답을 기다리거나(구독 중) 답한 뒤 진단 로그를 남기는 판정 수 (테스트용) */
+    val activeCount: Int get() = queries.size
 
     /** 답을 기다리는 판정 수 (테스트용) */
-    val pendingCount: Int get() = pending.size
+    val pendingCount: Int get() = queries.count { !it.answered }
 
     /**
      * 판정해 [reply]로 한 번 답한다. 메인 스레드에서 부른다(답도 메인 스레드에서 한다).
@@ -66,62 +77,96 @@ internal class FoldableDeviceProbe(
             Log.w(LOG_TAG, "힌지 신호 조회 실패", error)
             HingeSignals(declared = false, sensor = false)
         }
-        if (hinge.any) {
+        if (hinge.foldable) {
             log(hinge, layout = "기다리지 않음", elapsedMillis = 0, result = true)
             reply(true)
             return
         }
         val query = Query(hinge, reply)
-        pending += query
         val unsubscribe = try {
-            layoutSource.subscribe { hasFold -> handler.post { query.finish(hasFold, if (hasFold) "접힘" else "없음") } }
+            layoutSource.subscribe { hasFold -> handler.post { query.onLayout(hasFold) } }
         } catch (error: RuntimeException) {
-            Log.w(LOG_TAG, "창 배치 정보 구독 실패", error)
-            query.finish(false, "구독 실패")
+            query.failSubscribe(error)
+            return
+        } catch (error: LinkageError) {
+            // OEM 확장·라이브러리 불일치(NoClassDefFoundError 등). Flutter 엔진도 같은 경우를 따로 잡는다.
+            query.failSubscribe(error)
             return
         }
-        query.attach(unsubscribe)
-        if (!query.done) handler.postDelayed(query.timeout, layoutTimeoutMillis)
+        query.start(unsubscribe)
     }
 
     /**
-     * 답을 기다리는 판정을 모두 "폴더블 아님"(1·2가 없었으므로)으로 답하고 구독을 푼다. 엔진 정리 때 부른다 —
-     * 끝난 액티비티를 창 배치 구독이 붙들지 않게 하고, 캐시 엔진의 Dart 쪽이 제한 시간까지 기다리지 않게 한다.
+     * 답을 기다리는 판정을 모두 "폴더블 아님"(1·2가 없었으므로)으로 답하고, 진단 중인 것까지 모든 구독을 푼다. 엔진
+     * 정리 때 부른다 — 끝난 액티비티를 창 배치 구독이 붙들지 않게 하고, 캐시 엔진의 Dart 쪽이 제한 시간까지 기다리지
+     * 않게 한다(Dart는 화면 정보로 다시 판정한다).
      */
     fun cancel() {
-        for (query in pending.toList()) query.finish(false, "취소")
+        for (query in queries.toList()) query.cancel()
     }
 
     private inner class Query(val hinge: HingeSignals, val reply: (Boolean) -> Unit) {
         private val startedAt = SystemClock.uptimeMillis()
         private var unsubscribe: (() -> Unit)? = null
-        var done = false
-            private set
+        private var answer: Boolean? = null
+        val answered: Boolean get() = answer != null
 
-        val timeout = Runnable { finish(false, "제한 시간 초과") }
+        private val timeout = Runnable { answer(false, "제한 시간 초과") }
+        private val endDiagnostics = Runnable { close() }
 
-        /** 구독을 붙인다. 구독 중 이미 끝났으면(동기 응답 등) 바로 푼다. */
-        fun attach(unsubscribe: () -> Unit) {
-            if (done) unsubscribe() else this.unsubscribe = unsubscribe
+        private val elapsed: Long get() = SystemClock.uptimeMillis() - startedAt
+
+        fun start(unsubscribe: () -> Unit) {
+            this.unsubscribe = unsubscribe
+            queries += this
+            handler.postDelayed(timeout, layoutTimeoutMillis)
         }
 
-        fun finish(hasFold: Boolean, layout: String) {
-            if (done) return
-            done = true
-            pending -= this
+        fun failSubscribe(error: Throwable) {
+            Log.w(LOG_TAG, "창 배치 정보 구독 실패", error)
+            log(hinge, "구독 실패", elapsed, false)
+            reply(false)
+        }
+
+        fun onLayout(hasFold: Boolean) {
+            if (unsubscribe == null) return // 이미 끝남
+            val first = answer
+            if (first == null) {
+                answer(hasFold, if (hasFold) "접힘" else "없음")
+            } else if (first != hasFold) {
+                // 진단: 첫 값과 다른 값이 뒤에 왔다 — 첫 값을 답으로 쓰는 규칙을 다시 볼 근거 (#158)
+                Log.i(LOG_TAG, "폴더블 판정 뒤 창 배치 접힘=${if (hasFold) "접힘" else "없음"} (${elapsed}ms, 답=$first)")
+            }
+        }
+
+        private fun answer(hasFold: Boolean, layout: String) {
+            if (answered || unsubscribe == null) return
+            answer = hasFold
             handler.removeCallbacks(timeout)
+            log(hinge, layout, elapsed, hasFold)
+            reply(hasFold)
+            handler.postDelayed(endDiagnostics, diagnosticMillis)
+        }
+
+        fun cancel() {
+            if (!answered) answer(false, "취소")
+            close()
+        }
+
+        private fun close() {
+            handler.removeCallbacks(timeout)
+            handler.removeCallbacks(endDiagnostics)
             unsubscribe?.invoke()
             unsubscribe = null
-            log(hinge, layout, SystemClock.uptimeMillis() - startedAt, hasFold)
-            reply(hasFold)
+            queries -= this
         }
     }
 
     private fun log(hinge: HingeSignals, layout: String, elapsedMillis: Long, result: Boolean) {
         Log.i(
             LOG_TAG,
-            "폴더블 판정: 기능 선언=${hinge.declared}, 센서=${hinge.sensor}, 창 배치 접힘=$layout " +
-                "(${elapsedMillis}ms) → $result",
+            "폴더블 판정: 기능 선언=${hinge.declared}, 센서=${hinge.sensor}, ChromeOS=${hinge.pc}, " +
+                "창 배치 접힘=$layout (${elapsedMillis}ms) → $result",
         )
     }
 
@@ -132,16 +177,20 @@ internal class FoldableDeviceProbe(
          */
         const val LAYOUT_TIMEOUT_MILLIS = 500L
 
+        /** 답한 뒤 진단 로그를 위해 창 배치 구독을 유지하는 시간 (ms, 구독 시작이 아니라 답한 때부터) */
+        const val DIAGNOSTIC_MILLIS = 3000L
+
         /** 판정 로그 태그 */
         const val LOG_TAG = "AltCalc"
 
         /** [context]의 힌지 신호 (1·2). API 29 이하는 둘 다 없다(기능·센서 종류가 API 30에 생겼다). */
         fun hingeSignalsOf(context: Context): HingeSignals {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return HingeSignals(declared = false, sensor = false)
+            val pc = context.packageManager.hasSystemFeature(PackageManager.FEATURE_PC)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return HingeSignals(declared = false, sensor = false, pc = pc)
             val declared = context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE)
             val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-            val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) != null
-            return HingeSignals(declared, sensor)
+            val sensor = sensorManager?.getSensorList(Sensor.TYPE_HINGE_ANGLE)?.isNotEmpty() == true
+            return HingeSignals(declared, sensor, pc)
         }
     }
 }

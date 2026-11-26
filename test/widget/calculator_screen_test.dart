@@ -431,13 +431,14 @@ void main() {
     });
 
     testWidgets(
-      '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 접힘 정보를 한 번 보면 다시 펼칠 때 접힘 정보 전에도 태블릿(가로)으로 요청하지 않는다 (#70)',
+      '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·좌우 분할 없음 (#70)',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
-        const inner = Size(673, 841);
         const cover = Size(344, 882);
+        // 내부 화면을 가로로 든 채 펼친다 (Android 16 이상은 대화면에서 방향 고정을 무시한다)
+        const innerLandscape = Size(841, 673);
         const innerFold = DisplayFeature(
-          bounds: Rect.fromLTWH(336.5, 0, 0, 841),
+          bounds: Rect.fromLTWH(420.5, 0, 0, 673),
           type: DisplayFeatureType.fold,
           state: DisplayFeatureState.postureFlat,
         );
@@ -449,37 +450,69 @@ void main() {
         expect(orientationRequests(calls), [
           ['DeviceOrientation.portraitUp'],
         ]);
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isFalse);
 
-        // 처음 펼친다: 접힘 정보가 오기 전 한 프레임은 태블릿으로 판정된다(놓친 판정의 남은 한계).
-        tester.view.display.size = inner * 2;
-        tester.view.physicalSize = inner * 2;
+        // 펼친다: 물리 화면이 비율이 다른 화면으로 바뀐다. 접힘 정보는 아직 없다.
+        tester.view.display.size = innerLandscape * 2;
+        tester.view.physicalSize = innerLandscape * 2;
         await tester.pump();
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isTrue);
+        expect(orientationRequests(calls).last, anyOrientation);
+        expect(
+          orientationRequests(calls),
+          isNot(
+            contains([
+              'DeviceOrientation.landscapeLeft',
+              'DeviceOrientation.landscapeRight',
+            ]),
+          ),
+        );
+        // 같은 프레임의 배치도 폴더블 규칙이다: 접힘 정보 전에는 위아래 배치
+        expect(isStackedArrangement(tester), isTrue);
+
+        // 접힘 정보가 오면 접힘선 기준 좌우 배치
+        tester.view.displayFeatures = const [innerFold];
+        await tester.pump();
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      },
+    );
+
+    testWidgets(
+      '시작 시 판정이 놓친 폴더블: 접힘 정보를 한 번 본 뒤에는 접힘 정보가 잠시 사라져도 좌우 분할로 그리지 않는다 (#70)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // 물리 화면은 그대로(크기 변화로는 알 수 없다), 접힘 정보만 오간다
+        const innerLandscape = Size(841, 673);
+        const innerFold = DisplayFeature(
+          bounds: Rect.fromLTWH(420.5, 0, 0, 673),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        setDevice(tester, innerLandscape);
+        addTearDown(tester.view.resetDisplayFeatures);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        // 시작 시점에는 태블릿으로 판정된다(대비책 경로)
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
         expect(
           DeviceOrientationLock.instance.appliedPolicy,
           OrientationPolicy.landscape,
         );
+
         tester.view.displayFeatures = const [innerFold];
         await tester.pump();
+        expect(DeviceOrientationLock.instance.foldableDevice.value, isTrue);
         expect(orientationRequests(calls).last, anyOrientation);
 
-        // 접는다 → 세로
-        tester.view.display.size = cover * 2;
-        tester.view.physicalSize = cover * 2;
+        // 접힘 정보가 사라진다(회전 직후처럼 몇 프레임 늦게 다시 오는 구간) — 폴더블 규칙대로 위아래 배치
         tester.view.displayFeatures = const [];
         await tester.pump();
-        expect(orientationRequests(calls).last, [
-          'DeviceOrientation.portraitUp',
-        ]);
-        final requestsBeforeUnfold = orientationRequests(calls).length;
-
-        // 다시 편다: 접힘 정보가 아직 없어도 폴더블로 기억해 네 방향 허용을 바로 요청한다.
-        tester.view.display.size = inner * 2;
-        tester.view.physicalSize = inner * 2;
-        await tester.pump();
-        expect(orientationRequests(calls).last, anyOrientation);
-        tester.view.displayFeatures = const [innerFold];
-        await tester.pump();
-        expect(orientationRequests(calls), hasLength(requestsBeforeUnfold + 1));
+        expect(isStackedArrangement(tester), isTrue);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.any,
+        );
       },
     );
 

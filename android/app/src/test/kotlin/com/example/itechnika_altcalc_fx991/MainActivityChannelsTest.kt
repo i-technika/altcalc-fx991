@@ -82,8 +82,10 @@ class MainActivityChannelsTest {
         val replies = isFoldableDevice()
 
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS))
-
         assertEquals(listOf<MethodReply>(MethodReply.Success(false)), replies)
+
+        // 답한 뒤 진단 시간이 지나면 구독을 푼다
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FoldableDeviceProbe.DIAGNOSTIC_MILLIS))
         assertEquals(0, layout.activeCount)
     }
 

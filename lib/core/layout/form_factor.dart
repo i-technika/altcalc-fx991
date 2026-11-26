@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui'
     show
         DisplayFeature,
@@ -106,7 +107,8 @@ abstract final class FormFactor {
   /// 이 조회를 기다리므로 어떤 경우에도 오류를 내거나 멈추지 않는다.
   ///
   /// 한계: 1·2가 없는 폴더블을 접은 커버 화면에서 시작하면 3도 없어(창이 접힘선에 걸치지 않는다) 폰으로 판정된다.
-  /// 펼친 뒤 접힘 정보가 오면 `DeviceOrientationLock`이 바로잡고 그 뒤로는 폴더블로 기억한다. 실기기 확인은 #70의 후속 과제다.
+  /// 펼치면 `DeviceOrientationLock`이 물리 화면이 바뀐 것([isOtherScreen])을 보고 폴더블로 기억한다.
+  /// 각 신호의 실기기 값은 #158에서 기록한다.
   static Future<bool> queryFoldableDevice() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return false;
@@ -148,12 +150,32 @@ abstract final class FormFactor {
   }
 
   /// [view]가 놓인 물리 화면 크기 (dp). 플랫폼이 화면 크기를 알려주지 않으면(크기 0) 창 크기를 쓴다.
-  static Size displaySizeOf(FlutterView view) {
+  static Size displaySizeOf(FlutterView view) =>
+      reportedDisplaySizeOf(view) ?? view.physicalSize / view.devicePixelRatio;
+
+  /// 플랫폼이 알려 준 [view]의 물리 화면 크기 (dp). 알려 주지 않으면(크기 0) `null` — 창 크기로 대신하지 않는다.
+  static Size? reportedDisplaySizeOf(FlutterView view) {
     final display = view.display;
-    if (!display.size.isEmpty && display.devicePixelRatio > 0) {
-      return display.size / display.devicePixelRatio;
-    }
-    return view.physicalSize / view.devicePixelRatio;
+    if (display.size.isEmpty || !(display.devicePixelRatio > 0)) return null;
+    return display.size / display.devicePixelRatio;
+  }
+
+  /// 물리 화면이 바뀌었다고 볼 화면 비율(긴 변 ÷ 짧은 변) 차이 (작은 쪽 비율에 대한 상대값). 폴더블의 커버 ↔ 내부
+  /// 화면은 비율이 크게 다르다(Galaxy Z Fold 커버 약 2.6 ↔ 내부 약 1.2, Z Flip 내부 약 2.4 ↔ 커버 약 1.0).
+  static const double otherScreenAspectTolerance = 0.15;
+
+  /// 물리 화면 크기 [before]에서 [after]로 바뀐 것이 **다른 화면**으로 바뀐 것인지 (#70) — 화면이 둘인 기기, 곧 폴더블의
+  /// 커버 ↔ 내부 화면 전환이다. 회전(가로·세로가 맞바뀜)과 화면 크기·글자 확대 설정(dp 크기만 바뀌고 비율은 같다)은
+  /// 비율이 그대로라 세지 않는다. 비율이 [otherScreenAspectTolerance]보다 많이 다를 때만 참이다.
+  ///
+  /// 한계: 앱을 외부 디스플레이(DeX 등)로 옮겨 물리 화면 자체가 바뀌어도 참이 된다 — 그러면 폴더블로 기억해
+  /// 접힘선 없는 넓은 창도 위아래 배치가 된다([arrangementOf]의 폴더블 외부 디스플레이 제약과 같다).
+  static bool isOtherScreen(Size before, Size after) {
+    if (before.isEmpty || after.isEmpty) return false;
+    double aspect(Size s) => s.longestSide / s.shortestSide;
+    final a = aspect(before);
+    final b = aspect(after);
+    return (a - b).abs() / math.min(a, b) > otherScreenAspectTolerance;
   }
 
   /// 기기 종류([kind])와 물리 화면 크기([displaySize], dp)별 방향 정책.

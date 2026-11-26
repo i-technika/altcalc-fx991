@@ -1,5 +1,6 @@
 package com.example.itechnika_altcalc_fx991
 
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.Sensor
@@ -7,29 +8,40 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.window.layout.WindowLayoutInfo
+import androidx.window.testing.layout.FoldingFeature
+import androidx.window.testing.layout.WindowLayoutInfoPublisherRule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowSensor
 import java.time.Duration
 
 /**
- * 시작 시 폴더블 판정 (#70) — [FoldableDeviceProbe]의 신호 조합·기다림·정리 규칙.
- * 창 배치 정보는 [FakeFoldingLayoutSource]로 흉내 내고, 기다림은 Robolectric 메인 루퍼 시계로 돌린다.
+ * 시작 시 폴더블 판정 (#70) — [FoldableDeviceProbe]의 신호 조합·기다림·정리 규칙과 실제 창 배치 정보 출처의 연결.
+ * 판정 규칙은 창 배치 정보를 [FakeFoldingLayoutSource]로 흉내 내고, 기다림은 Robolectric 메인 루퍼 시계로 돌린다.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [FIRST_PUBLIC_API_SDK])
 class FoldableDeviceProbeTest {
+    /** Jetpack WindowManager가 내보내는 창 배치 정보를 테스트가 정한다 ([WindowLayoutFoldingSource] 검사용) */
+    @get:Rule
+    val publisher = WindowLayoutInfoPublisherRule()
+
     private val layout = FakeFoldingLayoutSource()
     private val replies = mutableListOf<Boolean>()
 
-    private fun probe(declared: Boolean = false, sensor: Boolean = false) = FoldableDeviceProbe(
-        hingeSignals = { FoldableDeviceProbe.HingeSignals(declared, sensor) },
+    private fun probe(declared: Boolean = false, sensor: Boolean = false, pc: Boolean = false) = FoldableDeviceProbe(
+        hingeSignals = { FoldableDeviceProbe.HingeSignals(declared, sensor, pc) },
         layoutSource = layout,
         handler = Handler(Looper.getMainLooper()),
     )
@@ -37,6 +49,10 @@ class FoldableDeviceProbeTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun idleFor(millis: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis))
+
+    private fun logs(): List<String> = ShadowLog.getLogsForTag(FoldableDeviceProbe.LOG_TAG).map { it.msg }
+
+    // ---- 판정 규칙 ----
 
     @Test
     fun `힌지 기능 선언이나 센서가 있으면 창 배치 정보를 기다리지 않고 바로 true`() {
@@ -49,7 +65,18 @@ class FoldableDeviceProbeTest {
     }
 
     @Test
-    fun `힌지 신호가 없으면 창 배치 정보 첫 값에 접히는 부분이 있는지로 답하고 구독을 푼다`() {
+    fun `ChromeOS에서는 힌지 신호를 쓰지 않고 창 배치 정보로 판정한다`() {
+        probe(declared = true, sensor = true, pc = true).query { replies += it }
+        assertTrue(replies.isEmpty())
+
+        layout.emit(false)
+        idle()
+
+        assertEquals(listOf(false), replies)
+    }
+
+    @Test
+    fun `힌지 신호가 없으면 창 배치 정보 첫 값에 접히는 부분이 있는지로 답한다`() {
         for (hasFold in listOf(true, false)) {
             replies.clear()
             probe().query { replies += it }
@@ -59,35 +86,69 @@ class FoldableDeviceProbeTest {
             idle()
 
             assertEquals(listOf(hasFold), replies)
-            assertEquals(0, layout.activeCount)
         }
     }
 
     @Test
-    fun `첫 값만 답이다 - 뒤에 오는 값은 무시하고 한 번만 답한다`() {
+    fun `판정 로그에 신호별 값과 결과를 남긴다`() {
+        probe().query { replies += it }
+        layout.emit(true)
+        idle()
+
+        assertTrue(
+            logs().toString(),
+            logs().any {
+                it.startsWith("폴더블 판정: 기능 선언=false, 센서=false, ChromeOS=false, 창 배치 접힘=접힘") && it.endsWith("→ true")
+            },
+        )
+    }
+
+    @Test
+    fun `답한 뒤 진단 시간 동안 구독을 유지하고, 지나면 푼다`() {
         val probe = probe()
         probe.query { replies += it }
+        layout.emit(false)
+        idle()
+        assertEquals(0, probe.pendingCount)
+        assertEquals("진단용으로 구독 유지", 1, layout.activeCount)
 
+        idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS - 1)
+        assertEquals(1, layout.activeCount)
+        idleFor(1)
+
+        assertEquals(0, layout.activeCount)
+        assertEquals(0, probe.activeCount)
+    }
+
+    @Test
+    fun `첫 값만 답이다 - 뒤에 다른 값이 오면 답은 그대로 두고 로그로 남긴다`() {
+        probe().query { replies += it }
+
+        layout.emit(false)
         layout.emit(false)
         layout.emit(true)
         idle()
 
         assertEquals(listOf(false), replies)
-        assertEquals(0, probe.pendingCount)
+        val later = logs().filter { it.startsWith("폴더블 판정 뒤") }
+        assertEquals("다른 값만 한 번 남긴다: $later", 1, later.size)
+        assertTrue(later.single(), later.single().contains("창 배치 접힘=접힘"))
     }
 
     @Test
-    fun `구독하는 동안 바로 값이 와도 답하고 구독을 푼다`() {
+    fun `구독하는 동안 바로 값이 와도 구독을 마친 뒤 답한다`() {
         layout.emitOnSubscribe = true
         probe().query { replies += it }
-        idle()
+        assertTrue("구독 함수 안에서는 답하지 않는다", replies.isEmpty())
 
+        idle()
         assertEquals(listOf(true), replies)
+        idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
         assertEquals(0, layout.activeCount)
     }
 
     @Test
-    fun `창 배치 정보가 오지 않으면 제한 시간에 false로 답하고 구독을 푼다`() {
+    fun `창 배치 정보가 오지 않으면 제한 시간에 false로 답한다`() {
         val probe = probe()
         probe.query { replies += it }
 
@@ -96,13 +157,14 @@ class FoldableDeviceProbeTest {
 
         idleFor(1)
         assertEquals(listOf(false), replies)
-        assertEquals(0, layout.activeCount)
         assertEquals(0, probe.pendingCount)
 
-        // 늦게 온 값은 무시한다
+        // 늦게 온 값은 답을 바꾸지 않는다(진단 로그만)
         layout.emit(true)
         idle()
         assertEquals(listOf(false), replies)
+        idleFor(FoldableDeviceProbe.DIAGNOSTIC_MILLIS)
+        assertEquals(0, layout.activeCount)
     }
 
     @Test
@@ -117,11 +179,16 @@ class FoldableDeviceProbeTest {
     }
 
     @Test
-    fun `창 배치 정보 구독이 실패하면 기다리지 않고 false`() {
-        layout.failOnSubscribe = true
-        probe().query { replies += it }
+    fun `창 배치 정보 구독이 실패하면 기다리지 않고 false - 링크 오류도 잡는다`() {
+        for (error in listOf<Throwable>(IllegalStateException("구독 실패 (테스트)"), NoClassDefFoundError("확장 없음 (테스트)"))) {
+            replies.clear()
+            layout.failure = error
+            val probe = probe()
+            probe.query { replies += it }
 
-        assertEquals(listOf(false), replies)
+            assertEquals(error.toString(), listOf(false), replies)
+            assertEquals(0, probe.activeCount)
+        }
     }
 
     @Test
@@ -152,7 +219,6 @@ class FoldableDeviceProbeTest {
 
         assertEquals(listOf(true), first)
         assertEquals(listOf(true), second)
-        assertEquals(0, layout.activeCount)
     }
 
     @Test
@@ -164,12 +230,66 @@ class FoldableDeviceProbeTest {
 
         assertEquals(listOf(false), replies)
         assertEquals(0, layout.activeCount)
+        assertEquals(0, probe.activeCount)
         layout.emit(true)
         idleFor(FoldableDeviceProbe.LAYOUT_TIMEOUT_MILLIS * 2)
         assertEquals(listOf(false), replies)
         // 거듭 불러도 안전하다
         probe.cancel()
         assertEquals(listOf(false), replies)
+    }
+
+    @Test
+    fun `cancel - 답한 뒤 진단 중인 구독도 푼다`() {
+        val probe = probe()
+        probe.query { replies += it }
+        layout.emit(true)
+        idle()
+        assertEquals(1, layout.activeCount)
+
+        probe.cancel()
+
+        assertEquals("다시 답하지 않는다", listOf(true), replies)
+        assertEquals(0, layout.activeCount)
+        assertEquals(0, probe.activeCount)
+    }
+
+    // ---- 실제 창 배치 정보 출처 (WindowLayoutFoldingSource) ----
+
+    @Test
+    fun `실제 출처 - 창 배치 정보의 FoldingFeature 유무를 그대로 알리고, 구독을 풀면 더 알리지 않는다`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val seen = mutableListOf<Boolean>()
+        val unsubscribe = WindowLayoutFoldingSource(activity).subscribe { seen += it }
+        idle()
+
+        publisher.overrideWindowLayoutInfo(WindowLayoutInfo(listOf(FoldingFeature(activity))))
+        idle()
+        publisher.overrideWindowLayoutInfo(WindowLayoutInfo(emptyList()))
+        idle()
+        assertEquals(listOf(true, false), seen)
+
+        unsubscribe()
+        publisher.overrideWindowLayoutInfo(WindowLayoutInfo(listOf(FoldingFeature(activity))))
+        idle()
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
+    fun `실제 출처로 판정하면 첫 값으로 답하고 로그에 창 배치 값이 남는다`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        FoldableDeviceProbe(
+            hingeSignals = { FoldableDeviceProbe.HingeSignals(declared = false, sensor = false) },
+            layoutSource = WindowLayoutFoldingSource(activity),
+            handler = Handler(Looper.getMainLooper()),
+        ).query { replies += it }
+        idle()
+
+        publisher.overrideWindowLayoutInfo(WindowLayoutInfo(listOf(FoldingFeature(activity))))
+        idle()
+
+        assertEquals(listOf(true), replies)
+        assertTrue(logs().toString(), logs().any { it.contains("창 배치 접힘=접힘") })
     }
 
     // ---- 힌지 신호 (실제 시스템 값) ----
@@ -179,35 +299,60 @@ class FoldableDeviceProbeTest {
     private fun declareHingeFeature() =
         shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE, true)
 
-    private fun addHingeSensor() {
+    private fun addHingeSensor(wakeUp: Boolean = false) {
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        shadowOf(sensorManager).addSensor(ShadowSensor.newInstance(Sensor.TYPE_HINGE_ANGLE))
+        val sensor = ShadowSensor.newInstance(Sensor.TYPE_HINGE_ANGLE)
+        shadowOf(sensor).setWakeUpFlag(wakeUp)
+        shadowOf(sensorManager).addSensor(sensor)
     }
+
+    private fun signals(declared: Boolean, sensor: Boolean) = FoldableDeviceProbe.HingeSignals(declared, sensor)
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.R, FIRST_PUBLIC_API_SDK])
     fun `hingeSignalsOf - API 30 이상은 기능 선언과 센서를 따로 읽는다`() {
-        assertEquals(FoldableDeviceProbe.HingeSignals(declared = false, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
+        assertEquals(signals(declared = false, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
 
         addHingeSensor()
-        assertEquals(FoldableDeviceProbe.HingeSignals(declared = false, sensor = true), FoldableDeviceProbe.hingeSignalsOf(context))
+        assertEquals(signals(declared = false, sensor = true), FoldableDeviceProbe.hingeSignalsOf(context))
 
         declareHingeFeature()
-        assertEquals(FoldableDeviceProbe.HingeSignals(declared = true, sensor = true), FoldableDeviceProbe.hingeSignalsOf(context))
+        assertEquals(signals(declared = true, sensor = true), FoldableDeviceProbe.hingeSignalsOf(context))
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.R, FIRST_PUBLIC_API_SDK])
+    fun `hingeSignalsOf - wake-up 힌지 센서만 있어도 센서로 본다`() {
+        // 실제 프레임워크의 getDefaultSensor는 API 36부터 이 종류를 wake-up 센서로만 찾는다 — 목록을 쓰므로 둘 다 센다.
+        // (Robolectric 섀도가 센서 목록을 대신 구현하므로 프레임워크 분기 자체는 여기서 볼 수 없다.)
+        addHingeSensor(wakeUp = true)
+        assertEquals(signals(declared = false, sensor = true), FoldableDeviceProbe.hingeSignalsOf(context))
     }
 
     @Test
     @Config(sdk = [Build.VERSION_CODES.R])
     fun `hingeSignalsOf - 기능 선언만 있어도 읽는다`() {
         declareHingeFeature()
-        assertEquals(FoldableDeviceProbe.HingeSignals(declared = true, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
+        assertEquals(signals(declared = true, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
     }
 
     @Test
     @Config(sdk = [MIN_SDK, Build.VERSION_CODES.Q])
     fun `hingeSignalsOf - API 29 이하는 기능 선언이 있어도 둘 다 없다`() {
         declareHingeFeature()
-        assertEquals(FoldableDeviceProbe.HingeSignals(declared = false, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
+        assertEquals(signals(declared = false, sensor = false), FoldableDeviceProbe.hingeSignalsOf(context))
+    }
+
+    @Test
+    @Config(sdk = [MIN_SDK, FIRST_PUBLIC_API_SDK])
+    fun `hingeSignalsOf - ChromeOS(FEATURE_PC)를 함께 알려 힌지 신호를 쓰지 않게 한다`() {
+        shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_PC, true)
+        declareHingeFeature()
+
+        val hinge = FoldableDeviceProbe.hingeSignalsOf(context)
+
+        assertTrue(hinge.pc)
+        assertFalse(hinge.foldable)
     }
 }
 
@@ -225,11 +370,11 @@ internal class FakeFoldingLayoutSource : FoldingLayoutSource {
     /** true면 구독하는 즉시(구독 함수 안에서) 접힘 있음을 보낸다 */
     var emitOnSubscribe = false
 
-    /** true면 구독이 실패한다 */
-    var failOnSubscribe = false
+    /** 있으면 구독할 때 이 오류를 던진다 */
+    var failure: Throwable? = null
 
     override fun subscribe(onLayout: (hasFold: Boolean) -> Unit): () -> Unit {
-        if (failOnSubscribe) throw IllegalStateException("구독 실패 (테스트)")
+        failure?.let { throw it }
         subscribeCount++
         listeners += onLayout
         if (emitOnSubscribe) onLayout(true)

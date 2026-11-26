@@ -100,6 +100,59 @@ void main() {
       }
     });
 
+    group('다른 물리 화면으로 바뀜 (#70)', () {
+      test('폴더블 커버 ↔ 내부 화면 전환은 다른 화면이다 (양방향)', () {
+        const pairs = [
+          (Size(344, 882), Size(673, 841)), // Galaxy Z Fold 커버 → 내부
+          (Size(344, 882), Size(841, 673)), // 내부를 가로로 든 채 펼침
+          (Size(412, 1006), Size(360, 374)), // Galaxy Z Flip 내부 → 커버
+          (Size(411, 841), Size(841, 701)), // Pixel Fold 커버 → 내부(가로가 기본)
+        ];
+        for (final (a, b) in pairs) {
+          expect(FormFactor.isOtherScreen(a, b), isTrue, reason: '$a → $b');
+          expect(FormFactor.isOtherScreen(b, a), isTrue, reason: '$b → $a');
+        }
+      });
+
+      test('회전·화면 크기 확대 설정·같은 화면은 다른 화면이 아니다', () {
+        const phone = Size(390, 844);
+        expect(FormFactor.isOtherScreen(phone, phone), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone.flipped), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone * 0.85), isFalse);
+        expect(FormFactor.isOtherScreen(phone, phone * 1.2), isFalse);
+        // 태블릿 600dp가 확대 설정으로 짧은 변 600 밑으로 내려가도 비율은 같다
+        expect(
+          FormFactor.isOtherScreen(const Size(600, 960), const Size(533, 853)),
+          isFalse,
+        );
+      });
+
+      test('허용치 경계: 비율 차이가 허용치 이하면 같은 화면, 넘으면 다른 화면', () {
+        const base = Size(1000, 2000); // 비율 2.0
+        final within = Size(
+          1000,
+          2000 * (1 + FormFactor.otherScreenAspectTolerance) - 1,
+        );
+        final beyond = Size(
+          1000,
+          2000 * (1 + FormFactor.otherScreenAspectTolerance) + 1,
+        );
+        expect(FormFactor.isOtherScreen(base, within), isFalse);
+        expect(FormFactor.isOtherScreen(base, beyond), isTrue);
+      });
+
+      test('크기를 모르면(빈 크기) 다른 화면으로 보지 않는다', () {
+        expect(
+          FormFactor.isOtherScreen(Size.zero, const Size(673, 841)),
+          isFalse,
+        );
+        expect(
+          FormFactor.isOtherScreen(const Size(344, 882), Size.zero),
+          isFalse,
+        );
+      });
+    });
+
     group('폴더블 판정 조회', () {
       tearDown(() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
