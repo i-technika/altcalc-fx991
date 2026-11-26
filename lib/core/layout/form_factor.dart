@@ -24,13 +24,14 @@ enum DeviceKind {
   tablet,
 }
 
-/// 계산기 화면 배치 종류 (#24, 접힘선 기준 배치는 #25).
+/// 계산기 화면 배치 종류 (#24, 접힘선 기준 배치는 #25, 가로형은 #142).
 enum ScreenArrangement {
-  /// 위아래 배치: 위 LCD, 아래 키패드 (폰 세로 화면, 세로·좁은 창, 폴더블 커버 화면)
+  /// 위아래 배치("세로형", #141): 위 LCD, 아래 실물 배열 키패드 (폰 세로 화면, 세로·좁은 창, 폴더블 커버 화면)
   stacked,
 
-  /// 좌우 분할 배치: LCD와 키패드를 좌우로 나누고 주로 쓰는 손 쪽에 키패드 (대화면 가로 창)
-  split,
+  /// 가로형 배치 (#142): 아래에 넓은 키패드 배열(함수부 옆에 숫자부), 위 띠에 활성 LCD(숫자부 위)와 계산 기록(함수부 위).
+  /// 숫자부와 활성 LCD는 주로 쓰는 손 쪽이다 (태블릿 가로, 가로로 돌린 폰, 분할 화면·데스크톱의 가로 창).
+  landscape,
 
   /// 세로 접힘선 기준 좌우 배치 (폴더블 내부 화면, 책 자세): 접힘선 한쪽 절반에 키패드(주로 쓰는 손 쪽),
   /// 다른 절반에 LCD. 어느 것도 접힘선을 가로지르지 않는다.
@@ -70,7 +71,7 @@ enum OrientationPolicy {
 ///   계산기는 다른 앱과 나란히 쓰는 경우가 많아 멀티태스킹을 끄지 않는다 — `Info.plist`의 iPad 방향은
 ///   네 방향 모두 허용한 채로 둔다(멀티태스킹 요건).
 /// - 분할 화면·팝업 창처럼 창 자체가 화면보다 작은 경우. 폰도 마찬가지라, 세로 고정과 무관하게 낮은 창이 생긴다.
-///   그런 창은 화면이 본체 크기로 다시 판정해 좌우 분할로 그리거나 창을 키워 달라는 안내를 띄운다
+///   그런 창은 화면이 본체 크기로 다시 판정해 키가 큰 배치로 그리거나 창을 키워 달라는 안내를 띄운다
 ///   (`CalculatorScreen`, `CalcTheme` "짧은 창" 절, #38). 분할 화면·팝업 창 자체는 막지 않는다
 ///   (`resizeableActivity`·최소 창 크기를 선언하지 않는 이유도 그 절).
 /// 그래서 태블릿을 세로로 들면 대개 세로 창이 되고, 그때는 위아래 배치로 보여 준다.
@@ -189,7 +190,8 @@ abstract final class FormFactor {
 
   /// 기기 종류([kind])와 물리 화면 크기([displaySize], dp)별 방향 정책.
   /// - 폰: 세로 — 가로 화면에서는 키패드가 쓸 수 없을 만큼 작아진다.
-  /// - 태블릿: 가로 — LCD와 키패드를 좌우로 나눠 보여 준다 (지켜지는 범위는 클래스 설명 참조).
+  /// - 태블릿: 가로 — 가로형 배치(위 띠에 기록·활성 LCD, 아래에 넓은 키패드 배열, #142)로 보여 준다 (지켜지는 범위는
+  ///   클래스 설명 참조).
   /// - 폴더블의 짧은 변 [largeScreenMinShortestSide] 미만 화면: 폰과 같이 세로. Fold 계열의 접은 커버 화면과
   ///   Galaxy Z Flip 계열의 내부 화면(세로로 긴 폰 크기, 가로 접힘선)이 여기에 든다.
   /// - 폴더블 대화면(Fold 계열 내부 화면): 네 방향 모두 허용한다 (#25). 내부 화면의 기본 방향이 기기마다
@@ -287,6 +289,13 @@ abstract final class FormFactor {
       hinge.bounds.shortestSide > 0 ||
       hinge.state == DisplayFeatureState.postureHalfOpened;
 
+  /// 화면이 본체 크기로 세로형과 가로형 중 키가 큰 쪽을 고르는 창인지 (#142) — 접힘 정보([features])가 없고 폴더블
+  /// 기기([foldableDevice])도 아닌 창이다. [arrangementOf] 3번의 창이다.
+  static bool picksFormByKeySize(
+    Iterable<DisplayFeature> features, {
+    bool foldableDevice = false,
+  }) => !foldableDevice && !hasFoldOrHinge(features);
+
   /// 앱 창([windowSize], dp)의 배치.
   ///
   /// 1. 창을 가로지르는 접힘선([hingeOf]) 양쪽이 모두 [hingeMinPanelExtent] 이상이면 접힘선을 경계로 나눈다 (#25).
@@ -299,17 +308,18 @@ abstract final class FormFactor {
   ///      39.9dp) — 펼친 가로 접힘선을 나눌지는 후속 이슈에서 다시 정한다.
   /// 2. 접힘 정보는 있는데 위 조건에 맞지 않거나, 폴더블 기기([foldableDevice])인데 접힘선이 없으면
   ///    위아래 배치다. 폴더블 내부 화면은 접힘 정보가 창이 붙은 뒤 늦게 오므로, 그 전 몇 프레임 동안
-  ///    접힘선을 무시한 좌우 분할로 그렸다가 바뀌는 깜빡임을 막는다. 접은 커버 화면은 어차피 위아래 배치다.
+  ///    접힘선을 무시한 가로형으로 그렸다가 바뀌는 깜빡임을 막는다. 접은 커버 화면은 어차피 위아래 배치다.
   ///    제약: 폴더블 여부는 기기 단위라, 폴더블을 외부 디스플레이(DeX 등)에 띄운 넓은 창도 위아래 배치다.
   ///    시작 구간에만 기기 단위로 보려면 "접힘 정보가 아직 안 옴"과 "접힘선 없음"을 구분해야 하는데 그런
   ///    신호가 없고, 시간 제한을 두면 펼칠 때마다 배치가 한 번씩 튄다. 드문 경우라 위아래 배치로 둔다 (#25 검토).
-  /// 3. 그 밖에는 창 크기로 정한다: 짧은 변이 [largeScreenMinShortestSide] 이상인 가로(폭 > 높이) 창이면
-  ///    좌우 분할, 아니면 위아래 배치다. 방향 고정이 무시된 태블릿 세로 화면이나 분할 화면의 좁은 창은
-  ///    위아래 배치가 된다.
+  /// 3. 그 밖의 창([picksFormByKeySize] — 접힘 정보가 없는 폴더블이 아닌 창)은 창 모양으로 답한다: 가로(폭 > 높이) 창이면
+  ///    [ScreenArrangement.landscape], 아니면 위아래 배치다. 화면은 이 창들을 모두 인셋·화면 여백을 뺀 본체 크기로
+  ///    세로형과 가로형 중 키가 큰 쪽으로 다시 고른다 (`CalculatorScreen`, #142) — 그래서 이 답은 창 모양에서 기대하는
+  ///    배치일 뿐이고, 정사각형에 가까운 가로 창(768×768 전후)이나 아주 작은 세로 창은 다른 쪽으로 그려질 수 있다.
   ///
-  /// 위아래 배치를 돌려받은 창이라도 짧은 변이 [largeScreenMinShortestSide] 미만이면(분할 화면·팝업 창 등), 화면이
-  /// 인셋·화면 여백을 뺀 본체 크기로 좌우 분할과 비교해 키가 더 큰 쪽으로 그린다 (`CalculatorScreen`, #38). 접힘선
-  /// 기준 배치를 쓸 수 없을 때 위아래 배치로 대체하는 것과 같이, 본체 크기가 필요한 판정은 화면이 한다.
+  /// 2번에서 위아래 배치를 돌려받은 창이라도 짧은 변이 [largeScreenMinShortestSide] 미만이면(폴더블 커버 화면의 분할 화면
+  /// 등) 화면이 본체 크기로 가로형과 비교해 키가 더 큰 쪽으로 그린다 (짧은 창, #38). 접힘선 기준 배치를 쓸 수 없을 때
+  /// 위아래 배치로 대체하는 것과 같이, 본체 크기가 필요한 판정은 화면이 한다.
   static ScreenArrangement arrangementOf(
     Size windowSize,
     Iterable<DisplayFeature> features, {
@@ -328,12 +338,11 @@ abstract final class FormFactor {
         if (separates(hinge)) return ScreenArrangement.hingeStacked;
       }
     }
-    if (foldableDevice || hasFoldOrHinge(features)) {
+    if (!picksFormByKeySize(features, foldableDevice: foldableDevice)) {
       return ScreenArrangement.stacked;
     }
-    return windowSize.shortestSide >= largeScreenMinShortestSide &&
-            windowSize.width > windowSize.height
-        ? ScreenArrangement.split
+    return windowSize.width > windowSize.height
+        ? ScreenArrangement.landscape
         : ScreenArrangement.stacked;
   }
 }

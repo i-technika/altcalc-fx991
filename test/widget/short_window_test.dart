@@ -15,6 +15,7 @@ import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.d
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
@@ -83,20 +84,49 @@ Size _bodyOf(Size window, EdgeInsets padding) => Size(
   window.height - padding.vertical - 2 * CalcTheme.screenPadding,
 );
 
-/// 키를 쓸 수 없을 만큼 작은 창 — 두 배치 모두 키가 [CalcTheme.keyTouchHeightUsableMin] 미만이다(좌우 분할 15.6dp).
+/// 키를 쓸 수 없을 만큼 작은 창 — 두 배치 모두 키가 [CalcTheme.keyTouchHeightUsableMin] 미만이다(가로형 8.8dp).
 /// 미리보기 "작은 팝업 창" 프리셋과 같은 크기다.
 const _tinyWindow = Size(320, 200);
 
+/// 위아래 배치 키패드 크기
+Size _stackedKeypadOf(Size body) =>
+    Size(body.width, CalcScreenLayout.of(body).keypadHeight);
+
 /// 위아래 배치로 그렸을 때의 가장 낮은 키 터치 높이 (dp)
 double _stackedTouchOf(Size body) => KeypadMetrics.minKeyTouchHeightOf(
-  Size(body.width, CalcScreenLayout.of(body).keypadHeight),
+  _stackedKeypadOf(body),
   KeypadArrangement.standard,
 );
 
-/// 좌우 분할로 그렸을 때의 가장 낮은 키 터치 높이 (dp)
-double _splitTouchOf(Size body) => KeypadMetrics.minKeyTouchHeightOf(
-  CalcSplitLayout.of(body, Handedness.right).keypad.size,
+/// 가로형으로 그렸을 때의 가장 낮은 키 터치 높이 (dp)
+double _landscapeTouchOf(Size body) => KeypadMetrics.minKeyTouchHeightOf(
+  CalcLandscapeLayout.of(body, Handedness.right).keypad.size,
+  KeypadArrangement.wide,
+);
+
+/// 위아래 배치·가로형의 가장 낮은 키 셀 높이 (dp) — 화면이 배치를 고를 때 비교하는 값 (#142)
+double _stackedCellOf(Size body) => KeypadMetrics.minKeyCellHeightOf(
+  _stackedKeypadOf(body),
   KeypadArrangement.standard,
+);
+double _landscapeCellOf(Size body) => KeypadMetrics.minKeyCellHeightOf(
+  CalcLandscapeLayout.of(body, Handedness.right).keypad.size,
+  KeypadArrangement.wide,
+);
+
+/// 그린 키패드의 구역 배열
+KeypadArrangement _drawnKeypadArrangement(WidgetTester tester) =>
+    tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement;
+
+/// 그린 키패드의 가장 낮은 키 셀 높이 (dp)
+double _drawnCell(WidgetTester tester) => KeypadMetrics.minKeyCellHeightOf(
+  tester.getSize(_keypad),
+  _drawnKeypadArrangement(tester),
+);
+
+/// [id] 키의 화면 영역
+Rect _keyRect(WidgetTester tester, CalcKeyId id) => tester.getRect(
+  find.byWidgetPredicate((w) => w is CalcKeyButton && w.keyDef.id == id),
 );
 
 /// 그린 키(커서 패드 제외) 중 가장 낮은 터치 높이 (dp) — `CalcKeyButton`의 터치 영역 규칙
@@ -116,20 +146,20 @@ double _lowestDrawnTouch(WidgetTester tester) {
 }
 
 void main() {
-  group('짧은 창은 키가 더 큰 좌우 분할로 그린다', () {
+  group('짧은 창은 키가 더 큰 가로형으로 그린다 (#38, #142)', () {
     // (창, 인셋, 그린 키 터치 하한 — CalcTheme "짧은 창" 절의 실측값을 내림)
     const cases = [
       (Size(411, 420), EdgeInsets.only(top: 24), 21.0), // 폰 분할 화면 위
       (Size(411, 440), EdgeInsets.only(bottom: 48), 21.0), // 폰 분할 화면 아래
-      (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21), 25.0),
-      (Size(640, 360), EdgeInsets.only(top: 24), 22.0),
-      (Size(568, 320), EdgeInsets.zero, 21.0),
+      (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21), 37.0),
+      (Size(640, 360), EdgeInsets.only(top: 24), 31.0),
+      (Size(568, 320), EdgeInsets.zero, 29.0),
       (Size(360, 300), EdgeInsets.zero, 18.0), // 팝업 창
     ];
     for (final (size, padding, minTouch) in cases) {
       for (final handedness in Handedness.values) {
         testWidgets(
-          '${size.width}×${size.height}·${handedness.name}: 좌우 분할, 키패드는 주로 쓰는 손 쪽',
+          '${size.width}×${size.height}·${handedness.name}: 가로형, 숫자부는 주로 쓰는 손 쪽',
           (tester) async {
             await _pump(
               tester,
@@ -138,10 +168,10 @@ void main() {
               handedness: handedness,
             );
             expect(tester.takeException(), isNull);
-            expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+            expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
             expect(_notice, findsNothing);
 
-            // 짧은 창이다: 위아래 배치였다면 키가 일반 하한보다 낮고, 그린 좌우 분할의 키가 그보다 크다.
+            // 짧은 창이다: 위아래 배치였다면 키가 일반 하한보다 낮고, 그린 가로형의 키가 그보다 크다.
             final body = _bodyOf(size, padding);
             final stackedTouch = _stackedTouchOf(body);
             expect(stackedTouch, lessThan(CalcTheme.keyTouchHeightFloor));
@@ -152,60 +182,61 @@ void main() {
             expect(
               KeypadMetrics.minKeyTouchHeightOf(
                 tester.getSize(_keypad),
-                KeypadArrangement.standard,
+                KeypadArrangement.wide,
               ),
               moreOrLessEquals(drawnTouch, epsilon: 0.01),
             );
 
-            // 키패드는 주로 쓰는 손 쪽 본체 가장자리·본체 아래에 붙는다.
+            // 키패드는 본체 폭 전체·본체 아래에 붙고, LCD는 그 바로 위다.
             final keypad = tester.getRect(_keypad);
             final lcd = tester.getRect(_lcd);
             const p = CalcTheme.screenPadding;
-            if (handedness.keypadOnRight) {
-              expect(
-                keypad.right,
-                moreOrLessEquals(size.width - padding.right - p),
-              );
-              expect(lcd.right, lessThanOrEqualTo(keypad.left));
-            } else {
-              expect(keypad.left, moreOrLessEquals(padding.left + p));
-              expect(lcd.left, greaterThanOrEqualTo(keypad.right));
-            }
+            expect(keypad.left, moreOrLessEquals(padding.left + p));
+            expect(
+              keypad.right,
+              moreOrLessEquals(size.width - padding.right - p),
+            );
             expect(
               keypad.bottom,
               moreOrLessEquals(padding.top + p + body.height),
             );
-            // LCD는 짧은 창에서도 최소 높이 아래로 줄지 않는다.
+            // 숫자부는 주로 쓰는 손 쪽 블록이다.
+            final number = _keyRect(tester, CalcKeyId.num7);
+            final function = _keyRect(tester, CalcKeyId.sin);
+            expect(
+              handedness.keypadOnRight
+                  ? number.left > function.right
+                  : number.right < function.left,
+              isTrue,
+            );
+            // 위 띠가 낮아 기록 영역이 없고, 활성 LCD가 띠 폭 전체를 쓴다. 짧은 창에서도 최소 높이 아래로 줄지 않는다.
+            expect(find.byKey(HistoryPanel.panelKey), findsNothing);
+            expect(lcd.width, moreOrLessEquals(keypad.width));
             expect(
               lcd.height,
               greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight - 0.01),
             );
 
-            // 설정 버튼은 LCD 아래에서 눌리고, LCD·키패드와 겹치지 않는다.
+            // 설정 버튼은 상단 띠에서 눌리고, 키패드와 겹치지 않는다.
             final button = tester.getRect(_settings);
             expect(_settings.hitTestable(), findsOneWidget);
-            expect(button.overlaps(lcd), isFalse);
             expect(button.overlaps(keypad), isFalse);
-            expect(button.bottom, lessThanOrEqualTo(keypad.bottom + 0.01));
+            expect(button.top, lessThan(lcd.top));
           },
         );
       }
     }
 
-    testWidgets('가로 폰 844×390: LCD 줄 글자도 위아래 배치보다 커진다', (tester) async {
+    testWidgets('가로 폰 844×390: 키에 높이를 주고 LCD는 띠 폭 전체·최소 높이다', (tester) async {
       const size = Size(844, 390);
       const padding = EdgeInsets.only(left: 47, right: 47, bottom: 21);
       await _pump(tester, size: size, padding: padding);
+      final body = _bodyOf(size, padding);
       final lcd = tester.getSize(_lcd);
-      final stacked = CalcScreenLayout.of(_bodyOf(size, padding));
-      double lineOf(Size s) =>
-          LcdFontSizes.forSize(s, TextScaler.noScaling).input;
-      expect(
-        lineOf(lcd),
-        greaterThan(
-          lineOf(Size(_bodyOf(size, padding).width, stacked.lcdHeight)) * 1.5,
-        ),
-      );
+      expect(lcd.width, moreOrLessEquals(body.width));
+      expect(lcd.height, moreOrLessEquals(CalcTheme.screenLcdMinHeight));
+      // 위아래 배치의 두 배 가까이 키가 크다(CalcTheme "가로형 배치" 절 18.8 → 37.6dp).
+      expect(_drawnCell(tester), greaterThan(_stackedCellOf(body) * 1.9));
     });
   });
 
@@ -264,12 +295,12 @@ void main() {
 
   group('짧은 창이어도 위아래 배치의 키가 더 크면 위아래 배치다', () {
     for (final (size, padding) in const [
-      // 키 27.96dp — 좌우 분할은 21.5dp
+      // 키 27.96dp — 가로형은 21.8dp
       (Size(412, 520), EdgeInsets.only(top: 24)),
-      // iPhone 4s 크기: 키 25.8dp로 일반 하한 미만이지만 좌우 분할은 약 16dp. (#141 전의 예시 iPhone SE 1세대
+      // iPhone 4s 크기: 키 25.8dp로 일반 하한 미만이지만 가로형은 약 16.7dp. (#141 전의 예시 iPhone SE 1세대
       // 320×568은 맨 아래 광고 슬롯이 빠져 키 31.1dp로 일반 하한을 넘어 짧은 창이 아니다.)
       (Size(320, 480), EdgeInsets.only(top: 20)),
-      // 좁고 낮은 팝업 창 — 좌우 분할은 키패드 폭이 절반이라 더 작다
+      // 좁고 낮은 팝업 창 — 가로형은 넓은 배열이 폭에 묶여 더 작다
       (Size(300, 420), EdgeInsets.zero),
     ]) {
       testWidgets('${size.width}×${size.height}', (tester) async {
@@ -285,7 +316,7 @@ void main() {
         final body = _bodyOf(size, padding);
         final stackedTouch = _stackedTouchOf(body);
         expect(stackedTouch, lessThan(CalcTheme.keyTouchHeightFloor));
-        expect(_splitTouchOf(body), lessThanOrEqualTo(stackedTouch));
+        expect(_landscapeCellOf(body), lessThanOrEqualTo(_stackedCellOf(body)));
         expect(
           _lowestDrawnTouch(tester),
           moreOrLessEquals(stackedTouch, epsilon: 0.01),
@@ -293,16 +324,14 @@ void main() {
       });
     }
 
-    testWidgets('세로 폰처럼 키가 일반 하한 이상인 창은 좌우 분할과 비교하지 않는다', (tester) async {
-      // 390×844: 좌우 분할도 키 28dp 미만이 아니지만 위아래 배치 그대로다(짧은 창이 아님).
+    testWidgets('세로 폰은 가로형보다 키가 커 위아래 배치다', (tester) async {
+      // 390×844: 위아래 42.4dp, 가로형 20.6dp (CalcTheme "짧은 창" 절)
       const size = Size(390, 844);
       const padding = EdgeInsets.only(top: 47, bottom: 34);
       await _pump(tester, size: size, padding: padding);
       expect(isStackedArrangement(tester), isTrue);
-      expect(
-        _stackedTouchOf(_bodyOf(size, padding)),
-        greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
-      );
+      final body = _bodyOf(size, padding);
+      expect(_landscapeCellOf(body), lessThan(_stackedCellOf(body) / 2));
     });
   });
 
@@ -336,8 +365,7 @@ void main() {
             expect(tester.takeException(), isNull);
             expect(_notice, findsNothing);
             expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-            // 접힘선 기준 배치로 그렸다(가운데 접힘선이면 영역이 짧은 창 좌우 분할과 같아, 배치 종류로 구분한다 —
-            // 대화상자를 접힘선 기준으로 나눌지가 이것으로 정해진다, #25·#129).
+            // 접힘선 기준 배치로 그렸다(대화상자를 접힘선 기준으로 나눌지가 배치 종류로 정해진다, #25·#129).
             expect(
               tester
                   .widget<SettingsButton>(find.byType(SettingsButton))
@@ -375,11 +403,11 @@ void main() {
       }
     }
 
-    testWidgets('접힘선 기준 배치를 쓰지 않는 펼친 가로 접힘선이어도 짧은 창이면 좌우 분할과 비교한다', (
+    testWidgets('접힘선 기준 배치를 쓰지 않는 펼친 가로 접힘선이어도 짧은 창이면 가로형과 비교한다', (
       tester,
     ) async {
       // 펼친 폭 0 가로 접힘선은 접힘선 기준 배치 조건(양쪽 280dp)에 맞지 않아 위아래 배치를 받는다. 위아래 배치도
-      // 접힘선을 가로지르므로, 키가 더 큰 좌우 분할(전에는 키패드 237×190 → 402×322)로 그린다.
+      // 접힘선을 가로지르므로, 키가 더 큰 가로형으로 그린다.
       const size = Size(844, 390);
       const fold = DisplayFeature(
         bounds: Rect.fromLTWH(0, 195, 844, 0),
@@ -388,7 +416,7 @@ void main() {
       );
       await _pump(tester, size: size, displayFeatures: const [fold]);
       expect(tester.takeException(), isNull);
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
       expect(
         _lowestDrawnTouch(tester),
         greaterThan(_stackedTouchOf(_bodyOf(size, EdgeInsets.zero))),
@@ -397,7 +425,7 @@ void main() {
   });
 
   group('키를 쓸 수 없을 만큼 작은 창은 안내를 띄운다', () {
-    // 그린 키가 16dp 이상이면 계산기, 아니면 안내 — 위아래·좌우 분할 모두 16dp 미만일 때만 안내다.
+    // 그린 키가 16dp 이상이면 계산기, 아니면 안내 — 위아래·가로형 모두 16dp 미만일 때만 안내다.
     const widths = [240.0, 300.0, 320.0, 360.0, 600.0];
     const heights = [220.0, 260.0, 300.0, 360.0, 400.0];
     testWidgets('창 크기 격자: 안내는 두 배치 모두 키가 하한 미만일 때만, 계산기의 키는 하한 이상', (
@@ -419,7 +447,7 @@ void main() {
               reason: '$size',
             );
             expect(
-              _splitTouchOf(body),
+              _landscapeTouchOf(body),
               lessThan(CalcTheme.keyTouchHeightUsableMin),
               reason: '$size',
             );
@@ -442,8 +470,11 @@ void main() {
     });
 
     for (final (size, padding) in const [
-      // #141(맨 아래 광고 슬롯 제거)로 본체가 52dp 높아져, 예전 예시 320×240·240×360은 키가 16dp를 넘는다.
-      (Size(320, 200), EdgeInsets.zero), // 좌우 분할 15.6dp
+      (Size(320, 200), EdgeInsets.zero), // 가로형 8.8dp
+      (
+        Size(320, 240),
+        EdgeInsets.zero,
+      ), // 가로형 15.6dp (#142 전 좌우 분할은 16.3dp로 계산기였다)
       (Size(600, 220), EdgeInsets.only(top: 24)),
       (Size(240, 300), EdgeInsets.zero), // 위아래 12.9dp
     ]) {
@@ -600,88 +631,92 @@ void main() {
     });
   });
 
-  group('창 크기를 키울 때 키가 줄지 않는다 (#38 R1)', () {
-    // 두 배치 중 키가 큰 쪽을 고르므로 짧은 변 600dp 미만에서는 높이를 늘려도 키가 줄지 않는다. (짧은 변 600dp
-    // 경계는 아래 #38 R2 그룹이 따로 본다.)
-    for (final width in const [844.0, 640.0, 560.0, 411.0]) {
-      testWidgets('폭 $width: 높이 260 → 599dp', (tester) async {
+  group('창 크기를 키울 때 키가 줄지 않는다 (#38 R1, #142)', () {
+    // 두 배치 중 키(가장 낮은 셀 높이)가 큰 쪽을 고르므로 높이를 늘려도 키가 줄지 않는다. 세로형 ↔ 가로형이 바뀌는
+    // 경계를 지나는 폭을 고른다. 터치 높이가 아니라 셀 높이로 보는 이유는 `KeypadMetrics.minKeyCellHeightOf` —
+    // 터치 높이는 키캡이 48dp를 넘는 순간 각인 띠를 빼며 배치와 무관하게 한 번 줄어든다.
+    for (final width in const [1280.0, 844.0, 640.0, 560.0, 411.0]) {
+      testWidgets('폭 $width: 높이 200 → 1000dp', (tester) async {
         var previous = 0.0;
-        for (var height = 260.0; height < 600; height += 3) {
+        for (var height = 200.0; height <= 1000; height += 5) {
           final size = Size(width, height);
           await _pump(tester, size: size);
           if (_notice.evaluate().isNotEmpty) {
             expect(previous, 0, reason: '$size: 계산기를 그린 뒤 다시 안내가 나왔다');
             continue;
           }
-          final touch = KeypadMetrics.minKeyTouchHeightOf(
-            tester.getSize(_keypad),
-            KeypadArrangement.standard,
-          );
-          expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
-          previous = touch;
+          final cell = _drawnCell(tester);
+          expect(cell, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
+          previous = cell;
         }
         expect(previous, greaterThan(0));
       });
     }
   });
 
-  group('창 폭을 키울 때도 키가 줄지 않고, 짧은 변 600dp 경계는 기록대로다 (#38 R2)', () {
-    for (final height in const [360.0, 598.0]) {
-      testWidgets('높이 $height: 폭 240 → 598dp', (tester) async {
+  group('창 폭을 키울 때도 키가 줄지 않고, 세로형 ↔ 가로형 경계에서 키가 튀지 않는다 (#38 R2, #142)', () {
+    for (final height in const [360.0, 598.0, 800.0]) {
+      testWidgets('높이 $height: 폭 240 → 1400dp', (tester) async {
         var previous = 0.0;
-        for (var width = 240.0; width < 600; width += 4) {
+        for (var width = 240.0; width <= 1400; width += 5) {
           final size = Size(width, height);
           await _pump(tester, size: size);
           if (_notice.evaluate().isNotEmpty) {
             expect(previous, 0, reason: '$size: 계산기를 그린 뒤 다시 안내가 나왔다');
             continue;
           }
-          final touch = KeypadMetrics.minKeyTouchHeightOf(
-            tester.getSize(_keypad),
-            KeypadArrangement.standard,
-          );
-          expect(touch, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
-          previous = touch;
+          final cell = _drawnCell(tester);
+          expect(cell, greaterThanOrEqualTo(previous - 0.01), reason: '$size');
+          previous = cell;
         }
         expect(previous, greaterThan(0));
       });
     }
 
-    testWidgets(
-      '짧은 변 600dp 경계: 세로·정사각형 창은 양쪽 모두 위아래 배치, 가로로 조금 긴 창은 경계에서 좌우 분할로 바뀐다',
-      (tester) async {
-        // CalcTheme "짧은 창" 절에 기록한 경계 — 정사각형 대화면(768×768 등)은 FormFactor 규칙대로 위아래 배치다.
-        // #141(맨 아래 광고 슬롯 제거·폭 상한 해제) 전에는 598×610이 좌우 분할(32.1dp)이었다가 600×610에서 위아래
-        // 배치로 바뀌었다. 이제 598×610도 위아래 배치의 키가 더 커(34.9dp) 경계 양쪽이 같은 배치다.
-        for (final size in const [
-          Size(598, 610),
-          Size(600, 610),
-          Size(768, 768),
-        ]) {
-          await _pump(tester, size: size);
-          expect(isStackedArrangement(tester), isTrue, reason: '$size');
-        }
-        // 가로로 조금 긴 창: 600dp 미만에서는 위아래 배치의 키가 더 커 위아래 배치이고, 600dp부터는 비교 없이 좌우
-        // 분할(FormFactor 대화면 가로 창)이라 키가 약간 작아진다. 가로형 배치(#142)가 이 비교를 다시 정한다.
-        // 키 차이가 가장 큰 폭 601 근처를 본다 (620에서는 약 3%).
-        const below = Size(601, 599.9);
-        const at = Size(601, 600);
-        await _pump(tester, size: below);
-        expect(isStackedArrangement(tester), isTrue);
-        final belowTouch = _lowestDrawnTouch(tester);
+    testWidgets('경계가 짧은 변 600dp에 묶이지 않는다: 키가 큰 쪽이 그대로 이어진다', (tester) async {
+      // #142 전 좌우 분할은 짧은 변 600dp에서 비교를 멈춰 601×599.9(위아래) → 601×600(좌우)에서 키가 약 6% 줄었다.
+      for (final size in const [Size(601, 599.9), Size(601, 600)]) {
+        await _pump(tester, size: size);
+        expect(isStackedArrangement(tester), isTrue, reason: '$size');
+      }
+      // 정사각형·거의 정사각형 창은 세로형의 키가 커 세로형이다 (CalcTheme "가로형 배치" 절 실측).
+      for (final size in const [
+        Size(598, 610),
+        Size(600, 610),
+        Size(768, 768),
+      ]) {
+        await _pump(tester, size: size);
+        expect(isStackedArrangement(tester), isTrue, reason: '$size');
+        final body = _bodyOf(size, EdgeInsets.zero);
+        expect(_landscapeCellOf(body), lessThan(_stackedCellOf(body)));
+      }
+      // 가로로 조금 긴 창은 짧은 변이 600dp 미만이어도, 이상이어도 가로형이다.
+      for (final size in const [Size(700, 599.9), Size(700, 600)]) {
+        await _pump(tester, size: size);
         expect(
-          belowTouch,
-          greaterThan(_splitTouchOf(_bodyOf(below, EdgeInsets.zero))),
+          drawnArrangementOf(tester),
+          DrawnArrangement.landscape,
+          reason: '$size',
         );
-        await _pump(tester, size: at);
-        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-        expect(_lowestDrawnTouch(tester), lessThan(belowTouch));
-        expect(
-          _lowestDrawnTouch(tester),
-          greaterThan(belowTouch * 0.93),
-        ); // 경계의 키 차이는 7% 미만이다 (601: 약 6%)
-      },
-    );
+      }
+    });
+
+    testWidgets('세로형 ↔ 가로형이 바뀌는 폭에서 두 배치의 키 셀 높이가 거의 같다 (연속)', (tester) async {
+      // 높이 600 창에서 폭을 1dp씩 늘려 처음 가로형이 되는 폭을 찾고, 그 직전 폭의 세로형 키와 견준다.
+      double? before;
+      for (var width = 600.0; width <= 800; width += 1) {
+        await _pump(tester, size: Size(width, 600));
+        final cell = _drawnCell(tester);
+        if (drawnArrangementOf(tester) == DrawnArrangement.landscape) {
+          expect(before, isNotNull);
+          expect(cell, greaterThanOrEqualTo(before!));
+          expect(cell - before, lessThan(0.5), reason: '폭 $width');
+          return;
+        }
+        before = cell;
+      }
+      fail('높이 600 창에서 폭 800dp까지 가로형이 되지 않았다');
+    });
   });
 
   // 실제 글꼴로 재는 그룹이라 마지막에 둔다(번들 글꼴은 로드한 뒤 이 파일 안에서 계속 유지된다).
@@ -698,7 +733,12 @@ void main() {
             await _pump(tester, size: size);
             if (_notice.evaluate().isNotEmpty) continue;
             final keypad = tester.getSize(_keypad);
-            final m = KeypadMetrics.compute(keypad, TextScaler.noScaling);
+            final arrangement = _drawnKeypadArrangement(tester);
+            final m = KeypadMetrics.compute(
+              keypad,
+              TextScaler.noScaling,
+              arrangement: arrangement,
+            );
             expect(
               m.mainLabelFontSize,
               greaterThanOrEqualTo(4.8),
@@ -709,11 +749,7 @@ void main() {
               greaterThanOrEqualTo(3.1),
               reason: '$size',
             );
-            if (KeypadMetrics.minKeyTouchHeightOf(
-                  keypad,
-                  KeypadArrangement.standard,
-                ) <
-                17) {
+            if (KeypadMetrics.minKeyTouchHeightOf(keypad, arrangement) < 17) {
               nearThreshold = true;
             }
           }

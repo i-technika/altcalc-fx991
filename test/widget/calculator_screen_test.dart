@@ -287,7 +287,7 @@ void main() {
       expect(isStackedArrangement(tester), isTrue);
     });
 
-    testWidgets('태블릿: 가로로 고정하고 좌우 분할로 띄운다', (tester) async {
+    testWidgets('태블릿: 가로로 고정하고 가로형으로 띄운다 (#142)', (tester) async {
       SharedPreferences.setMockInitialValues({});
       setDevice(tester, const Size(1280, 800));
       final calls = recordPlatformCalls(tester);
@@ -296,7 +296,7 @@ void main() {
       expect(orientationRequests(calls), [
         ['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'],
       ]);
-      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
     });
 
     testWidgets('Android 고대비 텍스트가 켜져 있으면 첫 화면부터 고대비 팔레트다 (#95)', (
@@ -348,9 +348,12 @@ void main() {
       recordPlatformCalls(tester);
       await app.main();
       await tester.pump();
+      // 가로형(#142): 숫자부와 활성 LCD가 왼쪽이다.
+      Rect key(CalcKeyId id) =>
+          tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
+      expect(key(CalcKeyId.num7).right, lessThan(key(CalcKeyId.sin).left));
       final lcd = tester.getRect(find.byType(LcdDisplay));
-      final keypad = tester.getRect(find.byKey(const ValueKey('calc-keypad')));
-      expect(keypad.right, lessThan(lcd.left));
+      expect(lcd.right, lessThanOrEqualTo(key(CalcKeyId.sin).left));
     });
 
     /// 폴더블 판정 조회 채널 응답을 [foldable]로 고정한다.
@@ -496,7 +499,7 @@ void main() {
     });
 
     testWidgets(
-      '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·좌우 분할 없음 (#70)',
+      '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·가로형 없음 (#70)',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         const cover = Size(344, 882);
@@ -543,7 +546,7 @@ void main() {
     );
 
     testWidgets(
-      '시작 시 판정이 놓친 폴더블: 접힘 정보를 한 번 본 뒤에는 접힘 정보가 잠시 사라져도 좌우 분할로 그리지 않는다 (#70)',
+      '시작 시 판정이 놓친 폴더블: 접힘 정보를 한 번 본 뒤에는 접힘 정보가 잠시 사라져도 가로형으로 그리지 않는다 (#70)',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         // 물리 화면은 그대로(크기 변화로는 알 수 없다), 접힘 정보만 오간다
@@ -559,7 +562,7 @@ void main() {
         await app.main();
         await tester.pump();
         // 시작 시점에는 태블릿으로 판정된다(대비책 경로)
-        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
         expect(
           DeviceOrientationLock.instance.appliedPolicy,
           OrientationPolicy.landscape,
@@ -836,7 +839,7 @@ void main() {
         expect(android.keypadHeight, moreOrLessEquals(813.6, epsilon: 0.1));
         expect(android.top, moreOrLessEquals(fullRow));
 
-        // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 좌우 분할로 그린다(#38).
+        // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 가로형으로 그린다(#38, #142).
         final short = CalcScreenLayout.of(const Size(2000, 300));
         expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
         expectSumsToBody(const Size(2000, 300), short);

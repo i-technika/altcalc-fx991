@@ -905,18 +905,26 @@ void main() {
     });
   });
 
-  group('대화면·좌우 분할 배치 (#24)', () {
-    test('분할 배치 상수: 간격은 양수, 키패드 몫은 0.3~0.5 (LCD 쪽 패널이 키패드보다 좁아지지 않는다)', () {
-      expect(CalcTheme.screenSplitGap, greaterThan(0));
-      expect(
-        CalcTheme.screenSplitKeypadMaxWidthRatio,
-        inInclusiveRange(0.3, 0.5),
-      );
-      expect(CalcTheme.screenSplitSettingsGap, greaterThanOrEqualTo(0));
+  group('가로형·접힘선 기준 배치 (#142, #25)', () {
+    test('간격 상수: 나란히 놓은 영역 사이 간격은 양수, 설정 버튼 간격은 0 이상', () {
+      expect(CalcTheme.screenPanelGap, greaterThan(0));
+      expect(CalcTheme.screenSettingsGap, greaterThanOrEqualTo(0));
     });
 
-    test('LCD 최대 폭 비율: 0 초과 1 이하 — 좌우 분할 LCD가 키패드보다 넓어지지 않는다 (#71)', () {
-      // LCD 줄 글자가 키 메인 각인보다 큰지는 split_layout_test에서 번들 글꼴로 실측한다.
+    test(
+      '가로형 기록 영역 문턱: LCD 최소 높이보다 높다 — 가로 폰처럼 위 띠가 LCD 최소 높이에 묶인 창에는 두지 않는다',
+      () {
+        expect(
+          CalcTheme.screenLandscapeHistoryMinHeight,
+          greaterThan(CalcTheme.screenLcdMinHeight),
+        );
+        // 문턱이 최소 높이보다 높아야 기록이 생기고 없어지는 경계에서 활성 LCD가 최대 높이에 걸리지 않는다 — 최대 높이가
+        // 최소 높이로 올려진 좁은 블록은 위 띠가 최소 높이라 문턱에 닿지 않는다(CalcLandscapeLayout, screen_layout_test).
+      },
+    );
+
+    test('LCD 최대 폭 비율: 0 초과 1 이하 — 책 자세 LCD가 키패드보다 넓어지지 않는다 (#71)', () {
+      // LCD 줄 글자가 키 메인 각인보다 큰지는 screen_layout_test에서 번들 글꼴로 실측한다.
       expect(CalcTheme.screenLcdMaxWidthRatio, greaterThan(0));
       expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
     });
@@ -1006,9 +1014,9 @@ void main() {
       expect(CalcTheme.windowTooSmallPadding, greaterThanOrEqualTo(0));
     });
 
-    test('접힘선 간격: 양수이고, 폭 0 접힘선 양쪽 내용 사이가 좌우 분할 간격과 같다 (#25)', () {
+    test('접힘선 간격: 양수이고, 폭 0 접힘선 양쪽 내용 사이가 나란히 놓은 영역 사이 간격과 같다 (#25)', () {
       expect(CalcTheme.screenHingeMargin, greaterThan(0));
-      expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenSplitGap);
+      expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenPanelGap);
     });
 
     test('설정 버튼은 접근성 권장 터치 대상(48dp) 이상이고 아이콘은 본체 배경 대비 4.5:1 이상이다', () {
