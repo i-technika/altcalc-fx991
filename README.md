@@ -265,6 +265,21 @@ flutter run -d chrome -t preview/key_preview_main.dart
   - `-port`는 5554~5682 사이 짝수다. 기기 ID가 `emulator-<포트>`가 된다.
   - `-read-only` 인스턴스는 끄면 바뀐 상태가 남지 않는다.
 
+#### 접근성 확인용 AVD (#185)
+
+에뮬레이터로 되는 접근성 확인(TalkBack·Accessibility Scanner)은 그 마일스톤에서 하고, 실기기가 있어야 하는 확인만 M6로 넘긴다
+([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
+
+- **TalkBack**: 이 PC의 AVD 이미지에는 모두 시스템 앱으로 들어 있다.
+  - `google_apis` API 34(`AltCalc_Phone_API34`): `pm path com.google.android.marvin.talkback` → `/product/app/talkback/talkback.apk` (실측)
+  - `google_apis` API 33과 `google_apis_playstore` API 36.1·37.0: 시스템 이미지(`system.img`) 안에 같은 패키지 이름이 있다
+- **Accessibility Scanner**(`com.google.android.apps.accessibility.auditor`): 어느 이미지에도 미리 들어 있지 않다.
+  Play 스토어로 설치하므로 **Google Play 이미지(`google_apis_playstore`)** 에서 Google 계정으로 로그인해야 한다.
+  `google_apis` 이미지에는 Play 스토어가 없다(API 34 실측: `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이다).
+- 이 PC의 Play 이미지 AVD는 `Medium_Phone_API_36.1`·`Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)이다.
+  `AltCalc_Phone_API33`·`AltCalc_Phone_API34`·`AltCalc_Flip67_API34`·`AltCalc_Fold76_API34`는 `google_apis` 이미지다.
+  - 이미지 종류는 `~/.android/avd/<AVD ID>.ini`의 `path`가 가리키는 폴더(이름이 AVD ID와 다를 수 있다)의 `config.ini`에서 `tag.id`로 본다.
+
 #### 확인 방법 (#68)
 
 - **(실측)**: 같은 버전(1.147, 커밋 `8a14f0cc1b`)의 VS Code zip 배포본을 사용자 설정과 분리해 띄웠다(`--user-data-dir`·`--extensions-dir`).
