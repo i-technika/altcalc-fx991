@@ -554,8 +554,10 @@ abstract final class CalcTheme {
   /// 상태 표시줄 높이 (상태 표시 글자 크기 대비)
   static const double lcdStatusBarHeightRatio = 1.4;
 
-  /// 상태 표시 슬롯 사이 간격 (상태 표시 글자 크기 대비)
-  static const double lcdStatusSlotGapRatio = 0.5;
+  /// 상태 표시 슬롯 사이 최소 간격 (상태 표시 글자 크기 대비).
+  /// 실물 세그먼트는 거의 붙어 있다(D·R·G 사이 0도트, FIX·SCI 사이 2도트 — #58). 그래서 글자가 실물보다 넓어
+  /// 밀어낼 때 남기는 간격만 작게 둔다. 크면 큰 글자 배율에서 실물 위치를 버리고 줄 전체를 축소하게 된다.
+  static const double lcdStatusSlotGapRatio = 0.2;
 
   /// 상태 표시 글꼴(Noto Sans Mono SemiBold)의 대문자 높이 (글자 크기 대비, OS/2 sCapHeight 714/1000).
   /// 직접 그리는 상태 아이콘(#57)이 글자와 같은 높이가 되도록 쓴다(테스트가 글꼴 파일 값과 대조).
