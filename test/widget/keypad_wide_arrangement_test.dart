@@ -147,6 +147,56 @@ void main() {
       },
     );
 
+    test(
+      'minKeyCellHeightOf (#142): 키패드가 커지면 줄지 않고, 함수부 셀 높이와 같으며, 터치 높이 이상이다',
+      () {
+        for (final arrangement in KeypadArrangement.values) {
+          var previous = 0.0;
+          for (var h = 50.0; h <= 1500; h += 10) {
+            final size = Size(h * 1.6, h);
+            final cell = KeypadMetrics.minKeyCellHeightOf(size, arrangement);
+            expect(
+              cell,
+              greaterThanOrEqualTo(previous - 1e-9),
+              reason: '$size',
+            );
+            previous = cell;
+            final m = KeypadMetrics.compute(
+              size,
+              TextScaler.noScaling,
+              arrangement: arrangement,
+            );
+            expect(
+              cell,
+              moreOrLessEquals(m.functionKeyHeight),
+              reason: '$size',
+            );
+            expect(
+              cell,
+              greaterThanOrEqualTo(
+                KeypadMetrics.minKeyTouchHeightOf(size, arrangement) - 1e-9,
+              ),
+              reason: '$size',
+            );
+          }
+        }
+      },
+    );
+
+    test('wideBlockWidthOf (#142): 넓은 배열의 블록 폭과 같다', () {
+      for (final width in const [400.0, 825.0, 1264.0]) {
+        final m = KeypadMetrics.compute(
+          Size(width, 200),
+          TextScaler.noScaling,
+          arrangement: KeypadArrangement.wide,
+        );
+        expect(
+          KeypadMetrics.wideBlockWidthOf(width),
+          moreOrLessEquals(m.blockWidth),
+        );
+      }
+    });
+
     test('preferredArrangementFor: 넓은 배열의 키가 클 때만 넓은 배열이다', () {
       // Fold 가로 반 접힘: 19.9 → 39.9dp
       expect(
@@ -339,15 +389,92 @@ void main() {
       }
     });
 
-    for (final arrangement in KeypadArrangement.values) {
-      testWidgets('스크린리더는 함수부 블록을 다 읽은 뒤 숫자부를 읽는다 (${arrangement.name})', (
+    testWidgets('숫자부 왼쪽(#142): 블록만 좌우로 맞바뀌고 구역 안 키 배열·키 element는 그대로다', (
+      tester,
+    ) async {
+      _wideView(tester);
+      await tester.pumpWidget(
+        _host(
+          const CalcKeypad(arrangement: KeypadArrangement.wide),
+          size: _foldTabletop,
+        ),
+      );
+      Finder key(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
+      final states = {
+        for (final def in allKeys) def.id: tester.state(_button(def.id)),
+      };
+      final right = {
+        for (final def in allKeys) def.id: tester.getRect(key(def.id)),
+      };
+      await tester.pumpWidget(
+        _host(
+          const CalcKeypad(
+            arrangement: KeypadArrangement.wide,
+            numbersOnLeft: true,
+          ),
+          size: _foldTabletop,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final keypad = tester.getRect(find.byKey(const ValueKey('calc-keypad')));
+      for (final def in allKeys) {
+        expect(
+          identical(tester.state(_button(def.id)), states[def.id]),
+          isTrue,
+          reason: def.id.name,
+        );
+        // 블록 단위의 좌우 대칭: 블록 폭만큼 옮겨 가고, 블록 안 위치(왼쪽부터의 거리)는 같다.
+        final before = right[def.id]!;
+        final after = tester.getRect(key(def.id));
+        expect(
+          after.width,
+          moreOrLessEquals(before.width),
+          reason: def.id.name,
+        );
+        expect(
+          after.height,
+          moreOrLessEquals(before.height),
+          reason: def.id.name,
+        );
+        expect(after.top, moreOrLessEquals(before.top), reason: def.id.name);
+        final number = _numberIds.contains(def.id);
+        expect(
+          number ? after.left < before.left : after.left > before.left,
+          isTrue,
+          reason: def.id.name,
+        );
+      }
+      // 숫자부는 키패드 왼쪽 끝에서 시작하고, 함수부는 오른쪽 끝에서 끝난다.
+      expect(
+        tester.getRect(key(CalcKeyId.num7)).left,
+        lessThan(keypad.left + keypad.width * 0.1),
+      );
+      expect(
+        tester.getRect(key(CalcKeyId.num7)).right,
+        lessThan(tester.getRect(key(CalcKeyId.sin)).left),
+      );
+    });
+
+    for (final (arrangement, numbersOnLeft) in const [
+      (KeypadArrangement.standard, false),
+      (KeypadArrangement.wide, false),
+      (
+        KeypadArrangement.wide,
+        true,
+      ), // 왼손잡이 가로형 (#142) — 숫자부가 왼쪽이어도 함수부를 먼저 읽는다
+    ]) {
+      testWidgets('스크린리더는 함수부 블록을 다 읽은 뒤 숫자부를 읽는다 '
+          '(${arrangement.name}${numbersOnLeft ? '·숫자부 왼쪽' : ''})', (
         tester,
       ) async {
         _wideView(tester);
         final handle = tester.ensureSemantics();
         useKoreanLocale(tester);
         await tester.pumpWidget(
-          _host(CalcKeypad(arrangement: arrangement), size: _foldTabletop),
+          _host(
+            CalcKeypad(arrangement: arrangement, numbersOnLeft: numbersOnLeft),
+            size: _foldTabletop,
+          ),
         );
         const strings = KoSemanticStrings();
         final labelToId = {
