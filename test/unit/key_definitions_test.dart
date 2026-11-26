@@ -258,6 +258,56 @@ void main() {
           check(legend, legend.plainText);
         }
       });
+
+      test('입력 칸은 모두 자리별 모양으로 그리는 LegendBox이고, 모양마다 자리가 하나다 (#186)', () {
+        // 글자 ◼·◻ 조각이 남으면 그 칸만 글꼴 정사각형으로 그려진다. 모양은 자리 이름이라(예: log 진수 칸)
+        // 한 모양이 서로 다른 각인에 쓰이지 않는다 — 같은 각인 안에서 같은 자리가 둘인 경우(∫·∑ 위아래 끝,
+        // 대분수 분자·분모, 분수 키 분자·분모)만 겹친다.
+        final owners = <LegendBoxShape, Set<String>>{};
+        final slanted = <String>[];
+        void walk(KeyLegend legend, String owner) {
+          switch (legend) {
+            case LegendText(:final text):
+              expect(text, isNot(matches('[◼◻]')), reason: owner);
+            case LegendBox(:final shape):
+              (owners[shape] ??= {}).add(owner);
+            case LegendRow(:final children):
+              for (final c in children) {
+                walk(c, owner);
+              }
+            case LegendScript(
+              :final base,
+              :final superscript,
+              :final subscript,
+              :final subscriptFollowsSlant,
+            ):
+              if (subscriptFollowsSlant) slanted.add(owner);
+              walk(base, owner);
+              if (superscript != null) walk(superscript, owner);
+              if (subscript != null) walk(subscript, owner);
+            case LegendLimits(:final base, :final over, :final under):
+              walk(base, owner);
+              walk(over, owner);
+              walk(under, owner);
+            case LegendFraction(:final numerator, :final denominator):
+              walk(numerator, owner);
+              walk(denominator, owner);
+            case LegendRadical(:final radicand, :final index):
+              walk(radicand, owner);
+              if (index != null) walk(index, owner);
+          }
+        }
+
+        for (final legend in _allLegends()) {
+          walk(legend, legend.plainText);
+        }
+        expect(owners.keys.toSet(), LegendBoxShape.values.toSet());
+        for (final MapEntry(key: shape, value: legends) in owners.entries) {
+          expect(legends, hasLength(1), reason: '$shape: $legends');
+        }
+        // ∫ 아래 끝 칸만 기울기를 따라 왼쪽으로 당긴다.
+        expect(slanted, ['∫◻◻◼']);
+      });
     });
 
     test('50키의 각인은 실물 대조표와 일치한다', () {

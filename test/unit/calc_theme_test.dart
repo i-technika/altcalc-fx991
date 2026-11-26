@@ -914,6 +914,50 @@ void main() {
       },
     );
 
+    test('칸 모양 상수 (#186): 사진대로 log 진수 칸은 세로로 길고, ∫ 본문·분수 칸은 가로로 길다', () {
+      double ratio(LegendBoxShape s) => CalcTheme.keyLegendBoxAspectRatio(s);
+      for (final shape in LegendBoxShape.values) {
+        expect(ratio(shape), inExclusiveRange(0.4, 2.5), reason: '$shape');
+      }
+      // ∑ 칸은 #169의 ∑ 기준 상수에서 나온다(사진 9×4·8×4px).
+      expect(ratio(LegendBoxShape.sumLimit), moreOrLessEquals(9 / 4));
+      expect(ratio(LegendBoxShape.sumOperand), moreOrLessEquals(8 / 4));
+      // 세로로 긴 칸: log 진수(1:2), log 밑(조금)
+      expect(ratio(LegendBoxShape.logArgument), inInclusiveRange(0.45, 0.55));
+      expect(ratio(LegendBoxShape.logBase), lessThan(1));
+      // 가로로 긴 칸: 사진에서 비가 1.3을 넘는 칸
+      for (final shape in [
+        LegendBoxShape.integralOperand,
+        LegendBoxShape.fractionPart,
+        LegendBoxShape.mixedFractionPart,
+        LegendBoxShape.derivativeOperand,
+      ]) {
+        expect(ratio(shape), greaterThan(1.3), reason: '$shape');
+      }
+      expect(ratio(LegendBoxShape.integralOperand), greaterThan(2));
+      // 나머지는 정사각형에 가깝다(사진 번짐 ±1px 안)
+      for (final shape in [
+        LegendBoxShape.integralLimit,
+        LegendBoxShape.mixedWhole,
+        LegendBoxShape.squareRootRadicand,
+        LegendBoxShape.cubeRootRadicand,
+        LegendBoxShape.rootIndex,
+        LegendBoxShape.rootRadicand,
+        LegendBoxShape.powerExponent,
+        LegendBoxShape.tenPowerExponent,
+        LegendBoxShape.ePowerExponent,
+      ]) {
+        expect(ratio(shape), inInclusiveRange(1, 1.3), reason: '$shape');
+      }
+      // 글꼴 ◼의 좌우 여백 (0.6em 칸 − 잉크 0.482em의 절반 — 실제 글꼴 값은 위젯 테스트가 확인)
+      expect(CalcTheme.keyLegendBoxSideBearing, moreOrLessEquals(0.059));
+      // ∫ 아래 끝 칸 당김: 사진 약 0.27em보다 작고, 칸 폭(약 0.32em)보다 작아 위 칸과 겹쳐 보이지 않는다
+      expect(
+        CalcTheme.keyLegendIntegralSubscriptShift,
+        inExclusiveRange(0.1, 0.27),
+      );
+    });
+
     test(
       '빈 칸 테두리는 최소 두께로 굵어져도 구멍이 칸의 절반 이상 남는다 — 짧은 창 하한 각인 3.2dp부터 (#169 R2)',
       () {

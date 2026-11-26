@@ -536,7 +536,12 @@ abstract final class CalcTheme {
   // 실물·화면 대조 (#169):
   // - 자리: Quick Start Guide 1쪽 제품 사진과 대조했다 — ∑의 끝 칸을 위아래로 쌓고(`LegendLimits`, 칸은 사진 비율의
   //   `LegendBox` — 아래 `keyLegendLimit*`·`keyLegendSum*`), log 밑 칸을 기준선에 두도록 고쳤다. 나머지 자리는 사진과
-  //   같다. 칸 모양(가로세로 비)은 ∑ 말고는 사진과 달라 #186에서 정한다(`key_definitions.dart` "2차원 각인" 절).
+  //   같다.
+  // - 칸 모양(#186): 모든 입력 칸을 자리별 가로세로 비([keyLegendBoxAspectRatio] — 실물 키패드 근접 사진에서 잼,
+  //   `key_definitions.dart` "2차원 각인" 절)의 직사각형으로 그린다. 높이는 글꼴 `◼`·`◻`의 잉크 높이 그대로라
+  //   (∑ 칸·log 진수 칸 제외) 각인 높이 예산이 바뀌지 않고 폭만 바뀐다. 폭으로 키패드 통일 글자 크기를 정하는 라벨은
+  //   메인 `SHIFT`·`ALPHA`(3.0em)와 각인 `Ran#`·`RanInt` 쌍이라 영향이 없다 — 가장 넓어지는 `∫◻◻◼`(약 1.86 → 2.4em)도
+  //   `SHIFT`보다 좁고, `log◼◻`는 좁아진다(테스트로 고정).
   // - 작은 쌓은 분수의 크기: Android 에뮬레이터(1080×2400, 420dpi = 2.625배, 본체 폭 약 396dp)에 실제 앱을 띄워 기기
   //   픽셀로 쟀다. 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려진다. 크기(기기 픽셀, 1px ≈ 0.06mm):
   //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px,
@@ -585,6 +590,43 @@ abstract final class CalcTheme {
   /// 두께로 칠하되, 칸의 짧은 변의 1/4을 넘지 않는다 — 테두리는 칸 안쪽에 칠하므로 구멍이 칸의 절반 이상 남아, 작은
   /// 각인(짧은 창 하한 약 3.2dp)에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2, 테스트로 고정).
   static const double keyLegendBoxStroke = 0.05;
+
+  /// 직접 그리는 칸(`LegendBox`)의 가로/세로 비 — 자리마다 실물 사진에서 잰 원본 픽셀 비 (#186, ∑ 칸은 #169).
+  ///
+  /// 픽셀 값의 출처는 `LegendBoxShape` 각 값의 설명이다. 정사각형에 가까운 칸도 잰 비를 그대로 쓴다(사용자 결정
+  /// "모든 칸 사진 비율로"). 칸의 높이는 `KeyLegendView`가 정한다 — ∑ 칸은 ∑ 잉크 기준([keyLegendSumBoxHeightRatio]),
+  /// log 진수 칸은 `l` 윗끝, 나머지는 글꼴 `◼`의 잉크 높이(그 자리 글자 크기 대비)다.
+  static double keyLegendBoxAspectRatio(LegendBoxShape shape) =>
+      switch (shape) {
+        LegendBoxShape.sumLimit =>
+          keyLegendSumLimitWidthRatio / keyLegendSumBoxHeightRatio, // 9×4
+        LegendBoxShape.sumOperand =>
+          keyLegendSumOperandWidthRatio / keyLegendSumBoxHeightRatio, // 8×4
+        LegendBoxShape.integralLimit => 27 / 26, // 위 14×13·아래 13×13의 평균
+        LegendBoxShape.integralOperand => 25 / 12,
+        LegendBoxShape.derivativeOperand => 14 / 10,
+        LegendBoxShape.fractionPart => 25 / 14,
+        LegendBoxShape.mixedWhole => 14 / 11,
+        LegendBoxShape.mixedFractionPart => 18 / 11,
+        LegendBoxShape.squareRootRadicand => 16 / 15,
+        LegendBoxShape.cubeRootRadicand => 12 / 11,
+        LegendBoxShape.rootIndex => 12 / 10,
+        LegendBoxShape.rootRadicand => 14 / 11,
+        LegendBoxShape.powerExponent => 14 / 14,
+        LegendBoxShape.tenPowerExponent => 11 / 10,
+        LegendBoxShape.ePowerExponent => 10 / 9,
+        LegendBoxShape.logBase => 11 / 13,
+        LegendBoxShape.logArgument => 13 / 26,
+      };
+
+  /// 직접 그리는 칸(∑ 칸 제외)의 좌우 여백 (그 자리 글자 크기 대비) — 글꼴 `◼`·`◻`의 좌우 여백(번들 Noto Sans Mono
+  /// 0.059em, 글자 폭 0.6em − 잉크 폭 0.482em의 절반)과 같게 해, 비가 1인 칸은 글꼴 칸과 같은 자리·폭을 차지한다(#186).
+  static const double keyLegendBoxSideBearing = 0.059;
+
+  /// `∫` 아래 끝 칸을 위 끝 칸보다 왼쪽으로 당기는 길이 (`subscriptFollowsSlant`, #186). 실물 근접 사진에서 아래 칸이
+  /// 위 칸보다 약 8px 왼쪽이다(∫ 높이 33px — 앱 ∫ 잉크 높이 1.131em로 옮기면 약 0.27em). 앱의 끝 칸이 사진보다 작아
+  /// (약 0.32em, 사진 약 0.45em) 같은 길이를 당기면 ∫ 아래쪽 끝 획에 가까워지므로 조금 줄여 둔다.
+  static const double keyLegendIntegralSubscriptShift = 0.22;
 
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
   static const double keyLegendFractionScale = 0.65;

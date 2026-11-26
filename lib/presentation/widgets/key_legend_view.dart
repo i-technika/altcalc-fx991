@@ -518,6 +518,7 @@ class _Builder {
       :final superscript,
       :final subscript,
       :final subscriptOnBaseline,
+      :final subscriptFollowsSlant,
     ) =>
       _script(
         base,
@@ -525,6 +526,7 @@ class _Builder {
         subscript,
         fontSize,
         subscriptOnBaseline: subscriptOnBaseline,
+        subscriptFollowsSlant: subscriptFollowsSlant,
       ),
     LegendBox(:final shape, :final filled) => _box(shape, filled, fontSize),
     LegendLimits(:final base, :final over, :final under) => _limits(
@@ -591,6 +593,7 @@ class _Builder {
     KeyLegend? subscript,
     double fontSize, {
     bool subscriptOnBaseline = false,
+    bool subscriptFollowsSlant = false,
   }) {
     final basePiece = layout(base, fontSize);
     final scriptSize = fontSize * CalcTheme.keyLegendScriptScale;
@@ -622,40 +625,52 @@ class _Builder {
               fontSize * CalcTheme.keyLegendSubscriptDrop,
               sub.inkBottom - basePiece.inkBottom,
             );
-      ops.addAll(sub.shifted(x, -drop));
+      // 기울어진 바탕(∫)은 아래첨자를 바탕 아래쪽 끝을 따라 왼쪽으로 당긴다(#186 사진 대조).
+      final pull = subscriptFollowsSlant
+          ? fontSize * CalcTheme.keyLegendIntegralSubscriptShift
+          : 0.0;
+      ops.addAll(sub.shifted(x - pull, -drop));
       top = math.max(top, sub.inkTop - drop);
       bottom = math.min(bottom, sub.inkBottom - drop);
-      scriptWidth = math.max(scriptWidth, sub.width);
+      scriptWidth = math.max(scriptWidth, sub.width - pull);
     }
     return _Piece(x + scriptWidth, top, bottom, ops);
   }
 
-  /// 직접 그리는 칸 ([LegendBox], #169). 크기는 ∑ 각인 기준 — ∑ 잉크 높이(글자 크기 ×
-  /// [CalcTheme.keyLegendLimitBaseScale] × ∑ 잉크 범위)에 사진 비율([CalcTheme.keyLegendSumBoxHeightRatio] 등)을 곱한다.
-  /// - [LegendBoxShape.sumLimit]: 아래끝이 기준선 — [_limits]가 ∑ 위·아래로 옮긴다.
-  /// - [LegendBoxShape.sumOperand]: 세로 가운데가 분수 축 높이([CalcTheme.keyLegendFractionAxis]) — 쌓은 ∑의 가운데와 같다.
+  /// 직접 그리는 칸 ([LegendBox], #169·#186). [fontSize]는 칸이 놓인 자리의 글자 크기(첨자·분수 안이면 줄인 크기)다.
+  /// 폭은 높이 × 자리별 사진 비([CalcTheme.keyLegendBoxAspectRatio])이고, 높이·자리는 모양에 따라:
+  /// - [LegendBoxShape.sumLimit]·[LegendBoxShape.sumOperand]: ∑ 잉크 높이(글자 크기 × [CalcTheme.keyLegendLimitBaseScale]
+  ///   × ∑ 잉크 범위)에 [CalcTheme.keyLegendSumBoxHeightRatio]를 곱한 높이. 끝 칸은 아래끝이 기준선이고 [_limits]가
+  ///   ∑ 위·아래로 옮기며, 본문 칸은 세로 가운데가 분수 축 높이([CalcTheme.keyLegendFractionAxis] — 쌓은 ∑의 가운데)다.
+  /// - [LegendBoxShape.logArgument]: 기준선에서 `l` 윗끝까지(근접 사진 — 진수 칸이 log 글자 높이만큼 선다).
+  /// - 그 밖: 글꼴 `◼`·`◻`의 잉크 높이로 기준선에 앉는다. 좌우에 글꼴 칸과 같은 여백
+  ///   ([CalcTheme.keyLegendBoxSideBearing])을 두어, 비가 1이면 글꼴 칸과 같은 자리·폭이다.
   /// 빈 칸은 테두리 선(바깥 끝이 칸 크기)으로, 채운 칸은 칸 전체를 칠한다.
   _Piece _box(LegendBoxShape shape, bool filled, double fontSize) {
-    final sigma = KeyLegendView.glyphInk['∑']!;
-    final sigmaInk =
-        (sigma.$2 - sigma.$1) * fontSize * CalcTheme.keyLegendLimitBaseScale;
-    final height = sigmaInk * CalcTheme.keyLegendSumBoxHeightRatio;
-    final width =
-        sigmaInk *
-        switch (shape) {
-          LegendBoxShape.sumLimit => CalcTheme.keyLegendSumLimitWidthRatio,
-          LegendBoxShape.sumOperand => CalcTheme.keyLegendSumOperandWidthRatio,
-        };
-    final bottom = switch (shape) {
-      LegendBoxShape.sumLimit => 0.0,
-      LegendBoxShape.sumOperand =>
-        fontSize * CalcTheme.keyLegendFractionAxis - height / 2,
-    };
-    // 본문 칸은 쌓은 ∑와 끝 칸 간격만큼 띄운다(사진 약 1px).
-    final left = switch (shape) {
-      LegendBoxShape.sumLimit => 0.0,
-      LegendBoxShape.sumOperand => fontSize * CalcTheme.keyLegendLimitGap,
-    };
+    final double height;
+    var bottom = 0.0;
+    var left = 0.0;
+    var right = 0.0;
+    switch (shape) {
+      case LegendBoxShape.sumLimit || LegendBoxShape.sumOperand:
+        final sigma = KeyLegendView.glyphInk['∑']!;
+        height =
+            (sigma.$2 - sigma.$1) *
+            fontSize *
+            CalcTheme.keyLegendLimitBaseScale *
+            CalcTheme.keyLegendSumBoxHeightRatio;
+        if (shape == LegendBoxShape.sumOperand) {
+          bottom = fontSize * CalcTheme.keyLegendFractionAxis - height / 2;
+          // 본문 칸은 쌓은 ∑와 끝 칸 간격만큼 띄운다(사진 약 1px).
+          left = fontSize * CalcTheme.keyLegendLimitGap;
+        }
+      default:
+        final top = shape == LegendBoxShape.logArgument ? 'l' : '◼';
+        height = fontSize * KeyLegendView.glyphInk[top]!.$2;
+        left = fontSize * CalcTheme.keyLegendBoxSideBearing;
+        right = left;
+    }
+    final width = height * CalcTheme.keyLegendBoxAspectRatio(shape);
     // 조각 좌표(위가 +): rect.top이 아래끝, rect.bottom이 위끝이다(`_BarOp`와 같은 규칙).
     final rect = Rect.fromLTRB(left, bottom, left + width, bottom + height);
     final _Op op;
@@ -681,7 +696,9 @@ class _Builder {
         closed: true,
       );
     }
-    return _Piece(rect.right, rect.bottom, rect.top, [(Offset.zero, op)]);
+    return _Piece(rect.right + right, rect.bottom, rect.top, [
+      (Offset.zero, op),
+    ]);
   }
 
   /// 위아래 끝 — 바탕을 [CalcTheme.keyLegendLimitBaseScale]배로 줄이고, 끝 칸을 바탕 잉크 위·아래에
