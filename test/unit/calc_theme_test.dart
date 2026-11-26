@@ -1141,4 +1141,50 @@ void main() {
       });
     });
   });
+
+  group('본체 아래 여백 규칙 (screenBottomMargin, #63)', () {
+    test('실측한 기기들은 화면 여백 그대로다 (#63)', () {
+      // (인셋, 제스처 영역) — CalcTheme.screenBottomMargin 문서의 실측값
+      for (final (padding, gesture) in const [
+        (24.0, 32.0), // API 36 폰, 제스처 내비게이션
+        (48.0, 48.0), // 같은 폰, 3버튼
+        (32.0, 32.0), // API 36 Pixel Fold 내부
+        (0.0, 8.0), // API 33 폰, 제스처 내비게이션(edge-to-edge 아님)
+        (34.0, 0.0), // iOS — 제스처 영역을 전달하지 않는다
+        (0.0, 0.0),
+      ]) {
+        expect(
+          CalcTheme.screenBottomMargin(
+            bottomInset: padding,
+            bottomGestureInset: gesture,
+          ),
+          CalcTheme.screenPadding,
+          reason: '인셋 $padding / 제스처 $gesture',
+        );
+      }
+    });
+
+    test('제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 차이만큼 넓힌다', () {
+      expect(
+        CalcTheme.screenBottomMargin(bottomInset: 0, bottomGestureInset: 32),
+        32,
+      );
+      expect(
+        CalcTheme.screenBottomMargin(bottomInset: 24, bottomGestureInset: 48),
+        24,
+      );
+      // 본체 아래 끝(화면 높이 − 인셋 − 여백)이 언제나 제스처 영역 윗변(화면 높이 − 제스처 영역) 이상 위에 있고,
+      // 여백은 화면 여백보다 작아지지 않는다.
+      for (final padding in [0.0, 8.0, 24.0, 48.0]) {
+        for (final gesture in [0.0, 8.0, 24.0, 32.0, 40.0, 64.0]) {
+          final margin = CalcTheme.screenBottomMargin(
+            bottomInset: padding,
+            bottomGestureInset: gesture,
+          );
+          expect(margin, greaterThanOrEqualTo(CalcTheme.screenPadding));
+          expect(padding + margin, greaterThanOrEqualTo(gesture));
+        }
+      }
+    });
+  });
 }

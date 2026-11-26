@@ -15,7 +15,7 @@ import '../support/screen_arrangement.dart';
 ///
 /// 맨 아래 광고 슬롯이 없어져(#141) 키패드가 본체 아래 끝까지 내려온다. 본체 아래 여백은
 /// [CalcTheme.screenBottomMargin]이라, 어느 배치에서든 키가 아래 제스처 영역에 닿지 않고
-/// 맨 아래 행도 누르는 순간 입력된다.
+/// 맨 아래 행도 누르는 순간 입력된다. 규칙 함수 자체는 `test/unit/calc_theme_test.dart`가 검사한다.
 ///
 /// 값의 출처: "실측"은 [CalcTheme.screenBottomMargin] 문서의 에뮬레이터 실측이고, "인셋 0 / 제스처 32"는
 /// 에뮬레이터로 만들 수 없어 실측하지 못한 가정이다(내비게이션 힌트를 숨긴 제스처 내비게이션 등, 실기기 확인은 #118).
@@ -90,8 +90,9 @@ const _verticalFold = DisplayFeature(
   state: DisplayFeatureState.postureFlat,
 );
 
+/// 가로형 폴더블 내부(841×701)를 세로로 돌려(701×841) 반 접은 가로 접힘선 — 테이블톱 배치
 const _horizontalHalfOpened = DisplayFeature(
-  bounds: Rect.fromLTWH(0, 336.5, 841, 0),
+  bounds: Rect.fromLTWH(0, 420.5, 701, 0),
   type: DisplayFeatureType.fold,
   state: DisplayFeatureState.postureHalfOpened,
 );
@@ -100,52 +101,6 @@ const _horizontalHalfOpened = DisplayFeature(
 const _gestureNav = EdgeInsets.fromLTRB(29.71, 24, 29.71, 32);
 
 void main() {
-  group('아래 여백 규칙 (CalcTheme.screenBottomMargin)', () {
-    test('실측한 기기들은 화면 여백 그대로다 (#63)', () {
-      // (인셋, 제스처 영역) — CalcTheme.screenBottomMargin 문서의 실측값
-      for (final (padding, gesture) in const [
-        (24.0, 32.0), // API 36 폰, 제스처 내비게이션
-        (48.0, 48.0), // 같은 폰, 3버튼
-        (32.0, 32.0), // API 36 Pixel Fold 내부
-        (0.0, 8.0), // API 33 폰, 제스처 내비게이션(edge-to-edge 아님)
-        (34.0, 0.0), // iOS — 제스처 영역을 전달하지 않는다
-        (0.0, 0.0),
-      ]) {
-        expect(
-          CalcTheme.screenBottomMargin(
-            bottomPadding: padding,
-            bottomGestureInset: gesture,
-          ),
-          CalcTheme.screenPadding,
-          reason: '인셋 $padding / 제스처 $gesture',
-        );
-      }
-    });
-
-    test('제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 차이만큼 넓힌다', () {
-      expect(
-        CalcTheme.screenBottomMargin(bottomPadding: 0, bottomGestureInset: 32),
-        32,
-      );
-      expect(
-        CalcTheme.screenBottomMargin(bottomPadding: 24, bottomGestureInset: 48),
-        24,
-      );
-      // 본체 아래 끝(화면 높이 − 인셋 − 여백)이 언제나 제스처 영역 윗변(화면 높이 − 제스처 영역) 이상 위에 있고,
-      // 여백은 화면 여백보다 작아지지 않는다.
-      for (final padding in [0.0, 8.0, 24.0, 48.0]) {
-        for (final gesture in [0.0, 8.0, 24.0, 32.0, 40.0, 64.0]) {
-          final margin = CalcTheme.screenBottomMargin(
-            bottomPadding: padding,
-            bottomGestureInset: gesture,
-          );
-          expect(margin, greaterThanOrEqualTo(CalcTheme.screenPadding));
-          expect(padding + margin, greaterThanOrEqualTo(gesture));
-        }
-      }
-    });
-  });
-
   group('맨 아래 키 행이 아래 제스처 영역 밖에 있다', () {
     // (이름, 창, 인셋, 제스처 영역, 화면 특징, 기대 배치, 기대 키패드 아래 끝)
     // 기대값은 창 높이 − 아래 인셋 − 아래 여백을 손으로 적은 숫자다(규칙 함수로 계산하지 않는다).
@@ -216,13 +171,13 @@ void main() {
             701 - 0 - 32,
           ),
           (
-            'Pixel Fold 내부 테이블톱 (인셋 0 / 제스처 32, 미실측 가정)',
-            Size(841, 701),
+            '가로 접힘선 테이블톱 701×841 (인셋 0 / 제스처 32, 미실측 가정)',
+            Size(701, 841),
             EdgeInsets.only(top: 28.19),
             EdgeInsets.fromLTRB(29.71, 28.19, 29.71, 32),
             [_horizontalHalfOpened],
             DrawnArrangement.tabletop,
-            701 - 0 - 32,
+            841 - 0 - 32,
           ),
         ];
 
@@ -246,8 +201,11 @@ void main() {
       });
     }
 
-    // 3버튼(폰)·작업 표시줄(태블릿 가로 좌우 분할): 제스처 영역이 시스템 바 안이라 배치가 바뀌지 않는다.
-    for (final size in const [Size(411.43, 914.29), Size(1280, 800)]) {
+    // 3버튼(폰, 위아래 배치)·작업 표시줄(태블릿 가로, 좌우 분할): 제스처 영역이 시스템 바 안이라 배치가 바뀌지 않는다.
+    for (final (size, arrangement) in const [
+      (Size(411.43, 914.29), DrawnArrangement.stacked),
+      (Size(1280, 800), DrawnArrangement.sideBySide),
+    ]) {
       testWidgets('인셋이 제스처 영역과 같으면 제스처 영역이 없을 때와 배치가 같다 — $size', (
         tester,
       ) async {
@@ -265,6 +223,7 @@ void main() {
           padding: padding,
           gesture: const EdgeInsets.only(top: 24, bottom: 48),
         );
+        expect(drawnArrangementOf(tester), arrangement);
         expect(_keypad(tester), without);
         expect(
           _keypad(tester).bottom,
@@ -296,7 +255,7 @@ void main() {
       );
     });
 
-    testWidgets('키보드가 떠도(padding 아래 0) 키보드와 무관한 인셋으로 판단해 여백을 넓히지 않는다', (
+    testWidgets('키보드가 떠도(padding 아래 0) 실측 24/32 폰의 여백은 화면 여백 그대로다', (
       tester,
     ) async {
       // 실측 24/32 폰에 키보드 100dp — padding.bottom은 0이 되고 viewPadding.bottom은 24로 남는다.
@@ -316,34 +275,82 @@ void main() {
         moreOrLessEquals(914.29 - 100 - 8, epsilon: 0.01),
       );
     });
+
+    testWidgets('키보드가 제스처 영역보다 높으면 인셋 0 / 제스처 32 폰도 여백을 넓히지 않는다', (
+      tester,
+    ) async {
+      // 키보드(100dp)가 본체 아래를 가려 키패드는 이미 제스처 영역(아래 32dp)보다 위에 있다.
+      const size = Size(411.43, 914.29);
+      await _pumpScreen(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24),
+        viewInsets: const EdgeInsets.only(bottom: 100),
+        gesture: _gestureNav,
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        _keypad(tester).bottom,
+        moreOrLessEquals(914.29 - 100 - 8, epsilon: 0.01),
+      );
+    });
   });
 
   group('맨 아래 행은 누르는 순간 입력된다', () {
     // 인셋 0 / 제스처 32(미실측 가정) — 예전 규칙(아래 여백 8dp 고정)이면 맨 아래 행 키캡의 아래 일부가
     // 제스처 영역에 들어가 손을 뗄 때 입력됐다. 실측 24/32는 본체 아래 끝이 영역 윗변과 맞닿는 경우다.
-    const cases = <(String, Size, EdgeInsets, List<DisplayFeature>)>[
-      ('위아래 배치, 인셋 0', Size(411.43, 914.29), EdgeInsets.only(top: 24), []),
-      (
-        '위아래 배치, 실측 24/32',
-        Size(411.43, 914.29),
-        EdgeInsets.only(top: 24, bottom: 24),
-        [],
-      ),
-      ('좌우 분할, 인셋 0', Size(1280, 800), EdgeInsets.only(top: 24), []),
-      (
-        '테이블톱, 인셋 0',
-        Size(841, 701),
-        EdgeInsets.only(top: 28.19),
-        [_horizontalHalfOpened],
-      ),
-    ];
-    for (final (name, size, padding, features) in cases) {
+    const cases =
+        <(String, Size, EdgeInsets, EdgeInsets, List<DisplayFeature>)>[
+          (
+            '위아래 배치, 인셋 0',
+            Size(411.43, 914.29),
+            EdgeInsets.only(top: 24),
+            _gestureNav,
+            [],
+          ),
+          (
+            '위아래 배치, 실측 24/32',
+            Size(411.43, 914.29),
+            EdgeInsets.only(top: 24, bottom: 24),
+            _gestureNav,
+            [],
+          ),
+          (
+            '위아래 배치, 실측 API 33 0/8',
+            Size(411.43, 890.29),
+            EdgeInsets.only(top: 48.76),
+            EdgeInsets.fromLTRB(29.71, 60.95, 29.71, 8),
+            [],
+          ),
+          (
+            '좌우 분할, 인셋 0',
+            Size(1280, 800),
+            EdgeInsets.only(top: 24),
+            _gestureNav,
+            [],
+          ),
+          (
+            '세로 접힘선 좌우 배치, 인셋 0',
+            Size(841, 701),
+            EdgeInsets.only(top: 28.19),
+            EdgeInsets.fromLTRB(29.71, 28.19, 29.71, 32),
+            [_verticalFold],
+          ),
+          (
+            '테이블톱, 인셋 0',
+            Size(701, 841),
+            EdgeInsets.only(top: 28.19),
+            EdgeInsets.fromLTRB(29.71, 28.19, 29.71, 32),
+            [_horizontalHalfOpened],
+          ),
+        ];
+    for (final (name, size, padding, gesture, features) in cases) {
       testWidgets(name, (tester) async {
         final container = await _pumpScreen(
           tester,
           size: size,
           padding: padding,
-          gesture: _gestureNav,
+          gesture: gesture,
           displayFeatures: features,
         );
         final lowest = _lowestKeycapBottom(tester);
@@ -356,8 +363,8 @@ void main() {
           // 좌우 뒤로가기 영역은 따로 보류된다(#50) — 그 밖의 가로 위치에서, 키캡 아래 끝 바로 위를 누른다.
           // 키캡 폭이 뒤로가기 영역(29.71dp)보다 넓어 모든 키에 그런 위치가 있다.
           final x = r.center.dx.clamp(
-            _gestureNav.left + 1,
-            size.width - _gestureNav.right - 1,
+            gesture.left + 1,
+            size.width - gesture.right - 1,
           );
           expect(x, inInclusiveRange(r.left, r.right), reason: '$id');
           final touch = await tester.startGesture(Offset(x, r.bottom - 1));

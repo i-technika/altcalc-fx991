@@ -600,9 +600,10 @@ class CalcTopStripLayout {
 ///   큰 쪽으로 그린다(세로 폰은 위아래 배치가 늘 크다). 어느 배치든 그린 키가
 ///   [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을 키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
 /// - 맨 아래 광고 슬롯은 없다 (#141, 사용자 결정 — 광고 없는 배치가 기준). 본체는 아래 시스템 인셋 위 아래
-///   여백([CalcTheme.screenBottomMargin] — 보통 화면 여백, 아래 제스처 영역이 더 깊으면 그만큼, #63)까지 쓴다.
+///   여백([CalcTheme.screenBottomMargin] — 보통 화면 여백, 아래 제스처 영역이 인셋보다 화면 여백 넘게 깊으면 그 초과분만큼,
+///   #63)까지 쓴다.
 ///   그래서 맨 아래 키 행은 홈 제스처 영역 밖에 있어 누르는 순간 입력된다(양 끝 키 중 좌우 뒤로가기 영역에 든
-///   부분은 아래 좌우 여백 항목대로 손을 뗄 때 입력된다). 무과금 사용자의 광고는 이 배치에서
+///   부분은 다음의 좌우 여백 항목대로 손을 뗄 때 입력된다). 무과금 사용자의 광고는 이 배치에서
 ///   LCD 쪽 한 영역을 줄여 넣는다(화면 맨 위·기록 영역, #18).
 ///
 /// 위아래 배치 구성 (위 → 아래):
@@ -662,9 +663,13 @@ class CalculatorScreen extends ConsumerWidget {
       window,
       features,
     )?.bounds.shift(-bodyOrigin);
-    // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 더 깊으면 본체가 그 영역에 닿지 않게 넓힌다 (#63).
+    // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 본체 아래를 가리는 것(시스템 인셋·키보드)보다 화면 여백
+    // 넘게 깊으면 그 초과분만큼 넓혀 본체가 영역에 닿지 않게 한다 (#63).
     final bottomMargin = CalcTheme.screenBottomMargin(
-      bottomPadding: MediaQuery.viewPaddingOf(context).bottom,
+      bottomInset: math.max(
+        MediaQuery.viewPaddingOf(context).bottom,
+        MediaQuery.viewInsetsOf(context).bottom,
+      ),
       bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
     );
     return Scaffold(
