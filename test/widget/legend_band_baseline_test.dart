@@ -24,6 +24,11 @@ import '../support/bundled_fonts.dart';
 /// 그린 기준선은 `Text`면 글자 상자(`RenderParagraph`) 위끝 + 보고한 기준선을 정수로 반올림한 거리(SkParagraph가 글자를 그리는
 /// 곳 — [InkCenteredLabel] 설명), 2차원 각인이면 보고한 기준선이다. 감싸는 [DrawnBaselineLabel]이 보고하는 값은 쓰지 않고 글자
 /// 상자에서 따로 잰다. 이 반올림 모델 자체는 "그린 픽셀" 그룹이 픽셀로 확인한다.
+///
+/// 한 줄 상자 아래로 잉크가 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)은 이웃과 기준선을 함께 쓰지 않는다 (#260). 실물은 그 각인의 잉크
+/// 아래끝(분모 `dx`·아래 끝 칸)을 이웃 각인 기준선에 두고 같은 키의 짝 각인 `:`도 함께 올려 인쇄한다([CalcTheme] "2차원 각인 배치"
+/// 절의 사진 실측). 앱은 띠 위쪽 여유만큼 그렇게 올린다([KeyLegendView.bandBottomInsets]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
+/// (360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다.
 
 /// 각인 띠에 그린 각인 하나 (전역 좌표, dp)
 typedef _BandLegend = ({
@@ -46,6 +51,13 @@ typedef _BandLegend = ({
   /// 배율 반영 글자 크기 (dp)
   double fontSize,
   TextStyle style,
+
+  /// 2차원 각인이면 그 각인 (글자 각인은 `null`)
+  KeyLegend? legend,
+
+  /// 키 버튼의 각인 띠 위끝·아래끝 (전역 좌표, dp)
+  double bandTop,
+  double bandBottom,
 });
 
 /// [box]의 전역 상자와 `FittedBox` 등이 줄인 비율
@@ -95,6 +107,10 @@ Finder _button(CalcKeyId id) =>
 /// [id] 키 버튼의 각인 띠(SHIFT·ALPHA, 원형 버튼 위 인쇄)에 그린 각인들. 메인 각인([InkCenteredLabel] 안)은 뺀다.
 List<_BandLegend> _bandLegends(WidgetTester tester, CalcKeyId id) {
   final found = <_BandLegend>[];
+  final button = tester.widget<CalcKeyButton>(_button(id));
+  final cell = tester.getRect(_button(id));
+  final bandTop = cell.top;
+  final bandBottom = cell.top + button.legendBandHeightFor(cell.height);
   void visit(RenderObject node) {
     if (node is RenderInkCenteredLabel) return;
     if (node is RenderParagraph) {
@@ -118,6 +134,9 @@ List<_BandLegend> _bandLegends(WidgetTester tester, CalcKeyId id) {
         scale: scale,
         fontSize: node.textScaler.scale(style.fontSize!),
         style: style,
+        legend: null,
+        bandTop: bandTop,
+        bandBottom: bandBottom,
       ));
       return;
     }
@@ -133,6 +152,9 @@ List<_BandLegend> _bandLegends(WidgetTester tester, CalcKeyId id) {
         scale: scale,
         fontSize: node.textScaler.scale(node.style.fontSize!),
         style: node.style,
+        legend: node.legend,
+        bandTop: bandTop,
+        bandBottom: bandBottom,
       ));
       return;
     }
@@ -158,17 +180,29 @@ Future<void> _pumpApp(
   await tester.pumpAndSettle();
 }
 
-/// 지금 화면의 모든 키 각인 띠를 검사하고 띠 각인 글자 크기를 돌려준다.
+/// 넘치는 각인을 띠에서 올린 결과 (#260)
+enum _Raise {
+  /// 잉크 아래끝이 띠 기준선(이웃 각인 기준선)에 있다 — 실물과 같은 자리
+  full,
+
+  /// 띠 위쪽 여유가 모자라 각인 위끝이 띠 위끝에 닿을 때까지만 올렸다
+  clamped,
+}
+
+/// 지금 화면의 모든 키 각인 띠를 검사하고, 띠 각인 글자 크기와 넘치는 각인(한 줄 표기)별 올린 결과를 돌려준다.
 ///
 /// 같은 행(키 버튼 위끝이 같은 키들 — 측정한 각인 위치가 아니라 키 배치로 묶는다)의 띠마다:
-/// 1. 모든 각인의 자리 아래끝이 같다(아래 정렬).
-/// 2. 각인 글자는 자리가 보고한 기준선에 그려진다(`Text` 반올림 보정 — [DrawnBaselineLabel]).
-/// 3. 한 줄 아래로 넘치지 않는 각인은 기준선 아래 깊이가 테마 없는 줄 상자의 깊이와 같다 — 그래서 그린 기준선이 모두 같다
-///    (줄 간격 배분 고정 — [keyLabelStrut]).
-/// 4. 한 줄 아래로 넘칠 수 있는 각인은 [_overflowingLegends]뿐이고, 넘친 잉크 깊이(잉크 범위 표로 잰 em 치수 × 글자 크기)에서 줄 상자
-///    깊이를 뺀 만큼만 올라간다([KeyLegendView] "크기·기준선" 절의 의도한 배치 — 실물 대조는 #260).
+/// 1. 각인 글자는 자리가 보고한 기준선에 그려진다(`Text` 반올림 보정 — [DrawnBaselineLabel]).
+/// 2. 한 줄 아래로 넘치는 각인([KeyLegendView.overhangsLine])이 없는 키의 각인은 모두 자리 아래끝이 띠 아래끝이고(아래 정렬),
+///    기준선 아래 깊이가 테마 없는 줄 상자의 깊이와 같다 — 그래서 그린 기준선이 모두 띠 기준선으로 같다(줄 간격 배분 고정 —
+///    [keyLabelStrut]).
+/// 3. 넘치는 각인은 [_overflowingLegends]뿐이다. 그 각인이 있는 키는(#260):
+///    - 키의 모든 각인(짝 각인 `:` 포함)이 그린 기준선을 함께 쓰고, 띠 기준선보다 위다.
+///    - 넘치는 각인의 잉크 아래끝(잉크 범위 표로 잰 em 치수 × 글자 크기)이 띠 기준선에 있거나([_Raise.full]), 띠 위쪽 여유가
+///      모자라 각인 위끝이 띠 위끝에 닿아 있고 잉크 아래끝은 띠 기준선과 띠 아래끝 사이에 있다([_Raise.clamped]).
+///    - 어느 각인도 띠 밖으로 나가지 않는다.
 /// 띠 각인은 줄어들지 않는다 — 줄이면 아래 정렬에서 기준선이 올라가므로, 줄어드는 창이 생기면 기대값을 정해 이 검사를 넓힌다.
-double _expectBandBaselines(WidgetTester tester) {
+(double, Map<String, _Raise>) _expectBandBaselines(WidgetTester tester) {
   // 행 — 키 버튼 위끝을 정렬해 앞 키와 0.01dp 안이면 같은 행으로 묶는다(반올림 구간 경계에서 갈리지 않게)
   final tops = [
     for (final button in tester.widgetList<CalcKeyButton>(
@@ -176,69 +210,116 @@ double _expectBandBaselines(WidgetTester tester) {
     ))
       (button.keyDef.id, tester.getRect(_button(button.keyDef.id)).top),
   ]..sort((a, b) => a.$2.compareTo(b.$2));
-  final rows = <List<_BandLegend>>[];
+  // 행마다 키별 각인 묶음
+  final rows = <List<List<_BandLegend>>>[];
   double? lastTop;
   for (final (id, top) in tops) {
     if (lastTop == null || top - lastTop > 0.01) rows.add([]);
     lastTop = top;
-    rows.last.addAll(_bandLegends(tester, id));
+    final legends = _bandLegends(tester, id);
+    if (legends.isNotEmpty) rows.last.add(legends);
   }
-  final all = rows.expand((r) => r).toList();
+  final all = rows.expand((r) => r).expand((k) => k).toList();
   expect(all, isNotEmpty);
   final fontSize = all.first.fontSize;
 
+  bool overhangs(_BandLegend l) =>
+      l.legend != null && KeyLegendView.overhangsLine(l.legend!, l.style);
+
   var mixedRows = 0;
-  final overflowing = <String>{};
+  final raised = <String, _Raise>{};
   for (final row in rows.where((r) => r.isNotEmpty)) {
-    final bottom = row.first.slot.bottom;
-    final baseline = bottom - _lineDescent(row.first.style, fontSize);
-    for (final l in row) {
-      final what = '${l.id} "${l.text}"';
-      expect(
-        l.fontSize,
-        moreOrLessEquals(fontSize, epsilon: 1e-6),
-        reason: what,
-      );
-      expect(
-        l.scale,
-        moreOrLessEquals(1.0, epsilon: 1e-6),
-        reason: '$what 줄어듦',
-      );
-      expect(
-        l.slot.bottom,
-        moreOrLessEquals(bottom, epsilon: 0.01),
-        reason: '$what 아래끝',
-      );
-      expect(
-        l.drawnBaseline,
-        moreOrLessEquals(l.slot.top + l.slotBaseline, epsilon: 0.01),
-        reason: '$what 글자가 보고한 기준선에 그려지는지',
-      );
-      if (l.drawnBaseline >= baseline - 0.01) {
+    final bottom = row.first.first.bandBottom;
+    final baseline = bottom - _lineDescent(row.first.first.style, fontSize);
+    final level = <_BandLegend>[];
+    for (final key in row) {
+      for (final l in key) {
+        final what = '${l.id} "${l.text}"';
+        expect(
+          l.fontSize,
+          moreOrLessEquals(fontSize, epsilon: 1e-6),
+          reason: what,
+        );
+        expect(
+          l.scale,
+          moreOrLessEquals(1.0, epsilon: 1e-6),
+          reason: '$what 줄어듦',
+        );
+        expect(
+          l.bandBottom,
+          moreOrLessEquals(bottom, epsilon: 0.01),
+          reason: '$what 띠 아래끝',
+        );
         expect(
           l.drawnBaseline,
-          moreOrLessEquals(baseline, epsilon: 0.01),
-          reason: '$what 띠 기준선',
+          moreOrLessEquals(l.slot.top + l.slotBaseline, epsilon: 0.01),
+          reason: '$what 글자가 보고한 기준선에 그려지는지',
         );
+        expect(
+          l.slot.top,
+          greaterThanOrEqualTo(l.bandTop - 0.01),
+          reason: '$what 띠 위로 나감',
+        );
+        expect(
+          l.slot.bottom,
+          lessThanOrEqualTo(bottom + 0.01),
+          reason: '$what 띠 아래로 나감',
+        );
+      }
+      final over = key.where(overhangs).toList();
+      if (over.isEmpty) {
+        for (final l in key) {
+          final what = '${l.id} "${l.text}"';
+          expect(
+            l.slot.bottom,
+            moreOrLessEquals(bottom, epsilon: 0.01),
+            reason: '$what 아래끝',
+          );
+          expect(
+            l.drawnBaseline,
+            moreOrLessEquals(baseline, epsilon: 0.01),
+            reason: '$what 띠 기준선',
+          );
+        }
+        level.addAll(key);
+        continue;
+      }
+      // 넘치는 각인이 있는 키 (#260)
+      final o = over.single;
+      final what = '${o.id} "${o.text}"';
+      expect(
+        _overflowingLegends,
+        contains(o.text),
+        reason: '$what 넘치지 않아야 할 각인',
+      );
+      for (final l in key) {
+        expect(
+          l.drawnBaseline,
+          moreOrLessEquals(o.drawnBaseline, epsilon: 0.01),
+          reason: '$what 와 짝 각인 "${l.text}"의 기준선',
+        );
+      }
+      expect(o.drawnBaseline, lessThan(baseline - 0.01), reason: '$what 올림');
+      final inkBottom =
+          o.drawnBaseline -
+          KeyLegendView.emMetrics(o.legend!, o.style).inkBottom * fontSize;
+      if ((inkBottom - baseline).abs() <= 0.01) {
+        raised[o.text] = _Raise.full;
       } else {
-        overflowing.add(l.text);
-        final legend = _overflowingLegends[l.text];
+        raised[o.text] = _Raise.clamped;
         expect(
-          legend,
-          isNotNull,
-          reason: '$what 넘치지 않아야 할 각인이 ${baseline - l.drawnBaseline}dp 올라갔다',
+          o.slot.top,
+          moreOrLessEquals(o.bandTop, epsilon: 0.01),
+          reason:
+              '$what 잉크 아래끝이 띠 기준선보다 ${inkBottom - baseline}dp 아래인데 띠 위에 여유가 남았다',
         );
-        // 넘친 잉크 깊이 − 줄 상자 깊이 (em 치수의 넘침 0.08em 미만 + 줄 상자 높이 반올림 몫 — [KeyLegendView] "크기·기준선" 절)
-        final inkDepth =
-            -KeyLegendView.emMetrics(legend!, l.style).inkBottom * fontSize;
         expect(
-          baseline - l.drawnBaseline,
-          moreOrLessEquals(inkDepth - (bottom - baseline), epsilon: 0.01),
-          reason: '$what 넘친 만큼 올라간 거리',
+          inkBottom,
+          inInclusiveRange(baseline, bottom + 0.01),
+          reason: '$what 잉크 아래끝',
         );
       }
     }
-    final level = row.where((l) => l.drawnBaseline >= baseline - 0.01);
     if (level.any((l) => l.plain) && level.any((l) => !l.plain)) mixedRows++;
   }
 
@@ -257,12 +338,12 @@ double _expectBandBaselines(WidgetTester tester) {
     );
   }
   expect(mixedRows, greaterThan(0));
-  // 가장 깊이 넘치는 `d/dx◼`는 늘 넘친다. `∑◻◻◼`는 넘친 깊이가 얕아 줄 상자 높이의 반올림에 따라 넘치지 않는 창도 있다.
-  expect(overflowing, contains('d/dx◼'));
-  return fontSize;
+  // 넘치는 각인은 줄 상자 높이 반올림과 상관없이(em 치수 판정) 어느 창에서나 둘 다 올린다.
+  expect(raised.keys, unorderedEquals(_overflowingLegends.keys));
+  return (fontSize, raised);
 }
 
-/// 각인 띠에서 한 줄 상자 아래로 잉크가 넘칠 수 있는 각인 (한 줄 표기 → 각인) — 분모·아래 끝 칸이 기준선 아래로 내려간다.
+/// 각인 띠에서 한 줄 상자 아래로 잉크가 넘치는 각인 (한 줄 표기 → 각인) — 분모·아래 끝 칸이 기준선 아래로 내려간다.
 /// 그 밖의 각인이 넘치면 띠 기준선 검사가 실패한다.
 final Map<String, KeyLegend> _overflowingLegends = {
   for (final id in CalcKeyId.values)
@@ -329,21 +410,29 @@ void main() {
   setUpAll(loadBundledFonts);
 
   group('실제 앱의 각인 띠 기준선', () {
-    // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지) — 세로 폰·태블릿과 가로형(넓은 배열 — 가로 폰은 옮긴 거리가 반올림 경계 0.5dp에
-    // 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2)
-    for (final (name, size, scales) in const [
-      ('폰 360×800', Size(360, 800), true),
-      ('태블릿 800×1280', Size(800, 1280), true),
-      ('가로 폰 800×360', Size(800, 360), false),
-      ('가로 태블릿 1280×800', Size(1280, 800), false),
+    // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지, 넘치는 각인을 올린 결과) — 세로 폰·태블릿과 가로형(넓은 배열 — 가로 폰은 옮긴
+    // 거리가 반올림 경계 0.5dp에 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2).
+    // 넘치는 각인(#260): 폰 크기 창은 각인 글자가 띠 높이의 0.8배(배율 1.3이면 `d/dx◼`가 띠를 거의 채운다)라 띠 위 여유(약
+    // 0.13em·0.05em)가 올릴 거리(한 줄 상자 깊이 약 0.215em)보다 작아 여유만큼만 올린다. 태블릿은 각인 글자가 상한(11dp)에
+    // 묶여 띠에 여유가 많아 잉크 아래끝이 띠 기준선에 온다.
+    for (final (name, size, scales, raise) in const [
+      ('폰 360×800', Size(360, 800), true, _Raise.clamped),
+      ('태블릿 800×1280', Size(800, 1280), true, _Raise.full),
+      ('가로 폰 800×360', Size(800, 360), false, _Raise.clamped),
+      ('가로 태블릿 1280×800', Size(1280, 800), false, _Raise.full),
     ]) {
-      testWidgets('$name 글자 배율 1.0·1.3: 같은 행 각인 띠의 글자 각인과 2차원 각인은 그린 기준선이 같다', (
-        tester,
-      ) async {
+      testWidgets('$name 글자 배율 1.0·1.3: 같은 행 각인 띠의 글자 각인과 2차원 각인은 그린 기준선이 같고, '
+          '한 줄 아래로 넘치는 각인은 짝 각인과 함께 올라가 있다', (tester) async {
         await _pumpApp(tester, size, 1.0);
-        final base = _expectBandBaselines(tester);
+        final (base, baseRaised) = _expectBandBaselines(tester);
+        expect(baseRaised.values.toSet(), {
+          raise,
+        }, reason: '배율 1.0 $baseRaised');
         await _pumpApp(tester, size, 1.3);
-        final scaled = _expectBandBaselines(tester);
+        final (scaled, scaledRaised) = _expectBandBaselines(tester);
+        expect(scaledRaised.values.toSet(), {
+          raise,
+        }, reason: '배율 1.3 $scaledRaised');
         // 세로 창은 글자 배율이 띠 글자 크기를 실제로 바꿔야 배율 검사가 뜻이 있다
         if (scales) expect(scaled, greaterThan(base + 0.1));
       });
@@ -422,6 +511,91 @@ void main() {
         );
       }
     }
+  });
+
+  group('그린 픽셀 — 넘치는 각인 (#260)', () {
+    // 태블릿(띠에 여유가 있는 창): 실물처럼 `d/dx◼`의 분모 `dx` 아래끝과 `∑◻◻◼`의 아래 끝 칸 아래끝이 같은 행 `SOLVE`의 잉크
+    // 아래끝(기준선)과 같은 높이에 그려지고, 짝 각인 `:`은 그만큼 올라가 있다.
+    testWidgets(
+      '800×1280: d/dx◼의 dx·∑ 아래 끝 칸의 잉크 아래끝이 같은 행 SOLVE의 기준선에 있고, 짝 각인 :도 올라가 있다',
+      (tester) async {
+        const pixelRatio = 2.0;
+        await _pumpApp(
+          tester,
+          const Size(800, 1280),
+          1.0,
+          pixelRatio: pixelRatio,
+        );
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find
+              .descendant(
+                of: find.byType(AltCalcApp),
+                matching: find.byType(RepaintBoundary),
+              )
+              .first,
+        );
+        final origin = boundary.localToGlobal(Offset.zero);
+        final image = (await tester.runAsync(
+          () => boundary.toImage(pixelRatio: pixelRatio),
+        ))!;
+        final data = (await tester.runAsync(
+          () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+        ))!;
+        final palette = CalcPalette.of(tester.element(_button(CalcKeyId.calc)));
+        _BandLegend only(CalcKeyId id, bool Function(_BandLegend l) test) =>
+            _bandLegends(tester, id).singleWhere(test);
+        final solve = only(CalcKeyId.calc, (l) => l.text == 'SOLVE');
+        final derivative = only(CalcKeyId.integral, (l) => l.text == 'd/dx◼');
+        final colon = only(CalcKeyId.integral, (l) => l.text == ':');
+        final sum = only(CalcKeyId.variableX, (l) => l.text.startsWith('∑'));
+        // 넘치는 각인은 잉크가 자리 아래끝까지 내려가므로, 바탕색을 재는 맨 아래 픽셀 행이 잉크 아래에 오게 자리를 띠
+        // 아래끝까지 넓힌다(올린 뒤라 그 사이는 비어 있다).
+        double bottom(_BandLegend l, Color ink) =>
+            _pixelInkBottom(
+              data,
+              image.width,
+              pixelRatio,
+              Rect.fromLTRB(
+                l.slot.left,
+                l.slot.top,
+                l.slot.right,
+                l.bandBottom,
+              ).shift(-origin),
+              ink,
+            ) +
+            origin.dy;
+        final solveBottom = bottom(solve, palette.shiftLabel);
+        final derivativeBottom = bottom(derivative, palette.shiftLabel);
+        final sumBottom = bottom(sum, palette.shiftLabel);
+        final colonBottom = bottom(colon, palette.alphaLabel);
+        image.dispose();
+        // S·O의 둥근 아래끝(−0.008em)·d의 둥근 아래끝과 픽셀 보간 오차를 합쳐 0.25dp — #260 전에는 dx 아래끝이 SOLVE 기준선보다
+        // 한 줄 상자 깊이(11dp 글자에서 약 2.4dp)만큼 아래였다
+        expect(
+          derivativeBottom,
+          moreOrLessEquals(solveBottom, epsilon: 0.25),
+          reason: 'dx $derivativeBottom · SOLVE $solveBottom',
+        );
+        expect(
+          sumBottom,
+          moreOrLessEquals(solveBottom, epsilon: 0.25),
+          reason: '∑ 아래 끝 칸 $sumBottom · SOLVE $solveBottom',
+        );
+        // `:`의 아래 점 아래끝(= 올린 기준선)은 d/dx◼의 잉크 깊이(0.278em ≈ 3.1dp)만큼 SOLVE 기준선보다 위다
+        final inkDepth =
+            -KeyLegendView.emMetrics(
+              derivative.legend!,
+              derivative.style,
+            ).inkBottom *
+            derivative.fontSize;
+        expect(inkDepth, greaterThan(2.5));
+        expect(
+          solveBottom - colonBottom,
+          moreOrLessEquals(inkDepth, epsilon: 0.3),
+          reason: ': $colonBottom · SOLVE $solveBottom',
+        );
+      },
+    );
   });
 
   group('DrawnBaselineLabel', () {

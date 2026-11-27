@@ -164,7 +164,8 @@ void main() {
     test('2차원 각인은 한 줄보다 크게 높아지지 않는다 — 가장 높아도 1.15em, 한 줄 아래로는 0.08em 미만', () {
       // 각인 띠는 글자 크기의 1/0.8 = 1.25em 높이다(keyLegendFontRatio). 첨자·분수가 한 줄을 크게 넘으면
       // 배율을 키웠을 때 통일 글자 크기 계산이 모든 각인을 그만큼 줄이므로, 넘는 폭을 상한으로 묶어 둔다.
-      // 한 줄 아래로 넘는 만큼 기준선이 올라가므로(각인 띠는 아래 정렬) 이웃 각인과의 기준선 차이도 묶는다.
+      // 한 줄 아래로 넘는 만큼도 띠 높이를 쓰므로 함께 묶는다(넘치는 각인은 각인 띠에서 남는 높이만큼 더 올린다 — #260,
+      // 아래 "각인 띠에서 넘치는 각인 올리기" 그룹).
       for (final (k, legend, style) in _twoDimensional()) {
         final em = KeyLegendView.emMetrics(legend, style);
         final line = KeyLegendView.emMetrics(const LegendText('x'), style);
@@ -174,6 +175,139 @@ void main() {
         final below =
             (em.size.height - em.baseline) - (line.size.height - line.baseline);
         expect(below, inInclusiveRange(-1e-9, 0.08), reason: reason);
+      }
+    });
+
+    test('한 줄 상자 아래로 잉크가 넘치는 SHIFT·ALPHA 각인은 d/dx◼와 ∑◻◻◼뿐이다 (#260)', () {
+      // 넘치는 각인은 각인 띠에서 이웃과 기준선을 함께 쓰지 않고 올린다(KeyLegendView.bandBottomInsets). 사진과 대조한 각인은 이
+      // 둘뿐이므로, 각인 배치 상수를 바꿔 다른 각인(대분수·a b/c⇔d/c — 사진에서도 분모가 기준선 아래로 조금 내려간다)이 넘치게
+      // 되면 그 각인의 실물 자리를 확인해야 한다.
+      final overhanging = {
+        for (final k in allKeys)
+          for (final (legend, style) in [
+            (k.shiftLegend, CalcTheme.keyShiftLabelStyle),
+            (k.alphaLegend, CalcTheme.keyAlphaLabelStyle),
+          ])
+            if (legend != null && KeyLegendView.overhangsLine(legend, style))
+              legend.plainText,
+      };
+      expect(overhanging, {'d/dx◼', '∑◻◻◼'});
+      // 글자만 있는 각인은 내림 글자가 있어도 한 줄 상자만 쓴다
+      expect(
+        KeyLegendView.overhangsLine(
+          const LegendText('y'),
+          CalcTheme.keyAlphaLabelStyle,
+        ),
+        isFalse,
+      );
+    });
+
+    group('각인 띠에서 넘치는 각인 올리기 (bandBottomInsets, #260)', () {
+      // 11dp: 태블릿의 각인 글자 크기(상한), 9.35dp: 360×800 폰 글자 배율 1.3 (줄 상자 높이가 반올림되는 크기)
+      for (final fontSize in [11.0, 9.35, 7.41]) {
+        final shiftStyle = CalcTheme.keyShiftLabelStyle.copyWith(
+          fontSize: fontSize,
+        );
+        final alphaStyle = CalcTheme.keyAlphaLabelStyle.copyWith(
+          fontSize: fontSize,
+        );
+        final derivative = keyDefOf(CalcKeyId.integral).shiftLegend!;
+        final colon = keyDefOf(CalcKeyId.integral).alphaLegend!;
+        // 그린 크기의 한 줄 상자 (기준선 위 높이, 아래 깊이)
+        (double, double) line() {
+          final painter = TextPainter(
+            text: TextSpan(text: ' ', style: shiftStyle),
+            strutStyle: keyLabelStrut(shiftStyle),
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+          )..layout();
+          final ascent = painter.computeDistanceToActualBaseline(
+            TextBaseline.alphabetic,
+          );
+          final result = (ascent, painter.height - ascent);
+          painter.dispose();
+          return result;
+        }
+
+        test('글자 크기 $fontSize: 넘치는 각인이 없는 키는 띄우지 않는다', () {
+          final sin = keyDefOf(CalcKeyId.sin);
+          expect(
+            KeyLegendView.bandBottomInsets([
+              (sin.shiftLegend!, shiftStyle),
+              (sin.alphaLegend!, alphaStyle),
+            ], fontSize * 3),
+            [0.0, 0.0],
+          );
+          expect(
+            KeyLegendView.bandBottomInsets(const [], fontSize * 3),
+            isEmpty,
+          );
+        });
+
+        test('글자 크기 $fontSize: 띠에 여유가 있으면 넘치는 각인의 잉크 아래끝이 띠 기준선에 오고, '
+            '짝 각인은 기준선이 같아지게 띄운다', () {
+          expect(colon.plainText, ':');
+          final (_, descent) = line();
+          final inkDepth =
+              -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
+              fontSize;
+          expect(inkDepth, greaterThan(descent));
+          final insets = KeyLegendView.bandBottomInsets([
+            (derivative, shiftStyle),
+            (colon, alphaStyle),
+          ], fontSize * 3);
+          // 넘치는 각인: 상자 아래끝 = 잉크 아래끝 → 띠 아래끝에서 한 줄 상자 깊이만큼 위(띠 기준선)
+          expect(insets[0], moreOrLessEquals(descent, epsilon: 1e-9));
+          // 짝 각인(글자): 상자 아래끝에서 기준선까지 한 줄 상자 깊이 → 기준선이 띠 기준선보다 잉크 깊이만큼 위
+          expect(insets[1], moreOrLessEquals(inkDepth, epsilon: 1e-9));
+          // 혼자 있는 넘치는 각인(∑)도 같다
+          final sum = keyDefOf(CalcKeyId.variableX).shiftLegend!;
+          expect(
+            KeyLegendView.bandBottomInsets([(sum, shiftStyle)], fontSize * 3),
+            [moreOrLessEquals(descent, epsilon: 1e-9)],
+          );
+        });
+
+        test(
+          '글자 크기 $fontSize: 띠 위쪽 여유가 모자라면 여유만큼만 올리고, 각인이 띠를 채우면 아래 정렬 그대로다',
+          () {
+            final (ascent, descent) = line();
+            final height = KeyLegendView.layoutSize(
+              derivative,
+              shiftStyle,
+            ).height;
+            final inkDepth =
+                -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
+                fontSize;
+            // 아래 정렬만으로 기준선이 올라가는 거리 (넘친 깊이)
+            final natural = inkDepth - descent;
+            for (final room in [0.0, descent * 0.4]) {
+              final insets = KeyLegendView.bandBottomInsets([
+                (derivative, shiftStyle),
+                (colon, alphaStyle),
+              ], height + room);
+              expect(insets[0], moreOrLessEquals(room, epsilon: 1e-9));
+              // 짝 각인은 넘치는 각인의 기준선(띠 기준선 + 넘친 깊이 + 올린 거리)에 맞춘다
+              expect(
+                insets[1],
+                moreOrLessEquals(natural + room, epsilon: 1e-9),
+              );
+              // 짝 각인의 위끝도 띠 안이다
+              expect(
+                insets[1] + ascent + descent,
+                lessThanOrEqualTo(height + room + 1e-9),
+              );
+            }
+            // 띠가 각인보다 낮아도(FittedBox가 줄이는 경우) 음수가 되지 않는다
+            expect(
+              KeyLegendView.bandBottomInsets([
+                (derivative, shiftStyle),
+                (colon, alphaStyle),
+              ], height - 2),
+              everyElement(greaterThanOrEqualTo(0.0)),
+            );
+          },
+        );
       }
     });
 

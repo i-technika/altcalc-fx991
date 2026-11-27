@@ -23,11 +23,12 @@ import '../../core/theme/calc_theme.dart';
 ///   앱 테마의 글자 스타일(Material 3의 `even` — 받으면 약 0.888em)과 상관없다(#252). 단 `Text`는 그 기준선을 정수 dp로 반올림한
 ///   곳에 글자를 그린다 — 키 버튼은 메인 각인을 그린 기준선으로 맞추고(#230 `InkCenteredLabel`), 각인 띠의 `Text`는 보고한 기준선에
 ///   그리게 옮긴다(#252 `DrawnBaselineLabel`).
-/// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
-///   각인 띠에서는 기준선이 그만큼 이웃 각인보다 올라간다 — 넘치는 양은 가장 많은 `d/dx◼`도 0.08em 미만이고(em 치수, 테스트로
-///   고정), 그린 크기에서는 줄 상자 높이를 정수 dp로 반올림해 줄 상자 깊이가 줄어드는 만큼(최대 0.5dp) 더 올라간다(#252 실측:
-///   360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp, `test/widget/legend_band_baseline_test.dart`). 실물도 이렇게
-///   올라가는지는 #260에서 대조한다.
+/// - 기준선은 한 줄 상자의 기준선이다. 분수·위아래 끝이 아래로 더 나가면 그만큼 상자가 아래로 커진다 — 넘치는 양은 가장 많은
+///   `d/dx◼`도 0.08em 미만이다(em 치수, 테스트로 고정. 그린 크기에서는 줄 상자 높이를 정수 dp로 반올림해 줄 상자 깊이가 줄어드는
+///   만큼, 최대 0.5dp 더 넘친다).
+/// - 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼` — [overhangsLine])은 아래 정렬한 각인 띠에서 실물처럼 더 올린다(#260): 잉크
+///   아래끝(분모·아래 끝 칸)이 이웃 각인의 기준선에 오도록, 같은 키의 짝 각인(`:`)과 함께 올린다. 띠 위쪽 여유가 모자라면 여유만큼만
+///   올린다 — 아래 여백은 [bandBottomInsets]가 구하고 사진 근거는 [CalcTheme] "2차원 각인 배치" 절에 있다.
 ///
 /// [KeypadMetrics] 같은 측정 쪽은 그리지 않고 [emSize]로 크기를 잰다.
 class KeyLegendView extends LeafRenderObjectWidget {
@@ -152,6 +153,79 @@ class KeyLegendView extends LeafRenderObjectWidget {
       tallest = math.max(tallest, height);
     }
     return tallest;
+  }
+
+  /// [legend]의 잉크(분모·아래 끝 칸)가 한 줄 상자 아래로 넘치는지 — em 치수로 판정한다 (#260).
+  ///
+  /// 그린 크기의 줄 상자는 높이를 정수 dp로 반올림해 깊이가 글자 크기마다 조금 다르다. 그 값으로 판정하면 넘친 깊이가 얕은
+  /// `∑◻◻◼`가 창에 따라 넘치기도 넘치지 않기도 해, 각인 띠에서 올리는 규칙([bandBottomInsets])이 창마다 달라진다. 그래서 큰 글자
+  /// 크기로 잰 비율([emMetrics])로 판정한다 — 글자만 있는 각인([LegendText])은 한 줄 상자만 쓰므로 넘치지 않는다.
+  static bool overhangsLine(KeyLegend legend, TextStyle style) {
+    final m = emMetrics(legend, style);
+    if (m.plain) return false;
+    final line = emMetrics(const LegendText(' '), style);
+    return -m.inkBottom > line.size.height - line.baseline + 1e-9;
+  }
+
+  /// 아래 정렬한 각인 띠(높이 [bandHeight] dp)에서 같은 키의 각인들 [legends]를 띠 아래끝에서 띄울 거리 (dp, 같은 순서) (#260).
+  ///
+  /// [legends]는 각인과 그 스타일이고, 스타일의 `fontSize`는 **배율을 반영한** 글자 크기다(그리는 크기 — 줄 상자 높이 반올림을
+  /// 그 크기로 잰다).
+  ///
+  /// 실물은 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`)을 이웃 각인과 같은 기준선에 두지 않고, 잉크 아래끝(분모 `dx`·아래 끝 칸)이
+  /// 이웃 각인(`SOLVE`·`QR`)의 기준선에 오도록 올려 인쇄한다 — 같은 키의 짝 각인 `:`도 함께 올라가 있다([CalcTheme] "2차원 각인
+  /// 배치" 절의 사진 실측). 그래서:
+  /// - 넘치는 각인([overhangsLine])이 없으면 모두 0이다 — 띠 아래끝에 정렬해 기준선을 함께 쓴다(#252).
+  /// - 넘치는 각인이 있으면 그 잉크 아래끝이 띠 기준선(띠 아래끝에서 한 줄 상자 깊이만큼 위 — 이웃 키 각인의 기준선)에 오게
+  ///   올린다. 각인 위끝이 띠 위끝을 넘지 않는 만큼만 올린다 — 띠 높이는 그대로이고 각인 글자 크기도 줄지 않는다(`KeypadMetrics`의
+  ///   높이 기준은 각인이 띠에 들어가는지만 본다). 여유는 글자 크기가 띠 높이 비율([CalcTheme.keyLegendFontRatio])이나 상한
+  ///   ([CalcTheme.keyLegendMaxFontSize])으로 정해질 때 생기고, 글자 배율로 `d/dx◼`가 띠를 꽉 채우면 없다.
+  /// - 같은 키의 다른 각인은 넘치는 각인과 기준선이 같아지게 함께 올린다(자기 위끝이 띠 위끝을 넘지 않는 만큼).
+  ///
+  /// `FittedBox`가 각인을 줄이는 창에서는 줄이기 전 크기로 구한 값이라 기준선이 조금 어긋날 수 있다(각인이 줄어드는 창은 없다 —
+  /// `test/widget/legend_band_baseline_test.dart`).
+  static List<double> bandBottomInsets(
+    List<(KeyLegend, TextStyle)> legends,
+    double bandHeight,
+  ) {
+    final overhanging = [
+      for (final (legend, style) in legends) overhangsLine(legend, style),
+    ];
+    if (!overhanging.contains(true)) return List.filled(legends.length, 0.0);
+    // (상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리, 잉크 아래끝 깊이)
+    final boxes = [
+      for (final (legend, style) in legends) _bandBox(legend, style),
+    ];
+    double room(double height) => math.max(0.0, bandHeight - height);
+    // 띠 기준선에서 이 키 각인들의 기준선까지 올릴 거리 — 넘치는 각인의 잉크 깊이(여유가 모자라면 여유까지)
+    var raise = 0.0;
+    for (final (i, (height, natural, inkDepth)) in boxes.indexed) {
+      if (!overhanging[i]) continue;
+      raise = math.max(
+        raise,
+        natural + math.min(math.max(0.0, inkDepth - natural), room(height)),
+      );
+    }
+    return [
+      for (final (height, natural, _) in boxes)
+        (raise - natural).clamp(0.0, room(height)),
+    ];
+  }
+
+  /// [bandBottomInsets]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
+  /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
+  static (double, double, double) _bandBox(KeyLegend legend, TextStyle style) {
+    final fontSize = style.fontSize ?? 14;
+    final (lineAscent, lineDescent) = _Builder(style).lineMetrics(fontSize);
+    final m = emMetrics(legend, style);
+    if (m.plain) return (lineAscent + lineDescent, 0.0, 0.0);
+    final inkDepth = -m.inkBottom * fontSize;
+    final depth = math.max(lineDescent, inkDepth);
+    return (
+      math.max(lineAscent, m.inkTop * fontSize) + depth,
+      depth - lineDescent,
+      inkDepth,
+    );
   }
 
   /// [emSize]와 함께, 위에서 기준선까지 거리와 잉크 범위(em)를 잰다.

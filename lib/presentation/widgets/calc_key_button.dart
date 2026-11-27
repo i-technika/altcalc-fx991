@@ -650,6 +650,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                         shiftLegend: widget.keyDef.shiftLegend,
                         alphaLegend: widget.keyDef.alphaLegend,
                         width: faceWidth,
+                        height: legendHeight,
                         fontSize: legendFontSize,
                         maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
                         textScaler: textScaler,
@@ -893,10 +894,17 @@ class _ShapeClipper extends CustomClipper<Path> {
 /// 같은 비율로 줄어든다. 단, 짧은 쪽이 한 줄 표기로 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름
 /// `A`~`F`, `y` 등)면 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
 /// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
+///
+/// 세로로는 띠 아래끝에 정렬해 모든 키의 각인이 기준선을 함께 쓴다(#252). 한 줄 아래로 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)이 있는
+/// 키만 실물처럼 그 잉크 아래끝이 띠 기준선에 오게, 짝 각인(`:`)과 함께 띠 높이 [height] 안에서 올린다
+/// ([KeyLegendView.bandBottomInsets], #260).
 class _LegendRow extends StatelessWidget {
   final KeyLegend? shiftLegend;
   final KeyLegend? alphaLegend;
   final double width;
+
+  /// 각인 띠 높이 (dp) — 넘치는 각인을 올릴 수 있는 여유를 잰다
+  final double height;
   final double fontSize;
   final double maxGap;
   final TextScaler textScaler;
@@ -905,6 +913,7 @@ class _LegendRow extends StatelessWidget {
     required this.shiftLegend,
     required this.alphaLegend,
     required this.width,
+    required this.height,
     required this.fontSize,
     required this.maxGap,
     required this.textScaler,
@@ -933,6 +942,20 @@ class _LegendRow extends StatelessWidget {
         alphaRunes < shiftRunes &&
         alphaRunes <= CalcTheme.keyLegendPriorityMaxRunes;
     final shortMaxWidth = math.max(0.0, (width - gap) / 2);
+    // 한 줄 아래로 넘치는 각인이 있는 키는 각인들을 띠 아래끝에서 띄운다 (#260) — 그리는 글자 크기(배율 반영)로 잰다
+    final scaledFontSize = textScaler.scale(fontSize);
+    final insets = KeyLegendView.bandBottomInsets([
+      if (shift != null)
+        (
+          shift,
+          CalcTheme.keyShiftLabelStyle.copyWith(fontSize: scaledFontSize),
+        ),
+      if (alpha != null)
+        (
+          alpha,
+          CalcTheme.keyAlphaLabelStyle.copyWith(fontSize: scaledFontSize),
+        ),
+    ], height);
 
     Widget legend(
       KeyLegend legend,
@@ -940,9 +963,10 @@ class _LegendRow extends StatelessWidget {
       Alignment alignment, {
       required bool short,
       required bool priorityLayout,
+      required double bottomInset,
     }) {
       final sized = style.copyWith(fontSize: fontSize);
-      final label = FittedBox(
+      final Widget fitted = FittedBox(
         fit: BoxFit.scaleDown,
         alignment: alignment,
         child: _legendLabel(
@@ -952,6 +976,12 @@ class _LegendRow extends StatelessWidget {
           snapToDrawnBaseline: true,
         ),
       );
+      final label = bottomInset > 0
+          ? Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: fitted,
+            )
+          : fitted;
       if (short) {
         return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: shortMaxWidth),
@@ -980,6 +1010,7 @@ class _LegendRow extends StatelessWidget {
             Alignment.bottomLeft,
             short: shiftIsShort,
             priorityLayout: priority,
+            bottomInset: insets.first,
           ),
         if (both) SizedBox(width: gap),
         if (alpha != null)
@@ -989,6 +1020,7 @@ class _LegendRow extends StatelessWidget {
             Alignment.bottomRight,
             short: alphaIsShort,
             priorityLayout: priority,
+            bottomInset: insets.last,
           ),
       ],
     );
