@@ -818,7 +818,7 @@ void _expectTouchTargets(
     final cell = tester.getSize(find.byWidget(b));
     final touch = b.extendHitAreaToLegend
         ? cell.height
-        : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+        : cell.height - b.legendBandHeightFor(cell.height);
     if (touch < lowest) lowest = touch;
     expect(touch, greaterThanOrEqualTo(floor), reason: b.keyDef.id.name);
   }

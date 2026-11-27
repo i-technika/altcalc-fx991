@@ -920,6 +920,14 @@ void main() {
       }
       expect(CalcTheme.keyLegendHeightRatio, lessThan(0.5));
       expect(CalcTheme.keyCapHorizontalPaddingRatio, lessThan(0.25));
+      // 키캡 크기 (#220): 실물 키캡 가로/세로 비(함수 약 1.85, 숫자 약 1.49)와 키캡 폭 하한(실물 키 사이보다 넓히지 않는다)
+      expect(CalcTheme.keyCapMaxAspectRatio, closeTo(1.85, 0.05));
+      expect(CalcTheme.keyCapNumberMaxAspectRatio, closeTo(1.49, 0.05));
+      expect(
+        CalcTheme.keyCapNumberMaxAspectRatio,
+        lessThan(CalcTheme.keyCapMaxAspectRatio),
+      );
+      expect(CalcTheme.keyCapMinWidthRatio, inInclusiveRange(0.8, 1.0));
       expect(CalcTheme.keyBorderWidth, greaterThan(0));
       expect(CalcTheme.keyPressedOffset, greaterThanOrEqualTo(0));
       expect(CalcTheme.keyMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));

@@ -139,15 +139,20 @@ class KeypadMetrics {
   ///
   /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
   /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
+  /// 메인 라벨은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220 — 빠뜨리면 셀 너비)에, 각인은 셀 너비에 맞춘다.
   @visibleForTesting
   static ({double main, double numberMain, double legend}) debugWidthLimits({
     required double functionKeyWidth,
     required double numberKeyWidth,
+    double? functionCapWidth,
+    double? numberCapWidth,
     bool Function(CalcKeyDef def)? where,
   }) {
     final limits = _LabelLimits.measure(
       functionKeyWidth: functionKeyWidth,
       numberKeyWidth: numberKeyWidth,
+      functionCapWidth: functionCapWidth ?? functionKeyWidth,
+      numberCapWidth: numberCapWidth ?? numberKeyWidth,
       where: where,
     );
     return (
@@ -171,6 +176,47 @@ class KeypadMetrics {
 
   /// 숫자부 키의 셀 높이 (간격 제외, dp)
   double get numberKeyHeight => math.max(0.0, numberRowHeight - verticalGap);
+
+  /// 각인 띠 높이 (dp) — 함수부 셀 높이 × [CalcTheme.keyLegendHeightRatio]. 숫자부 키도 같은 높이다(#220 — 실물처럼
+  /// 숫자부 셀이 높은 몫은 키캡이 받는다, [CalcTheme] "키캡 크기 (#220)" 절).
+  double get legendBandHeight => _legendBandHeightOf(functionKeyHeight);
+
+  /// 상단 조작부·함수부 키캡 높이 (각인 띠 아래, 눌림 여유 포함, dp)
+  double get functionCapHeight =>
+      math.max(0.0, functionKeyHeight - legendBandHeight);
+
+  /// 숫자부 키캡 높이 (각인 띠 아래, 눌림 여유 포함, dp)
+  double get numberCapHeight =>
+      math.max(0.0, numberKeyHeight - legendBandHeight);
+
+  /// 상단 조작부·함수부의 그린 키캡 폭 (dp, #220) — [CalcKeyButton]이 같은 규칙([keyCapFaceWidth])으로 그린다
+  double get functionCapWidth => _capFaceWidthOf(
+    functionKeyWidth,
+    functionCapHeight,
+    CalcTheme.keyCapMaxAspectRatio,
+  );
+
+  /// 숫자부의 그린 키캡 폭 (dp, #220)
+  double get numberCapWidth => _capFaceWidthOf(
+    numberKeyWidth,
+    numberCapHeight,
+    CalcTheme.keyCapNumberMaxAspectRatio,
+  );
+
+  /// 함수부 셀 높이 [functionCell]의 각인 띠 높이 (dp)
+  static double _legendBandHeightOf(double functionCell) =>
+      math.max(0.0, functionCell) * CalcTheme.keyLegendHeightRatio;
+
+  /// 키캡 높이 [capHeight](눌림 여유 포함)의 그린 키캡 폭 — [CalcKeyButton]처럼 눌림 여유를 뺀 높이로 비를 잰다
+  static double _capFaceWidthOf(
+    double cellWidth,
+    double capHeight,
+    double maxAspectRatio,
+  ) => keyCapFaceWidth(
+    cellWidth: cellWidth,
+    faceHeight: capHeight - math.min(CalcTheme.keyPressedOffset, capHeight),
+    maxAspectRatio: maxAspectRatio,
+  );
 
   /// [available] 영역 안에서 [arrangement] 배열이 세로로 길어지지 않는 가장 큰 키패드 크기.
   ///
@@ -272,9 +318,11 @@ class KeypadMetrics {
   ) {
     final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
         _geometryOf(fitSize(available, arrangement), arrangement);
+    // 각인 띠는 모든 구역이 함수부 띠 높이다 (#220).
+    final band = _legendBandHeightOf(functionRowHeight - verticalGap);
     double touchOf(double rowHeight) {
       final cell = math.max(0.0, rowHeight - verticalGap);
-      final cap = cell * (1 - CalcTheme.keyLegendHeightRatio);
+      final cap = math.max(0.0, cell - band);
       return cap < CalcTheme.keyMinTouchTargetHeight ? cell : cap;
     }
 
@@ -355,23 +403,37 @@ class KeypadMetrics {
       arrangement,
     );
 
-    // CalcKeyButton 내부 치수와 같은 방식으로 각인 띠·키캡 높이를 구한다.
-    double capHeightOf(double rowHeight) =>
-        math.max(0.0, rowHeight - verticalGap) *
-        (1 - CalcTheme.keyLegendHeightRatio);
-
+    // CalcKeyButton 내부 치수와 같은 방식으로 각인 띠·키캡 높이를 구한다. 각인 띠는 모든 구역이 함수부 띠 높이다(#220).
     final cellHeight = math.max(0.0, functionRowHeight - verticalGap);
-    final legendHeight = cellHeight * CalcTheme.keyLegendHeightRatio;
+    final legendHeight = _legendBandHeightOf(cellHeight);
+    double capHeightOf(double rowHeight) =>
+        math.max(0.0, rowHeight - verticalGap - legendHeight);
     final capHeight = capHeightOf(functionRowHeight);
     final scaler = textScaler.clamp(
       maxScaleFactor: CalcTheme.keyMaxTextScaleFactor,
     );
+    final functionKeyWidth = math.max(
+      0.0,
+      blockWidth / functionColumns - horizontalGap,
+    );
+    final numberKeyWidth = math.max(
+      0.0,
+      blockWidth / numberColumns - horizontalGap,
+    );
     final limits = _LabelLimits.measure(
-      functionKeyWidth: math.max(
-        0.0,
-        blockWidth / functionColumns - horizontalGap,
+      functionKeyWidth: functionKeyWidth,
+      numberKeyWidth: numberKeyWidth,
+      // 메인 라벨은 그린 키캡 폭에 맞춘다 (#220 — 키캡이 셀보다 좁을 수 있다)
+      functionCapWidth: _capFaceWidthOf(
+        functionKeyWidth,
+        capHeight,
+        CalcTheme.keyCapMaxAspectRatio,
       ),
-      numberKeyWidth: math.max(0.0, blockWidth / numberColumns - horizontalGap),
+      numberCapWidth: _capFaceWidthOf(
+        numberKeyWidth,
+        capHeightOf(numberRowHeight),
+        CalcTheme.keyCapNumberMaxAspectRatio,
+      ),
     );
 
     // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141). 가장 높은 각인(분수 등 2차원 각인, #155)까지
@@ -504,9 +566,12 @@ class _LabelLimits {
       KeyLegendView.emSize(legend, style).width;
 
   /// [where]가 있으면 그 키만 잰다(테스트용 — [KeypadMetrics.debugWidthLimits]).
+  /// 메인 라벨은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220)에, 각인은 셀 너비에 맞춘다(각인 띠는 셀 폭이다).
   static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,
+    required double functionCapWidth,
+    required double numberCapWidth,
     bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
@@ -549,9 +614,10 @@ class _LabelLimits {
         continue;
       }
 
-      // 메인 라벨: 키캡 좌우 여백과 테두리를 뺀 폭 (CalcKeyButton의 키캡 배치와 같다)
+      // 메인 라벨: 그린 키캡 폭에서 좌우 여백과 테두리를 뺀 폭 (CalcKeyButton의 키캡 배치와 같다)
+      final capWidth = number ? numberCapWidth : functionCapWidth;
       final capInner =
-          width * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
+          capWidth * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
           2 * CalcTheme.keyBorderWidth;
       final mainLimit =
           math.max(0.0, capInner) /
@@ -805,6 +871,11 @@ class _KeypadBody extends StatelessWidget {
       mainLabelFontSize: _numberKeyIds.contains(def.id)
           ? metrics.numberMainLabelFontSize
           : metrics.mainLabelFontSize,
+      // 모든 구역이 함수부와 같은 각인 띠, 구역별 키캡 가로/세로 비 상한 (#220)
+      legendHeight: metrics.legendBandHeight,
+      keycapMaxAspectRatio: _numberKeyIds.contains(def.id)
+          ? CalcTheme.keyCapNumberMaxAspectRatio
+          : CalcTheme.keyCapMaxAspectRatio,
       focusable: def.id == settingsKey,
     );
   }

@@ -551,16 +551,15 @@ void main() {
         const Size(480, 640),
         TextScaler.noScaling,
       );
-      double capHeightOf(double cellHeight) =>
-          cellHeight * (1 - CalcTheme.keyLegendHeightRatio);
+      // 각인 띠는 모든 구역이 함수부 띠 높이다 (#220)
       expect(huge.size, const Size(480, 640));
       expect(
-        capHeightOf(huge.numberKeyHeight),
+        huge.numberCapHeight,
         greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
       );
       expect(huge.extendNumberHitArea, isFalse);
       expect(
-        capHeightOf(huge.functionKeyHeight),
+        huge.functionCapHeight,
         lessThan(CalcTheme.keyMinTouchTargetHeight),
       );
       expect(huge.extendFunctionHitArea, isTrue);
@@ -571,7 +570,7 @@ void main() {
         TextScaler.noScaling,
       );
       expect(
-        capHeightOf(tablet.functionKeyHeight),
+        tablet.functionCapHeight,
         greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
       );
       expect(tablet.extendFunctionHitArea, isFalse);

@@ -1254,7 +1254,7 @@ void main() {
             final cell = tester.getSize(find.byWidget(b));
             final touch = b.extendHitAreaToLegend
                 ? cell.height
-                : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+                : cell.height - b.legendBandHeightFor(cell.height);
             expect(
               touch,
               greaterThanOrEqualTo(minTouchHeight),
