@@ -201,24 +201,19 @@ void main() {
       }
     });
 
-    test(
-      'SHIFT 대기 중에 누르면 MENU·AC가 실행되지 않고 SHIFT 대기만 풀린다 — 마지막 입력·입력 수는 그대로다',
-      () {
-        final typed = _press([CalcKeyId.num7]);
-        for (final id in removed) {
-          final from = CalcState(
-            modifier: KeyModifier.shift,
-            lastInput: typed.lastInput,
-            inputCount: typed.inputCount,
-          );
-          final next = from.pressKey(id);
-          expect(next.modifier, KeyModifier.none, reason: id.name);
-          expect(next.lastInput, typed.lastInput, reason: id.name);
-          expect(next.inputCount, typed.inputCount, reason: id.name);
-          expect(next.repeatableKey, isNull, reason: id.name);
-        }
-      },
-    );
+    test('SHIFT 대기 중에 누르면 MENU·AC가 실행되지 않고 SHIFT 대기만 풀린다 — 마지막 입력·입력 수는 그대로, 반복 대상은 끊는다', () {
+      for (final id in removed) {
+        // DEL을 입력한 뒤 SHIFT — SHIFT 대기 중에도 반복 대상(DEL)은 남아 있다(_withModifier).
+        final from = _press([CalcKeyId.del, CalcKeyId.shift]);
+        expect(from.modifier, KeyModifier.shift, reason: id.name);
+        expect(from.repeatableKey, CalcKeyId.del, reason: id.name);
+        final next = from.pressKey(id);
+        expect(next.modifier, KeyModifier.none, reason: id.name);
+        expect(next.lastInput, from.lastInput, reason: id.name);
+        expect(next.inputCount, from.inputCount, reason: id.name);
+        expect(next.repeatableKey, isNull, reason: id.name);
+      }
+    });
 
     test('SHIFT를 풀고 다시 누르면 메인 기능(MENU·AC)이 입력된다', () {
       for (final id in removed) {

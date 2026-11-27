@@ -20,8 +20,8 @@ void main() {
       .legendFontSize!;
 
   testWidgets('글꼴을 나중에 로드하면 화면의 키 글자 크기가 새 글꼴로 다시 계산된다', (tester) async {
-    // 테스트 글꼴은 모든 글자가 1em 정사각형이라 각인이 번들 글꼴보다 넓다 → 각인 폭 기준(하한)에 걸린다
-    // (#253 전에는 MENU 위 `MENU SETUP`, 지금은 `Ran# RanInt` 같은 긴 각인 쌍). (#156부터 SHIFT·ALPHA는 원형 버튼이라 메인 라벨 폭 기준에 들지 않아, 각인 글자 크기로 본다.)
+    // 테스트 글꼴은 모든 글자가 1em 정사각형이라 각인이 번들 글꼴보다 넓다 — 가장 좁게 들어가는 각인 쌍(`·` 키
+    // `Ran#`·`RanInt`)의 폭 한도가 최소 글자 크기보다 작아, 각인 글자 크기는 하한에 걸린다(#253 전에는 `MENU SETUP`). (#156부터 SHIFT·ALPHA는 원형 버튼이라 메인 라벨 폭 기준에 들지 않아, 각인 글자 크기로 본다.)
     const size = Size(360, 420);
     await tester.pumpWidget(
       const MaterialApp(
