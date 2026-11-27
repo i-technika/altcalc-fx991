@@ -1,5 +1,6 @@
 package com.example.itechnika_altcalc_fx991
 
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Looper
@@ -11,6 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import io.flutter.plugin.common.MethodCall
 import org.robolectric.annotation.Config
 import java.time.Duration
 
@@ -129,6 +131,56 @@ class MainActivityChannelsTest {
 
         shadowOf(activity).setInMultiWindowMode(false)
         assertEquals(MethodReply.Success(false), messenger.invokeMethod(DEVICE_CHANNEL, "isInMultiWindowMode"))
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `여러 창 모드가 바뀌면 기기 채널로 Dart에 알린다 (#137 R1)`() {
+        activity.onMultiWindowModeChanged(true)
+        activity.onMultiWindowModeChanged(false)
+        assertEquals(
+            listOf(MethodCall("multiWindowModeChanged", true), MethodCall("multiWindowModeChanged", false))
+                .map { it.method to it.arguments },
+            messenger.sentMethodCalls(DEVICE_CHANNEL).map { it.method to it.arguments },
+        )
+
+        // 채널을 뗀 뒤에는 보내지 않는다(끝난 엔진에 보내지 않는다)
+        activity.unregisterChannels(messenger)
+        activity.onMultiWindowModeChanged(true)
+        assertEquals(2, messenger.sentMethodCalls(DEVICE_CHANNEL).size)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `전체 화면으로 돌아오면 전체 화면에서 쓰던 방향 고정을 바로 되돌린다 (#137 R1)`() {
+        val portrait = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        val fullUser = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        activity.requestedOrientation = portrait
+        assertEquals(portrait, activity.fullScreenOrientation)
+
+        // 분할 화면에서 Dart가 고정을 풀어도 전체 화면 값은 그대로 기억한다
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.onMultiWindowModeChanged(true)
+        activity.requestedOrientation = fullUser
+        assertEquals(fullUser, activity.requestedOrientation)
+        assertEquals(portrait, activity.fullScreenOrientation)
+
+        // 나오면 Dart를 기다리지 않고 되돌린다
+        shadowOf(activity).setInMultiWindowMode(false)
+        activity.onMultiWindowModeChanged(false)
+        assertEquals(portrait, activity.requestedOrientation)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `전체 화면에서 요청한 적이 없으면 여러 창 모드에서 나와도 방향을 건드리지 않는다`() {
+        val before = activity.requestedOrientation
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.onMultiWindowModeChanged(true)
+        shadowOf(activity).setInMultiWindowMode(false)
+        activity.onMultiWindowModeChanged(false)
+        assertEquals(before, activity.requestedOrientation)
+        assertEquals(null, activity.fullScreenOrientation)
     }
 
     @Test

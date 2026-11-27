@@ -25,6 +25,38 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
+     * 여러 창 모드에 들어가고 나올 때 Dart에 알린다 (#137 R1). Dart(`DeviceOrientationLock`)는 화면 정보가 바뀔 때도
+     * [isInMultiWindowMode]를 묻지만, 그 시점에 값이 아직 바뀌지 않았거나(분할 화면 회전 중 7ms 동안 false 관찰) 창
+     * 크기가 그대로인 채 모드만 바뀌면 놓친다. 이 알림을 받으면 다시 묻고 방향 정책을 다시 정한다.
+     * 한 인자 판(API 24)을 재정의한다 — API 26 이상에서도 두 인자 판의 기본 구현이 이것을 부른다(minSdk 24라 두 인자
+     * 판만 재정의하면 API 24·25에서 알림이 없다).
+     */
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode)
+        // 전체 화면으로 돌아오면 Dart를 기다리지 않고 전체 화면에서 쓰던 방향 고정을 바로 되돌린다 (#137 R1) — Dart는 이
+        // 알림을 받고 다시 묻고 요청하느라 메인 스레드를 두 번 오가는데, 그동안 가로로 든 폰에서는 전체 화면이 가로로
+        // 그려졌다(에뮬레이터에서 0.6~1.2초). Dart가 곧 같은 값을 다시 요청하고, 그 사이 정책이 바뀌었으면(분할 화면 중
+        // 접기·펴기 등) Dart 요청이 바로잡는다.
+        if (!isInMultiWindowMode) fullScreenOrientation?.let { super.setRequestedOrientation(it) }
+        deviceChannel?.invokeMethod(MULTI_WINDOW_MODE_CHANGED, isInMultiWindowMode)
+    }
+
+    /**
+     * 전체 화면에서 마지막으로 요청한 방향 (#137 R1, 없으면 `null`). Dart의 방향 요청(`SystemChrome`)은 Flutter가 이
+     * 메서드로 보낸다. 여러 창 모드에서 푼 요청(네 방향)은 기억하지 않는다.
+     */
+    @VisibleForTesting
+    internal var fullScreenOrientation: Int? = null
+        private set
+
+    override fun setRequestedOrientation(requestedOrientation: Int) {
+        if (!isInMultiWindowMode) fullScreenOrientation = requestedOrientation
+        super.setRequestedOrientation(requestedOrientation)
+    }
+
+    /**
      * 플랫폼 채널을 [messenger]에 건다. Flutter 엔진 없이 JVM 단위 테스트에서 부를 수 있게
      * [configureFlutterEngine]에서 떼어 두었다 (#108).
      */
@@ -37,7 +69,9 @@ class MainActivity : FlutterActivity() {
             layoutSource = foldingLayoutSource,
         )
         foldableProbe = probe
-        MethodChannel(messenger, DEVICE_CHANNEL)
+        val channel = MethodChannel(messenger, DEVICE_CHANNEL)
+        deviceChannel = channel
+        channel
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     // 폴더블 판정 (#70): 접힘 정보(displayFeatures)는 화면이 붙은 뒤 비동기로 오므로, 힌지 신호와
@@ -64,6 +98,7 @@ class MainActivity : FlutterActivity() {
     @VisibleForTesting
     internal fun unregisterChannels(messenger: BinaryMessenger) {
         MethodChannel(messenger, DEVICE_CHANNEL).setMethodCallHandler(null)
+        deviceChannel = null
         foldableProbe?.cancel()
         foldableProbe = null
         EventChannel(messenger, HIGH_TEXT_CONTRAST_CHANNEL).setStreamHandler(null)
@@ -72,6 +107,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private var highTextContrast: HighTextContrastStreamHandler? = null
+
+    /** Dart로 여러 창 모드 변경을 알리는 기기 채널 ([registerChannels]가 건 것, 없으면 `null`) */
+    private var deviceChannel: MethodChannel? = null
     private var foldableProbe: FoldableDeviceProbe? = null
 
     /** 폴더블 판정에 쓰는 창 배치 정보 (테스트가 바꿔 끼운다) */
@@ -80,6 +118,9 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val DEVICE_CHANNEL = "altcalc/device"
+
+        /** 여러 창 모드 변경 알림 — Dart `FormFactor.multiWindowModeChangedMethod`와 같아야 한다 (#137 R1) */
+        private const val MULTI_WINDOW_MODE_CHANGED = "multiWindowModeChanged"
         private const val HIGH_TEXT_CONTRAST_CHANNEL = "altcalc/accessibility/high_text_contrast"
     }
 }

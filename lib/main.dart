@@ -95,8 +95,17 @@ Future<void> main() async {
 /// ## 여러 창 모드 (#137)
 /// 분할 화면·자유 형식 창·팝업 창에서는 방향을 고정하지 않는다([FormFactor.orientationPolicyOf]의 `multiWindow`) — 고정하면
 /// 창 모양이 요청 방향과 다를 때 Android가 앱을 레터박스로 줄인다(폰 1/3 분할 창 411×305 → 301.7×304.8dp,
-/// [FormFactor.queryMultiWindowMode]). 여러 창 모드인지는 화면 정보가 바뀔 때마다 요청 직전에 Android에 묻는다 — 여러 창
-/// 모드에 들어가고 나올 때는 늘 창 크기가 바뀐다. 전체 화면으로 돌아오면 기기별 정책으로 다시 고정한다.
+/// [FormFactor.queryMultiWindowMode]). 여러 창 모드인지는 방향을 요청하기 직전마다 Android에 묻는다. 다시 판정하는 때는
+/// 화면 정보가 바뀔 때와, Android가 여러 창 모드 변경을 알릴 때다(`onMultiWindowModeChanged` → 기기 채널
+/// [FormFactor.multiWindowModeChangedMethod], #137 R1) — 화면 정보가 바뀐 시점의 답은 아직 바뀌기 전일 수 있고, 창 크기가
+/// 그대로인 채 모드만 바뀔 수도 있다. 전체 화면으로 돌아오면 기기별 정책으로 다시 고정한다.
+/// 답을 모르면(조회 실패·시간 초과) 지난 값을 그대로 쓴다. 여러 창 모드에서 나왔다는 답(false)은 창이 물리 화면을 다
+/// 채울 때(전체 화면)나 Android가 나왔다고 알린 뒤에는 바로 믿고, 그 밖에 창이 아직 작으면
+/// [multiWindowExitConfirmDelay] 뒤 한 번 더 확인한다 — 분할 화면에서 화면을 돌릴 때 7ms 동안 false가 왔다가 돌아온 적이
+/// 있다(Android 16 에뮬레이터, 5번 중 1번). 그대로 믿으면 그 사이 세로 고정을 보내 레터박스로 줄었다 돌아온다.
+/// 전체 화면에서 바로 믿는 것은, 가로로 든 폰에서 분할 화면을 끝낼 때 고정이 늦을수록 가로 화면이 오래 보이기 때문이다.
+/// 같은 이유로 Android `MainActivity`는 여러 창 모드에서 나올 때 전체 화면에서 쓰던 방향 고정을 Dart를 기다리지 않고 바로
+/// 되돌린다(이 클래스가 곧 같은 값을 다시 요청한다).
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -115,6 +124,17 @@ class DeviceOrientationLock with WidgetsBindingObserver {
 
   /// 마지막으로 물어본 여러 창 모드 여부 (위 "여러 창 모드", #137) — 요청할 때마다 다시 묻는다.
   bool _multiWindow = false;
+
+  /// Android가 마지막으로 알린 여러 창 모드 여부 (#137 R1, 아직 없으면 `null`). `false` 알림은 여러 창 모드에서 나왔다는
+  /// 확실한 신호라, 그 뒤의 false 답은 창 크기와 상관없이 재확인 없이 믿는다.
+  bool? _notifiedMultiWindow;
+
+  /// 아직 시작하지 않은 다음 판정 (없으면 `null`) — 화면 정보가 잇달아 바뀌어도(자유 형식 창을 끌어 크기 바꾸기 등) 판정을
+  /// 하나로 합친다(#137 R1). 시작한 판정은 그때의 화면 정보를 읽으므로, 그 뒤 변화는 이것 하나가 받는다.
+  Future<void>? _queued;
+
+  /// [stop]할 때마다 늘린다 — 기다리던 판정이 [stop] 뒤에 끝나면 결과를 버린다(#137 R1).
+  int _generation = 0;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -137,6 +157,8 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _observeScreen();
     if (!_observing) {
       WidgetsBinding.instance.addObserver(this);
+      // Android가 여러 창 모드 변경을 알리면 다시 판정한다 (#137 R1)
+      FormFactor.onMultiWindowModeChanged(_onMultiWindowModeChanged);
       _observing = true;
     }
     return _apply();
@@ -145,8 +167,14 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   /// 관찰을 멈추고 요청 기록을 지운다 (테스트용).
   @visibleForTesting
   void stop() {
-    if (_observing) WidgetsBinding.instance.removeObserver(this);
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      FormFactor.onMultiWindowModeChanged(null);
+    }
     _observing = false;
+    _generation++;
+    _queued = null;
+    _notifiedMultiWindow = null;
     _applied = null;
     _foldableDevice.value = false;
     _lastDisplay = null;
@@ -212,11 +240,12 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Dart가 판정 답을 받은 뒤
   /// 0~15ms 안에 왔다(7번). 오지 않으면 그냥 시작한다 — 그때는 위아래 배치가 먼저 보일 수 있다.
   ///
-  /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간이다.
+  /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간 +
+  /// [FormFactor.multiWindowQueryTimeout](첫 방향 요청 전 여러 창 모드 조회, #137)이다.
   static const Duration foldFeatureWait = Duration(milliseconds: 300);
 
-  /// 여러 창 모드에서 나왔다는 답을 다시 확인하기까지 기다리는 시간 (#137, 위 "여러 창 모드"). 전체 화면으로 돌아온 뒤
-  /// 세로로 다시 고정하는 것이 이만큼 늦어진다.
+  /// 여러 창 모드에서 나왔다는 답을 다시 확인하기까지 기다리는 시간 (#137, 위 "여러 창 모드"). 창이 아직 물리 화면보다
+  /// 작을 때만 기다린다 — 전체 화면으로 돌아온 경우는 기다리지 않는다.
   static const Duration multiWindowExitConfirmDelay = Duration(
     milliseconds: 100,
   );
@@ -284,12 +313,24 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     }
   }
 
-  /// 앞 요청이 끝난 뒤 지금 정책으로 요청한다. 실패해도 오류를 내보내지 않는다.
+  /// 앞 요청이 끝난 뒤 지금 정책으로 요청한다. 실패해도 오류를 내보내지 않는다. 아직 시작하지 않은 판정이 있으면
+  /// 그것과 합친다([_queued]).
   Future<void> _apply() {
+    final queued = _queued;
+    if (queued != null) return queued;
     final previous = _pending;
-    final next = previous == null
-        ? _applyNow()
-        : previous.then((_) => _applyNow());
+    final Future<void> next;
+    if (previous == null) {
+      next = _applyNow();
+    } else {
+      late final Future<void> chained;
+      chained = previous.then((_) {
+        if (identical(_queued, chained)) _queued = null;
+        return _applyNow();
+      });
+      _queued = chained;
+      next = chained;
+    }
     _pending = next;
     next.whenComplete(() {
       if (identical(_pending, next)) _pending = null;
@@ -298,13 +339,27 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   Future<void> _applyNow() async {
+    final generation = _generation;
     // 여러 창 모드인지 요청 직전에 묻는다 (#137) — 앞 요청이 끝난 뒤라 답과 요청 순서가 엇갈리지 않는다.
-    var multiWindow = await FormFactor.queryMultiWindowMode();
-    if (_multiWindow && !multiWindow) {
-      // 여러 창 모드에서 나왔다는 답은 잠시 뒤 한 번 더 확인한다 — 분할 화면에서 화면을 돌릴 때 7ms 동안 false가 왔다가
-      // 돌아온 적이 있다(Android 16 에뮬레이터, 5번 중 1번). 그대로 믿으면 그 사이 세로 고정을 보내 레터박스로 줄었다 돌아온다.
+    // 답을 모르면(조회 실패·시간 초과) 지난 값을 그대로 쓴다.
+    var multiWindow = await FormFactor.queryMultiWindowMode() ?? _multiWindow;
+    if (generation != _generation) return;
+    if (_multiWindow &&
+        !multiWindow &&
+        _notifiedMultiWindow != false &&
+        !_windowFillsDisplay()) {
+      // 창이 아직 작은데 여러 창 모드에서 나왔다는 답은 잠시 뒤 한 번 더 확인한다(위 "여러 창 모드").
       await Future<void>.delayed(multiWindowExitConfirmDelay);
-      multiWindow = await FormFactor.queryMultiWindowMode();
+      if (generation != _generation) return;
+      multiWindow = await FormFactor.queryMultiWindowMode() ?? _multiWindow;
+      if (generation != _generation) return;
+      LayoutLog.multiWindowMode(
+        '재확인 ${multiWindowExitConfirmDelay.inMilliseconds}ms 뒤 $multiWindow'
+        '${multiWindow ? ' — 유지' : ''}',
+      );
+    }
+    if (multiWindow != _multiWindow) {
+      LayoutLog.multiWindowMode('$_multiWindow → $multiWindow');
     }
     _multiWindow = multiWindow;
     final (:policy, :kind, :display, :reason) = _currentDecision();
@@ -331,6 +386,26 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         error: error,
       );
     }
+  }
+
+  /// Android가 여러 창 모드 변경을 알렸다 (위 "여러 창 모드") — 다시 묻고 판정한다.
+  void _onMultiWindowModeChanged(bool multiWindow) {
+    _notifiedMultiWindow = multiWindow;
+    LayoutLog.multiWindowMode('알림 $multiWindow');
+    unawaited(_apply());
+  }
+
+  /// 창이 물리 화면을 다 채우는지 (전체 화면, 위 "여러 창 모드") — 플랫폼이 물리 화면 크기를 알려 주지 않으면 거짓이다.
+  /// 화면을 돌리면 물리 화면 크기도 돌아간 값으로 오므로 그대로 비교한다.
+  static bool _windowFillsDisplay() {
+    final view = _view;
+    if (view == null) return false;
+    final display = FormFactor.reportedDisplaySizeOf(view);
+    if (display == null) return false;
+    final window = view.physicalSize / view.devicePixelRatio;
+    const tolerance = 1.0;
+    return (window.width - display.width).abs() < tolerance &&
+        (window.height - display.height).abs() < tolerance;
   }
 
   @override

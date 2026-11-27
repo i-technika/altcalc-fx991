@@ -172,6 +172,13 @@ abstract final class LayoutLog {
     );
   }
 
+  /// 여러 창 모드 판정 (#137 R1) — Android의 변경 알림(`알림 true`), 방향 판정 때 값이 바뀜(`false → true`), 창이 아직 작을
+  /// 때 나왔다는 답의 재확인(`재확인 100ms 뒤 …`). 일시적인 오답과 재확인이 막았는지를 실기기 logcat으로 보려는 것이다.
+  static void multiWindowMode(String event) {
+    if (!enabled) return;
+    _write('여러 창 모드: $event');
+  }
+
   /// 방향 요청 — [kind]·[display](물리 화면, dp)로 고른 [policy]를 보냈다. 실패하면 [error]가 있다.
   /// [reason]은 크기 규칙 말고 따로 정한 근거다 — 펼친 트라이폴드의 `접힘선 2개`·`접힘선 2개 기억`(#144), `여러 창 모드`(#137).
   static void orientationRequest(

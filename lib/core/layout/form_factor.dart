@@ -100,6 +100,30 @@ abstract final class FormFactor {
   @visibleForTesting
   static const String multiWindowModeMethod = 'isInMultiWindowMode';
 
+  /// Android가 여러 창 모드 변경을 알리는 메서드 이름 (#137 R1, Android → Dart, 인자는 새 여러 창 모드 여부).
+  /// Android `MainActivity`의 `MULTI_WINDOW_MODE_CHANGED`와 같아야 한다.
+  @visibleForTesting
+  static const String multiWindowModeChangedMethod = 'multiWindowModeChanged';
+
+  /// Android가 여러 창 모드 변경을 알리면 [onChanged]를 부른다 (#137 R1, [multiWindowModeChangedMethod]). `null`이면 듣지
+  /// 않는다. 기기 채널로 Android가 보내는 호출은 이것 하나뿐이라 채널 처리기를 통째로 건다. Android가 아니면 아무것도
+  /// 오지 않는다.
+  static void onMultiWindowModeChanged(
+    void Function(bool multiWindow)? onChanged,
+  ) {
+    deviceChannel.setMethodCallHandler(
+      onChanged == null
+          ? null
+          : (call) async {
+              if (call.method == multiWindowModeChangedMethod) {
+                onChanged(call.arguments == true);
+                return null;
+              }
+              throw MissingPluginException(call.method);
+            },
+    );
+  }
+
   /// 여러 창 모드 조회 응답 제한 시간 (#137). Android가 바로 답하는 값이라 짧게 둔다 — 넘기면 여러 창 모드 아님으로 본다.
   static const Duration multiWindowQueryTimeout = Duration(milliseconds: 500);
 
@@ -114,8 +138,11 @@ abstract final class FormFactor {
   /// 창 크기를 물리 화면 크기와 비교하지 않고 Android에 묻는 이유: 전체 화면에서도 창이 화면보다 작을 수 있다(화면 구멍을
   /// 피한 창 등). 그런 창을 여러 창 모드로 잘못 보면 폰의 세로 고정이 풀린다.
   ///
-  /// Android가 아니거나, 조회에 실패하거나, [multiWindowQueryTimeout] 안에 답이 없으면 `false`(전과 같은 방향 고정)다.
-  static Future<bool> queryMultiWindowMode() async {
+  /// Android가 아니거나 채널이 없으면(`MissingPluginException`) `false`(전과 같은 방향 고정)다. 조회에 실패하거나
+  /// [multiWindowQueryTimeout] 안에 답이 없거나 답이 bool이 아니면 `null`(모름)이다 — 부르는 쪽(`DeviceOrientationLock`)은
+  /// 지난 값을 그대로 쓴다(#137 R1). 화면을 돌리는 중처럼 Android 메인 스레드가 바쁠 때 500ms 안에 답하지 못한 적이 있어
+  /// (Android 16 에뮬레이터, 다른 에뮬레이터가 부팅하던 때), 그것을 "여러 창 모드에서 나옴"으로 읽지 않으려는 것이다.
+  static Future<bool?> queryMultiWindowMode() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return false;
     }
@@ -123,12 +150,12 @@ abstract final class FormFactor {
       final result = await deviceChannel
           .invokeMethod<Object?>(multiWindowModeMethod)
           .timeout(multiWindowQueryTimeout);
-      return result == true;
+      return result is bool ? result : null;
     } on MissingPluginException {
       return false;
     } catch (error) {
       debugPrint('여러 창 모드 조회 실패: $error');
-      return false;
+      return null;
     }
   }
 

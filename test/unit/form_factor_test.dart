@@ -304,23 +304,26 @@ void main() {
         expect(methods, List.filled(2, FormFactor.multiWindowModeMethod));
       });
 
-      test('Android: 오류·미등록·null·bool 아닌 답이면 false (방향을 전처럼 고정한다)', () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        mockChannel((_) async => throw PlatformException(code: 'x'));
-        expect(await FormFactor.queryMultiWindowMode(), isFalse);
-        mockChannel((_) async => null);
-        expect(await FormFactor.queryMultiWindowMode(), isFalse);
-        mockChannel((_) async => 'true');
-        expect(await FormFactor.queryMultiWindowMode(), isFalse);
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(FormFactor.deviceChannel, null);
-        expect(
-          await FormFactor.queryMultiWindowMode(),
-          isFalse,
-        ); // MissingPlugin
-      });
+      test(
+        'Android: 오류·null·bool 아닌 답이면 모름(null), 채널 미등록이면 false (#137 R1)',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          mockChannel((_) async => throw PlatformException(code: 'x'));
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          mockChannel((_) async => null);
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          mockChannel((_) async => 'true');
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(FormFactor.deviceChannel, null);
+          expect(
+            await FormFactor.queryMultiWindowMode(),
+            isFalse,
+          ); // MissingPlugin
+        },
+      );
 
-      test('Android: 제한 시간 안에 답이 없으면 false', () async {
+      test('Android: 제한 시간 안에 답이 없으면 모름(null)', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         final never = Completer<ByteData?>();
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -335,11 +338,50 @@ void main() {
               .setMockMessageHandler(FormFactor.deviceChannel.name, null),
         );
         final watch = Stopwatch()..start();
-        expect(await FormFactor.queryMultiWindowMode(), isFalse);
+        expect(await FormFactor.queryMultiWindowMode(), isNull);
         expect(
           watch.elapsed,
           greaterThanOrEqualTo(FormFactor.multiWindowQueryTimeout),
         );
+      });
+
+      test('Android의 변경 알림을 받아 넘기고, 다른 호출은 모른다고 답한다 (#137 R1)', () async {
+        final received = <bool>[];
+        FormFactor.onMultiWindowModeChanged(received.add);
+        addTearDown(() => FormFactor.onMultiWindowModeChanged(null));
+        const codec = StandardMethodCodec();
+        Future<ByteData?> send(MethodCall call) {
+          final reply = Completer<ByteData?>();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .handlePlatformMessage(
+                FormFactor.deviceChannel.name,
+                codec.encodeMethodCall(call),
+                reply.complete,
+              );
+          return reply.future;
+        }
+
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, true),
+        );
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, false),
+        );
+        // bool이 아닌 인자는 false로 읽는다
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, 'yes'),
+        );
+        expect(received, [true, false, false]);
+        // 모르는 호출은 notImplemented(빈 응답)
+        expect(await send(const MethodCall('noSuchMethod')), isNull);
+        expect(received, hasLength(3));
+
+        // 듣지 않으면 아무것도 받지 않는다
+        FormFactor.onMultiWindowModeChanged(null);
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, true),
+        );
+        expect(received, hasLength(3));
       });
 
       test('iOS: 채널을 부르지 않고 false', () async {
