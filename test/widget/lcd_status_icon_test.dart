@@ -145,6 +145,39 @@ class _Shot {
     return false;
   }
 
+  /// dp 사각형 안에서 위 → 아래, 왼쪽 → 오른쪽으로 처음 만나는 잉크 물리 픽셀 (x, y). 없으면 `null`.
+  (int, int)? firstInk(Rect r) {
+    for (var py = (r.top * dpr).floor(); py < (r.bottom * dpr).ceil(); py++) {
+      for (var px = (r.left * dpr).floor(); px < (r.right * dpr).ceil(); px++) {
+        if (px >= 0 && px < width && py >= 0 && py < height && inked(px, py)) {
+          return (px, py);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// [seed] 물리 픽셀에서 상하좌우로 이어진 물리 픽셀 전체 (dp 사각형 [r] 안). 잉크([inked])보다 넓게, 배경만큼
+  /// 밝지 않은(빨강 170 이하 — 덮임 약 40% 이상) 회색 픽셀도 잇는다 — 안티에일리어싱 회색으로 이어 보이는 다리도 붙은 것으로 본다(#217 리뷰 R1).
+  Set<(int, int)> inkComponent((int, int) seed, Rect r) {
+    final left = (r.left * dpr).floor();
+    final right = (r.right * dpr).ceil();
+    final top = (r.top * dpr).floor();
+    final bottom = (r.bottom * dpr).ceil();
+    final found = <(int, int)>{seed};
+    final queue = [seed];
+    while (queue.isNotEmpty) {
+      final (x, y) = queue.removeLast();
+      for (final (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]) {
+        if (nx < left || nx >= right || ny < top || ny >= bottom) continue;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        if (_light(nx, ny) || !found.add((nx, ny))) continue;
+        queue.add((nx, ny));
+      }
+    }
+    return found;
+  }
+
   /// dp 가로줄 [y]에서 [r] 범위의 잉크 구간 수
   int inkRuns(double y, Rect r) {
     final py = (y * dpr).floor();
@@ -159,17 +192,27 @@ class _Shot {
   }
 }
 
-Widget _bar(LcdStatus status, TextStyle style, double scale, bool material) {
+Widget _bar(
+  LcdStatus status,
+  TextStyle style,
+  double scale,
+  bool material, {
+  Offset phase = Offset.zero,
+}) {
   final bar = ColoredBox(
     color: const Color(0xFFFFFFFF),
     child: Align(
       alignment: Alignment.topLeft,
-      child: SizedBox(
-        width: 2400,
-        child: LcdStatusBar(
-          status: status,
-          style: style,
-          textScaler: TextScaler.linear(scale),
+      child: Padding(
+        // [phase]: 표시줄을 물리 1px 미만만큼 옮겨 픽셀 격자에 대한 소수점 위치(위상)를 바꾼다 (#217 리뷰 R2)
+        padding: EdgeInsets.only(left: phase.dx, top: phase.dy),
+        child: SizedBox(
+          width: 2400,
+          child: LcdStatusBar(
+            status: status,
+            style: style,
+            textScaler: TextScaler.linear(scale),
+          ),
         ),
       ),
     ),
@@ -191,6 +234,7 @@ Future<_Shot> _render(
   double dpr = 1.0,
   bool material = false,
   double? height,
+  Offset phase = Offset.zero,
 }) async {
   tester.view.physicalSize = Size(2400 * dpr, 200 * dpr);
   tester.view.devicePixelRatio = dpr;
@@ -202,7 +246,7 @@ Future<_Shot> _render(
   await tester.pumpWidget(
     RepaintBoundary(
       key: _boundaryKey,
-      child: _bar(status, style, scale, material),
+      child: _bar(status, style, scale, material, phase: phase),
     ),
   );
   return _capture(tester, dpr);
@@ -232,6 +276,132 @@ Rect _scanRect(WidgetTester tester, LcdIndicatorSlot slot) {
       ? 2400.0
       : (rect.right + _slotRect(tester, values[slot.index + 1]).left) / 2;
   return Rect.fromLTRB(left, 0, right, 200);
+}
+
+/// √▭✎의 가로 폭·위치와 작은 크기에서의 분리를 검사한다 (#160 리뷰 R2, #217).
+/// [letter]는 같은 줄 대문자 E의 잉크, [shrink]는 글자가 상자에 맞춰 줄어든 비율, [stroke]는 실제로 그려진 선 굵기(dp).
+/// 기대 좌표는 페인터와 같은 계산이다: 잉크는 [CalcTheme.lcdStatusMathInkCells]칸, 3칸 슬롯 가운데. 내부 가로 위치는
+/// 잉크 폭을 3으로 본 #160 배치(칸 1.1~1.9)이고, 연필 촉은 1.7이다.
+/// [tipUnderStub]: 연필 촉 픽셀이 칸 바깥 오른쪽 끝 안쪽(짧은 변 아래)까지 남는지 — 촉은 뾰족해 상태 글자 6dp·2x에서는
+/// 끝 픽셀의 덮임이 옅어 열린 곳 바로 바깥에서 끝나 보인다(#160 배치에서도 같다).
+/// [anyPhase]: 표시줄을 물리 1px 미만만큼 옮긴 위상에서 그렸는지 — 끝 픽셀 덮임이 위상에 따라 달라 허용치를 넓힌다
+/// (#217 리뷰 R2).
+void _expectMathInk(
+  WidgetTester tester,
+  _Shot shot,
+  Rect letter,
+  double shrink,
+  double stroke,
+  double dpr, {
+  bool tipUnderStub = true,
+  bool anyPhase = false,
+}) {
+  final reach = 2.0 / dpr;
+  final cap = letter.height;
+  final slot = _slotRect(tester, LcdIndicatorSlot.math);
+  final advance = slot.width / 3;
+  // 페인터(`LcdStatusIconMetrics.cell`)와 같이 글리프 폭과 진행 폭 중 작은 값
+  final cell = math.min(
+    advance - CalcTheme.lcdStatusStyle.letterSpacing!,
+    advance,
+  );
+  const inkCells = CalcTheme.lcdStatusMathInkCells;
+  final inkLeft =
+      slot.left +
+      slot.width * (1 - shrink) / 2 +
+      (1.5 * advance - inkCells / 2 * cell) * shrink;
+  final unit = inkCells / 3 * cell * shrink;
+  double inkX(double p) => inkLeft + p * unit;
+
+  final scan = _scanRect(tester, LcdIndicatorSlot.math);
+  final ink = shot.inkBounds(scan)!;
+  // 대문자 높이 띠·슬롯 안 (위 크기 조합 묶음의 공통 검사와 같은 허용치 — 6dp·2x 전용 테스트도 여기서 본다)
+  // 임의 위상에서는 글자(E)만 힌팅으로 픽셀 격자에 맞춰지므로 물리 2px까지 본다.
+  final tolerance = (anyPhase ? 2.0 : 1.5) / dpr;
+  expect(ink.top, greaterThanOrEqualTo(letter.top - tolerance), reason: '$ink');
+  expect(
+    ink.bottom,
+    lessThanOrEqualTo(letter.bottom + tolerance),
+    reason: '$ink',
+  );
+  final inner = slot.width * (1 - shrink) / 2;
+  expect(
+    ink.left,
+    greaterThanOrEqualTo(slot.left + inner - tolerance),
+    reason: '$ink, 슬롯 $slot',
+  );
+  expect(
+    ink.right,
+    lessThanOrEqualTo(slot.right - inner + tolerance),
+    reason: '$ink, 슬롯 $slot',
+  );
+  expect(
+    ink.width,
+    // 임의 위상에서는 양 끝(근호 시작의 대각선 모서리, 연필 위 끝 꼭짓점)의 옅은 픽셀이 잉크 문턱 아래로 떨어져
+    // 끝마다 물리 2px까지 줄 수 있다.
+    closeTo(inkCells * cell * shrink, anyPhase ? 2 * reach : reach),
+    reason: '√▭✎ 잉크 $ink — 근호 시작부터 연필 위 끝까지',
+  );
+  expect(
+    ink.center.dx,
+    closeTo(slot.center.dx, reach),
+    reason: '√▭✎ 잉크 $ink는 슬롯 $slot 가운데에 놓인다',
+  );
+  // 연필은 칸(⊏ — 윗선·근호와도 이어져 있다)과 떨어진 덩어리다: 연필 몸통(잉크 오른쪽 1/5)의 잉크에서 상하좌우로
+  // 이어진 픽셀(배경만큼 밝지 않은 회색 포함)을 따라가도 칸 왼쪽 변에 닿지 않는다(짧은 변·아랫변 어느 쪽으로도 붙지
+  // 않았고, 안티에일리어싱 회색 다리로도 이어 보이지 않는다 — #217 리뷰 R1).
+  final pencilSeed = shot.firstInk(
+    Rect.fromLTRB(inkX(2.4), letter.top, inkX(3), letter.bottom),
+  );
+  expect(pencilSeed, isNotNull, reason: '연필 몸통');
+  final pencil = shot.inkComponent(pencilSeed!, scan);
+  final boxSeed = shot.firstInk(
+    Rect.fromLTRB(
+      inkX(1.1),
+      letter.top + cap * 0.6,
+      inkX(1.1) + stroke,
+      letter.top + cap * 0.7,
+    ),
+  );
+  expect(boxSeed, isNotNull, reason: '칸 왼쪽 변');
+  expect(pencil.contains(boxSeed), isFalse, reason: '연필이 칸에 붙었다');
+  // 연필 촉은 칸의 열린 오른쪽, 짧은 변 아래로 들어간다: 연필 덩어리의 왼쪽 끝이 칸 바깥 오른쪽 끝보다 왼쪽이다.
+  // 위 연결 검사와 함께 #160 리뷰 R2의 "짧은 변·연필·아랫변이 떨어져 있다"를 본다. #160은 짧은 변 한가운데 세로줄
+  // 하나를 훑어 세 덩어리를 셌는데, 뾰족한 촉이 그 한 열에 잉크로 남는지가 픽셀 위상에 따라 바뀌어 덩어리 검사로
+  // 바꿨다(#217 리뷰 R2). 6dp·2x는 촉 끝 픽셀이 옅어 열린 곳 바로 바깥에서 끝나 보이므로 선 굵기만큼 바깥까지 허용한다
+  // (문서 한계).
+  final tipLeft = pencil.map((p) => p.$1).reduce(math.min) / dpr;
+  expect(
+    tipLeft,
+    lessThan(tipUnderStub ? inkX(1.9) : inkX(1.9) + stroke),
+    reason: '촉 $tipLeft, 칸 오른쪽 끝 ${inkX(1.9)}',
+  );
+  // 칸이 뭉개지지 않는다: 칸 왼쪽 변과 연필 촉 사이(칸 안), 윗선과 칸 윗변 사이에 배경이 보이는 열·줄이 하나는 있다.
+  // 세로 범위는 대문자 E로 잰 높이에서 정하므로, 글자 힌팅 차이(물리 2px까지)만큼 안쪽으로 줄여 본다.
+  final boxTop = letter.top + cap * 0.3;
+  expect(
+    shot.hasGapColumn(
+      inkX(1.1) + stroke,
+      inkX(1.7),
+      boxTop + stroke + reach,
+      letter.bottom - stroke - reach,
+    ),
+    isTrue,
+    reason: '칸 안 (칸 왼쪽 변 ${inkX(1.1)}, 촉 ${inkX(1.7)})',
+  );
+  // 윗선과 칸 윗변 사이: 대문자 E로 잰 높이는 글꼴 힌팅(플랫폼마다 다르다)에 따라 물리 1px 어긋나므로, 아이콘 잉크
+  // 위 끝(윗선)부터 칸 안까지 훑는다. 가로 범위가 칸 왼쪽 변 한가운데를 포함하므로 칸 안 줄은 밝지 않다 — 밝은 줄은
+  // 윗선과 칸 윗변 사이에만 있을 수 있다(근호는 0.85, 연필은 1.7보다 오른쪽이라 이 범위 밖이다).
+  expect(
+    shot.hasGapRow(
+      ink.top,
+      ink.top + cap * 0.6,
+      inkX(1.1) + stroke / 2,
+      inkX(1.5),
+    ),
+    isTrue,
+    reason: '윗선과 칸 윗변 사이',
+  );
 }
 
 /// 글꼴 파일 OS/2 테이블의 (sxHeight, sCapHeight) / unitsPerEm
@@ -484,26 +654,60 @@ void main() {
         reason: 'x $xInk, 윗변',
       );
 
-      // √▭✎: 칸 오른쪽 위 짧은 변·연필·아랫변이 서로 떨어져 있다 — 짧은 변 한가운데 세로줄을 위에서 아래로
-      // 훑으면 [윗변+짧은 변], [연필], [아랫변] 세 덩어리가 배경으로 나뉜다(#160 리뷰 R2).
-      final mathSlot = _slotRect(tester, LcdIndicatorSlot.math);
-      final mathAdvance = mathSlot.width / 3;
-      final mathCol1 =
-          mathSlot.left +
-          mathSlot.width * (1 - shrink) / 2 +
-          mathAdvance * shrink;
-      final stubX =
-          mathCol1 +
-          (mathAdvance - CalcTheme.lcdStatusStyle.letterSpacing!) *
-              shrink *
-              0.9 -
-          stroke * shrink / 2;
-      expect(
-        shot.inkRunsVertical(stubX, letter.top + cap * 0.3, letter.bottom),
-        3,
-        reason: '짧은 변 세로줄 x=$stubX',
-      );
+      _expectMathInk(tester, shot, letter, shrink, stroke, dpr);
     });
+  }
+
+  // √▭✎ 작은 크기·픽셀 위상(#217 리뷰 R2): 앱에서는 슬롯의 소수점 위치가 기기·배치마다 다르다. 표시줄을 물리 1px
+  // 미만만큼 옮긴 여러 위상에서 본다. 6dp·2x는 이슈가 든 작은 끝이다(→x 검사가 힌팅 때문에 성립하지 않아 위 묶음에 없다).
+  for (final (fontSize, scale, dpr) in [
+    (6.0, 1.0, 2.0),
+    (10.0, 1.0, 3.0),
+    (8.0, 1.3, 2.625),
+  ]) {
+    for (final (fx, fy) in [
+      (0.0, 0.0),
+      (0.3, 0.15),
+      (0.6, 0.45),
+      (0.85, 0.7),
+    ]) {
+      testWidgets('√▭✎ 잉크 폭·가운데와 칸·연필 분리 — 픽셀 위상 '
+          '(글자 $fontSize, 배율 $scale, 화면 ${dpr}x, 위상 물리 ($fx, $fy)px, #217)', (
+        tester,
+      ) async {
+        final shot = await _render(
+          tester,
+          _allOn,
+          fontSize: fontSize,
+          scale: scale,
+          dpr: dpr,
+          material: true,
+          phase: Offset(fx / dpr, fy / dpr),
+        );
+        final letter = shot.inkBounds(
+          _slotRect(tester, LcdIndicatorSlot.engineering),
+        )!;
+        final shrink = math.min(
+          1.0,
+          letter.height /
+              (fontSize * scale * CalcTheme.lcdStatusCapHeightRatio),
+        );
+        final stroke =
+            letter.height /
+            CalcTheme.lcdStatusCapHeightRatio *
+            CalcTheme.lcdStatusIconStrokeRatio;
+        _expectMathInk(
+          tester,
+          shot,
+          letter,
+          shrink,
+          stroke,
+          dpr,
+          tipUnderStub: fontSize * scale * dpr > 12,
+          anyPhase: fx != 0 || fy != 0,
+        );
+      });
+    }
   }
 
   testWidgets('아이콘 모양: 근호 윗선 아래에 칸(⊏)이 매달려 비었고, 연필은 촉을 칸의 열린 오른쪽에 넣고 오른쪽 위로 '
@@ -514,26 +718,30 @@ void main() {
     final stroke = fontSize * CalcTheme.lcdStatusIconStrokeRatio;
     final cap = e.height;
 
-    // √▭✎ (3칸): 첫째 칸 = √, 둘째 칸 = 칸(⊏), 셋째 칸 = 연필 몸통 (연필 촉은 둘째 칸 안)
+    // √▭✎ (3칸 슬롯 가운데에 lcdStatusMathInkCells칸 잉크, #217): 잉크를 3등분하면 첫째 = √, 둘째 = 칸(⊏),
+    // 셋째 = 연필 몸통 (연필 촉은 둘째 안). 이 크기(60dp, 배율 1)에서는 글자가 줄지 않는다.
     final math = _slotRect(tester, LcdIndicatorSlot.math);
-    final third = math.width / 3;
+    final cell =
+        math.width / 3 - CalcTheme.lcdStatusStyle.letterSpacing!; // 자간 > 0
+    final third = CalcTheme.lcdStatusMathInkCells / 3 * cell;
+    final inkLeft = math.center.dx - CalcTheme.lcdStatusMathInkCells / 2 * cell;
 
-    /// [column]째 칸에서 가로 [l]~[r](칸 폭 비율), 세로 [t]~[b](위에서 잰 대문자 높이 비율)
+    /// 잉크 [column]째 3등분에서 가로 [l]~[r](3등분 폭 비율), 세로 [t]~[b](위에서 잰 대문자 높이 비율)
     Rect area(int column, double l, double t, double r, double b) =>
         Rect.fromLTRB(
-          math.left + third * (column + l),
+          inkLeft + third * (column + l),
           e.top + cap * t,
-          math.left + third * (column + r),
+          inkLeft + third * (column + r),
           e.top + cap * b,
         );
     final radicalBox = area(0, 0, 0, 2, 1);
-    // 윗선: 대문자 윗선 줄에서 근호 꼭대기부터 한 구간이 둘째 칸 대부분까지 이어진다.
+    // 윗선: 대문자 윗선 줄에서 근호 꼭대기부터 한 구간이 둘째 3등분 대부분까지 이어진다.
     final topRow = e.top + stroke / 2;
     expect(shot.inkRuns(topRow, radicalBox), 1);
     expect(shot.longestRun(topRow, radicalBox), greaterThan(third * 0.8));
-    // 칸은 윗선 아래에 띄워 매달렸다 — 대문자 높이 20% 줄에서 둘째 칸은 비었다.
+    // 칸은 윗선 아래에 띄워 매달렸다 — 대문자 높이 20% 줄에서 둘째 3등분은 비었다.
     expect(shot.anyInk(area(1, 0, 0.19, 1, 0.21)), isFalse, reason: '윗선과 칸 사이');
-    // 칸 윗변(30%)·아랫변(기준선)은 둘째 칸 폭 대부분을 덮는다.
+    // 칸 윗변(30%)·아랫변(기준선)은 둘째 3등분 폭 대부분을 덮는다.
     expect(
       shot.longestRun(e.top + cap * 0.3 + stroke / 2, area(1, 0, 0, 1, 1)),
       greaterThan(third * 0.6),
@@ -544,19 +752,25 @@ void main() {
       greaterThan(third * 0.6),
       reason: '칸 아랫변',
     );
-    // 칸 안쪽은 비었다.
-    expect(shot.anyInk(area(1, 0.3, 0.5, 0.55, 0.8)), isFalse, reason: '칸 안');
-    // 근호: 아래쪽 30% 줄에서 첫째 칸에 두 획(왼쪽 획은 대문자 높이 절반쯤에서 시작)
+    // 칸 안쪽은 비었다(칸 왼쪽 변은 3등분 폭의 0.1~0.31).
+    expect(shot.anyInk(area(1, 0.36, 0.5, 0.55, 0.8)), isFalse, reason: '칸 안');
+    // 근호: 아래쪽 30% 줄에서 첫째 3등분에 두 획(왼쪽 획은 대문자 높이 절반쯤에서 시작)
     expect(shot.inkRuns(e.bottom - cap * 0.3, area(0, 0, 0, 1, 1)), 2);
 
-    // 연필: 촉은 칸의 열린 오른쪽 아래에 들어가고, 몸통은 셋째 칸 오른쪽 위로 뻗는다.
+    // 연필: 촉은 칸의 열린 오른쪽 아래에 들어가고, 몸통은 셋째 3등분 오른쪽 위로 뻗는다.
     expect(
       shot.anyInk(area(1, 0.6, 0.65, 0.9, 0.85)),
       isTrue,
       reason: '칸 안의 촉',
     );
-    expect(shot.anyInk(area(2, 0.65, 0, 1, 0.35)), isTrue, reason: '오른쪽 위');
-    // 기준선까지 내려오지 않는다(셋째 칸 아래 15% 띠가 비었다). 셋째 칸 왼쪽 위·오른쪽 아래도 비었다 —
+    expect(shot.anyInk(area(2, 0.65, 0, 1, 0.4)), isTrue, reason: '오른쪽 위');
+    // 연필 위 끝은 대문자 윗선 아래 0.3(가이드, #217)이다 — 셋째 3등분 오른쪽 절반에는 연필만 있다.
+    expect(
+      shot.inkBounds(area(2, 0.5, 0, 1, 1))!.top,
+      closeTo(e.top + cap * 0.3, 2),
+      reason: '연필 위 끝',
+    );
+    // 기준선까지 내려오지 않는다(셋째 3등분 아래 15% 띠가 비었다). 셋째 3등분 왼쪽 위·오른쪽 아래도 비었다 —
     // 촉에서 오른쪽 위 모서리로 기운 대각선이다.
     expect(shot.anyInk(area(2, 0, 0.85, 1, 1)), isFalse, reason: '아래 띠');
     expect(shot.anyInk(area(2, 0, 0, 0.25, 0.25)), isFalse, reason: '왼쪽 위');
