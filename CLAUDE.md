@@ -30,7 +30,7 @@
   - 상수: π = 3.14159265358980, e = 2.71828182845904 (가이드 기재값)
   - 연산 단계별 반올림 방식·언더플로 처리 등 세부 규칙은 #30에서 실물 대조로 확정한다.
 - **2D 자연어 수식 렌더링 (Natural Textbook Display):** `IntrinsicWidth`, `Row`, `Column` 등을 활용한 재귀 위젯 트리(`MathNodeWidget`)로 분수, 루트, 지수, 정적분, 시그마 기호를 렌더링한다.
-- **수익화 및 서버리스 인앱결제** (M7, 에픽 #192 — 설정 화면의 구매·복원 자리는 M6 앱 설정, 에픽 #191):
+- **수익화 및 서버리스 인앱결제** (M10, 에픽 #192 — 구매·복원 자리는 M4 설정 팝업, 에픽 #191. 설정 팝업은 ON 자리의 설정 키(SETUP 키 — #190에서 `SETTING`으로 인쇄했고 #253에서 `SETUP`으로 바꿨다) 하나로 여는 일반 앱 같은 팝업이다. SHIFT+MENU(SETUP)로는 열지 않는다 — MENU의 SHIFT 각인 `SETUP`과 AC의 SHIFT 각인 `OFF`는 #253에서 없앴다):
   - 광고 없는 배치(과금 사용자)가 기준이다 (#141). 화면 맨 아래 광고 슬롯은 없고, 무과금 사용자의 배너 광고(`google_mobile_ads`)는
     그 배치에서 LCD 쪽 한 영역을 줄여 넣는다 — 키패드에서 가장 먼 곳(폰·태블릿 세로는 화면 맨 위, 그 밖에는 기록 영역), 기록 영역부터 줄이고
     활성 LCD는 줄이지 않는다(#18). 광고를 키패드 바로 옆에 두지 않는다(AdMob 실수 클릭 안내).
@@ -48,7 +48,7 @@
 - `presentation/providers/`: `calc_provider.dart`, `settings_provider.dart` (`shared_preferences` 앱 설정 — `main()`이 불러와 override. 화면 켜짐 유지 `keepScreenOnProvider`는 LCD ☀ 자리 표시기를 켜며 M1에서는 저장하지 않는다 — 저장·화면 꺼짐 방지는 #234), `device_provider.dart` (폴더블 기기 여부 — `main()`이 시작 판정(Android 쪽 `FoldableDeviceProbe.kt`)과 그 뒤 화면 정보로 기억한 값 `DeviceOrientationLock.foldableDevice`로 override), `iap_provider.dart`
 - `presentation/l10n/`: `calc_semantic_strings.dart` (스크린리더 음성 문구 — 키 기능 이름·LCD 표시기 의미, 한국어·영어), `device_locale_scope.dart` (기기 로캘 전달·언어 변경 시 재빌드), `settings_strings.dart` (설정 UI·화면 안내 문구, 한국어·영어)
 - `presentation/screens/`: `calculator_screen.dart`
-- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖·👁(☀ 자리의 화면 켜짐 유지, #233)와 반전 상자 글자 S·A·D·R·G), `math_node_widget.dart`, `calc_key_button.dart` (키 하나 — 키캡(윗면 광택·옆면·그림자, #156)·각인 띠, 메인 각인을 그린 기준선에서 잉크 가운데로 세로 맞춤(`InkCenteredLabel`, #230 — 기준은 `CalcTheme` "메인 각인 세로 위치" 절), SHIFT·ALPHA·MENU·ON 자리의 설정 키는 원형 버튼, 설정 키는 키보드 포커스, #190), `round_key_face.dart` (실물 SHIFT·ALPHA·MENU·ON 같은 원형 은색 버튼 면), `calc_body_background.dart` (본체 바탕 — 세로 그라데이션·잔무늬·가장자리 선, 고대비에서는 끔, #156), `key_legend_view.dart` (분수·첨자·근호·∑ 위아래 끝·직접 그리는 칸 각인을 실물처럼 2차원으로 그림 — 배치 비율은 `CalcTheme` "2차원 각인 배치" 절), `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 가로형·가로 접힘선 아래 패널용 넓은 배열 `KeypadArrangement`, 넓은 배열의 손잡이 대칭), `history_panel.dart` (가로형·접힘선 기준 배치(책 자세의 반대쪽 패널, 가로 접힘선의 위 패널)의 계산 기록 영역 — M1에서는 빈 영역, 내용은 #145), `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 키), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_launcher.dart`·`handedness_dialog.dart` (ON 키(설정 키, #190)로 설정 열기 — 접힘선 기준 대화상자 위치·키패드 위치 선택. LCD 위 상단 띠·설정 버튼(#41)은 #190에서 없앴다), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용), `screen_reader_announcer.dart` (스크린리더 상태 변화 알림 — 루트 Navigator 위에 두어 설정 대화상자 장벽에 막히지 않게 하고, Android는 알린 뒤 `clearDelay`가 지나면 알림 노드를 없앤다, #207)
+- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖·👁(☀ 자리의 화면 켜짐 유지, #233)와 반전 상자 글자 S·A·D·R·G), `math_node_widget.dart`, `calc_key_button.dart` (키 하나 — 키캡(윗면 광택·옆면·그림자, #156)·각인 띠, 메인 각인을 그린 기준선에서 잉크 가운데로 세로 맞춤(`InkCenteredLabel`, #230 — 기준은 `CalcTheme` "메인 각인 세로 위치" 절), SHIFT·ALPHA·MENU·ON 자리의 설정 키는 원형 버튼, 설정 키는 키보드 포커스, #190), `round_key_face.dart` (실물 SHIFT·ALPHA·MENU·ON 같은 원형 은색 버튼 면), `calc_body_background.dart` (본체 바탕 — 세로 그라데이션·잔무늬·가장자리 선, 고대비에서는 끔, #156), `key_legend_view.dart` (분수·첨자·근호·∑ 위아래 끝·직접 그리는 칸 각인을 실물처럼 2차원으로 그림 — 배치 비율은 `CalcTheme` "2차원 각인 배치" 절), `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 가로형·가로 접힘선 아래 패널용 넓은 배열 `KeypadArrangement`, 넓은 배열의 손잡이 대칭), `history_panel.dart` (가로형·접힘선 기준 배치(책 자세의 반대쪽 패널, 가로 접힘선의 위 패널)의 계산 기록 영역 — M1에서는 빈 영역. 계산 기록과 메모리 내용을 함께 보여 주는 틀은 M5 Calculate의 #145, 각 모드 내용은 그 모드 마일스톤), `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 키), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_launcher.dart`·`handedness_dialog.dart` (ON 키(설정 키, #190)로 설정 열기 — 접힘선 기준 대화상자 위치·키패드 위치 선택. 지금은 키패드 위치 대화상자이고, M4(에픽 #191)에서 계산기 SETUP 항목과 앱 설정을 담은 설정 팝업으로 바꾼다. LCD 위 상단 띠·설정 버튼(#41)은 #190에서 없앴다), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용), `screen_reader_announcer.dart` (스크린리더 상태 변화 알림 — 루트 Navigator 위에 두어 설정 대화상자 장벽에 막히지 않게 하고, Android는 알린 뒤 `clearDelay`가 지나면 알림 노드를 없앤다, #207)
 - 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회하고, SDK 고정 검사는 CI의 버전 읽기 스크립트를 bash로 실행한다, 액션 고정 스크립트·프로젝트 상태 변경 스크립트(`.claude/scripts/set-project-status.sh`, #250) 검사는 가짜 gh로, 릴리스 APK API 격리 검사 스크립트는 가짜 Android SDK와 실제 빌드에서 옮긴 dexdump 표본으로 실행한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap·글리프 잉크 범위 파서, 각인 위젯 찾기, LCD 글자 목록, 키 터치 치수 측정·커서 패드 내접원 기준(#159), 커서 패드 라벨 검사, 엔진 브리지의 터치 탐색 판정 흉내(겹친 시맨틱 노드의 히트 테스트 순서, #203), 스크린리더 읽기 순서(의미 트리 순회, #140), 화면 배치 판정, CI 워크플로 파일 목록·YAML 로더·`uses:` 줄 추출, 셸 스크립트 실행용 bash 찾기, 가짜 APK용 ZIP 작성기)
 - Android 단위 테스트: `android/app/src/test/kotlin/` (Kotlin 플랫폼 코드의 JVM 테스트 — Robolectric으로 API 수준별 분기를 기기 없이 검사한다.
   `TestSupport.kt`에 테스트 대상 API 수준 상수·가짜 메신저·시스템 설정 흉내 도구, `MainActivityLifecycleTest`는 Mockito `FlutterJNI` 대역 캐시 엔진으로 생명주기를 돈다. `flutter test`와 따로 Gradle로 돌린다 — README "Android 단위 테스트")
@@ -118,24 +118,43 @@
 | `/fix-issue <서브이슈번호>` | 서브이슈 구현 → PR → 적대적 리뷰 2라운드 → 마일스톤 브랜치 머지 → 이슈 Close |
 | `/close-ms <에픽번호>` | 마일스톤 PR Ready 전환 → 멀티플랫폼 CI → `main` 머지 |
 
-### 마일스톤 대응 표 (2026-11-27 재구성, #185)
+### 마일스톤 대응 표 (2026-11-27 모드별 재구성, #249)
 M 번호(`<N>`), 에픽 이슈 번호, GitHub 마일스톤 번호는 **서로 다르다**. 브랜치·커밋·실기기 규칙의 `M<N>`은 에픽 제목의 `[M<N>]`
 (= 마일스톤 제목의 `M<N>:`)에서 읽는다 — 에픽 번호나 `milestone.number`로 정하지 않는다.
+M2(수식 AST, 바뀌지 않음) 뒤는 MENU 메인 메뉴(M3) → 설정 팝업(M4) → 실물 계산 모드별 마일스톤(모드 12개, Calculate만 둘)이고, v1.0 모드 뒤에 광고·결제(M10)·출시 QA(M11)가 있다. **v1.0은 모드 4개**(Calculate·Complex·Equation/Func·Table)로
+M11에서 출시하고, 나머지 모드는 M12부터 버전마다 하나씩 더한다. 구성 원본은 에픽 #5 "마일스톤 구성", 항목별 요구사항은 [milestone.md](milestone.md)다.
 
-| M | 에픽 | GitHub 마일스톤 번호 | 브랜치 | 내용 |
-|---|---|---|---|---|
-| M1 | #1 | 1 | `milestone/m1` | UI 셸·키패드 |
-| M2 | #2 | 2 | `milestone/m2` | 2D 수식 AST·커서 |
-| M3 | #3 | 3 | `milestone/m3` | 계산 엔진(COMP) |
-| M4 | #4 | 4 | `milestone/m4` | 수치해석 |
-| M5 | #5 | 5 | `milestone/m5` | 특수 연산 모드 |
-| M6 | #191 | 8 | `milestone/m6` | 앱 설정(ON 키) |
-| M7 | #192 | 9 | `milestone/m7` | AdMob·인앱결제 |
-| M8 | #6 | 6 | `milestone/m8` | 출시 QA(실기기 점검·실물 대조·스토어 빌드) — v1.0 |
-| M9 | #34 | 7 | `milestone/m9` | 데이터 분석 앱 — v1.1 |
+| M | 에픽 | GitHub 마일스톤 번호 | 브랜치 | 내용 | 배포 |
+|---|---|---|---|---|---|
+| M1 | #1 | 1 | `milestone/m1` | UI 셸·키패드 | |
+| M2 | #2 | 2 | `milestone/m2` | 2D 수식 AST·커서 | |
+| M3 | #5 | 5 | `milestone/m3` | MENU 메인 메뉴·모드 전환 뼈대 | |
+| M4 | #191 | 8 | `milestone/m4` | SETUP 설정 팝업 (SETUP 키) | |
+| M5 | #3 | 3 | `milestone/m5` | Calculate — 기본 연산 엔진·메모리·계산 기록 | |
+| M6 | #4 | 4 | `milestone/m6` | Calculate — CALC·SOLVE·미적분·Σ, 과학 상수·단위 변환 | |
+| M7 | #239 | 10 | `milestone/m7` | Complex | |
+| M8 | #240 | 11 | `milestone/m8` | Equation/Func | |
+| M9 | #241 | 12 | `milestone/m9` | Table | |
+| M10 | #192 | 9 | `milestone/m10` | AdMob·인앱결제 | |
+| M11 | #6 | 6 | `milestone/m11` | 출시 QA (실기기 점검·실물 대조·스토어 빌드) | v1.0 |
+| M12 | #242 | 13 | `milestone/m12` | Inequality | v1.1 |
+| M13 | #243 | 14 | `milestone/m13` | Ratio | v1.2 |
+| M14 | #244 | 15 | `milestone/m14` | Base-N | v1.3 |
+| M15 | #245 | 16 | `milestone/m15` | Matrix | v1.4 |
+| M16 | #246 | 17 | `milestone/m16` | Vector | v1.5 |
+| M17 | #34 | 7 | `milestone/m17` | Statistics | v1.6 |
+| M18 | #247 | 18 | `milestone/m18` | Distribution | v1.7 |
+| M19 | #248 | 19 | `milestone/m19` | Spreadsheet | v1.8 |
 
 마일스톤 이름(`--milestone`에 쓰는 제목)은 번호로 조회한다: `gh api repos/i-technika/altcalc-fx991/milestones/<GitHub 마일스톤 번호> --jq .title`.
-2026-11-27 이전 이슈·코멘트의 "M6 실기기·광고·출시 QA"는 지금의 M8(실기기·출시 QA)·M7(광고·결제)이다.
+- M1 에픽 #1은 GitHub 서브이슈 한도(부모 하나에 100개)에 닿았다. 새 M1 이슈는 에픽 #1 대신 묶음 이슈 **#237**(`[M1]` 제목) 아래에 연결한다(`/fix-issue` 9단계 B 블록의 `EPIC=237`).
+
+옛 M 번호 (이슈·코멘트·커밋·PR 본문은 이력이라 고치지 않는다 — 에픽 번호·GitHub 마일스톤 번호는 두 재구성에서 바뀌지 않았으니 그것으로 찾는다):
+- 2026-11-27 첫 재구성(#185) 이전의 "M6 실기기·광고·출시 QA"는 지금의 M11(실기기·출시 QA)·M10(광고·결제)이고(그 안의 앱 설정 자리는 지금 M4),
+  옛 M7(데이터 분석 앱)은 M17~M19다. 그때의 M1~M5는 아래 #249 이전 번호와 같다.
+- 같은 날 모드별 재구성(#249) 이전 번호 → 지금 번호: M3(계산 엔진 COMP) → M5, M4(수치해석) → M6, M5(특수 연산 모드) → M3 메뉴 뼈대와 모드별 마일스톤(M7~M9·M12~M16),
+  M6(앱 설정, ON 키) → M4 설정 팝업, M7(AdMob·인앱결제) → M10, M8(출시 QA) → M11, M9(데이터 분석 앱) → M17~M19.
+  계산기 SETUP(#27)은 옛 M3에서 M4 설정 팝업으로, 과학 상수·단위 변환(#29)은 옛 M3에서 M6으로 옮겼다.
 
 ### 브랜치/PR 규칙
 - 마일스톤 브랜치: `milestone/m<N>` — `<N>`은 위 표의 M 번호 (base: `main`, Draft PR로 유지 → Draft 동안 CI 미실행)
@@ -144,7 +163,7 @@ M 번호(`<N>`), 에픽 이슈 번호, GitHub 마일스톤 번호는 **서로 �
   (#112 이전의 커밋 메시지와 머지된 PR·이슈 본문·코멘트에는 `[M1-5]` 같은 순번이 남아 있다 — 이력이라 그대로 두며, 모두 `#번호`가 함께 적혀 있다)
 - 서브이슈 PR 제목: `<이슈 제목> (#<이슈번호>)`
 - 서브이슈 생성은 어느 단계에서든 `/fix-issue` 9단계의 A(생성)·B(연결) 블록을 따른다 (라벨·마일스톤·프로젝트·상위 에픽 연결·이슈 타입을 함께 지정하고, 생성 실패 시 중복 생성을 막는다)
-- Android·iOS(iPhone·iPad) **실기기** 확인은 M8 출시 QA(에픽 #6 "실기기 점검", GitHub 마일스톤 번호 6)에서 한다(v1.0 출시 전 과제인 M1~M7에 한함 — M 구분은 위 대응 표·마일스톤 제목으로 한다. M6·M7을 포함한 범위는 2026-11-27 사용자 확인, #185). 실기기가 있어야 하는 부분은 M8·에픽 #6 이슈로 나누고, 에뮬레이터·CI로 되는 부분은 그 과제가 속한 마일스톤에 남긴다. M1~M7 이슈 본문에 있는 실기기 확인 항목도 그 이슈에서 하거나 완료 처리하지 않고 M8로 나눈다(이미 있는 M8 이슈가 있으면 그것을 가리킨다). iOS 화면·동작 확인은 실기기로 본다(Mac 없음). 실물 계산기·사진 대조는 실기기 확인이 아니다 (#185, 자세히는 `/fix-issue` 1·9단계)
+- Android·iOS(iPhone·iPad) **실기기** 확인은 M11 출시 QA(에픽 #6 "실기기 점검", GitHub 마일스톤 번호 6)에서 한다(v1.0 출시 전 과제인 M1~M10에 한함 — M 구분은 위 대응 표·마일스톤 제목으로 한다. 범위는 2026-11-27 사용자 확인, #185·#249). 실기기가 있어야 하는 부분은 M11·에픽 #6 이슈로 나누고, 에뮬레이터·CI로 되는 부분은 그 과제가 속한 마일스톤에 남긴다. M1~M10 이슈 본문에 있는 실기기 확인 항목도 그 이슈에서 하거나 완료 처리하지 않고 M11로 나눈다(이미 있는 M11 이슈가 있으면 그것을 가리킨다). v1.0 뒤 마일스톤(M12~M19)의 실기기 확인은 M11로 넘기지 않고 그 마일스톤에서 한다(그 버전의 배포 전 점검). iOS 화면·동작 확인은 실기기로 본다(Mac 없음). 실물 계산기·사진 대조는 실기기 확인이 아니다 (#185, 자세히는 `/fix-issue` 1·9단계)
 - 담당자(Assignee): 착수하는 이슈(`/open-ms`의 에픽, `/fix-issue`의 서브이슈)와 생성하는 PR은 `i-technika`로 지정한다 (미착수 후속 이슈는 지정하지 않음)
 - 라벨: 에픽 `milestone`, 서브이슈 `sub-issue` / 프로젝트: `AltCalc FX-991` (#7)
 - 서브이슈 PR은 기본 브랜치가 아닌 마일스톤 브랜치로 머지되므로 `Closes #N`으로 **이슈가 자동 Close되지 않는다.** 머지 후 직접 `gh issue close`한다.

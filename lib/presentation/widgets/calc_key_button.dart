@@ -31,7 +31,7 @@ import 'screen_coordinate_root.dart';
 /// 인쇄한다(SHIFT 금색·ALPHA 자홍색·나머지 흰색 — [CalcPalette.bodyPrintOf]):
 /// ```
 ///  ┌──────────────────────┐
-///  │       SETTING        │  ← 각인 띠: 메인 각인(흰색, 가운데)
+///  │        SETUP         │  ← 각인 띠: 메인 각인(흰색, 가운데)
 ///  │         (◉)          │  ← 원형 버튼 (터치 영역은 셀 전체)
 ///  └──────────────────────┘
 /// ```
@@ -592,13 +592,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             height: legendHeight,
             width: width,
             child: round
-                ? _BodyPrintRow(
+                ? _BodyPrintLabel(
                     keyDef: widget.keyDef,
                     fontSize: legendFontSize,
-                    gap: math.min(
-                      legendFontSize * CalcTheme.keyLegendGapRatio,
-                      width * CalcTheme.keyLegendGapMaxWidthRatio,
-                    ),
                     textScaler: textScaler,
                   )
                 // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭 안에 인쇄한다 (#220 R1)
@@ -864,62 +860,35 @@ double keyCapFaceWidth({
   );
 }
 
-/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에, SHIFT·ALPHA 각인이 있으면
-/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼, #156). 띠 폭을 넘으면 함께 줄인다.
+/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에 쓴다. 띠 폭을 넘으면 줄인다.
+/// 원형 버튼에는 SHIFT·ALPHA 각인이 없다(#253 — 실물 MENU 위 `MENU SETUP`의 `SETUP`은 앱에서 뺐다, `CalcKeyDef` assert).
 /// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
-/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
-class _BodyPrintRow extends StatelessWidget {
+/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 각인을 잰다.
+class _BodyPrintLabel extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;
-  final double gap;
   final TextScaler textScaler;
 
-  const _BodyPrintRow({
+  const _BodyPrintLabel({
     required this.keyDef,
     required this.fontSize,
-    required this.gap,
     required this.textScaler,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = CalcPalette.of(context);
-    final parts = [
-      (
-        keyDef.mainLegend,
-        CalcTheme.keyBodyPrintStyle.copyWith(
-          color: palette.bodyPrintOf(keyDef.category),
-        ),
-      ),
-      if (keyDef.shiftLegend case final shift?)
-        (
-          shift,
-          CalcTheme.keyShiftLabelStyle.copyWith(color: palette.shiftLabel),
-        ),
-      if (keyDef.alphaLegend case final alpha?)
-        (
-          alpha,
-          CalcTheme.keyAlphaLabelStyle.copyWith(color: palette.alphaLabel),
-        ),
-    ];
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.bottomCenter,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          for (final (i, (legend, style)) in parts.indexed) ...[
-            if (i > 0) SizedBox(width: gap),
-            _legendLabel(
-              legend,
-              style.copyWith(fontSize: fontSize),
-              textScaler,
-              snapToDrawnBaseline: true,
-            ),
-          ],
-        ],
+      child: _legendLabel(
+        keyDef.mainLegend,
+        CalcTheme.keyBodyPrintStyle.copyWith(
+          color: palette.bodyPrintOf(keyDef.category),
+          fontSize: fontSize,
+        ),
+        textScaler,
+        snapToDrawnBaseline: true,
       ),
     );
   }
@@ -1134,7 +1103,7 @@ class KeycapSheenPainter extends CustomPainter {
 /// 두 위젯은 같은 strut 한 줄 상자([keyLabelStrut] — 줄 간격 배분까지 고정해 앱 테마와 상관없다, #252)와 기준선을 쓰므로,
 /// 2차원 각인이 한 줄을 넘지 않으면 크기·보고한 기준선이 같다. 단 `Text`는 보고한 기준선을 정수 dp로 반올림한 곳에 글자를
 /// 그린다([InkCenteredLabel] 설명). [snapToDrawnBaseline]이면 `Text`를 [DrawnBaselineLabel]로 감싸 보고한 기준선에 글자가
-/// 그려지게 한다 — 아래 정렬·기준선 정렬로 이웃 각인과 나란히 놓는 각인 띠(SHIFT·ALPHA, 원형 버튼 위 인쇄)가 쓴다(#252).
+/// 그려지게 한다 — 아래 정렬로 같은 행의 이웃 각인과 기준선을 함께 쓰는 각인 띠(SHIFT·ALPHA, 원형 버튼 위 인쇄)가 쓴다(#252).
 /// 메인 각인은 [InkCenteredLabel]이 그린 기준선으로 맞추므로 감싸지 않는다.
 Widget _legendLabel(
   KeyLegend legend,
@@ -1171,8 +1140,17 @@ Widget _legendLabel(
 ///
 /// `Text`(`RenderParagraph`)는 보고한 기준선을 정수 dp로 반올림한 곳에 글자를 그린다([InkCenteredLabel] 설명). 그 밖의
 /// 자식([KeyLegendView]·[DrawnBaselineLabel])은 보고한 기준선에 그린다.
-double drawnBaselineOf(RenderBox child, double baseline) =>
-    child is RenderParagraph ? baseline.roundToDouble() : baseline;
+///
+/// `Text`는 상황에 따라 `RenderParagraph`를 다른 렌더 객체로 감싼다 — 위에 선택 영역이 있으면 `MouseRegion`, `semanticsLabel`을
+/// 주면 `Semantics`(#252 R1). 그런 감싸개는 모두 자식을 제자리(오프셋 0)에 두는 [RenderProxyBox]이므로, 그 사슬을 따라
+/// 내려가 `RenderParagraph`를 찾는다 — 그래야 감싸개가 끼어도 반올림 보정이 조용히 빠지지 않는다.
+double drawnBaselineOf(RenderBox child, double baseline) {
+  RenderObject? node = child;
+  while (node is RenderProxyBox) {
+    node = node.child;
+  }
+  return node is RenderParagraph ? baseline.roundToDouble() : baseline;
+}
 
 /// `Text` 각인([child])을 보고한 기준선에 글자가 그려지도록 세로로만 옮겨 그린다 (#252).
 ///

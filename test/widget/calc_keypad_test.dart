@@ -798,6 +798,33 @@ void main() {
   group('실제 글꼴 기준 글자 크기 상한 (#141)', () {
     setUpAll(loadBundledFonts);
 
+    test('원형 버튼 위 이름(SHIFT·ALPHA·MENU·SETUP)은 통일 각인 크기의 폭 기준을 정하지 않는다 — 10% 이상 여유 (#253)', () {
+      // #253 전에는 MENU 위 `MENU SETUP` 줄이 키패드 전체 각인 크기를 정해 다른 각인까지 작아졌다. 원형 버튼 위에는
+      // 이름 하나만 인쇄하므로 그보다 긴 각인 쌍(`·` 키 `Ran#`·`RanInt` 등)이 폭 기준을 정해야 한다.
+      bool round(CalcKeyDef d) => d.face == KeyFace.roundButton;
+      for (final (area, arrangement) in [
+        (const Size(304, 420), KeypadArrangement.standard),
+        (const Size(400, 560), KeypadArrangement.standard),
+        (const Size(1000, 420), KeypadArrangement.wide),
+      ]) {
+        for (final scale in [1.0, 1.3]) {
+          final m = KeypadMetrics.compute(
+            area,
+            TextScaler.linear(scale),
+            arrangement: arrangement,
+          );
+          final all = KeypadMetrics.debugWidthLimits(m).legend;
+          final roundOnly = KeypadMetrics.debugWidthLimits(
+            m,
+            where: round,
+          ).legend;
+          final reason = '$area $arrangement ×$scale';
+          expect(all.isFinite && roundOnly.isFinite, isTrue, reason: reason);
+          expect(roundOnly, greaterThan(all * 1.1), reason: reason);
+        }
+      }
+    });
+
     test('폰 키패드(가장 넓은 폰 본체 424dp 이하)에는 상한이 걸리지 않는다 (실제 글꼴 — 폭 기준이 덜 줄인다)', () {
       // 세로 폰의 키패드는 폭 기준 최대 높이(폭 / 가로세로비 하한)를 넘지 않는다.
       for (final width in [304.0, 374.0, 424.0]) {

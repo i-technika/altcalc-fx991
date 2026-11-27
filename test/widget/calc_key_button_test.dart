@@ -394,7 +394,7 @@ void main() {
                 .painter!
             as RoundKeyFacePainter;
 
-    testWidgets('버튼 면에는 글자가 없고, 메인 각인(SETTING)은 각인 띠 가운데에 본체 인쇄 색으로 그린다', (
+    testWidgets('버튼 면에는 글자가 없고, 메인 각인(SETUP)은 각인 띠 가운데에 본체 인쇄 색으로 그린다', (
       tester,
     ) async {
       for (final highContrast in [false, true]) {
@@ -2151,13 +2151,24 @@ void _appearanceTests() {
             );
           }
         }
-        // 실물 MENU 버튼 위 `MENU SETUP` — SETUP은 SHIFT 각인 색
+        // 실물 MENU 버튼 위 `MENU SETUP`의 `SETUP`은 앱에서 뺐다 (#253) — MENU 위에는 `MENU` 하나만 가운데에 있다.
         await tester.pumpWidget(
-          _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.menu))),
+          _host(
+            SizedBox(
+              width: 64,
+              height: 72,
+              child: CalcKeyButton(keyDef: keyDefOf(CalcKeyId.menu)),
+            ),
+          ),
         );
+        expect(find.text('SETUP'), findsNothing);
+        expect(find.byType(Text), findsOneWidget);
         expect(
-          legendStyleOf(tester, find.text('SETUP')).color,
-          CalcTheme.shiftLabel,
+          tester.getCenter(find.text('MENU')).dx,
+          moreOrLessEquals(
+            tester.getCenter(find.byType(CalcKeyButton)).dx,
+            epsilon: 0.5,
+          ),
         );
       },
     );
