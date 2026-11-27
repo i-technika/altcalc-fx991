@@ -1317,13 +1317,17 @@ abstract final class CalcTheme {
   /// 영역이 인셋보다 [screenPadding] 넘게 깊을 때만 0보다 크다.
   /// - 쓰는 곳: 키패드가 본체 윗변 가까이 올 수 있는 배치의 키패드 윗변 하한이다 — 지금은 손 쪽 패널이 짧은 책 자세
   ///   (`CalcHingeSplitLayout.shortHandPanel`)뿐이다. 그 밖의 배치는 본체 위에 활성 LCD(최소 [screenLcdMinHeight])나 위 띠·위
-  ///   패널이 있어 키패드 윗변이 본체 윗변에서 120dp 넘게 떨어진다 — 실측한 가장 깊은 차이(12.2dp)보다 훨씬 아래다.
+  ///   패널이 있어 키패드 윗변이 본체 윗변에서 120dp(활성 LCD 최소 높이 + 간격) 이상 떨어진다 — 실측한 가장 깊은 차이(12.2dp)의
+  ///   깊이 4.2dp보다 훨씬 아래다. 깊이가 120dp 이상인 기기는 없다고 본다(그런 기기는 세로형으로 돌아간 책 자세의 첫 행도 영역에
+  ///   든다).
   /// - 이유: 그 영역에서 시작한 터치는 `CalcKeyButton`이 손을 뗄 때 확정한다(#50). 첫 행(SHIFT·ALPHA·커서 패드·MENU·ON)
   ///   위쪽이 영역에 들면 그 부분만 누름 감각이 달라지고, 각인 띠까지 넓힌 터치 영역(키캡 48dp 미만)도 그렇다.
   /// - 본체 위 여백을 넓히지 않는 이유(아래 여백 [screenBottomMargin]과 다르다): 대부분의 배치는 본체 윗변에 키가 아니라 활성
-  ///   LCD(누르지 않는 영역)가 온다. 여백을 넓히면 키패드가 위에 없는 커버 화면(Pixel Fold 커버 41.9 / 54.1 → 4.2dp)에서도
-  ///   본체가 낮아지고, 본체 원점·접힘선 좌표 변환(`CalculatorScreen`)도 함께 바뀌어야 한다. 키패드만 물리면 비용이 그 배치의
-  ///   키 높이 몇 dp뿐이다.
+  ///   LCD나 계산 기록 영역(지금은 누르지 않는 영역 — 기록을 누르게 되면 #145에서 다시 본다)이 온다. 여백을 넓히면 키패드가
+  ///   위에 없는 커버 화면(Pixel Fold 커버 41.9 / 54.1 → 4.2dp)에서도 본체가 낮아지고, 본체 원점·접힘선 좌표 변환
+  ///   (`CalculatorScreen`)도 함께 바뀌어야 한다. 키패드만 물리면 비용은 그 배치의 키 높이(깊이만큼 낮아진 키패드)다. 깊이만큼
+  ///   비우면 키가 쓸 수 있는 크기([keyTouchHeightUsableMin])보다 작아지는 창은 그 크기를 지키는 만큼만 비운다(#172 R1) — 쓸 수
+  ///   있는 크기 경계(안내 화면이 뜨는 창)가 깊이와 무관하다. 그런 창에서는 첫 행 위쪽이 영역에 남아 손을 뗄 때 입력된다(#50).
   /// - 실측(Android 에뮬레이터 Release 진단 빌드, dp — 인셋 / 위 제스처 영역 → 깊이):
   ///   · API 36 Pixel Tablet 가로·세로, Pixel Fold 내부(책 자세): 24 / 24, 28.2 / 28.2 → 0 (#118)
   ///   · API 36 Pixel Fold 커버(카메라 구멍, 위아래 배치): 41.9 / 54.1 → 4.2 (#118)
@@ -1338,7 +1342,11 @@ abstract final class CalcTheme {
   static double screenTopGestureDepth({
     required double topInset,
     required double topGestureInset,
-  }) => math.max(0.0, topGestureInset - topInset - screenPadding);
+  }) {
+    final depth = topGestureInset - topInset - screenPadding;
+    // 비유한 값(NaN 등)은 0으로 본다 — `math.max(0, NaN)`은 NaN이다.
+    return depth.isFinite ? math.max(0.0, depth) : 0.0;
+  }
 
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;

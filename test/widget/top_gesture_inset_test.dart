@@ -8,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/screen_arrangement.dart';
@@ -19,8 +20,9 @@ import '../support/screen_arrangement.dart';
 /// 제스처 영역에서 시작한 터치에만 걸린다). 다른 배치는 본체 위에 활성 LCD·위 띠가 있어 키패드가 영역에서 멀고, 영역이
 /// 깊어도 배치가 바뀌지 않는다(본체 위 여백을 넓히지 않는다).
 ///
-/// 값의 출처: "실측"은 [CalcTheme.screenTopGestureDepth] 문서의 에뮬레이터 실측이고, 분할 화면 창의 깊은 위 제스처 영역은
-/// 그 실측(API 33 폰 48.8 / 61.0 — 차이 12.2)을 접힘선 창에 옮긴 가정이다(실기기 확인은 #177).
+/// 값의 출처: "실측"은 [CalcTheme.screenTopGestureDepth] 문서의 에뮬레이터 실측이다. 접힘선 창의 깊은 위 제스처 영역(36.2·44·56
+/// 등)은 실측이 없는 가정값이다 — 에뮬레이터에서 깊이가 0보다 큰 접힘선 창을 만들지 못했다(실기기 확인은 #177). 36.2는 실측한
+/// 가장 깊은 깊이(4.2dp)를 이 창의 인셋에 옮긴 값이다.
 
 /// 화면 크기·인셋·제스처 영역·화면 특징을 지정해 [CalculatorScreen]을 띄운다.
 Future<ProviderContainer> _pumpScreen(
@@ -62,6 +64,43 @@ Rect _keypad(WidgetTester tester) =>
 Rect _keycap(WidgetTester tester, CalcKeyId id) =>
     tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
 
+/// 열 [x]에서 [from]부터 0.25dp씩 내려가며 눌러 [id] 키가 처음 반응하는 화면 y와 그 진단 로그 첫 줄(머리말 뺌)을 돌려준다.
+/// 로그를 켜고 끈다. 반응한 누름은 바로 뗀다. [probeOnly]면 반응한 누름을 취소해 입력하지 않는다.
+Future<({double y, String line})> _topmostHit(
+  WidgetTester tester,
+  CalcKeyId id,
+  double x,
+  double from, {
+  bool probeOnly = false,
+}) async {
+  final printed = <String>[];
+  LayoutLog.enable(sink: printed.add, frameTimings: false);
+  try {
+    for (var y = from; y < from + 40; y += 0.25) {
+      printed.clear();
+      final touch = await tester.startGesture(Offset(x, y));
+      await tester.pump();
+      final lines = [
+        for (final l in printed)
+          if (l.startsWith('${LayoutLog.prefix} 키 '))
+            l.substring('${LayoutLog.prefix} 키 '.length),
+      ];
+      if (probeOnly) {
+        await touch.cancel();
+      } else {
+        await touch.up();
+      }
+      await tester.pump();
+      if (lines.isEmpty) continue;
+      expect(lines.first, contains(': ${id.name} '), reason: 'y=$y');
+      return (y: y, line: lines.first);
+    }
+    fail('$id: $from부터 40dp 안에서 눌리지 않았다');
+  } finally {
+    LayoutLog.disable();
+  }
+}
+
 /// 세로 접힘선 (창 높이 전체, x = [x])
 DisplayFeature _verticalFold(double x, double height) => DisplayFeature(
   bounds: Rect.fromLTWH(x, 0, 0, height),
@@ -89,6 +128,9 @@ void main() {
         (47.0, 0.0, 0.0), // iOS — 제스처 영역을 전달하지 않는다
         (0.0, 0.0, 0.0),
         (0.0, 8.0, 0.0), // 화면 여백과 같으면 본체 윗변이 영역 아랫변
+        (24.0, double.nan, 0.0), // 비유한 값은 0
+        (double.nan, 40.0, 0.0),
+        (0.0, double.infinity, 0.0),
       ]) {
         expect(
           CalcTheme.screenTopGestureDepth(
@@ -155,34 +197,13 @@ void main() {
             keypad.bottom,
             moreOrLessEquals(_shortBookSize.height - 8, epsilon: 0.01),
           );
-          // 첫 행 키캡 위쪽 끝 바로 아래를 눌러도 보류 없이 누르는 순간 입력된다(진단 로그의 키 입력 단계로 본다 — SHIFT·ALPHA는
-          // 계산기 입력 수를 늘리지 않는 모디파이어다).
           final printed = <String>[];
           LayoutLog.enable(sink: printed.add, frameTimings: false);
           addTearDown(LayoutLog.disable);
-          for (final id in const [
-            CalcKeyId.shift,
-            CalcKeyId.alpha,
-            CalcKeyId.menu,
-          ]) {
-            final r = _keycap(tester, id);
-            expect(r.top, greaterThanOrEqualTo(topGesture), reason: '$id');
-            printed.clear();
-            final touch = await tester.startGesture(
-              Offset(r.center.dx, r.top + 0.5),
-            );
-            await tester.pump();
-            expect(printed, [
-              startsWith('${LayoutLog.prefix} 키 입력(누를 때): ${id.name} '),
-            ], reason: '$id');
-            await touch.up();
-            await tester.pump();
-          }
           // 대조: 같은 화면에서 오른쪽 뒤로가기 영역에 든 ON 키 바깥쪽 끝은 보류된다 — 제스처 영역 판정이 살아 있다.
           // (취소로 끝내 설정 대화상자를 열지 않는다.)
           final on = _keycap(tester, settingsKey);
           expect(on.right, greaterThan(_shortBookSize.width - 29.71));
-          printed.clear();
           final edge = await tester.startGesture(
             Offset(on.right - 1, on.center.dy),
           );
@@ -195,11 +216,34 @@ void main() {
           await edge.cancel();
           await tester.pump();
           expect(container.read(calcProvider).inputCount, 0);
+          // 첫 행 키마다 가장 위의 터치 지점(각인 띠까지 넓힌 터치 영역의 윗변 — 키캡보다 위)을 눌러도 보류 없이 누르는 순간
+          // 입력된다. 진단 로그의 키 입력 단계로 본다(SHIFT·ALPHA는 입력 수를 늘리지 않는 모디파이어다). ON은 설정을 여므로
+          // 마지막에 누른다.
+          for (final id in const [
+            CalcKeyId.shift,
+            CalcKeyId.alpha,
+            CalcKeyId.cursorUp,
+            CalcKeyId.menu,
+            settingsKey,
+          ]) {
+            final r = _keycap(tester, id);
+            final hit = await _topmostHit(tester, id, r.center.dx, keypad.top);
+            expect(hit.y, greaterThanOrEqualTo(topGesture), reason: '$id');
+            expect(
+              hit.line,
+              startsWith('입력(누를 때): ${id.name} '),
+              reason: '$id',
+            );
+            if (id == CalcKeyId.shift) {
+              // 각인 띠까지 넓힌 키는 키캡 위에서도 눌린다 — 키캡만 눌러서는 이 부분을 보지 못한다.
+              expect(hit.y, lessThan(r.top), reason: '$id');
+            }
+          }
         },
       );
     }
 
-    testWidgets('영역이 깊어진 만큼만 키패드가 낮아진다 (키 크기는 일반 하한 아래 그대로 쓸 수 있는 크기)', (
+    testWidgets('영역이 깊어진 만큼만 키패드가 낮아지고, 키는 쓸 수 있는 크기 이상 일반 하한 이하다', (
       tester,
     ) async {
       await _pumpScreen(
@@ -225,6 +269,98 @@ void main() {
       );
       expect(withGesture.bottom, moreOrLessEquals(without.bottom));
       expect(withGesture.left, moreOrLessEquals(without.left));
+      final touch = KeypadMetrics.minKeyTouchHeightOf(
+        withGesture.size,
+        KeypadArrangement.standard,
+      );
+      expect(touch, greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin));
+      expect(touch, lessThanOrEqualTo(CalcTheme.keyTouchHeightFloor));
+      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+    });
+
+    // 깊이만큼 비우면 키가 쓸 수 있는 크기(16dp)보다 작아지는 낮은 창 (#172 R1): 쓸 수 있는 크기를 지키는 만큼만 비운다 —
+    // 안내 화면이 뜨는 창 높이가 깊이와 무관하다. 그 대신 첫 행 위쪽은 영역에 남아 손을 뗄 때 입력된다.
+    for (final topGesture in [36.2, 56.0]) {
+      testWidgets('위 제스처 영역 $topGesture: 쓸 수 있는 크기 경계가 깊이 0과 같다 (창 높이 쓸기)', (
+        tester,
+      ) async {
+        bool usable() =>
+            find.byKey(WindowTooSmallNotice.noticeKey).evaluate().isEmpty;
+        var sawShortBook = false;
+        for (var h = 220.0; h <= 270; h += 1) {
+          final size = Size(640, h);
+          final f = _verticalFold(320, h);
+          await _pumpScreen(
+            tester,
+            size: size,
+            padding: _shortBookPadding,
+            gesture: _gestureWithTop(24),
+            displayFeatures: [f],
+          );
+          final base = usable();
+          // 안내 중에는 키패드가 숨어 찾을 수 없다.
+          final baseKeypad = base ? _keypad(tester) : null;
+          final baseDrawn = base ? drawnArrangementOf(tester) : null;
+          await _pumpScreen(
+            tester,
+            size: size,
+            padding: _shortBookPadding,
+            gesture: _gestureWithTop(topGesture),
+            displayFeatures: [f],
+          );
+          expect(usable(), base, reason: 'h=$h');
+          if (!base) continue;
+          expect(drawnArrangementOf(tester), baseDrawn, reason: 'h=$h');
+          if (baseDrawn != DrawnArrangement.sideBySide) continue;
+          sawShortBook = true;
+          final keypad = _keypad(tester);
+          // 키패드 윗변은 깊이 0일 때보다 위로 가지 않고, 영역 아랫변보다 아래로도 가지 않는다(필요한 만큼만 비운다).
+          expect(
+            keypad.top,
+            greaterThanOrEqualTo(baseKeypad!.top - 0.01),
+            reason: 'h=$h',
+          );
+          expect(
+            keypad.top,
+            lessThanOrEqualTo(topGesture + 0.01),
+            reason: 'h=$h',
+          );
+          expect(
+            KeypadMetrics.minKeyTouchHeightOf(
+              keypad.size,
+              KeypadArrangement.standard,
+            ),
+            greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin),
+            reason: 'h=$h',
+          );
+        }
+        expect(sawShortBook, isTrue);
+      });
+    }
+
+    testWidgets('쓸 수 있는 크기를 지키려고 덜 비운 창은 첫 행 위쪽이 보류된다 (판정 대조)', (tester) async {
+      // 640×236, 위 제스처 영역 56(깊이 24): 깊이만큼 비우면 키가 16dp 미만이라 덜 비운다.
+      const size = Size(640, 236);
+      await _pumpScreen(
+        tester,
+        size: size,
+        padding: _shortBookPadding,
+        gesture: _gestureWithTop(56),
+        displayFeatures: [_verticalFold(320, 236)],
+      );
+      expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+      expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+      final keypad = _keypad(tester);
+      expect(keypad.top, lessThan(56));
+      final hit = await _topmostHit(
+        tester,
+        CalcKeyId.menu,
+        _keycap(tester, CalcKeyId.menu).center.dx,
+        keypad.top,
+        probeOnly: true,
+      );
+      expect(hit.y, lessThan(56));
+      expect(hit.line, startsWith('보류(제스처 영역): menu '));
     });
 
     testWidgets('진단 로그: 배치 줄이 키패드 위치를 화면 좌표로 남긴다 (#172)', (tester) async {

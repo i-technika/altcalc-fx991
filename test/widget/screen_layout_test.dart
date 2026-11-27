@@ -3361,7 +3361,8 @@ void _hingeLayoutTests() {
     });
 
     test('세로 접힘선: 위 제스처 영역 깊이만큼 짧은 손 쪽 패널의 키패드가 아래에서 시작한다 (#172)', () {
-      // (본체, 접힘선) — 짧은 손 쪽 패널 창(640×360·700×392·841×360)과 짧지 않은 창(Pixel Fold 내부 본체 825×640.8)
+      // (본체, 접힘선) — 짧은 손 쪽 패널 창의 본체(640×360 인셋 24 → 624×320, 700×392 인셋 24/24 → 684×344(키 하한으로
+      // 줄인 키패드), 841×360 인셋 24 → 825×320)와 짧지 않은 창(Pixel Fold 내부 본체 825×640.8)
       const cases = <(Size, Rect)>[
         (Size(624, 320), Rect.fromLTWH(312, 0, 0, 320)),
         (Size(684, 344), Rect.fromLTWH(342, 0, 0, 344)),
@@ -3422,6 +3423,51 @@ void _hingeLayoutTests() {
           topGestureDepth: depth,
         );
         expect(l.keypad.top, moreOrLessEquals(0), reason: '$depth');
+      }
+    });
+
+    test('세로 접힘선: 위 제스처 영역 깊이가 있어도 창 높이를 키울 때 키가 줄지 않고 쓸 수 있는 크기 경계가 같다 (#172 R1)', () {
+      double touchOf(CalcHingeSplitLayout l) =>
+          KeypadMetrics.minKeyTouchHeightOf(
+            l.keypad.size,
+            KeypadArrangement.standard,
+          );
+      for (final width in [624.0, 825.0]) {
+        for (final h in Handedness.values) {
+          for (final depth in [4.2, 12.2, 24.0, 60.0]) {
+            var last = 0.0;
+            for (var height = 150.0; height <= 700; height += 0.5) {
+              final body = Size(width, height);
+              final hinge = Rect.fromLTWH(width / 2, 0, 0, height);
+              final base = CalcHingeSplitLayout.of(body, hinge, h);
+              final l = CalcHingeSplitLayout.of(
+                body,
+                hinge,
+                h,
+                topGestureDepth: depth,
+              );
+              final reason = '$width×$height $h depth=$depth';
+              final touch = touchOf(l);
+              expect(touch, greaterThanOrEqualTo(last - 0.01), reason: reason);
+              last = touch;
+              // 쓸 수 있는 크기(16dp) 판정은 깊이 0과 같다.
+              expect(
+                touch >= CalcTheme.keyTouchHeightUsableMin,
+                touchOf(base) >= CalcTheme.keyTouchHeightUsableMin,
+                reason: reason,
+              );
+              expect(l.keypad.bottom, moreOrLessEquals(height), reason: reason);
+              // 키패드 윗변은 영역 아랫변 이상이거나(쓸 수 있는 크기를 지키려고 덜 비운 경우) 키가 쓸 수 있는 크기 근처다.
+              if (l.shortHandPanel && l.keypad.top < depth - 0.01) {
+                expect(
+                  touch,
+                  lessThan(CalcTheme.keyTouchHeightUsableMin + 0.05),
+                  reason: reason,
+                );
+              }
+            }
+          }
+        }
       }
     });
 

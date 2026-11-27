@@ -359,16 +359,18 @@ typedef _HingeRegions = ({
 ///   전체가 계산 기록 영역이다(`HistoryPanel`, 내용은 #145).
 /// - 손 쪽 패널이 짧은 창([shortHandPanel], #143 R1·R2, 2026-11-27 사용자 결정): 세로형의 가장 낮은 키가 일반 하한
 ///   ([CalcTheme.keyTouchHeightFloor])보다 낮고, 키패드가 패널 높이를 다 쓰면 키가 더 커지는 창은 활성 LCD를 반대쪽 패널
-///   맨 위로 옮긴다([_lcdOverHistory] — 그 아래 기록, 기록이 최소 높이에 못 미치면 없음). 키패드는 손 쪽 패널 높이까지
-///   쓰되 키가 일반 하한을 넘지 않는 높이로 줄여 본체 아래에 붙인다 — 그래서 창 높이가 늘어 세로형의 키가 일반 하한에 닿는
+///   맨 위로 옮긴다([_lcdOverHistory] — 그 아래 기록, 기록이 최소 높이에 못 미치면 없음). 키패드는 손 쪽 패널 높이(위
+///   시스템 제스처 영역 아래 — 아래 항목)까지 쓰되 키가 일반 하한을 넘지 않는 높이로 줄여 본체 아래에 붙인다 — 그래서 창 높이가 늘어 세로형의 키가 일반 하한에 닿는
 ///   순간 키 크기가 그대로(28dp) 이어지며 LCD가 손 쪽 패널로 돌아온다(R2: 줄이지 않으면 841×508 → 510에서 39.8 → 28.1dp로
 ///   줄었다). 그 사이 키패드 위가 빈다. 세로형 그대로면 LCD 최소 높이(112dp)가 짧은 패널 높이를 먼저 가져가 키가 위아래
 ///   배치와 같아지고(841×355: 16.2dp), 쓸 수 있는 크기 경계에서 접힘선을 가로지르는 가로형(31.6dp)과 키가 2배로 튀었다.
-///   위 시스템 제스처 영역이 본체 윗변 아래로 들어오는 기기(`topGestureDepth`, #172)는 키패드가 그 아래부터만 쓴다 — 첫 행이
-///   영역에 들면 그 행만 손을 뗄 때 입력된다(#50).
 ///   패널 폭에 묶여 키가 커지지 않는 창(접힘선이 치우쳐 손 쪽 패널이 좁은 창)과, 반대쪽 패널이 활성 LCD 최소 폭
 ///   ([CalcTheme.screenShortBookLcdMinWidth] 200dp)보다 좁은 창은 세로형 그대로다. 기록 패널의 최소 폭은 두지 않는다 —
 ///   좁은 기록을 어떻게 보일지는 #145에서 정한다.
+/// - 위 시스템 제스처 영역(#172): 영역이 본체 윗변 아래로 들어오는 기기(`topGestureDepth` > 0)는 짧은 손 쪽 패널의 키패드가
+///   그 아래부터만 쓴다 — 첫 행이 영역에 들면 그 행만 손을 뗄 때 입력된다(#50). 그만큼 비우면 키가 쓸 수 있는 크기보다 작아지는
+///   창은 그 크기를 지키는 만큼만 비운다([_keypadRoomBelowTopGesture]). 보통 책 자세는 키패드 위에 활성 LCD가 있어 해당하지
+///   않는다(깊이가 활성 LCD 최소 높이 + 간격 120dp 이상인 기기는 없다고 본다 — 실측 최대 12.2dp).
 /// - LCD·기록·키패드 어느 것도 접힘선 위에 놓이지 않는다. 모든 영역은 본체 안에 있다(음수·비유한 크기는 0으로 본다).
 @immutable
 class CalcHingeSplitLayout {
@@ -427,11 +429,12 @@ class CalcHingeSplitLayout {
     // 손 쪽 패널이 짧은 창 (#143 R1): 키패드가 패널 높이를 다 쓰면 키가 커질 때만 LCD를 반대쪽 패널로 옮긴다.
     // 반대쪽 패널이 활성 LCD 최소 폭보다 좁으면(접힘선이 치우친 창) 옮기지 않는다 — 줄 글자가 LCD 최소 높이 글자보다 작아진다.
     // "패널 높이"는 위 시스템 제스처 영역 아래부터다(#172) — 첫 행이 알림창 끌어내리기 영역에 들지 않게 한다.
-    final keypadRoom = math.max(
-      0.0,
-      height - (topGestureDepth.isFinite ? math.max(0.0, topGestureDepth) : 0),
+    final fullKeypad = KeypadMetrics.fitSize(
+      Size(
+        handSize.width,
+        _keypadRoomBelowTopGesture(handSize, topGestureDepth),
+      ),
     );
-    final fullKeypad = KeypadMetrics.fitSize(Size(handSize.width, keypadRoom));
     final fullTouch = KeypadMetrics.minKeyTouchHeightOf(
       fullKeypad,
       KeypadArrangement.standard,
@@ -463,6 +466,31 @@ class CalcHingeSplitLayout {
       keypad: hand.keypad.shift(Offset(handLeft, 0)),
       shortHandPanel: false,
     );
+  }
+
+  /// 손 쪽 패널 [panel]에서 키패드가 쓸 높이 — 위 시스템 제스처 영역 깊이 [topGestureDepth]([CalcTheme.screenTopGestureDepth],
+  /// 비유한·음수는 0) 아래 높이다(#172). 단, 그만큼 비우면 키가 쓸 수 있는 크기([CalcTheme.keyTouchHeightUsableMin])보다 작아지는
+  /// 창은 그 크기를 지키는 높이까지만 비운다(#172 R1) — 첫 행이 영역에 들어 손을 뗄 때 입력되더라도(#50) 계산기를 쓸 수 있는
+  /// 쪽이 "창이 너무 작다" 안내보다 낫다. 그래서 쓸 수 있는 크기 경계가 깊이와 무관하고, 높이를 키우면 키패드 윗변이 영역 안에서
+  /// 영역 아랫변까지 이어서 내려온다(키는 줄지 않는다). 패널 높이 전체로도 쓸 수 없는 창은 깊이만큼 비운다(어차피 안내다).
+  static double _keypadRoomBelowTopGesture(Size panel, double topGestureDepth) {
+    final height = panel.height;
+    final depth = topGestureDepth.isFinite
+        ? math.max(0.0, topGestureDepth)
+        : 0.0;
+    final room = math.max(0.0, height - depth);
+    if (depth == 0) return room;
+    final whole = KeypadMetrics.fitSize(panel);
+    final wholeTouch = KeypadMetrics.minKeyTouchHeightOf(
+      whole,
+      KeypadArrangement.standard,
+    );
+    if (wholeTouch < CalcTheme.keyTouchHeightUsableMin) return room;
+    // 키캡이 48dp보다 작은 동안(쓸 수 있는 크기 근처) 가장 낮은 키의 터치 높이는 키패드 높이에 비례한다. 반올림 오차로 경계
+    // 아래로 떨어지지 않게 조금(0.01dp) 더 둔다.
+    final usableHeight =
+        whole.height * CalcTheme.keyTouchHeightUsableMin / wholeTouch + 0.01;
+    return math.max(room, math.min(height, usableHeight));
   }
 
   /// 화면이 다루는 모양 ([_Body])
@@ -676,7 +704,7 @@ class CalcTabletopLayout {
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
 ///   아래 제스처 영역은 반대로 여백으로 피한다(위 광고 슬롯 항목) — 깊이 차이가 작아 대부분 기기에서 비용이 없다.
 /// - 위 제스처 영역(알림창 끌어내리기)은 본체 위 여백으로 피하지 않는다 — 거의 모든 배치에서 본체 윗변에는 키가 아니라
-///   활성 LCD가 온다. 키패드가 본체 윗변 가까이 오는 배치(손 쪽 패널이 짧은 책 자세)만 키패드를 영역 아래에 둔다
+///   활성 LCD나 계산 기록 영역이 온다(기록을 누르거나 스크롤하게 되면 그 위쪽이 영역에 들 수 있다 — #145에서 정한다). 키패드가 본체 윗변 가까이 오는 배치(손 쪽 패널이 짧은 책 자세)만 키패드를 영역 아래에 둔다
 ///   ([CalcTheme.screenTopGestureDepth], #172).
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
@@ -1050,7 +1078,7 @@ class _Body extends ConsumerWidget {
     required this.picksFormByKeySize,
     required this.smallWindow,
     this.hinge,
-    this.topGestureDepth = 0,
+    required this.topGestureDepth,
     this.diagnostics,
   });
 
@@ -1175,7 +1203,8 @@ class _Body extends ConsumerWidget {
             (lcd.right <= keypad.left + _epsilon ||
                 lcd.left >= keypad.right - _epsilon),
         tooSmall: tooSmall,
-        keypad: keypad.shift(diagnostics.bodyOrigin),
+        // 안내 중에는 키패드가 숨어 있으므로 위치를 적지 않는다 (#172 R1)
+        keypad: tooSmall ? null : keypad.shift(diagnostics.bodyOrigin),
         window: diagnostics.window,
         features: diagnostics.features,
         foldableDevice: diagnostics.foldableDevice,

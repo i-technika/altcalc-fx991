@@ -324,6 +324,18 @@ void main() {
     ]);
   });
 
+  test('배치 줄: 키패드 위치가 없으면(안내 중) 키패드 항목을 적지 않는다 (#172 R1)', () {
+    LayoutLog.layout(
+      chosen: ScreenArrangement.stacked,
+      drawn: ScreenArrangement.stacked,
+      tooSmall: true,
+      window: const Size(320, 200),
+      features: const [],
+      foldableDevice: false,
+    );
+    expect(lines.single, isNot(contains('키패드')));
+  });
+
   test('배치는 바뀔 때만 남긴다 (빌드마다 불러도 줄이 늘지 않는다)', () {
     layout();
     now += 1000;

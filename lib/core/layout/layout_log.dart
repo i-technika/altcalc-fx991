@@ -200,7 +200,9 @@ abstract final class LayoutLog {
   /// - [chosen]: 창 크기·접힘선으로 고른 배치 ([FormFactor.arrangementOf])
   /// - [drawn]: 실제로 그린 배치 (키가 작아 접힘선 기준 배치를 못 쓰면 위아래 배치·가로형으로 대체)
   /// - [tooSmall]: 계산기 대신 창을 키워 달라는 안내를 띄웠는지
-  /// - [keypad]: 키패드 영역 (화면 좌표, dp) — 첫 행·맨 아래 행과 시스템 제스처 영역("시스템 영역" 줄)을 견줄 때 쓴다(#172)
+  /// - [keypad]: 키패드 영역 (dp, #172) — 첫 행·맨 아래 행과 시스템 제스처 영역("시스템 영역" 줄)을 견줄 때 쓴다. 좌표는
+  ///   "시스템 영역"·키 입력 줄과 같은 앱 창(MediaQuery) 기준이다(여러 창 모드에서는 화면이 아니라 창의 왼쪽 위가 원점).
+  ///   안내 중(키패드가 숨음)에는 `null`이라 적지 않는다. 키패드가 옮겨 가면 창 크기가 같아도 새 배치 줄이 생긴다.
   static void layout({
     required ScreenArrangement chosen,
     required ScreenArrangement drawn,
