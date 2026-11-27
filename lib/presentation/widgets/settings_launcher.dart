@@ -19,8 +19,8 @@ import 'handedness_dialog.dart';
 /// 움직임은 대화상자 뒤의 키에 닿지 않는다.
 ///
 /// ## 접힘선이 있을 때 대화상자 위치 (#25)
-/// 대화상자는 ON 키가 있는 쪽 절반에 뜬다(대화상자 경로의 `anchorPoint` → `DisplayFeatureSubScreen`, 좁은 절반
-/// 예외는 아래 "좁은 하위 화면").
+/// 대화상자는 ON 키가 있는 쪽 절반에 뜬다(대화상자 경로가 ON 키 중심으로 고른 기준점 → `DisplayFeatureSubScreen`,
+/// 좁은 절반 예외는 아래 "좁은 하위 화면").
 /// Flutter는 반 접힘·물리 힌지만 화면을 나누는 것으로 보지만, 앱은 펼친 폭 0 접힘선에서도 화면을 나눈다
 /// (`FormFactor.arrangementOf` — 세로 접힘선은 #25부터, 가로 접힘선은 #143부터). 그 경우 대화상자가 주름을 가로지르지
 /// 않도록 같은 기준으로 한 번 더 나눈다. 아래의 "절반"은 접힘선 양쪽 패널이다(가로 접힘선이면 위·아래).
@@ -51,7 +51,7 @@ import 'handedness_dialog.dart';
 ///
 /// ### 좁은 하위 화면 (#125)
 /// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 대화상자
-/// 경로가 앱의 배치와 무관하게 늘 화면을 나누고(접힘선이 2개 이상인 화면은 예외 — 아래 절), `anchorPoint`에 가장
+/// 경로가 앱의 배치와 무관하게 늘 화면을 나누고(접힘선이 2개 이상인 화면은 예외 — 아래 절), 기준점에 가장
 /// 가까운 하위 화면(나뉜 절반)에 대화상자를 가둔다. 접힘선이 한쪽에 치우친 창에서는 ON 키가 좁은 절반에 있을 수
 /// 있다 — 위아래 배치에서 세로 접힘선이 키패드 오른쪽을 지나면 오른쪽 위 ON 키가 좁은 절반에 들고, 가로 접힘선 기준
 /// 배치의 ON 키는 키패드가 있는 아래 절반이라 그 절반이 낮을 수 있다.
@@ -86,13 +86,18 @@ import 'handedness_dialog.dart';
 /// 열린 대화상자에도 반영된다(나뉨 여부와 그 기준 위치, 적용 안내 글). 대화상자는 다른 경로라 이 위젯이 다시
 /// 빌드되는 중에는 바꿀 수 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은
 /// [GlobalKey]로 옮겨 가므로 키보드 포커스·스크롤 위치가 유지된다.
-/// 다시 잰 기준 위치(ON 키 중심)는 앱만 나누는 펼친 폭 0 접힘선(세로·가로)에만 쓰인다. Flutter도 나누는 반 접힘·물리 힌지는
-/// 경로가 연 시점의 `anchorPoint`로 절반을 고르고, 그 값은 경로가 열린 동안 바뀌지 않는다. 접힘선이 2개 이상인 화면에서
-/// 연 `anchorPoint`는 연 시점의 ON 키 중심 그대로다([dialogAnchorPointOf]). 접힘 정보가 바뀌어 접힘선 2개 이상인 화면이
-/// 되거나 그 반대가 되면 경로는 나뉨 여부를 같은 프레임에 바꾼다(경로의 MediaQuery를 직접 본다, 앱만 나누는 절반은 위처럼
-/// 한 프레임 늦다). 연 시점의 값이라, 가로형 배치(접힘선 2개)로 연 채 접힘선 1개 화면이 되면 대화상자는 연 시점의 ON 키
-/// 쪽 절반에 뜬다 — 접힘선 기준 배치에서는 ON 키가 반대쪽 절반으로 옮겨 가 있을 수 있다(회전 등 다른 전환과 같은 한계,
-/// 기준점을 따라가게 하는 일은 후속 이슈).
+///
+/// 화면 기하(창 크기·접힘 정보·시스템 인셋 — 이 위젯이 보는 MediaQuery)가 바뀌면 ON 키 중심도 다시 재어, 대화상자가
+/// **지금** ON 키가 있는 절반(좁은 절반 예외 포함)으로 옮겨 간다(#218). 앱만 나누는 펼친 폭 0 접힘선뿐 아니라 Flutter도
+/// 나누는 반 접힘·물리 힌지도 같다 — 경로는 Flutter `DisplayFeatureSubScreen`의 연 시점에 고정되는 `anchorPoint`를 쓰지
+/// 않고, 다시 잰 ON 키 중심으로 고른 기준점([dialogAnchorPointOf])으로 절반을 고른다([_SettingsDialogRoute]).
+/// 예: 823×603 창을 접힘선 2개(반 접힘 x=274.5·548.5)인 가로형 배치로 연 채 가운데 접힘선 1개(x=411.5) 화면이 되면,
+/// 접힘선 기준 배치로 바뀌어 오른손잡이의 ON 키는 x=367 → 782로 옮겨 가고 대화상자도 오른쪽 절반으로 간다(왼손잡이는
+/// x=782 → 370.5, 왼쪽 절반). #218 전에는 연 시점의 ON 키 쪽 절반에 남았다. 회전(반 접은 Fold의 세로 책 자세 ↔ 가로
+/// 테이블톱)도 같다.
+/// 접힘 정보가 바뀌면 경로는 나뉨 여부를 같은 프레임에 바꾸지만(경로의 MediaQuery를 직접 본다), ON 키는 그 프레임의
+/// 배치가 끝난 뒤에 재므로 그 프레임은 이전 기준점으로 절반을 고르고 다음 프레임에 옮겨 간다.
+/// 손잡이만 바꾸면 ON 키가 옮겨 가도 다시 재지 않는다 — 아래 "대화상자가 열린 채 손잡이를 바꾸면".
 ///
 /// ## 대화상자가 열린 채 손잡이를 바꾸면 (#94)
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 키패드(와 ON 키)가 반대쪽 절반으로 옮겨 가도, 대화상자는 연
@@ -102,13 +107,12 @@ import 'handedness_dialog.dart';
 /// 반대쪽 넓은 절반이고, 거기 그대로 남는다). 다른 두 방식을 쓰지 않는 이유:
 /// - ON 키 쪽으로 따라가기: 키보드 화살표로 선택지를 옮기면 선택도 바뀌므로([HandednessDialog]) 화살표를 누를
 ///   때마다 대화상자가 접힘선 건너로 뛴다. 손가락·스크린리더 터치 탐색 위치에서도 대화상자가 사라진다.
-///   (반 접힘·물리 힌지까지 따라가게 하려면 경로의 `anchorPoint`를 열린 동안 바꿀 수 있어야 한다 — 지금 경로는
-///   연 시점의 값을 쓴다.)
+///   그래서 ON 키 중심은 화면 기하가 바뀔 때만 다시 잰다(위 절, #218) — 손잡이 변경은 MediaQuery를 바꾸지 않는다.
 /// - 고르면 바로 닫기: 화살표 한 번에 설정이 바뀌고 대화상자가 닫힌다([HandednessDialog]).
 ///
 /// 다른 화면에서도 대화상자는 연 자리에 남는다.
 /// - 손잡이를 바꾸면 배치까지 바뀌는 비대칭 세로 접힘선(키패드가 들어갈 절반 폭이 손잡이마다 다르다): 반 접힘·물리
-///   힌지는 연 시점의 `anchorPoint`가 고정이라 ON 키가 옮겨 가도 대화상자는 그 자리다. 펼친 폭 0 접힘선은
+///   힌지는 손잡이 변경으로 기준점(ON 키 중심)을 다시 재지 않아 ON 키가 옮겨 가도 대화상자는 그 자리다. 펼친 폭 0 접힘선은
 ///   [handednessKeepsArrangement]가 `false`라 처음부터 화면 전체에 떠 있다(위 2).
 /// - 가로 접힘선 기준 배치: ON 키는 늘 아래 절반(키패드)에 있다. 넓은 배열은 손잡이를 바꾸면 숫자부만 좌우로 옮겨 가고
 ///   ON 키(함수부 구역)도 같은 절반 안에서 좌우로만 옮겨 간다.
@@ -185,7 +189,8 @@ class SettingsLauncher extends StatefulWidget {
     );
   }
 
-  /// 대화상자 경로(`DialogRoute`)에 줄 `anchorPoint` ([SettingsLauncher] "좁은 하위 화면", #125).
+  /// 대화상자 경로([_SettingsDialogRoute])가 하위 화면을 고르는 기준점 ([SettingsLauncher] "좁은 하위 화면", #125).
+  /// 경로는 열린 동안 다시 잰 ON 키 중심으로 이 값을 다시 구한다(#218).
   ///
   /// [screen]은 대화상자 경로가 그려지는 Navigator의 MediaQuery다 — 경로 좌표, 접힘 정보, 시스템 인셋이 모두 그
   /// 기준이다. [anchor]는 ON 키 중심(경로 좌표)이다. Flutter와 같은 방법(`DisplayFeatureSubScreen`의 공개 함수)으로
@@ -310,6 +315,13 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   /// 바뀌어도 유지되므로(`CalculatorScreen`) 같은 context가 새 자리를 가리킨다.
   BuildContext? _anchorContext;
 
+  /// 마지막으로 본 화면 기하 (창 크기·접힘 정보·시스템 인셋) — 바뀌면 ON 키 중심을 다시 잰다(#218)
+  ({Size size, List<DisplayFeature> features, EdgeInsets padding})? _geometry;
+
+  /// 프레임 끝의 갱신([_scheduleRefresh])이 예약돼 있는지, 그때 ON 키 중심도 다시 잴지
+  bool _refreshScheduled = false;
+  bool _remeasurePending = false;
+
   /// 지금 [widget] 값과 [anchor]로 만든 대화상자 화면 상태
   _DialogLayout _layoutOf(Offset? anchor) => (
     arrangement: widget.arrangement,
@@ -319,25 +331,67 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   );
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 손잡이 변경과 화면 기하 변경을 구별하는 기준 — 손잡이만 바뀌면 이 값들은 그대로다([SettingsLauncher]
+    // "대화상자가 열린 채 손잡이를 바꾸면", #94). 회전·접기·창 크기 변경은 이 중 하나 이상을 바꾼다.
+    final geometry = (
+      size: MediaQuery.sizeOf(context),
+      features: MediaQuery.displayFeaturesOf(context),
+      padding: MediaQuery.paddingOf(context),
+    );
+    final previous = _geometry;
+    _geometry = geometry;
+    if (previous != null &&
+        (previous.size != geometry.size ||
+            previous.padding != geometry.padding ||
+            !_sameFeatures(previous.features, geometry.features))) {
+      _scheduleRefresh(remeasure: true);
+    }
+  }
+
+  static bool _sameFeatures(List<DisplayFeature> a, List<DisplayFeature> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
   void didUpdateWidget(SettingsLauncher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.arrangement != oldWidget.arrangement ||
         widget.handednessApplies != oldWidget.handednessApplies ||
         widget.handednessKeepsArrangement !=
             oldWidget.handednessKeepsArrangement) {
-      // 대화상자 경로는 이 위젯의 자손이 아니라 빌드 중에 다시 빌드하라고 표시할 수 없다 — 프레임이 끝난 뒤
-      // (ON 키가 새 자리에 놓인 뒤) 알린다. ON 키 중심도 그때 다시 잰다.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final key = _anchorContext;
-        final navigator = Navigator.maybeOf(context, rootNavigator: true);
-        _layout.value = _layoutOf(
-          key == null || !key.mounted || navigator == null
-              ? _layout.value.anchor
-              : _anchorIn(key, navigator) ?? _layout.value.anchor,
-        );
-      });
+      // 배치 값만 따른다 — 손잡이만 바꿔 배치가 바뀌는 화면(비대칭 접힘선)에서 대화상자가 따라 옮겨 가지 않게
+      // ON 키 중심은 화면 기하가 바뀔 때만 다시 잰다(위 [didChangeDependencies]).
+      _scheduleRefresh(remeasure: false);
     }
+  }
+
+  /// 프레임이 끝난 뒤(ON 키가 새 자리에 놓인 뒤) 열린 대화상자에 지금 배치 값을 알린다. 대화상자 경로는 이 위젯의
+  /// 자손이 아니라 빌드 중에 다시 빌드하라고 표시할 수 없다. [remeasure]면 ON 키 중심도 그때 다시 잰다.
+  /// 한 프레임에 배치 값과 화면 기하가 함께 바뀌면 한 번만 갱신한다.
+  void _scheduleRefresh({required bool remeasure}) {
+    _remeasurePending |= remeasure;
+    if (_refreshScheduled) return;
+    _refreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScheduled = false;
+      final remeasure = _remeasurePending;
+      _remeasurePending = false;
+      if (!mounted) return;
+      var anchor = _layout.value.anchor;
+      final key = _anchorContext;
+      final navigator = Navigator.maybeOf(context, rootNavigator: true);
+      if (remeasure && key != null && key.mounted && navigator != null) {
+        anchor = _anchorIn(key, navigator) ?? anchor;
+      }
+      _layout.value = _layoutOf(anchor);
+    });
   }
 
   @override
@@ -452,15 +506,9 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
             Theme.of(context).dialogTheme.barrierColor ??
             Colors.black54,
         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-        // ON 키 중심([_layout]의 anchor)은 앱만 나누는 펼친 폭 0 접힘선용으로 그대로 두고, Flutter가 나누는
-        // 접힘선의 하위 화면 선택에만 좁은 하위 화면을 피한 기준점을 쓴다.
-        anchorPoint: SettingsLauncher.dialogAnchorPointOf(
-          // 의존을 등록하지 않고 읽는다 — `MediaQuery.of`로 읽으면 Navigator가 MediaQuery의 모든 속성에 영구히
-          // 의존해, 한 번 연 뒤로 어떤 변경에도 모든 경로를 다시 빌드한다.
-          navigator.context.getInheritedWidgetOfExactType<MediaQuery>()?.data,
-          anchor,
-          minRegion,
-        ),
+        // Flutter가 나누는 접힘선의 하위 화면은 경로가 [_layout]의 ON 키 중심(열린 동안 다시 잰다)으로 고른다.
+        layout: _layout,
+        minRegion: minRegion,
         // SafeArea는 아래에서 직접 씌운다 — 앱이 나눌 때는 나눈 절반 안쪽에 있어야 한다([SettingsLauncher]
         // "접힘선이 있을 때 대화상자 위치"). 나누지 않으면 기본값(경로가 씌우는 SafeArea)과 같은 자리다.
         useSafeArea: false,
@@ -501,14 +549,26 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
 
 /// 설정 대화상자 경로 — `showDialog`가 만드는 [DialogRoute]이고, 경로가 나누는 접힘선을 배치와 맞춘다(창을 가로지르는
 /// 접힘선이 2개 이상인 화면은 나누지 않는다, [SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
+///
+/// 하위 화면은 이 경로가 직접 고른다(#218). [DialogRoute]의 `anchorPoint`는 경로를 만들 때 정해져 열린 동안 바뀌지
+/// 않으므로 넘기지 않고, [layout]의 ON 키 중심(화면 기하가 바뀌면 다시 잰다)으로 [SettingsLauncher.dialogAnchorPointOf]의
+/// 기준점을 구해 바깥 `DisplayFeatureSubScreen`에 준다. 그 위젯이 고른 절반의 접힘 정보만 남기므로(접힘선은 절반
+/// 경계에 닿을 뿐 겹치지 않는다) [super.buildPage] 안쪽의 Flutter `DisplayFeatureSubScreen`은 더 나누지 않는다.
 class _SettingsDialogRoute extends DialogRoute<void> {
+  /// 열린 대화상자가 보는 화면 상태 — 기준점은 그 `anchor`(ON 키 중심)로 고른다
+  final ValueNotifier<_DialogLayout> layout;
+
+  /// 대화상자 최소 크기 ([SettingsLauncher.dialogMinRegionOf] — 좁은 하위 화면을 피하는 기준, #125)
+  final Size minRegion;
+
   _SettingsDialogRoute({
     required super.context,
     required super.builder,
+    required this.layout,
+    required this.minRegion,
     super.themes,
     super.barrierColor,
     super.useSafeArea,
-    super.anchorPoint,
     super.traversalEdgeBehavior,
   });
 
@@ -518,11 +578,23 @@ class _SettingsDialogRoute extends DialogRoute<void> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) => _LayoutHingesOnly(
-    child: super.buildPage(context, animation, secondaryAnimation),
+    child: ValueListenableBuilder<_DialogLayout>(
+      valueListenable: layout,
+      child: super.buildPage(context, animation, secondaryAnimation),
+      builder: (context, layout, page) => DisplayFeatureSubScreen(
+        // [_LayoutHingesOnly]가 배치가 쓰는 접힘선만 남긴 MediaQuery다.
+        anchorPoint: SettingsLauncher.dialogAnchorPointOf(
+          MediaQuery.of(context),
+          layout.anchor,
+          minRegion,
+        ),
+        child: page!,
+      ),
+    ),
   );
 }
 
-/// 경로 페이지([child] — Flutter `DisplayFeatureSubScreen`을 품는다)에 [SettingsLauncher.dialogRouteMediaOf]의
+/// 경로 페이지([child] — 하위 화면을 고르는 `DisplayFeatureSubScreen`을 품는다)에 [SettingsLauncher.dialogRouteMediaOf]의
 /// MediaQuery를 준다 — 페이지는 배치가 쓰는 접힘선으로만 나누고, 접힘선이 2개 이상인 화면은 나누지 않는다.
 ///
 /// 페이지의 빌더가 아니라 이 위젯이 MediaQuery에 의존한다 — 접힘 정보가 바뀌면(열린 채 펴거나 접음) 같은 프레임에 이
