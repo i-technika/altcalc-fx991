@@ -978,6 +978,47 @@ void _cursorPadR2Tests() {
       }
       handle.dispose();
     });
+
+    // 쓸어 넘기기(다음 항목) 순서는 ◀ ▲ ▼ ▶이다 — TalkBack 에뮬레이터에서 앞·뒤 쓸기로 확인한 순서(#173).
+    // 정렬 키 없이 Flutter 기본 순서(위치)로 정해지므로, 영역 나누기(semanticRect)를 바꿔도 이 순서가 남는지 지킨다.
+    for (final area in const [
+      Size(360, 420),
+      Size(393, 560),
+      Size(800, 300),
+      Size(411, 452),
+    ]) {
+      testWidgets('${area.width}×${area.height}: 쓸어 넘기기 순서는 ◀ ▲ ▼ ▶', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+        const strings = KoSemanticStrings();
+        final labelToSector = {
+          for (final sector in CursorPadSector.values)
+            strings.keyButton(CursorPad.defOf(sector).id): sector,
+        };
+        final order = <CursorPadSector>[];
+        void visit(SemanticsNode node) {
+          final sector = labelToSector[node.label];
+          if (sector != null) order.add(sector);
+          for (final child in node.debugListChildrenInOrder(
+            DebugSemanticsDumpOrder.traversalOrder,
+          )) {
+            visit(child);
+          }
+        }
+
+        visit(tester.getSemantics(find.byKey(const ValueKey('calc-keypad'))));
+        expect(order, [
+          CursorPadSector.left,
+          CursorPadSector.up,
+          CursorPadSector.down,
+          CursorPadSector.right,
+        ]);
+        handle.dispose();
+      });
+    }
   });
 
   group('폭 제약 라벨의 렌더링', () {
