@@ -410,8 +410,8 @@ void _expectMathInk(
 /// 기대 좌표는 페인터와 같은 계산이다: 잉크는 [CalcTheme.lcdStatusEyeInkCells]칸 폭으로 2칸 슬롯 가운데, 대문자 높이 띠
 /// 가운데에 높이 0.62.
 /// - 크기·가운데: 위아래 끝은 대문자 높이 띠를 넘지 않고 띠 가운데에 놓인다. 폭·높이는 안티에일리어싱 몫
-///   (물리 1.5px, 임의 위상 2px)까지만 어긋난다(6dp·2x는 양 끝 몫 — 아래 주석).
-/// - 원(⊙ — ☉ = 해)으로 뭉개지지 않음(#233 리뷰 R1): 잉크가 가로로 길고(가로:세로 1.5 이상), 눈동자가 위아래 눈꺼풀에
+///   (물리 1.5px, 임의 위상 2px)에 물리 1px까지만 어긋난다(아래 주석).
+/// - 원(⊙ — ☉ = 해)으로 뭉개지지 않음(#233 리뷰 R1): 잉크가 가로로 길고(가로:세로 1.4 이상), 눈동자가 위아래 눈꺼풀에
 ///   닿아 가운데 세로줄이 한 덩어리다(떠 있는 점이 아니다).
 /// - 알아볼 수 있음: 눈동자 가운데가 진하고, 눈동자 왼쪽·오른쪽 흰자에 배경만큼 밝은(빨강 170 초과 — 덮임 40% 미만)
 ///   픽셀이 있다.
@@ -446,10 +446,13 @@ void _expectEyeInk(
     reason: reason,
   );
   expect(ink.center.dy, closeTo(mid, tolerance), reason: reason);
-  // 크기 허용치: 대문자 높이가 물리 10px 아래(6dp·2x)면 눈꺼풀 꼭대기·뾰족한 끝 픽셀의 덮임이 잉크 문턱(50%) 아래로
-  // 떨어져 끝마다 물리 1px쯤 줄어든다 — 그때만 양 끝 몫(2배)을 준다.
-  final size = cap * dpr < 10 ? 2 * tolerance : tolerance;
+  // 크기 허용치: 안티에일리어싱 몫에 물리 1px을 더한다 — 작은 크기에서는 눈꺼풀 꼭대기·뾰족한 끝 픽셀의 덮임이 잉크
+  // 문턱(50%) 아래로 떨어져 끝마다 물리 1px 안팎 줄어든다(6dp·2x 실측). 문턱 크기에서 갑자기 바뀌지 않도록
+  // 모든 크기에 같은 식을 쓴다(#233 리뷰 R2).
+  final size = tolerance + 1 / dpr;
   expect(ink.height, closeTo(cap * 0.62, size), reason: reason);
+  // 작은 크기에서는 위 허용치가 높이의 절반에 가까워지므로, 대문자 높이 대비 의미 있는 범위도 본다.
+  expect(ink.height, inInclusiveRange(cap * 0.4, cap * 0.8), reason: reason);
   // 1.4칸 폭, 슬롯 가운데
   expect(ink.left, greaterThanOrEqualTo(left - tolerance), reason: reason);
   expect(
@@ -459,9 +462,9 @@ void _expectEyeInk(
   );
   expect(ink.width, closeTo(width, size), reason: reason);
   expect(ink.center.dx, closeTo(slot.center.dx, tolerance), reason: reason);
-  // 가로로 길다 — 원(⊙)이 아니다. 설계는 약 1.9:1이고, 6dp·2x에서는 픽셀 문턱 때문에 1.6:1까지 내려간다
-  // (한 칸에 그린 #233 첫 안은 약 1.1:1이었다).
-  expect(ink.width / ink.height, greaterThanOrEqualTo(1.5), reason: reason);
+  // 가로로 길다 — 원(⊙)이 아니다. 설계는 약 1.9:1이고, 6dp·2x에서는 픽셀 문턱 때문에 1.6:1까지 내려간다(36위상
+  // 최솟값). 한 칸에 그린 #233 첫 안은 약 1.1:1이었다 — 그 사이의 1.4로 둔다(물리 1px 흔들림에 깨지지 않게).
+  expect(ink.width / ink.height, greaterThanOrEqualTo(1.4), reason: reason);
   // 눈동자가 위아래 눈꺼풀에 닿는다: 가운데 세로줄의 잉크가 한 구간이다.
   expect(
     shot.inkRunsVertical(slot.center.dx, letter.top, letter.bottom),
@@ -765,6 +768,7 @@ void main() {
   // 옮긴 여러 위상으로 본다(√▭✎ 위상 검사와 같은 방식).
   for (final (fontSize, scale, dpr) in [
     (6.0, 1.0, 2.0),
+    (7.0, 1.0, 2.0), // 대문자 높이 약 10물리 px — 허용치 식이 크기에 따라 끊기지 않는지(#233 리뷰 R2)
     (10.0, 1.0, 3.0),
     (8.0, 1.3, 2.625),
   ]) {
@@ -969,7 +973,8 @@ void main() {
     }
     // 눈동자 가운데는 진하다.
     expect(shot.inked(eye.center.dx.floor(), mid.floor()), isTrue);
-    // 눈꺼풀은 양 끝에서 뾰족하다: 가운데 가로줄의 바깥 끝 구간은 잉크 폭의 0.08(안쪽 렌즈 끝)보다 짧다.
+    // 눈꺼풀은 양 끝에서 뾰족하다: 가운데 가로줄의 바깥 끝 구간은 안쪽 렌즈 끝(잉크 폭의 0.08)까지라, 안티에일리어싱
+    // 몫을 더해도 잉크 폭의 0.1보다 짧다.
     expect(
       shot.longestRun(mid, Rect.fromLTRB(eye.left - 2, 0, eyeX(0.2), 200)),
       lessThan(eye.width * 0.1),
