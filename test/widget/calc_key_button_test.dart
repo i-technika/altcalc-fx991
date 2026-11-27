@@ -7,6 +7,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/round_key_face.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -154,6 +155,8 @@ void main() {
   group('카테고리 테마', () {
     testWidgets('모든 키의 키캡 배경·라벨 색이 카테고리 색과 일치한다', (tester) async {
       for (final def in allKeys) {
+        // 원형 버튼(#190)은 키캡 대신 `RoundKeyFace`로 그린다 — 아래 "원형 버튼 키" 그룹이 따로 검사한다.
+        if (def.face == KeyFace.roundButton) continue;
         await tester.pumpWidget(
           _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
         );
@@ -177,6 +180,8 @@ void main() {
       tester,
     ) async {
       for (final def in allKeys) {
+        // 원형 버튼(#190)은 키캡 대신 `RoundKeyFace`로 그린다 — 아래 "원형 버튼 키" 그룹이 따로 검사한다.
+        if (def.face == KeyFace.roundButton) continue;
         await tester.pumpWidget(
           _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
         );
@@ -227,6 +232,8 @@ void main() {
 
     testWidgets('모든 키: 평소 키캡·라벨·테두리·각인이 고대비 팔레트 색이다', (tester) async {
       for (final def in allKeys) {
+        // 원형 버튼(#190)은 키캡 대신 `RoundKeyFace`로 그린다 — 아래 "원형 버튼 키" 그룹이 따로 검사한다.
+        if (def.face == KeyFace.roundButton) continue;
         await tester.pumpWidget(
           _host(
             CalcKeyButton(keyDef: def, onPressed: (_) {}),
@@ -270,6 +277,8 @@ void main() {
       '모든 키: 누르면 즉시 눌림 색(흰 라벨 키는 반전)이 되고, 떼면 배경·라벨이 함께 애니메이션 뒤 돌아온다',
       (tester) async {
         for (final def in allKeys) {
+          // 원형 버튼(#190)은 키캡 대신 `RoundKeyFace`로 그린다 — 아래 "원형 버튼 키" 그룹이 따로 검사한다.
+          if (def.face == KeyFace.roundButton) continue;
           final category = def.category;
           await tester.pumpWidget(
             _host(
@@ -341,6 +350,8 @@ void main() {
       }
 
       for (final def in allKeys) {
+        // 원형 버튼(#190)은 키캡 대신 `RoundKeyFace`로 그린다 — 아래 "원형 버튼 키" 그룹이 따로 검사한다.
+        if (def.face == KeyFace.roundButton) continue;
         final background = palette.keyBackground(def.category);
         Future<double> labelContrast({required bool enabled}) async {
           await tester.pumpWidget(
@@ -363,6 +374,224 @@ void main() {
         expect(disabled, lessThan(enabled), reason: '$def');
         expect(disabled, greaterThan(1.0), reason: '$def');
       }
+    });
+  });
+
+  group('원형 버튼 키 (#190)', () {
+    final on = keyDefOf(settingsKey);
+    RoundKeyFace face(WidgetTester tester) =>
+        tester.widget<RoundKeyFace>(find.byType(RoundKeyFace));
+    RoundKeyFacePainter painter(WidgetTester tester) =>
+        tester
+                .widget<CustomPaint>(
+                  find.descendant(
+                    of: find.byType(RoundKeyFace),
+                    matching: find.byType(CustomPaint),
+                  ),
+                )
+                .painter!
+            as RoundKeyFacePainter;
+
+    testWidgets('버튼 면에는 글자가 없고, 메인 각인(SETTING)은 각인 띠 가운데에 본체 인쇄 색으로 그린다', (
+      tester,
+    ) async {
+      for (final highContrast in [false, true]) {
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: on, onPressed: (_) {}),
+            highContrast: highContrast,
+          ),
+        );
+        final reason = 'highContrast=$highContrast';
+        expect(
+          find.descendant(of: _keycap(on.id), matching: find.byType(Text)),
+          findsNothing,
+          reason: reason,
+        );
+        expect(
+          find.descendant(
+            of: _keycap(on.id),
+            matching: find.byType(RoundKeyFace),
+          ),
+          findsOneWidget,
+        );
+        final label = findLegend(on.mainLegend);
+        expect(
+          legendStyleOf(tester, label).color,
+          highContrast ? CalcTheme.bodyPrintHighContrast : CalcTheme.bodyPrint,
+          reason: reason,
+        );
+        final cap = tester.getRect(_keycap(on.id));
+        final text = tester.getRect(label);
+        expect(text.bottom, lessThanOrEqualTo(cap.top + 0.01), reason: reason);
+        expect(
+          text.center.dx,
+          moreOrLessEquals(cap.center.dx, epsilon: 0.5),
+          reason: reason,
+        );
+        // 평소 고리 바깥 경계는 키캡 테두리 색이다 (고대비 팔레트를 따른다)
+        expect(
+          painter(tester).edge,
+          highContrast
+              ? CalcPalette.highContrast.keyBorder
+              : CalcPalette.standard.keyBorder,
+          reason: reason,
+        );
+      }
+    });
+
+    test('고리는 키캡 자리의 짧은 변을 지름으로 가운데에, 원판은 그 안에 그린다', () {
+      for (final size in const [Size(64, 72), Size(120, 40), Size(30, 90)]) {
+        final bezel = RoundKeyFacePainter.bezelOf(size);
+        expect(bezel.width, moreOrLessEquals(size.shortestSide));
+        expect(bezel.height, moreOrLessEquals(size.shortestSide));
+        expect(bezel.center, size.center(Offset.zero));
+        final disc = RoundKeyFacePainter.discOf(size);
+        expect(disc.center, bezel.center);
+        expect(
+          disc.width,
+          moreOrLessEquals(bezel.width * CalcTheme.roundKeyDiscRatio),
+        );
+        expect(bezel.contains(disc.topLeft), isTrue);
+      }
+      expect(RoundKeyFacePainter.bezelOf(Size.zero).isEmpty, isTrue);
+    });
+
+    testWidgets('누르면 즉시 눌림 원판·눌림 테두리로 그려지고 아래로 내려가며, 떼면 돌아온다', (tester) async {
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: on, onPressed: (_) {})),
+      );
+      final cap = tester.getRect(_keycap(on.id));
+      final restTop = tester.getRect(find.byType(RoundKeyFace)).top;
+      expect(restTop, moreOrLessEquals(cap.top));
+      expect(face(tester).pressed, isFalse);
+      final gesture = await tester.startGesture(cap.center);
+      await tester.pump();
+      expect(face(tester).pressed, isTrue);
+      expect(painter(tester).edge, CalcTheme.keyPressedBorder);
+      expect(
+        tester.getRect(find.byType(RoundKeyFace)).top,
+        moreOrLessEquals(restTop + CalcTheme.keyPressedOffset),
+      );
+      await gesture.up();
+      await tester.pump();
+      expect(face(tester).pressed, isFalse);
+      expect(painter(tester).edge, CalcTheme.keyBorder);
+    });
+
+    testWidgets('그린 버튼이 작아도 셀 전체(각인 띠 포함)가 터치 영역이다', (tester) async {
+      final pressed = <CalcKeyId>[];
+      const cell = Size(64, 72);
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(keyDef: on, onPressed: pressed.add),
+          size: cell,
+        ),
+      );
+      final box = tester.getRect(find.byType(CalcKeyButton));
+      expect(box.size, cell);
+      final bezel = RoundKeyFacePainter.bezelOf(tester.getSize(_keycap(on.id)));
+      expect(bezel.width, lessThan(cell.width));
+      // 네 모서리 (각인 띠의 위 모서리, 원 밖의 아래 모서리) — 모두 그린 원 밖이다
+      for (final p in [
+        box.topLeft + const Offset(1, 1),
+        box.topRight + const Offset(-1, 1),
+        box.bottomLeft + const Offset(1, -1),
+        box.bottomRight + const Offset(-1, -1),
+      ]) {
+        await tester.tapAt(p);
+        await tester.pump();
+      }
+      expect(pressed, List.filled(4, on.id));
+    });
+
+    testWidgets('비활성이면 원판을 흐리게 그리고, 눌러도 입력되지 않는다', (tester) async {
+      await tester.pumpWidget(_host(CalcKeyButton(keyDef: on)));
+      expect(face(tester).enabled, isFalse);
+      expect(painter(tester).enabled, isFalse);
+      final gesture = await tester.startGesture(
+        tester.getCenter(_keycap(on.id)),
+      );
+      await tester.pump();
+      expect(face(tester).pressed, isFalse);
+      await gesture.up();
+    });
+
+    testWidgets(
+      '키보드: focusable이면 포커스를 받아 Enter·Space로 누르고 햅틱을 낸다. 비활성이면 포커스를 받지 않는다',
+      (tester) async {
+        final haptics = _recordHaptics(tester);
+        final pressed = <CalcKeyId>[];
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: on, onPressed: pressed.add, focusable: true),
+          ),
+        );
+        final node = Focus.of(tester.element(_keycap(on.id)));
+        node.requestFocus();
+        await tester.pump();
+        expect(node.hasPrimaryFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect(pressed, [on.id, on.id]);
+        expect(haptics, [_light, _light]);
+
+        // 비활성: 포커스를 받지 않는다(가지고 있던 포커스도 잃는다)
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: on, focusable: true)),
+        );
+        await tester.pump();
+        final disabled = Focus.of(tester.element(_keycap(on.id)));
+        expect(disabled.canRequestFocus, isFalse);
+        expect(disabled.hasFocus, isFalse);
+      },
+    );
+
+    testWidgets('키보드: focusable이 아닌 키는 Tab으로 포커스를 받지 않는다 (원형 버튼·키캡 모두)', (
+      tester,
+    ) async {
+      for (final def in [on, keyDefOf(CalcKeyId.sin)]) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final focused = FocusManager.instance.primaryFocus?.context;
+        final inKey =
+            focused != null &&
+            find
+                .descendant(
+                  of: find.byType(CalcKeyButton),
+                  matching: find.byElementPredicate(
+                    (e) => identical(e, focused),
+                  ),
+                )
+                .evaluate()
+                .isNotEmpty;
+        expect(inKey, isFalse, reason: def.id.name);
+      }
+    });
+
+    testWidgets('스크린리더: focusable 키는 포커스를 받을 수 있고 지금 포커스가 있는지 알린다', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: on, onPressed: (_) {}, focusable: true)),
+      );
+      final button = find.byType(CalcKeyButton);
+      expect(
+        tester.getSemantics(button),
+        isSemantics(isButton: true, isFocusable: true, isFocused: false),
+      );
+      Focus.of(tester.element(_keycap(on.id))).requestFocus();
+      await tester.pump();
+      expect(
+        tester.getSemantics(button),
+        isSemantics(isButton: true, isFocusable: true, isFocused: true),
+      );
+      handle.dispose();
     });
   });
 

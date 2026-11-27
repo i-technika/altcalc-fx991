@@ -331,6 +331,7 @@ void main() {
         final heights = <double>{};
         for (final def in allKeys) {
           if (cursorIds.contains(def.id)) continue;
+          if (def.face == KeyFace.roundButton) continue;
           if (def.mainLabel.runes.length != 1) continue;
           final text = find.descendant(
             of: _keycap(def.id),
@@ -1074,6 +1075,8 @@ void _cursorPadR2Tests() {
         );
         for (final def in allKeys) {
           if (def.category == KeyCategory.cursor) continue;
+          // 원형 버튼(#190)의 메인 각인은 키캡 면이 아니라 각인 띠에 인쇄한다.
+          if (def.face == KeyFace.roundButton) continue;
           // 2차원 각인(#155)은 Text가 아니라 KeyLegendView로 그려진다.
           final text = find.descendant(
             of: _keycap(def.id),

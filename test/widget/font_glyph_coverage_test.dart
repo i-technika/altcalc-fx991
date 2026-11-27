@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/top_strip.dart';
 
 import '../support/lcd_glyphs.dart';
 import '../support/ttf_cmap.dart';
@@ -46,7 +45,7 @@ const _themeStyles = [
   CalcTheme.keyMainLabelStyle,
   CalcTheme.keyShiftLabelStyle,
   CalcTheme.keyAlphaLabelStyle,
-  CalcTheme.topStripWordmarkStyle,
+  CalcTheme.keyBodyPrintStyle,
 ];
 
 void main() {
@@ -171,14 +170,6 @@ void main() {
       };
       final missing = [
         for (final code in glyphs)
-          if (!mono.contains(code)) _describe(code),
-      ];
-      expect(missing, isEmpty);
-    });
-
-    test('상단 띠 워드마크 글자는 모두 고정폭 기본 글꼴에 있다 (#41)', () {
-      final missing = [
-        for (final code in TopStripDecoration.wordmarkText.runes)
           if (!mono.contains(code)) _describe(code),
       ];
       expect(missing, isEmpty);

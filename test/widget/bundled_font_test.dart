@@ -250,6 +250,8 @@ void main() {
       final shift = _emWidth('SHIFT', style);
       expect(shift, moreOrLessEquals(5 * cell, epsilon: 0.01));
       for (final key in allKeys) {
+        // 원형 버튼(#190 — 설정 키의 SETTING)의 메인 각인은 키캡 면이 아니라 각인 띠에 인쇄한다.
+        if (key.face == KeyFace.roundButton) continue;
         expect(
           KeyLegendView.emSize(key.mainLegend, style).width,
           lessThanOrEqualTo(shift + 0.001),

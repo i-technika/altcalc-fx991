@@ -8,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/settings_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
@@ -17,7 +18,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_launcher.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,7 +31,9 @@ import '../support/screen_arrangement.dart';
 
 final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
-final _settings = find.byKey(SettingsButton.buttonKey);
+
+/// 설정 키(ON, #190)
+final _settings = find.byKey(CalcKeyButton.keycapKeyOf(settingsKey));
 final _notice = find.byKey(WindowTooSmallNotice.noticeKey);
 
 /// [size] 창·[padding] 인셋으로 [CalculatorScreen]을 띄운다. 같은 [container]로 다시 부르면 창 크기만 바꿔
@@ -150,8 +153,8 @@ void main() {
   group('짧은 창은 키가 더 큰 가로형으로 그린다 (#38, #142)', () {
     // (창, 인셋, 그린 키 터치 하한 — CalcTheme "짧은 창" 절의 실측값을 내림)
     const cases = [
-      (Size(411, 420), EdgeInsets.only(top: 24), 21.0), // 폰 분할 화면 위
-      (Size(411, 440), EdgeInsets.only(bottom: 48), 21.0), // 폰 분할 화면 아래
+      (Size(411, 400), EdgeInsets.only(top: 24), 21.0), // 폰 분할 화면 위 (미리보기 프리셋)
+      (Size(411, 420), EdgeInsets.only(bottom: 48), 21.0), // 폰 분할 화면 아래
       (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21), 37.0),
       (Size(640, 360), EdgeInsets.only(top: 24), 31.0),
       (Size(568, 320), EdgeInsets.zero, 29.0),
@@ -218,11 +221,11 @@ void main() {
               greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight - 0.01),
             );
 
-            // 설정 버튼은 상단 띠에서 눌리고, 키패드와 겹치지 않는다.
+            // 설정 키(ON, #190)는 키패드 안에서 눌린다.
             final button = tester.getRect(_settings);
             expect(_settings.hitTestable(), findsOneWidget);
-            expect(button.overlaps(keypad), isFalse);
-            expect(button.top, lessThan(lcd.top));
+            expect(keypad.inflate(0.01).contains(button.topLeft), isTrue);
+            expect(keypad.inflate(0.01).contains(button.bottomRight), isTrue);
           },
         );
       }
@@ -296,8 +299,9 @@ void main() {
 
   group('짧은 창이어도 위아래 배치의 키가 더 크면 위아래 배치다', () {
     for (final (size, padding) in const [
-      // 키 27.96dp — 가로형은 21.8dp
-      (Size(412, 520), EdgeInsets.only(top: 24)),
+      // 폰 분할 화면 위: 키 22.1dp — 가로형은 21.7dp (#190에서 상단 띠 최소 높이 12dp가 키패드로 가 위아래 배치가 이겼다.
+      // 그 전 예시 412×520은 키 28.7dp로 일반 하한을 넘어 짧은 창이 아니다.)
+      (Size(411, 420), EdgeInsets.only(top: 24)),
       // iPhone 4s 크기: 키 25.8dp로 일반 하한 미만이지만 가로형은 약 16.7dp. (#141 전의 예시 iPhone SE 1세대
       // 320×568은 맨 아래 광고 슬롯이 빠져 키 31.1dp로 일반 하한을 넘어 짧은 창이 아니다.)
       (Size(320, 480), EdgeInsets.only(top: 20)),
@@ -369,7 +373,7 @@ void main() {
             // 접힘선 기준 배치로 그렸다(대화상자를 접힘선 기준으로 나눌지가 배치 종류로 정해진다, #25·#129).
             expect(
               tester
-                  .widget<SettingsButton>(find.byType(SettingsButton))
+                  .widget<SettingsLauncher>(find.byType(SettingsLauncher))
                   .arrangement,
               ScreenArrangement.hingeSplit,
             );
@@ -379,7 +383,7 @@ void main() {
               drawnTouch,
               greaterThan(_stackedTouchOf(_bodyOf(size, padding))),
             );
-            // LCD·키패드·설정 버튼 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 키패드는 손 쪽 절반이다.
+            // LCD·키패드·설정 키 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 키패드는 손 쪽 절반이다.
             const m = CalcTheme.screenHingeMargin - 0.01;
             for (final rect in [
               tester.getRect(_lcd),
@@ -472,10 +476,8 @@ void main() {
 
     for (final (size, padding) in const [
       (Size(320, 200), EdgeInsets.zero), // 가로형 8.8dp
-      (
-        Size(320, 240),
-        EdgeInsets.zero,
-      ), // 가로형 15.6dp (#142 전 좌우 분할은 16.3dp로 계산기였다)
+      // 300×240: 두 배치 모두 16dp 미만 (#190 전 예시 320×240은 상단 띠가 빠져 가로형 16.7dp로 계산기다)
+      (Size(300, 240), EdgeInsets.zero),
       (Size(600, 220), EdgeInsets.only(top: 24)),
       (Size(240, 300), EdgeInsets.zero), // 위아래 12.9dp
     ]) {
@@ -501,10 +503,10 @@ void main() {
               tester.renderObject<RenderParagraph>(text).textScaler.scale(10),
               moreOrLessEquals(10 * textScale),
             );
-            // 안내(스크롤 영역)는 인셋·화면 여백을 뺀 본체 영역(위쪽 화면 여백 포함)과 같다.
+            // 안내(스크롤 영역)는 인셋·화면 여백을 뺀 본체 영역과 같다.
             final area = Rect.fromLTRB(
               padding.left + CalcTheme.screenPadding,
-              padding.top,
+              padding.top + CalcTheme.screenPadding,
               size.width - padding.right - CalcTheme.screenPadding,
               size.height - padding.bottom - CalcTheme.screenPadding,
             );
@@ -543,8 +545,11 @@ void main() {
       expect(node.flagsCollection.isLiveRegion, isTrue);
       expect(node.label, message.windowTooSmall);
       expect(find.bySemanticsLabel(message.windowTooSmall), findsOneWidget);
-      // 숨긴 계산기(설정 버튼·LCD 알림 노드)는 의미 트리에 없다.
-      expect(find.byTooltip(message.settingsButton), findsNothing);
+      // 숨긴 계산기(설정 키·LCD 알림 노드)는 의미 트리에 없다.
+      expect(
+        find.bySemanticsLabel(const KoSemanticStrings().keyButton(settingsKey)),
+        findsNothing,
+      );
       handle.dispose();
     });
 
@@ -582,7 +587,7 @@ void main() {
       );
     });
 
-    testWidgets('안내 중에는 숨긴 키·설정 버튼이 터치를 받지 않는다', (tester) async {
+    testWidgets('안내 중에는 숨긴 키(설정 키 포함)가 터치를 받지 않는다', (tester) async {
       final container = await _pump(tester, size: _tinyWindow);
       final before = container.read(calcProvider);
       // 본체 곳곳을 눌러도 상태가 바뀌지 않고 대화상자도 뜨지 않는다.
@@ -599,7 +604,7 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
     });
 
-    testWidgets('키보드 포커스가 있던 설정 버튼은 안내 중 포커스를 잃는다 (숨긴 계산기는 포커스 대상이 아니다)', (
+    testWidgets('키보드 포커스가 있던 설정 키(ON)는 안내 중 포커스를 잃는다 (숨긴 계산기는 포커스 대상이 아니다)', (
       tester,
     ) async {
       final container = await _pump(tester, size: const Size(411, 600));
@@ -610,7 +615,10 @@ void main() {
         if (focused == null) return false;
         return find
             .descendant(
-              of: find.byType(SettingsButton, skipOffstage: false),
+              of: find.byWidgetPredicate(
+                (w) => w is CalcKeyButton && w.keyDef.id == settingsKey,
+                skipOffstage: false,
+              ),
               matching: find.byElementPredicate(
                 (e) => identical(e, focused),
                 skipOffstage: false,
@@ -625,7 +633,7 @@ void main() {
       await _pump(tester, size: _tinyWindow, container: container);
       expect(_notice, findsOneWidget);
       expect(focusInSettings(), isFalse);
-      // 안내 중 Tab을 눌러도 숨긴 설정 버튼으로 가지 않는다.
+      // 안내 중 Tab을 눌러도 숨긴 설정 키로 가지 않는다.
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       expect(focusInSettings(), isFalse);
@@ -728,34 +736,33 @@ void main() {
       '창 크기 격자에서 메인 4.8dp·각인 3.1dp 이상 (#38 R1에서 정한 하한 — 가로형 뒤에도 유지)',
       (tester) async {
         var nearThreshold = false;
-        for (var w = 220.0; w <= 900; w += 40) {
-          for (var h = 200.0; h <= 600; h += 20) {
-            final size = Size(w, h);
-            await _pump(tester, size: size);
-            if (_notice.evaluate().isNotEmpty) continue;
-            final keypad = tester.getSize(_keypad);
-            final arrangement = _drawnKeypadArrangement(tester);
-            final m = KeypadMetrics.compute(
-              keypad,
-              TextScaler.noScaling,
-              arrangement: arrangement,
-            );
-            expect(
-              m.mainLabelFontSize,
-              greaterThanOrEqualTo(4.8),
-              reason: '$size',
-            );
-            expect(
-              m.legendFontSize,
-              greaterThanOrEqualTo(3.1),
-              reason: '$size',
-            );
-            if (KeypadMetrics.minKeyTouchHeightOf(keypad, arrangement) < 17) {
-              nearThreshold = true;
-            }
+        // 격자 + 안내 직전 창(320×240: 가로형 키 16.7dp — #190에서 상단 띠가 빠져 격자의 가장 작은 키가 17dp를 넘었다)
+        final sizes = [
+          for (var w = 220.0; w <= 900; w += 40)
+            for (var h = 200.0; h <= 600; h += 20) Size(w, h),
+          const Size(320, 240),
+        ];
+        for (final size in sizes) {
+          await _pump(tester, size: size);
+          if (_notice.evaluate().isNotEmpty) continue;
+          final keypad = tester.getSize(_keypad);
+          final arrangement = _drawnKeypadArrangement(tester);
+          final m = KeypadMetrics.compute(
+            keypad,
+            TextScaler.noScaling,
+            arrangement: arrangement,
+          );
+          expect(
+            m.mainLabelFontSize,
+            greaterThanOrEqualTo(4.8),
+            reason: '$size',
+          );
+          expect(m.legendFontSize, greaterThanOrEqualTo(3.1), reason: '$size');
+          if (KeypadMetrics.minKeyTouchHeightOf(keypad, arrangement) < 17) {
+            nearThreshold = true;
           }
         }
-        // 안내 직전 크기가 격자에 있어야 이 하한이 의미 있다.
+        // 안내 직전 크기가 있어야 이 하한이 의미 있다.
         expect(nearThreshold, isTrue);
       },
     );

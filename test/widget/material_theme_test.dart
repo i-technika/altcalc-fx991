@@ -6,14 +6,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/settings_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/focus_ring.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,7 +44,7 @@ void _setDevice(
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
 }
 
-/// 실제 앱 루트([AltCalcApp])로 가로형 배치(설정 버튼이 보이는 태블릿 가로 창, #142)를 띄운다.
+/// 실제 앱 루트([AltCalcApp])로 가로형 배치(태블릿 가로 창, #142)를 띄운다.
 Future<void> _pumpApp(
   WidgetTester tester, {
   Widget? home,
@@ -66,7 +67,7 @@ Future<void> _pumpApp(
 }
 
 Future<void> _openDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(SettingsButton.buttonKey));
+  await tester.tap(_settingsKey);
   await tester.pumpAndSettle();
   expect(find.byType(HandednessDialog), findsOneWidget);
 }
@@ -197,6 +198,14 @@ PaintPattern _paintsFocusRing(
         color: color,
         style: PaintingStyle.stroke,
       ),
+    CircleBorder() =>
+      paints..circle(
+        x: local?.center.dx,
+        y: local?.center.dy,
+        radius: local == null ? null : (local.shortestSide - w) / 2,
+        color: color,
+        style: PaintingStyle.stroke,
+      ),
     RoundedRectangleBorder(borderRadius: BorderRadius.zero) =>
       paints..drrect(
         outer: local == null ? null : RRect.fromRectAndCorners(local),
@@ -215,7 +224,9 @@ Finder _inkWellOf(Finder target) =>
 
 Finder _option(Handedness h) => find.byKey(HandednessDialog.optionKeyOf(h));
 final _closeButton = find.byKey(HandednessDialog.closeKey);
-final _settingsButton = find.byKey(SettingsButton.buttonKey);
+
+/// 설정 키(ON, #190)의 키캡 자리 — 키보드 포커스 노드가 감싸는 영역이다(`CalcKeyButton.focusable`).
+final _settingsKey = find.byKey(CalcKeyButton.keycapKeyOf(settingsKey));
 
 /// 포커스 표시 방식을 테스트 동안 [strategy]로 둔다.
 void _setHighlightStrategy(FocusHighlightStrategy strategy) {
@@ -227,11 +238,11 @@ void _setHighlightStrategy(FocusHighlightStrategy strategy) {
 }
 
 /// [target] 안 글자·아이콘(RichText)을 감싼 가장 가까운 포커스 노드(버튼·타일의 InkWell)에 포커스를 준다.
+/// 글자가 없는 대상(설정 키의 원형 버튼 자리)은 그 대상을 감싼 포커스 노드다.
 Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
+  final texts = find.descendant(of: target, matching: find.byType(RichText));
   final node = Focus.of(
-    tester.element(
-      find.descendant(of: target, matching: find.byType(RichText)).first,
-    ),
+    tester.element(texts.evaluate().isEmpty ? target : texts.first),
   );
   node.requestFocus();
   await tester.pumpAndSettle();
@@ -287,12 +298,12 @@ Future<_AppLevel> _materialAppLevel(
   return level!;
 }
 
-/// 계산기 화면(설정 버튼)과 설정 대화상자에서 보이는 앱 수준 요소가 [expected]인지
+/// 계산기 화면(설정 키)과 설정 대화상자에서 보이는 앱 수준 요소가 [expected]인지
 Future<void> _expectScreenAppLevel(
   WidgetTester tester,
   _AppLevel expected,
 ) async {
-  expect(_appLevelOf(tester.element(_settingsButton)), expected, reason: '화면');
+  expect(_appLevelOf(tester.element(_settingsKey)), expected, reason: '화면');
   await _openDialog(tester);
   expect(
     _appLevelOf(tester.element(find.byType(HandednessDialog))),
@@ -334,7 +345,7 @@ void main() {
             final reason = 'highContrast=$highContrast';
             _expectTheme(appTheme!, expected, reason: reason);
             _expectTheme(
-              Theme.of(tester.element(find.byKey(SettingsButton.buttonKey))),
+              Theme.of(tester.element(_settingsKey)),
               expected,
               reason: reason,
             );
@@ -433,10 +444,7 @@ void main() {
             await _openDialog(tester);
             for (final (where, theme) in [
               ('MaterialApp', appTheme!),
-              (
-                '설정 버튼',
-                Theme.of(tester.element(find.byKey(SettingsButton.buttonKey))),
-              ),
+              ('설정 키', Theme.of(tester.element(_settingsKey))),
               ('대화상자', Theme.of(tester.element(find.byType(HandednessDialog)))),
             ]) {
               final reason =
@@ -511,13 +519,13 @@ void main() {
           expect(app.cupertinoPrimary, isNot(end.cupertinoPrimary));
         }
         expect(
-          _appLevelOf(tester.element(_settingsButton)),
+          _appLevelOf(tester.element(_settingsKey)),
           app,
           reason: '전환 중 고대비=$value',
         );
         await tester.pumpAndSettle();
         expect(
-          _appLevelOf(tester.element(_settingsButton)),
+          _appLevelOf(tester.element(_settingsKey)),
           references[value],
           reason: '전환 뒤 고대비=$value',
         );
@@ -573,7 +581,7 @@ void main() {
         frame.value = value;
         await tester.pumpAndSettle();
         expect(
-          _appLevelOf(tester.element(_settingsButton)),
+          _appLevelOf(tester.element(_settingsKey)),
           references[value],
           reason: '틀 고대비=$value',
         );
@@ -826,43 +834,33 @@ void main() {
       );
 
       testWidgets(
-        '$mode: 설정 버튼에도 보이는 면에 맞춰 테두리를 그리고, 본체와 3:1 이상이며 버튼 크기는 그대로다',
+        '$mode: 설정 키(ON, #190)에도 원형 버튼 고리에 맞춰 둥근 테두리를 그리고, 본체·고리와 3:1 이상이며 키 크기는 그대로다',
         (tester) async {
           _setDevice(tester, highContrast: highContrast);
           await _pumpApp(tester);
-          final sizeBefore = tester.getSize(_settingsButton);
-          expect(_ringOf(tester, _settingsButton), isNull);
-          await _focusByKeyboard(tester, _settingsButton);
-          final ring = _ringOf(tester, _settingsButton);
+          final sizeBefore = tester.getSize(_settingsKey);
+          expect(_ringOf(tester, _settingsKey), isNull);
+          await _focusByKeyboard(tester, _settingsKey);
+          final ring = _ringOf(tester, _settingsKey);
           expect(ring, isNotNull);
           expect(ring!.color, expectedColor);
           expect(ring.width, greaterThanOrEqualTo(2.0));
           expect(
-            _ringBoxOf(_settingsButton),
-            _paintsFocusRing(tester, _settingsButton, ring.color),
+            _ringRenderOf(tester, _settingsKey).shape,
+            isA<CircleBorder>(),
           );
-          final visible = find
-              .descendant(of: _settingsButton, matching: find.byType(Material))
-              .first;
-          expect(_ringRectOf(tester, _settingsButton), tester.getRect(visible));
+          // 테두리 영역은 원형 버튼을 그리는 키캡 자리다 — 원은 그 짧은 변 지름(고리와 같다)으로 그린다.
+          // (그리는 원의 중심·반지름은 좌표 변환의 부동소수점 오차로 정확히 비교할 수 없어 영역으로 확인한다.)
+          final keycap = tester.getRect(_settingsKey);
+          expect(_ringRectOf(tester, _settingsKey), keycap);
           expect(
-            _ringBoxOf(_settingsButton),
-            _paintsFocusRing(
-              tester,
-              _settingsButton,
-              expectedColor,
-              at: tester.getRect(visible),
-            ),
+            _ringBoxOf(_settingsKey),
+            _paintsFocusRing(tester, _settingsKey, expectedColor),
           );
-          final ink = tester.widget<InkWell>(_inkWellOf(_settingsButton));
           final backgrounds = {
-            // WCAG 2.4.13: 포커스 전후 같은 픽셀
+            // WCAG 2.4.13: 포커스 전후 같은 픽셀 — 원 바깥은 본체, 안쪽은 고리
             '본체': CalcTheme.bodyBackground,
-            // 추가 확인: IconButton 기본 포커스 겹침과의 인접 대비 (위젯이 실제로 쓰는 값)
-            '포커스 겹침': Color.alphaBlend(
-              ink.overlayColor!.resolve({WidgetState.focused})!,
-              CalcTheme.bodyBackground,
-            ),
+            '고리': CalcTheme.roundKeyBezel,
           };
           for (final MapEntry(key: name, value: bg) in backgrounds.entries) {
             expect(
@@ -871,11 +869,7 @@ void main() {
               reason: name,
             );
           }
-          expect(tester.getSize(_settingsButton), sizeBefore);
-          expect(
-            tester.getSize(_settingsButton),
-            const Size.square(CalcTheme.settingsButtonSize),
-          );
+          expect(tester.getSize(_settingsKey), sizeBefore);
         },
       );
 
@@ -904,11 +898,11 @@ void main() {
           await tester.pump();
           expect(_ringOf(tester, target), isNull, reason: '$target 터치로 복귀');
         }
-        // 설정 버튼도 같다
+        // 설정 키도 같다
         await tester.tap(_closeButton);
         await tester.pumpAndSettle();
-        await _focus(tester, _settingsButton);
-        expect(_ringOf(tester, _settingsButton), isNull);
+        await _focus(tester, _settingsKey);
+        expect(_ringOf(tester, _settingsKey), isNull);
       });
 
       testWidgets('$mode: 실제 앱 설정(자동 판정)에서 키를 누르면 테두리가 보이고, 화면을 탭하면 사라진다', (
@@ -939,7 +933,7 @@ void main() {
         _setDevice(tester, highContrast: highContrast);
         _setHighlightStrategy(FocusHighlightStrategy.alwaysTraditional);
         await _pumpApp(tester);
-        await _focus(tester, _settingsButton);
+        await _focus(tester, _settingsKey);
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pumpAndSettle();
         expect(find.byType(HandednessDialog), findsOneWidget);
@@ -970,7 +964,7 @@ void main() {
     testWidgets('키보드 포커스 중 고대비를 켜고 끄면 테두리가 그 모드의 색으로 바로 바뀐다', (tester) async {
       _setDevice(tester, highContrast: false);
       await _pumpApp(tester);
-      await _focusByKeyboard(tester, _settingsButton);
+      await _focusByKeyboard(tester, _settingsKey);
       for (final (highContrast, expected) in [
         (false, CalcTheme.materialFocusRingStandard),
         (true, CalcTheme.materialFocusRingHighContrast),
@@ -979,7 +973,7 @@ void main() {
         _setDevice(tester, highContrast: highContrast);
         await tester.pump();
         expect(
-          _ringOf(tester, _settingsButton)?.color,
+          _ringOf(tester, _settingsKey)?.color,
           expected,
           reason: 'highContrast=$highContrast',
         );
@@ -988,34 +982,6 @@ void main() {
   });
 
   group('고대비 설정에서 툴팁·SnackBar 대비 (#97)', () {
-    testWidgets(
-      '설정 버튼 툴팁: M3 기본값이 색 구성과 무관해 테마로 바꾸지 않았고, 고대비에서도 7:1 이상임을 확인한다',
-      (tester) async {
-        _setDevice(tester, highContrast: true);
-        await _pumpApp(tester);
-        await tester.longPress(find.byKey(SettingsButton.buttonKey));
-        await tester.pumpAndSettle();
-        final label = find.descendant(
-          of: find.byType(Overlay),
-          matching: find.text(_strings.settingsButton),
-        );
-        expect(label, findsOneWidget);
-        final box = tester.widget<Container>(
-          find.ancestor(of: label, matching: find.byType(Container)).first,
-        );
-        final decoration = box.decoration! as BoxDecoration;
-        // 툴팁 배경은 반투명이다 — 버튼 둘레의 본체 위에 겹친 색으로 잰다.
-        final background = Color.alphaBlend(
-          decoration.color!,
-          CalcTheme.bodyBackground,
-        );
-        expect(
-          _contrast(_textColor(tester, label), background),
-          greaterThanOrEqualTo(_aaa),
-        );
-      },
-    );
-
     testWidgets('SnackBar 글자·동작 버튼은 SnackBar 면과 7:1 이상이다', (tester) async {
       _setDevice(tester, highContrast: true);
       await _pumpApp(

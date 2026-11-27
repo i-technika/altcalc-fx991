@@ -14,7 +14,6 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,7 +26,9 @@ import '../support/screen_arrangement.dart';
 
 final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
-final _settings = find.byKey(SettingsButton.buttonKey);
+
+/// 설정 키(ON, #190)
+final _settingsKey = find.byKey(CalcKeyButton.keycapKeyOf(settingsKey));
 final _history = find.byKey(HistoryPanel.panelKey);
 
 /// [size] 창·[padding] 인셋으로 [CalculatorScreen]을 띄운다.
@@ -118,7 +119,6 @@ void main() {
               final body = _bodyRectOf(size, padding);
               final lcd = tester.getRect(_lcd);
               final keypad = tester.getRect(_keypad);
-              final settings = tester.getRect(_settings);
               final keypadWidget = tester.widget<CalcKeypad>(
                 find.byType(CalcKeypad),
               );
@@ -213,15 +213,17 @@ void main() {
                 );
               }
 
-              // 설정 버튼: 상단 띠의 오른쪽 끝(손잡이와 무관), 48dp, 눌리고 키패드와 겹치지 않는다.
-              expect(settings.right, moreOrLessEquals(body.right));
-              expect(settings.top, lessThan(lcd.top));
+              // 상단 띠가 없어(#190) 위 띠는 본체 윗변부터이고, 키패드가 남긴 높이를 모두 받는다.
+              expect(expected.band.top, moreOrLessEquals(0));
               expect(
-                settings.width,
-                moreOrLessEquals(CalcTheme.settingsButtonSize),
+                expected.band.bottom + CalcTheme.screenLcdKeypadGap,
+                moreOrLessEquals(expected.keypad.top),
               );
-              expect(settings.overlaps(keypad), isFalse);
-              expect(_settings.hitTestable(), findsOneWidget);
+              // 설정 키(ON)는 키패드 안이고 눌린다.
+              final on = tester.getRect(_settingsKey);
+              expect(keypad.inflate(0.01).contains(on.topLeft), isTrue);
+              expect(keypad.inflate(0.01).contains(on.bottomRight), isTrue);
+              expect(_settingsKey.hitTestable(), findsOneWidget);
             },
           );
         }
@@ -268,24 +270,24 @@ void main() {
     }
   });
 
-  testWidgets('태블릿 가로: 상단 띠가 내용 줄 전체 높이까지 늘어 설정 버튼이 LCD·기록 영역에 겹치지 않는다', (
+  testWidgets('태블릿 가로: 상단 띠 없이 기록 영역·활성 LCD 위 띠가 본체 윗변부터 키패드 위까지다 (#190)', (
     tester,
   ) async {
-    // 10인치 Android 1280×800: LCD가 목표 높이보다 커진 몫(282.9 → 196)에서 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다.
+    // 10인치 Android 1280×800: 키패드가 넓은 배열 세로 한계(409.1)에 닿아 남는 높이를 모두 위 띠가 받는다.
     const size = Size(1280, 800);
     const padding = EdgeInsets.only(top: 24, bottom: 48);
     await _pump(tester, size: size, padding: padding);
     final body = _bodyRectOf(size, padding);
     final lcd = tester.getRect(_lcd);
+    final history = tester.getRect(_history);
+    final keypad = tester.getRect(_keypad);
+    expect(history.top, moreOrLessEquals(body.top));
+    expect(lcd.top, greaterThanOrEqualTo(body.top - 0.01));
+    expect(history.bottom, moreOrLessEquals(lcd.bottom));
     expect(
-      lcd.top - body.top,
-      moreOrLessEquals(
-        CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding,
-      ),
+      keypad.top - lcd.bottom,
+      moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
     );
-    final settings = tester.getRect(_settings);
-    expect(settings.bottom, lessThanOrEqualTo(lcd.top + 0.01));
-    expect(settings.overlaps(tester.getRect(_history)), isFalse);
   });
 
   testWidgets('한국어 기기: 빈 기록 영역은 "계산 기록 없음"으로 읽힌다', (tester) async {
@@ -333,7 +335,7 @@ void main() {
 
   for (final handedness in Handedness.values) {
     testWidgets(
-      '스크린리더 읽기 순서: 활성 LCD → 기록 → 키패드(함수부 → 숫자부) → 설정 버튼 (${handedness.name})',
+      '스크린리더 읽기 순서: 활성 LCD → 기록 → 키패드(함수부·설정 키 → 숫자부) (${handedness.name})',
       (tester) async {
         final handle = tester.ensureSemantics();
         await _pump(
@@ -346,18 +348,19 @@ void main() {
         final history = indexIn(tester, order, _history);
         final function = indexIn(tester, order, keycap(CalcKeyId.sin));
         final number = indexIn(tester, order, keycap(CalcKeyId.num7));
-        final settings = indexIn(tester, order, _settings);
+        // 설정 키(ON)는 키패드의 상단 조작부에 있어 함수부 구역과 함께 읽힌다 (#190).
+        final on = indexIn(tester, order, _settingsKey);
         expect(lcd, lessThan(history));
+        expect(history, lessThan(on));
         expect(history, lessThan(function));
         expect(function, lessThan(number));
-        expect(number, lessThan(settings));
+        expect(on, lessThan(number));
         handle.dispose();
       },
     );
   }
 
-  // 순서 키는 모든 배치에 붙는다 — 설정 버튼은 화면 위치와 무관하게 맨 끝이다(세로형은 예전에 띠의 버튼을 LCD보다 먼저
-  // 읽었다). 계산기를 연 사용자가 먼저 듣는 것이 LCD이고, 드물게 쓰는 설정은 키 뒤에 둔다(#142).
+  // 순서 키는 모든 배치에 붙는다 — 계산기를 연 사용자가 먼저 듣는 것이 LCD다(#142). 설정은 키패드의 ON 키다(#190).
   for (final (name, size, features) in [
     ('세로형 390×844', const Size(390, 844), const <DisplayFeature>[]),
     (
@@ -372,15 +375,17 @@ void main() {
       ],
     ),
   ]) {
-    testWidgets('스크린리더 읽기 순서 ($name): LCD → 키패드 → 설정 버튼', (tester) async {
+    testWidgets('스크린리더 읽기 순서 ($name): LCD → 키패드(설정 키 포함)', (tester) async {
       final handle = tester.ensureSemantics();
       await _pump(tester, size: size, displayFeatures: features);
       final order = traversalOrder(tester);
       final lcd = indexIn(tester, order, _lcd);
       final key = indexIn(tester, order, keycap(CalcKeyId.shift));
-      final settings = indexIn(tester, order, _settings);
+      final on = indexIn(tester, order, _settingsKey);
+      final number = indexIn(tester, order, keycap(CalcKeyId.num7));
       expect(lcd, lessThan(key));
-      expect(key, lessThan(settings));
+      expect(key, lessThan(on));
+      expect(on, lessThan(number));
       handle.dispose();
     });
   }
@@ -411,7 +416,7 @@ void main() {
               );
               expect(tester.takeException(), isNull);
               expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
-              await tester.tap(_settings);
+              await tester.tap(_settingsKey);
               await tester.pumpAndSettle();
               expect(tester.takeException(), isNull);
             },
@@ -426,18 +431,20 @@ void main() {
       final l = CalcLandscapeLayout.of(const Size(1264, 712), Handedness.right);
       const block = 1264 / 2.06;
       const keypadHeight = block / 1.5; // 넓은 배열 세로 한계 409.1
-      // LCD: 남는 높이 692 − 409.1 = 282.9(최대 높이 350.6 이하) → 목표 196을 넘는 몫에서 띠를 28dp 늘린다.
-      const lcdHeight = 712 - 12 - 8 - keypadHeight - 28;
-      expect(l.top, moreOrLessEquals(40));
+      // 위 띠: 키패드가 세로 한계에 닿아 남는 높이 712 − 8 − 409.1 = 294.9를 모두 받는다(목표 199.4) — 상단 띠가 없어
+      // 본체 윗변부터다(#190). 활성 LCD는 블록 폭의 최대 높이(실물 비율 613.6 / 1.75 = 350.6과 줄 글자 상한 높이 약 273.5 중
+      // 낮은 쪽, #189)로 위 띠 아래(키패드 바로 위)에 붙고, 기록 영역은 위 띠 전체다.
+      const lcdHeight = 712 - 8 - keypadHeight;
+      final active = LcdFontSizes.heightAtMaxLineFont;
       expect(
         l.lcd,
         rectMoreOrLessEquals(
-          const Rect.fromLTWH(1264 - block, 40, block, lcdHeight),
+          Rect.fromLTWH(1264 - block, lcdHeight - active, block, active),
         ),
       );
       expect(
         l.history,
-        rectMoreOrLessEquals(const Rect.fromLTWH(0, 40, block, lcdHeight)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, block, lcdHeight)),
       );
       expect(
         l.keypad,
@@ -448,7 +455,7 @@ void main() {
       expect(l.numbersOnLeft, isFalse);
       expect(
         l.band,
-        rectMoreOrLessEquals(Rect.fromLTWH(0, 40, 1264, lcdHeight)),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 1264, lcdHeight)),
       );
     });
 
@@ -482,7 +489,8 @@ void main() {
             expect(history.overlaps(l.lcd), isFalse, reason: '$body $h $l');
             expect(history.overlaps(l.keypad), isFalse, reason: '$body $h $l');
           }
-          expect(l.top, greaterThanOrEqualTo(0));
+          // 위 띠는 본체 윗변부터 키패드 위 간격까지다 (#190 — 상단 띠가 없다).
+          expect(l.band.top, moreOrLessEquals(0), reason: '$body $h $l');
           expect(l.keypad.bottom, moreOrLessEquals(body.height));
         }
       }
@@ -508,7 +516,6 @@ void main() {
         if (r.history != null) {
           expect(l.history, rectMoreOrLessEquals(mirror(r.history!)));
         }
-        expect(l.top, r.top);
       }
     });
 
@@ -516,7 +523,7 @@ void main() {
     double lineFont(CalcLandscapeLayout l) =>
         LcdFontSizes.forSize(l.lcd.size, TextScaler.noScaling).input;
 
-    /// 앞 배치 [p] → 다음 배치 [l]로 창이 조금 커질 때의 연속성 (#142 R1·R2): 키패드는 줄지 않고, 위 띠·상단 띠 높이는
+    /// 앞 배치 [p] → 다음 배치 [l]로 창이 조금 커질 때의 연속성 (#142 R1·R2): 키패드는 줄지 않고, 위 띠 높이는
     /// 한 걸음([step]) 넘게 바뀌지 않으며, 활성 LCD 줄 글자는 기록 영역이 생기고 없어질 때만 바뀌되 그때도 문턱 비율
     /// ([CalcTheme.screenLandscapeHistoryMinLcdFontRatio])보다 많이 줄지 않는다.
     void expectContinuous(
@@ -532,11 +539,6 @@ void main() {
       );
       expect(
         (l.band.height - p.band.height).abs(),
-        lessThanOrEqualTo(step + 1e-6),
-        reason: reason,
-      );
-      expect(
-        (l.top - p.top).abs(),
         lessThanOrEqualTo(step + 1e-6),
         reason: reason,
       );
@@ -665,15 +667,13 @@ void main() {
               reason: reason,
             );
           }
-          // 위 띠 높이는 세로형과 같은 규칙을 본체 폭으로 쓴 값이다(기록 영역과 무관).
+          // 위 띠는 세로형과 같은 규칙을 본체 폭으로 쓴 높이다(기록 영역과 무관) — 키패드와 간격이 쓰지 않는 높이를
+          // 모두 받는다(#190).
+          expect(band.top, moreOrLessEquals(0), reason: reason);
           expect(
             band.height,
-            lessThanOrEqualTo(
-              math.max(
-                    CalcTheme.screenLcdMinHeight,
-                    width / CalcTheme.screenLcdMinAspectRatio,
-                  ) +
-                  1e-6,
+            moreOrLessEquals(
+              height - CalcTheme.screenLcdKeypadGap - l.keypad.height,
             ),
             reason: reason,
           );

@@ -332,7 +332,7 @@ const DisplayFeature previewTriFoldRightFold = DisplayFeature(
 );
 
 /// Flip 내부 화면의 상태 표시줄 높이 근사값 (dp) — 화면 위 가운데의 카메라 구멍 때문에 구멍 없는 화면(24dp)보다
-/// 높게 잡았다(배치 테스트 `screen_layout_test`·`top_strip_test`의 Flip 근사와 같다). 실기기 미확인이다.
+/// 높게 잡았다(배치 테스트 `screen_layout_test`의 Flip 근사와 같다). 실기기 미확인이다.
 const double _flipStatusBarHeight = 32;
 
 /// 미리보기 프리셋 목록. 첫 항목이 기본값이다.
@@ -433,7 +433,7 @@ const List<PreviewDevice> previewDevices = [
     systemGestureInsets: EdgeInsets.only(top: 24, bottom: 48),
   ),
   // 태블릿 가로: 가로형 배치 (#142) — 위 띠에 계산 기록(빈 영역, #145)과 활성 LCD, 아래에 넓은 키패드 배열.
-  // 손잡이는 화면의 설정 버튼으로 바꾼다(숫자부와 활성 LCD가 그쪽으로 옮겨 간다) —
+  // 손잡이는 ON 키(설정 키, #190)로 바꾼다(숫자부와 활성 LCD가 그쪽으로 옮겨 간다) —
   // 대화상자는 기기 틀 안에 그 기기의 크기·글자 배율로 뜬다 (#72).
   PreviewDevice(
     '태블릿 가로',

@@ -64,21 +64,24 @@ void main() {
         expect(strings.keys.keys.toSet(), CalcKeyId.values.toSet());
       });
 
-      test('SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다', () {
-        for (final def in allKeys) {
-          final speech = strings.keys[def.id]!;
-          expect(
-            speech.shift != null,
-            def.hasShift,
-            reason: '${def.id.name} SHIFT',
-          );
-          expect(
-            speech.alpha != null,
-            def.hasAlpha,
-            reason: '${def.id.name} ALPHA',
-          );
-        }
-      });
+      test(
+        'SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다 (쓰지 않는 SHIFT 기능은 빼고, #190)',
+        () {
+          for (final def in allKeys) {
+            final speech = strings.keys[def.id]!;
+            expect(
+              speech.shift != null,
+              def.hasShift && !ignoredShiftFunctions.contains(def.id),
+              reason: '${def.id.name} SHIFT',
+            );
+            expect(
+              speech.alpha != null,
+              def.hasAlpha,
+              reason: '${def.id.name} ALPHA',
+            );
+          }
+        },
+      );
 
       test('음성 라벨에는 표시용 기호가 없다', () {
         for (final speech in strings.keys.values) {
@@ -96,6 +99,11 @@ void main() {
           for (final layer in KeyLayer.values) {
             final display = KeyInput.labelOf(def.id, layer);
             if (display == null || RegExp(r'^[0-9]$').hasMatch(display)) {
+              continue;
+            }
+            // 쓰지 않는 SHIFT 기능(#190 — OFF)은 읽지 않는다.
+            if (layer == KeyLayer.shift &&
+                ignoredShiftFunctions.contains(def.id)) {
               continue;
             }
             // 대소문자만 다른 경우(OPTN/Optn)도 철자로 읽히므로 막는다. 각인 자체가 실제 영단어라
@@ -128,11 +136,12 @@ void main() {
         );
       });
 
-      test('키 버튼 힌트는 SHIFT·ALPHA 기능이 있는 키에만 있다', () {
+      test('키 버튼 힌트는 SHIFT·ALPHA 기능이 있는 키에만 있다 (쓰지 않는 SHIFT 기능은 빼고, #190)', () {
         for (final def in allKeys) {
           expect(
             strings.keyButtonHint(def.id) != null,
-            def.hasShift || def.hasAlpha,
+            (def.hasShift && !ignoredShiftFunctions.contains(def.id)) ||
+                def.hasAlpha,
             reason: def.id.name,
           );
         }
