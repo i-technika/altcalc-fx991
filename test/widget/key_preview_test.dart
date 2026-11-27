@@ -181,13 +181,13 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     hinges: const [Rect.fromLTRB(345, 0, 345, 829)],
     caption: ' · 접힘선(점선) 세로 x=345 반 접힘',
   ),
-  // 펼친 채 가로로 돌림 — 펼친 폭 0 가로 접힘선은 나누지 않는다
+  // 펼친 채 가로로 돌림 — 펼친 폭 0 가로 접힘선도 나눈다 (#143, 각도와 무관)
   ('폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.landscape): (
-    arrangement: ScreenArrangement.stacked,
-    usesHinge: false,
+    arrangement: ScreenArrangement.hingeStacked,
+    usesHinge: true,
     size: const Size(829, 690),
     hinges: const [Rect.fromLTRB(0, 345, 829, 345)],
-    caption: ' · 접힘선(점선) 가로 y=345 (배치에 안 씀)',
+    caption: ' · 접힘선(점선) 가로 y=345',
   ),
   // 테이블톱 자세
   ('폴더블 내부', PreviewFoldPosture.halfOpened, PreviewOrientation.landscape): (
@@ -213,11 +213,11 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     caption: ' · 접힘선(점선) 세로 x=420.5 반 접힘',
   ),
   ('가로형 폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
-    arrangement: ScreenArrangement.stacked,
-    usesHinge: false,
+    arrangement: ScreenArrangement.hingeStacked,
+    usesHinge: true,
     size: const Size(701, 841),
     hinges: const [Rect.fromLTRB(0, 420.5, 701, 420.5)],
-    caption: ' · 접힘선(점선) 가로 y=420.5 (배치에 안 씀)',
+    caption: ' · 접힘선(점선) 가로 y=420.5',
   ),
   ('가로형 폴더블 내부', PreviewFoldPosture.halfOpened, PreviewOrientation.portrait): (
     arrangement: ScreenArrangement.hingeStacked,
@@ -227,13 +227,13 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     caption: ' · 접힘선(점선) 가로 y=420.5 반 접힘',
   ),
   // Galaxy Z Flip 내부 (세로 고정 411×1006, 접힘선 y=503, #104) — 앱이 가로로 돌지 않아 방향은 세로뿐이다.
-  // 펼치면 가로 접힘선을 배치에 쓰지 않는다
+  // 완전히 펼쳐도 가로 접힘선으로 나눈다 (#143)
   ('플립형 폴더블 내부', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
-    arrangement: ScreenArrangement.stacked,
-    usesHinge: false,
+    arrangement: ScreenArrangement.hingeStacked,
+    usesHinge: true,
     size: const Size(411, 1006),
     hinges: const [Rect.fromLTRB(0, 503, 411, 503)],
-    caption: ' · 접힘선(점선) 가로 y=503 (배치에 안 씀)',
+    caption: ' · 접힘선(점선) 가로 y=503',
   ),
   // Flex 모드 (테이블톱 자세)
   ('플립형 폴더블 내부', PreviewFoldPosture.halfOpened, PreviewOrientation.portrait): (
@@ -454,7 +454,7 @@ void main() {
     test(
       '화면 특징: 모든 자세·방향에서 영역은 유한하고 화면 안이며, 접힘선은 화면을 끝까지 가로질러 앱이 접힘선으로 인식한다',
       () {
-        // 배치에 쓰이지 않는 접힘선(펼친 가로 접힘선)도 앱은 접힘선으로 인식한다 — 배치에 쓸지는
+        // 배치에 쓰이지 않는 접힘선(트라이폴드의 두 접힘선)도 앱은 접힘선으로 인식한다 — 배치에 쓸지는
         // 아래 "자세·방향 조합마다 기대 배치" 표가 정한다. 일부러 인식되지 않게 만든 접힘선은 프리셋에 없다.
         for (final d in previewDevices.expand(_posesOf)) {
           final screen = Offset.zero & d.size;
@@ -762,8 +762,8 @@ void main() {
 
     test('폴더블 자세·방향 조합마다 기대 배치 (배치에 쓰지 않는 접힘선은 명시)', () {
       // (프리셋, 자세, 방향) → (기대 배치, 접힘선을 배치에 쓰는지)
-      // 펼친 가로 접힘선은 앱이 접힘선으로 인식하지만(hingeOf) 배치를 나누지 않는다 — 미리보기에는 회색 점선과
-      // 캡션 `(배치에 안 씀)`으로 나온다.
+      // 트라이폴드의 두 접힘선은 앱이 접힘선으로 인식하지만(crossingHingesOf) 배치를 나누지 않는다 — 미리보기에는 회색
+      // 점선과 캡션 `(배치에 안 씀)`으로 나온다. 펼친 가로 접힘선도 #143부터 배치에 쓴다.
       final expected = _foldPoseExpectations;
       final combos = <_Pose>{
         for (final d in previewDevices.where((d) => d.foldable))
@@ -838,7 +838,7 @@ void main() {
       expect(expected.values.where((e) => !e.usesHinge), isNotEmpty);
     });
 
-    // 배치에 쓰는 접힘선은 주황, 쓰지 않는 접힘선(펼친 가로 접힘선)은 회색 점선으로 그린다.
+    // 배치에 쓰는 접힘선은 주황, 쓰지 않는 접힘선(트라이폴드의 두 접힘선)은 회색 점선으로 그린다.
     for (final MapEntry(key: pose, value: e) in _foldPoseExpectations.entries) {
       testWidgets('${_poseName(pose)}: 접힘선 점선 색', (tester) async {
         tester.view.physicalSize = e.size * tester.view.devicePixelRatio;
@@ -953,8 +953,8 @@ void main() {
         ' · 접힘선(점선) 가로 y=420.5 반 접힘, 세로 x=410 폭 20 (배치에 안 씀), '
         '세로 x=200 (배치에 안 씀)',
       );
-      // 화면을 가로지르지만 나누지 않는 접힘선: 펼친 가로 접힘선(Fold 내부를 가로로 돌림),
-      // 한쪽 패널이 너무 좁은 세로 접힘선
+      // 펼친 가로 접힘선(Fold 내부를 가로로 돌림)도 배치에 쓴다 (#143 — 각도와 무관). 화면을 가로지르지만 나누지 않는
+      // 접힘선은 한쪽 패널이 너무 좁은(패널 최소 길이 128dp 미만) 접힘선이다.
       expect(
         previewDisplayFeatureCaption(const Size(829, 690), const [
           DisplayFeature(
@@ -963,17 +963,27 @@ void main() {
             state: DisplayFeatureState.postureFlat,
           ),
         ]),
-        ' · 접힘선(점선) 가로 y=345 (배치에 안 씀)',
+        ' · 접힘선(점선) 가로 y=345',
       );
       expect(
         previewDisplayFeatureCaption(const Size(690, 829), const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(200, 0, 0, 829),
+            bounds: Rect.fromLTWH(100, 0, 0, 829),
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureFlat,
           ),
         ]),
-        ' · 접힘선(점선) 세로 x=200 (배치에 안 씀)',
+        ' · 접힘선(점선) 세로 x=100 (배치에 안 씀)',
+      );
+      expect(
+        previewDisplayFeatureCaption(const Size(829, 690), const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 600, 829, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ]),
+        ' · 접힘선(점선) 가로 y=600 (배치에 안 씀)',
       );
       // 화면을 가로지르는 접힘선이 둘이면(트라이폴드, #144) 둘 다 배치에 쓰지 않는다
       expect(
@@ -995,12 +1005,12 @@ void main() {
       expect(
         previewDisplayFeatureCaption(const Size(690, 829), const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(200, 0, 0, 829),
+            bounds: Rect.fromLTWH(100, 0, 0, 829),
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureHalfOpened,
           ),
         ]),
-        ' · 접힘선(점선) 세로 x=200 반 접힘 (배치에 안 씀)',
+        ' · 접힘선(점선) 세로 x=100 반 접힘 (배치에 안 씀)',
       );
     });
 
@@ -1335,10 +1345,13 @@ void main() {
                 handedness.keypadOnRight,
               );
             } else {
+              // 책 자세(#143): LCD·키패드가 손 쪽 패널, 계산 기록이 반대쪽 패널
+              final history = tester.getRect(find.byType(HistoryPanel));
               expect(
-                keypad.center.dx > lcd.center.dx,
+                keypad.center.dx > history.center.dx,
                 handedness.keypadOnRight,
               );
+              expect(lcd.center.dx, moreOrLessEquals(keypad.center.dx));
             }
 
             // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
@@ -1811,24 +1824,34 @@ void main() {
             device,
             tester.getRect(find.byKey(const ValueKey('calc-keypad'))),
           );
+          final history = toScreen(
+            tester,
+            device,
+            tester.getRect(find.byType(HistoryPanel)),
+          );
           Rect keyOf(CalcKeyId id) =>
               toScreen(tester, device, tester.getRect(_keycap(id)));
           const e = 0.01;
+          // 책 자세(#143): LCD·키패드는 손 쪽 절반, 계산 기록은 반대쪽 절반
           if (handedness == Handedness.right) {
-            // 키패드 오른쪽 절반, LCD 왼쪽 절반. 바깥쪽 끝 열은 뒤로가기 영역에 걸린다.
-            expect(lcd.left, greaterThanOrEqualTo(-e));
-            expect(lcd.right, lessThanOrEqualTo(hingeX + e));
-            expect(keypad.left, greaterThanOrEqualTo(hingeX - e));
-            expect(keypad.right, lessThanOrEqualTo(device.size.width + e));
+            // 바깥쪽 끝 열은 뒤로가기 영역에 걸린다.
+            expect(history.left, greaterThanOrEqualTo(-e));
+            expect(history.right, lessThanOrEqualTo(hingeX + e));
+            for (final r in [lcd, keypad]) {
+              expect(r.left, greaterThanOrEqualTo(hingeX - e));
+              expect(r.right, lessThanOrEqualTo(device.size.width + e));
+            }
             expect(
               keyOf(CalcKeyId.ac).right,
               greaterThan(device.size.width - device.systemGestureInsets.right),
             );
           } else {
-            expect(keypad.left, greaterThanOrEqualTo(-e));
-            expect(keypad.right, lessThanOrEqualTo(hingeX + e));
-            expect(lcd.left, greaterThanOrEqualTo(hingeX - e));
-            expect(lcd.right, lessThanOrEqualTo(device.size.width + e));
+            for (final r in [lcd, keypad]) {
+              expect(r.left, greaterThanOrEqualTo(-e));
+              expect(r.right, lessThanOrEqualTo(hingeX + e));
+            }
+            expect(history.left, greaterThanOrEqualTo(hingeX - e));
+            expect(history.right, lessThanOrEqualTo(device.size.width + e));
             expect(
               keyOf(CalcKeyId.num7).left,
               lessThan(device.systemGestureInsets.left),
@@ -2039,12 +2062,13 @@ void main() {
         );
       });
 
-      testWidgets('화면을 가로지르지만 배치를 나누지 않는 접힘선(펼친 가로 접힘선)은 회색 점선', (
+      testWidgets('화면을 가로지르지만 배치를 나누지 않는 접힘선(아래 패널이 너무 짧은 가로 접힘선)은 회색 점선', (
         tester,
       ) async {
+        // 아래 패널 69dp < 패널 최소 길이 128dp. 가운데 가로 접힘선은 펼쳐도 배치에 쓴다(#143).
         await pumpPainter(tester, const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(0, 414.5, 690, 0),
+            bounds: Rect.fromLTWH(0, 760, 690, 0),
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureFlat,
           ),
@@ -2052,8 +2076,8 @@ void main() {
         expect(
           painted,
           paints..line(
-            p1: const Offset(0, 414.5),
-            p2: const Offset(8, 414.5),
+            p1: const Offset(0, 760),
+            p2: const Offset(8, 760),
             color: PreviewDisplayFeaturePainter.otherColor,
           ),
         );
@@ -2272,17 +2296,24 @@ void main() {
                   );
                   switch (arrangement) {
                     case ScreenArrangement.hingeSplit:
-                      // 키패드는 주로 쓰는 손 쪽 절반, LCD는 다른 절반.
+                      // 책 자세(#143): LCD·키패드는 주로 쓰는 손 쪽 절반, 계산 기록은 다른 절반.
                       final x = hinge.left;
                       final onRight = h == Handedness.right;
+                      final history = rectOf(find.byType(HistoryPanel));
+                      for (final r in [lcd, keypad]) {
+                        expect(
+                          onRight ? r.left : r.right,
+                          onRight
+                              ? greaterThanOrEqualTo(x - e)
+                              : lessThanOrEqualTo(x + e),
+                          reason: reason,
+                        );
+                      }
                       expect(
-                        onRight ? keypad.left : lcd.left,
-                        greaterThanOrEqualTo(x - e),
-                        reason: reason,
-                      );
-                      expect(
-                        onRight ? lcd.right : keypad.right,
-                        lessThanOrEqualTo(x + e),
+                        onRight ? history.right : history.left,
+                        onRight
+                            ? lessThanOrEqualTo(x + e)
+                            : greaterThanOrEqualTo(x - e),
                         reason: reason,
                       );
                     case ScreenArrangement.hingeStacked:
@@ -2299,16 +2330,23 @@ void main() {
                         greaterThanOrEqualTo(y - e),
                         reason: reason,
                       );
-                      // 키패드는 주로 쓰는 손 쪽 가장자리(인셋·화면 여백 안쪽)에 붙는다. 폭이 좁은 화면(Flip
-                      // 내부, #104)은 키패드가 아래 절반 폭을 다 써서 양쪽 가장자리에 모두 닿는다.
-                      final edge = h == Handedness.right
-                          ? posed.size.width -
-                                posed.padding.right -
-                                CalcTheme.screenPadding
-                          : posed.padding.left + CalcTheme.screenPadding;
+                      // 키패드는 아래 패널 폭 전체라(#143) 양쪽 가장자리(인셋·화면 여백 안쪽)에 모두 닿는다.
                       expect(
-                        h == Handedness.right ? keypad.right : keypad.left,
-                        moreOrLessEquals(edge, epsilon: e),
+                        keypad.right,
+                        moreOrLessEquals(
+                          posed.size.width -
+                              posed.padding.right -
+                              CalcTheme.screenPadding,
+                          epsilon: e,
+                        ),
+                        reason: reason,
+                      );
+                      expect(
+                        keypad.left,
+                        moreOrLessEquals(
+                          posed.padding.left + CalcTheme.screenPadding,
+                          epsilon: e,
+                        ),
                         reason: reason,
                       );
                     case ScreenArrangement.stacked:

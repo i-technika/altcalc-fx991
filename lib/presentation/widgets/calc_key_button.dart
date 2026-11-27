@@ -26,9 +26,9 @@ import 'screen_coordinate_root.dart';
 ///  │ └──────────────────┘ │
 ///  └──────────────────────┘
 /// ```
-/// 원형 버튼 키([KeyFace.roundButton], #190 — 지금은 ON 자리의 설정 키)는 키캡 자리 가운데에 원형 은색 버튼
-/// ([RoundKeyFace])을 그리고 버튼 면에는 글자를 쓰지 않는다. 메인 각인은 실물처럼 버튼 위 본체(각인 띠 가운데)에
-/// 흰색으로 인쇄한다:
+/// 원형 버튼 키([KeyFace.roundButton] — SHIFT·ALPHA·MENU·ON 자리의 설정 키, #190·#156)는 키캡 자리 가운데에 원형 은색
+/// 버튼([RoundKeyFace])을 그리고 버튼 면에는 글자를 쓰지 않는다. 메인 각인은 실물처럼 버튼 위 본체(각인 띠 가운데)에
+/// 인쇄한다(SHIFT 금색·ALPHA 자홍색·나머지 흰색 — [CalcPalette.bodyPrintOf]):
 /// ```
 ///  ┌──────────────────────┐
 ///  │       SETTING        │  ← 각인 띠: 메인 각인(흰색, 가운데)
@@ -44,7 +44,13 @@ import 'screen_coordinate_root.dart';
 /// - 시스템 글자 배율은 [CalcTheme.keyMaxTextScaleFactor]까지 반영하지만, 이미 폭이 꽉 찬
 ///   여러 글자 라벨은 [FittedBox]가 다시 줄이므로 사실상 공간이 남는 라벨(주로 한 글자)에만 효과가 있다.
 ///   키패드 전체를 고르게 키우려면 부모가 배율을 반영한 글자 크기를 주입한다.
-/// - 눌림 이동([CalcTheme.keyPressedOffset])만큼 키캡 아래에 여유를 두어 셀 밖으로 그려지지 않는다.
+/// - 눌림 이동([CalcTheme.keyPressedOffset])만큼 키캡 아래에 여유를 두어 셀 밖으로 그려지지 않는다. 키캡 옆면
+///   ([CalcTheme.keyCapSideDepth], #156)도 이 여유에 그린다. 그림자는 셀 아래 키 사이 간격으로 조금 번질 수 있다.
+///
+/// ## 외관 (#156)
+/// 키캡은 카테고리 색 위에 윗면 광택·아래 옆면·그림자를 더해 실물처럼 입체로 그린다([CalcTheme] "키캡 입체감" 절).
+/// 모서리 반경은 키 종류마다 다르다(함수부는 둥글게, 숫자부는 덜 둥글게). 고대비 모드에서는 광택·옆면을 그리지 않는다
+/// ([CalcPalette.drawsRelief]).
 ///
 /// ## 입력 계약
 /// - 실물 키처럼 **누르는 순간** [onPressed]를 호출하고 [HapticFeedback.lightImpact]를 실행한다.
@@ -381,15 +387,18 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   /// [CalcKeyButton.focusable]이면 [keycap]에 포커스 노드·활성화 동작·포커스 테두리를 씌운다. 포커스 노드의 영역이
   /// 키캡(원형 버튼은 고리를 품은 자리)이라 테두리가 그 모양에 맞는다.
-  Widget _wrapFocus(Widget keycap, {required bool round}) {
+  /// 사각 키캡의 포커스 테두리는 그린 키캡과 같은 모서리 반경([cornerRadius], #156)을 쓴다.
+  Widget _wrapFocus(
+    Widget keycap, {
+    required bool round,
+    required double cornerRadius,
+  }) {
     if (!widget.focusable) return keycap;
     return FocusRing(
       shape: round
           ? const CircleBorder()
-          : const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(
-                Radius.circular(CalcTheme.keyBorderRadius),
-              ),
+          : RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(cornerRadius)),
             ),
       child: Actions(
         actions: _keyboardActions,
@@ -423,7 +432,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       hint: strings.keyButtonHint(widget.keyDef.id),
       onTap: _enabled ? _handleSemanticTap : null,
       excludeSemantics: true,
-      child: LayoutBuilder(builder: _buildLayout),
+      // 키 하나를 따로 그리는 층으로 둔다 (#156) — 키캡에 그림자·옆면·광택을 더해 그리기가 무거워졌으므로, 키를 누르고 뗄
+      // 때 이 키만 다시 그리고 이웃 키·본체 바탕은 다시 그리지 않는다.
+      child: RepaintBoundary(child: LayoutBuilder(builder: _buildLayout)),
     );
   }
 
@@ -490,6 +501,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         ? Offset.zero
         : Offset(0, legendHeight);
 
+    final cornerRadius = keyCapCornerRadius(
+      widget.keyDef.category,
+      capHeight - pressRoom,
+    );
     Widget keycap = Padding(
       padding: EdgeInsets.only(bottom: pressRoom),
       child: _wrapFocus(
@@ -503,6 +518,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                 keyDef: widget.keyDef,
                 pressed: _pressed,
                 enabled: _enabled,
+                cornerRadius: cornerRadius,
                 fontSize:
                     widget.mainLabelFontSize ??
                     math.min(
@@ -515,6 +531,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                 textScaler: textScaler,
               ),
         round: round,
+        cornerRadius: cornerRadius,
       ),
     );
     if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
@@ -756,8 +773,28 @@ class _LegendRow extends StatelessWidget {
   }
 }
 
-/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인(흰색)을 가운데에, SHIFT·ALPHA 각인이 있으면
-/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼 — #156에서 쓴다). 띠 폭을 넘으면 함께 줄인다.
+/// 키캡([KeyFace.keycap]) 모서리 반경 (#156) — 숫자부 키(흰 키·파란 키)는 [CalcTheme.keyCapNumberCornerRadiusRatio],
+/// 나머지(함수부·조작부·커서)는 [CalcTheme.keyCapCornerRadiusRatio]에 키캡 높이 [height]를 곱하고
+/// [CalcTheme.keyCapMaxCornerRadius]에서 멈춘다. 커서 패드 키는 방향 구역 모양으로 잘려 반경이 보이지 않는다.
+@visibleForTesting
+double keyCapCornerRadius(KeyCategory category, double height) {
+  final ratio = switch (category) {
+    KeyCategory.number ||
+    KeyCategory.operator ||
+    KeyCategory.equals ||
+    KeyCategory.ac ||
+    KeyCategory.del => CalcTheme.keyCapNumberCornerRadiusRatio,
+    _ => CalcTheme.keyCapCornerRadiusRatio,
+  };
+  return math.max(
+    0.0,
+    math.min(height * ratio, CalcTheme.keyCapMaxCornerRadius),
+  );
+}
+
+/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에, SHIFT·ALPHA 각인이 있으면
+/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼, #156). 띠 폭을 넘으면 함께 줄인다.
+/// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
 /// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
 class _BodyPrintRow extends StatelessWidget {
   final CalcKeyDef keyDef;
@@ -778,7 +815,9 @@ class _BodyPrintRow extends StatelessWidget {
     final parts = [
       (
         keyDef.mainLegend,
-        CalcTheme.keyBodyPrintStyle.copyWith(color: palette.bodyPrint),
+        CalcTheme.keyBodyPrintStyle.copyWith(
+          color: palette.bodyPrintOf(keyDef.category),
+        ),
       ),
       if (keyDef.shiftLegend case final shift?)
         (
@@ -842,6 +881,7 @@ class _Keycap extends StatelessWidget {
   final CalcKeyDef keyDef;
   final bool pressed;
   final bool enabled;
+  final double cornerRadius;
   final double fontSize;
   final double horizontalPadding;
   final EdgeInsets labelInsets;
@@ -851,6 +891,7 @@ class _Keycap extends StatelessWidget {
     required this.keyDef,
     required this.pressed,
     required this.enabled,
+    required this.cornerRadius,
     required this.fontSize,
     required this.horizontalPadding,
     required this.labelInsets,
@@ -876,9 +917,11 @@ class _Keycap extends StatelessWidget {
         ? Duration.zero
         : CalcTheme.keyPressAnimationDuration;
 
-    // 눌리면 그림자가 사라지고 살짝 아래로 내려가 실물 키의 눌림을 흉내 내며, 배경 명도와 테두리가 바뀐다(#22).
+    // 눌리면 그림자·옆면이 사라지고 옆면 깊이만큼 아래로 내려가 실물 키의 눌림을 흉내 내며, 배경 명도와 테두리가 바뀐다(#22).
     // 누를 때는 즉시 바꾸고 뗄 때만 애니메이션한다 — 짧은 탭에서도 눌림 색이 끝까지 보이게 한다.
-    // 고대비 모드에서는 흰 라벨 키의 배경·라벨이 반전된다(#54, [CalcPalette.invertsOnPress]).
+    // 고대비 모드에서는 흰 라벨 키의 배경·라벨이 반전되고(#54, [CalcPalette.invertsOnPress]) 광택·옆면을 그리지 않는다(#156).
+    final relief = palette.drawsRelief;
+    final radius = BorderRadius.circular(cornerRadius);
     return Transform.translate(
       offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
       child: AnimatedContainer(
@@ -886,39 +929,60 @@ class _Keycap extends StatelessWidget {
         duration: duration,
         decoration: BoxDecoration(
           color: background,
-          borderRadius: BorderRadius.circular(CalcTheme.keyBorderRadius),
+          borderRadius: radius,
           border: Border.all(
             color: pressed ? palette.keyPressedBorder : palette.keyBorder,
             width: CalcTheme.keyBorderWidth,
           ),
+          // 그림자 목록은 먼저 둔 것부터 그린다 — 번지는 그림자 위에 옆면(번지지 않는 같은 모양의 어두운 면)을 얹는다.
           boxShadow: pressed
               ? const []
-              : const [
+              : [
                   BoxShadow(
                     color: CalcTheme.keyShadow,
                     blurRadius: CalcTheme.keyElevation,
-                    offset: Offset(0, CalcTheme.keyElevation),
+                    offset: Offset(
+                      0,
+                      CalcTheme.keyElevation +
+                          (relief ? CalcTheme.keyCapSideDepth : 0),
+                    ),
                   ),
+                  if (relief)
+                    BoxShadow(
+                      color: Color.alphaBlend(CalcTheme.keyCapSide, background),
+                      offset: const Offset(0, CalcTheme.keyCapSideDepth),
+                    ),
                 ],
         ),
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-        alignment: Alignment.center,
-        // 라벨 여백은 애니메이션하지 않는다 — 창 크기가 바뀔 때 라벨이 즉시 그린 허브 등과 함께 움직이게 한다.
-        child: Padding(
-          padding: labelInsets,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 숫자·SHIFT)에서는 애니메이션이 일어나지 않는다.
-            child: TweenAnimationBuilder<Color?>(
-              tween: ColorTween(end: labelColor),
-              duration: duration,
-              builder: (context, color, _) => _legendLabel(
-                keyDef.mainLegend,
-                CalcTheme.keyMainLabelStyle.copyWith(
-                  fontSize: fontSize,
-                  color: color,
+        // 광택은 라벨 아래에 그린다(CustomPaint는 자식보다 먼저 그린다). 라벨 여백은 애니메이션하지 않는다 — 창 크기가
+        // 바뀔 때 라벨이 즉시 그린 허브 등과 함께 움직이게 한다.
+        child: CustomPaint(
+          painter: relief
+              ? KeycapSheenPainter(
+                  cornerRadius: cornerRadius,
+                  dark: background.computeLuminance() < 0.18,
+                )
+              : null,
+          child: Padding(
+            padding:
+                EdgeInsets.symmetric(horizontal: horizontalPadding) +
+                labelInsets,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                // 라벨 색이 바뀌지 않는 키(일반 모드 전부, 고대비 밝은 키)에서는 애니메이션이 일어나지 않는다.
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: labelColor),
+                  duration: duration,
+                  builder: (context, color, _) => _legendLabel(
+                    keyDef.mainLegend,
+                    CalcTheme.keyMainLabelStyle.copyWith(
+                      fontSize: fontSize,
+                      color: color,
+                    ),
+                    textScaler,
+                  ),
                 ),
-                textScaler,
               ),
             ),
           ),
@@ -928,31 +992,88 @@ class _Keycap extends StatelessWidget {
   }
 }
 
+/// 키캡 윗면 광택 (#156, [CalcTheme] "키캡 입체감" 절) — 테두리 안쪽에 위쪽은 밝게, 아래쪽은 어둡게 세로 그라데이션을
+/// 칠한다. 가운데(글자 자리)는 투명이다. 어두운 키([dark] — 검정·파랑)는 위쪽 광택을 [CalcTheme.keyCapGloss]로,
+/// 밝은 키는 [CalcTheme.keyCapSheen]으로 칠한다.
+@visibleForTesting
+class KeycapSheenPainter extends CustomPainter {
+  /// 키캡 모서리 반경 (dp)
+  final double cornerRadius;
+
+  /// 어두운 키캡인지
+  final bool dark;
+
+  const KeycapSheenPainter({required this.cornerRadius, required this.dark});
+
+  /// 광택 그라데이션 색 (위 → 아래)
+  List<Color> get colors => [
+    dark ? CalcTheme.keyCapGloss : CalcTheme.keyCapSheen,
+    const Color(0x00FFFFFF),
+    const Color(0x00000000),
+    CalcTheme.keyCapShade,
+  ];
+
+  /// [colors]의 위치 (키캡 높이 대비)
+  static const List<double> stops = [
+    0.0,
+    CalcTheme.keyCapSheenClearStart,
+    CalcTheme.keyCapSheenClearEnd,
+    1.0,
+  ];
+
+  /// 받는 상자는 키캡 테두리 안쪽이다 — 키캡(`AnimatedContainer`)이 장식의 테두리 두께만큼 자식을 안쪽에 둔다.
+  /// 그래서 더 줄이지 않고, 모서리 반경만 테두리 안쪽 곡선에 맞춘다(바깥 반경 − 테두리 두께, #156 R1).
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(math.max(0.0, cornerRadius - CalcTheme.keyBorderWidth)),
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: colors,
+          stops: stops,
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(KeycapSheenPainter oldDelegate) =>
+      oldDelegate.cornerRadius != cornerRadius || oldDelegate.dark != dark;
+}
+
 /// 각인 하나를 그린다. 글자만 있는 각인은 `Text`, 2차원 각인(분수·첨자·근호)은 [KeyLegendView]다 (#155).
+/// 글자에 변수 이탤릭 글자가 있으면 그 글자만 다른 글꼴로 그린다([keyLabelSpan], #156).
 ///
-/// 두 위젯은 같은 strut 한 줄 상자와 기준선을 쓰므로, 2차원 각인이 한 줄을 넘지 않으면 크기·기준선이 같다.
+/// 두 위젯은 같은 strut 한 줄 상자([keyLabelStrut])와 기준선을 쓰므로, 2차원 각인이 한 줄을 넘지 않으면 크기·기준선이 같다.
 Widget _legendLabel(KeyLegend legend, TextStyle style, TextScaler textScaler) {
   if (legend case LegendText(:final text)) {
-    return Text(
-      text,
+    final span = keyLabelSpan(text, style);
+    final strut = keyLabelStrut(style);
+    if (span.children == null) {
+      return Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        textScaler: textScaler,
+        style: style,
+        strutStyle: strut,
+      );
+    }
+    return Text.rich(
+      TextSpan(children: span.children),
       maxLines: 1,
       softWrap: false,
       textScaler: textScaler,
       style: style,
-      strutStyle: _labelStrut(style),
+      strutStyle: strut,
     );
   }
   return KeyLegendView(legend: legend, style: style, textScaler: textScaler);
 }
-
-/// 키 라벨 줄 높이를 기본 글꼴(Noto Sans Mono) 기준 `fontSize × height`로 고정하는 strut.
-///
-/// 대체 글꼴(Noto Sans Math — `∑`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 그대로 두면 그 글자가
-/// 섞인 라벨만 줄이 약 7% 높아진다(#16 실측: 20 → 21dp). 키패드 글자 크기 계산(`KeypadMetrics`의
-/// `fitFontSizeToHeight`)이 전제하는 줄 높이와 맞추고, 라벨 사이 기준선을 같게 한다.
-/// 2차원 각인([KeyLegendView])도 글자 조각을 같은 strut로 배치한다.
-///
-/// strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다. 2차원 각인은 잉크(첨자·분수·∫ 등)까지
-/// 각인 크기에 넣으므로 넘쳐 그려지지 않는다(#155 — 그 전의 `∛` 글자는 줄 상자 위로 약 0.27em 넘쳤다).
-StrutStyle _labelStrut(TextStyle style) =>
-    StrutStyle.fromTextStyle(style, forceStrutHeight: true);

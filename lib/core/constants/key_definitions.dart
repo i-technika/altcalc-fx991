@@ -185,7 +185,7 @@ enum KeyFace {
   keycap,
 
   /// 실물 SHIFT·ALPHA·MENU·ON처럼 작은 원형 은색 버튼 — 버튼 면에는 글자가 없고, 메인 각인은 버튼 위 본체에
-  /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). 지금은 ON 키만 쓴다 — SHIFT·ALPHA·MENU는 #156에서 바꾼다.
+  /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). #190에서 ON 키를, #156에서 SHIFT·ALPHA·MENU를 이 모양으로 바꿨다.
   roundButton,
 }
 
@@ -405,11 +405,13 @@ const List<List<CalcKeyDef>> controlLeftRows = [
       id: CalcKeyId.shift,
       mainLegend: LegendText('SHIFT'),
       category: KeyCategory.shift,
+      face: KeyFace.roundButton,
     ),
     CalcKeyDef(
       id: CalcKeyId.alpha,
       mainLegend: LegendText('ALPHA'),
       category: KeyCategory.alpha,
+      face: KeyFace.roundButton,
     ),
   ],
   [
@@ -437,6 +439,7 @@ const List<List<CalcKeyDef>> controlRightRows = [
       mainLegend: LegendText('MENU'),
       shiftLegend: LegendText('SETUP'),
       category: KeyCategory.menu,
+      face: KeyFace.roundButton,
     ),
     // 실물은 버튼 위 본체에 흰 `ON`이 인쇄된 작은 원형 은색 버튼이다. 이 앱에는 전원이 없어 ON을 설정 키로 쓰고
     // (#190, 사용자 결정), 같은 자리에 `SETTING`을 인쇄한다 — [settingsKey].

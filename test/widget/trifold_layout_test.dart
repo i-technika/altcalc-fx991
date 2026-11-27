@@ -10,6 +10,7 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/device_provider.d
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -163,9 +164,8 @@ void main() {
             );
             expect(tester.takeException(), isNull);
             expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
-            // 펼침(postureFlat) 조합은 접힘선을 무시하지 않던 예전 규칙(첫 접힘선만 씀)으로도 위아래 배치가 된다 —
-            // 펼친 폭 0 가로 접힘선은 나누지 않기 때문이다. 이 테스트가 #144 회귀를 가르는 것은 반 접힘 조합(예전
-            // 규칙이면 테이블톱)이고, 펼침 조합의 판정은 `form_factor_test`가 `picksFormByKeySize`로 확인한다.
+            // 접힘선을 무시하지 않던 예전 규칙(첫 접힘선만 씀)이면 펼침·반 접힘 모두 가로 접힘선 기준 배치가 된다(#143부터
+            // 가로 접힘선은 자세와 무관하게 나눈다) — 그래서 두 자세 조합 모두 #144 회귀를 가른다.
             expect(drawnArrangementOf(tester), DrawnArrangement.stacked);
             final r = _rects(tester);
             expect(r.lcd, free.lcd);
@@ -229,9 +229,13 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
       final r = _rects(tester);
-      // 키패드(오른손 — 오른쪽 절반)와 LCD가 가운데 접힘선을 넘지 않는다
+      // 책 자세(#143): LCD·키패드(오른손 — 오른쪽 절반)와 계산 기록(왼쪽 절반)이 가운데 접힘선을 넘지 않는다
       expect(r.keypad.left, greaterThanOrEqualTo(320));
-      expect(r.lcd.right, lessThanOrEqualTo(320));
+      expect(r.lcd.left, greaterThanOrEqualTo(320));
+      expect(
+        tester.getRect(find.byType(HistoryPanel)).right,
+        lessThanOrEqualTo(320),
+      );
     },
   );
 

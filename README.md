@@ -129,6 +129,14 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
     등록·주입 스크립트와 판정 방법(화면 캡처의 초록 초점 테두리 + `uiautomator dump` 노드 경계)은 PR #204 본문과 #203 코멘트에 있다.
   - 분할 화면: `adb shell dumpsys activity service SystemUIService WMShell splitscreen moveToSideStage <다른 앱 taskId> 0`
     (`am stack list`로 taskId를 본다). `uiautomator dump`는 초점 창만 읽으므로 앱을 `am start`로 다시 앞에 둔다.
+    분할선은 `input swipe 540 <분할선 y> 540 <목표 y> 1500`으로 옮긴다 — 폰에서는 1/3·1/2·2/3에서만 멈춘다(#137).
+    앱 창이 레터박스로 줄었는지는 `dumpsys activity activities | grep letterboxReason`으로 본다.
+  - 자유 형식 창(#137): `settings put global enable_freeform_support 1`·`settings put global force_resizable_activities 1` 뒤
+    `am start --windowingMode 5 -n <앱>`으로 띄우고 `am task resize <taskId> <왼> <위> <오른> <아래>`(px)로 크기를 바꾼다(최소 약 220dp).
+    끝나면 두 설정을 0으로 되돌린다.
+  - TalkBack이 읽은 문구: TalkBack 설정 → 고급 설정 → 개발자 설정 → "음성 출력 표시"를 켜면 화면 아래에 읽은 문구가 떠
+    `screencap`으로 남길 수 있다(#137 — 창이 너무 작다는 안내를 확인). 끝나면 끈다.
+    설정 화면은 `am start -n com.google.android.marvin.talkback/com.android.talkback.TalkBackPreferencesActivity`로 연다(`-S`를 붙이면 TalkBack이 꺼진다).
   - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
     `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
     `AltCalc_Pixel_Fold_API36`(폴더블)은 `Medium_Phone_API_36.1`과 같은 시스템 이미지(`android-36.1/google_apis_playstore`)다.
@@ -162,13 +170,14 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
   폴더블 내부(Galaxy Z Fold 근사, 세로가 기본 방향)·가로형 폴더블 내부(Pixel Fold 근사, 가로가 기본 방향)·플립형 폴더블 내부
   (Galaxy Z Flip 근사, 세로) 프리셋에는 화면 가운데의 접힘선이 `MediaQuery.displayFeatures`로 들어간다. 이 프리셋들에서는
   **자세**(펼침/반 접힘)를, 앞의 두 프리셋에서는 **방향**(세로/가로)도 고를 수 있고(다른 기기로 바꾸면 기본 방향으로 펼친 상태로
-  돌아간다), 조합마다 배치가 다음과 같다. 플립형은 짧은 변이 600dp 미만이라 실제 앱이 세로로 고정하므로(`FormFactor.orientationPolicyOf`)
+  돌아간다), 조합마다 배치가 다음과 같다. 접힘선은 자세와 무관하게 언제나 경계라(#143) 펼침과 반 접힘의 배치가 같다. 플립형은 짧은 변이 600dp 미만이라 실제 앱이 세로로 고정하므로(`FormFactor.orientationPolicyOf`)
   방향 선택 대신 `세로 고정` 안내가 나온다 — 기기를 돌려도 앱 화면은 돌지 않는다.
 
-  | 접힘선 방향 | 펼침 | 반 접힘 |
-  | --- | --- | --- |
-  | 세로 (Fold 세로, Pixel Fold 가로) | 접힘선 기준 좌우 배치 | 접힘선 기준 좌우 배치 (책 자세) |
-  | 가로 (Fold 가로, Pixel Fold 세로, Flip 세로) | 위아래 배치 — 접힘선은 `(배치에 안 씀)` | 위 LCD·아래 키패드 (테이블톱 자세, Flip은 Flex 모드). Fold·Pixel Fold는 숫자부를 함수부 오른쪽에 둔 넓은 키패드(#80) |
+  | 접힘선 방향 | 펼침·반 접힘 (같은 배치) |
+  | --- | --- |
+  | 세로 (Fold 세로, Pixel Fold 가로) | 책 자세 — 손 쪽 패널에 활성 LCD·실물 배열 키패드(세로형), 반대쪽 패널 전체에 계산 기록 (손 쪽 패널이 짧은 분할 창은 활성 LCD가 반대쪽 패널 맨 위로 간다) |
+  | 가로 (Fold 가로, Pixel Fold 세로) | 아래 패널에 숫자부를 손 쪽에 둔 넓은 키패드(#80), 위 패널에 기록(함수부 위)·활성 LCD(숫자부 위) — 가로형과 같은 구성 |
+  | 가로 (Flip 세로) | 아래 패널에 폭 전체 실물 배열 키패드, 위 패널 맨 위에 활성 LCD와 그 아래 기록 (반 접으면 Flex 모드) |
 
   트라이폴드 프리셋(#144 — Galaxy Z TriFold 공개 해상도를 밀도 2.625로 바꾼 823×603, 가로가 기본 방향, 세로 접힘선 x=274.5·548.5.
   밀도·접힘선 모두 실기기 미확인 가정)에서도 **자세**와 **방향**(세로/가로)을 고를 수 있다. 접힘선이 2개라 앱이 접힘선을 무시하고 태블릿처럼 그린다 —
@@ -178,7 +187,7 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
   쓰는 접힘선은 주황, 배치에 쓰지 않는 접힘선은 회색 점선과 캡션 `(배치에 안 씀)`이고, 폭이 있는 힌지는 영역을 반투명하게 칠한다.
   반 접힌 접힘선은 캡션에 `반 접힘`이 붙는다. 돌린 화면의 인셋은 근사로 화면 기준 그대로 둔다(상태 표시줄 위, 내비게이션 아래, 뒤로가기 영역 좌우).
   점선 색·캡션은 앱의 배치 규칙(`FormFactor.arrangementOf`)을 따르며, 키가 터치 하한보다 작아 화면이 위아래 배치로
-  되돌아가는 경우는 반영하지 않는다 — 지금 프리셋 조합에서는 일어나지 않는다(되돌아가지 않음을 테스트가 확인 — 테이블톱 조합은 실물·넓은 키패드(#80) 중 키가 큰 쪽으로 그린다).
+  되돌아가는 경우는 반영하지 않는다 — 지금 프리셋 조합에서는 일어나지 않는다(되돌아가지 않음을 테스트가 확인 — 가로 접힘선 조합은 실물·넓은 키패드(#80) 중 키가 큰 쪽으로 그린다).
 - **시스템 글자 배율**: 85% / 100% / 130% / 200% (키패드·LCD는 130%에서 배율을 자르므로 200%는 그 잘림 확인용)
 - **고대비**: 기기의 고대비 설정(`MediaQuery.highContrast` — iOS "대비 증가", Android 14 이상 "색상 대비" 중간·높음)을 켠 화면.
   호스트(브라우저·OS)의 고대비 설정과 무관하게 이 스위치가 정한다. 실제 앱은 Android 접근성 "고대비 텍스트"를 켜도 같은

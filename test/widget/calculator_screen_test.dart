@@ -18,11 +18,13 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
+import '../support/semantics_hit_testing.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
 
@@ -150,12 +152,21 @@ void main() {
             greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
           );
           // 키가 넓어져도 각인 글자는 상한에서 멈춘다.
+          // 숫자부 메인 라벨은 함수부보다 크다(#156) — 구역마다 상한이 있다.
+          final numberIds = {
+            for (final row in numberRows)
+              for (final def in row) def.id,
+          };
           for (final button in tester.widgetList<CalcKeyButton>(
             find.byType(CalcKeyButton),
           )) {
             expect(
               button.mainLabelFontSize,
-              lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
+              lessThanOrEqualTo(
+                numberIds.contains(button.keyDef.id)
+                    ? CalcTheme.keyNumberMainLabelMaxFontSize
+                    : CalcTheme.keyMainLabelMaxFontSize,
+              ),
             );
             expect(
               button.legendFontSize,
@@ -366,6 +377,38 @@ void main() {
       expect(lcd.right, lessThanOrEqualTo(key(CalcKeyId.sin).left));
     });
 
+    /// 기기 채널: 폴더블 판정은 "폴더블 아님", 여러 창 모드 조회(#137)는 [multiWindow]()의 값이다. [fail]()이 참이면
+    /// 여러 창 모드 조회가 실패한다(Dart는 모름 — `null`로 읽는다). 받은 메서드 이름을 차례로 돌려준다.
+    List<String> mockMultiWindow(
+      WidgetTester tester,
+      bool Function() multiWindow, {
+      bool Function()? fail,
+    }) {
+      final methods = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        FormFactor.deviceChannel,
+        (call) async {
+          methods.add(call.method);
+          if (call.method != FormFactor.multiWindowModeMethod) {
+            return {FormFactor.foldableKey: false, FormFactor.foldKey: false};
+          }
+          if (fail?.call() ?? false) throw PlatformException(code: 'x');
+          return multiWindow();
+        },
+      );
+      return methods;
+    }
+
+    /// Android가 기기 채널로 여러 창 모드 변경을 알린다 (#137 R1, `MainActivity.onMultiWindowModeChanged`)
+    Future<void> notifyMultiWindow(WidgetTester tester, bool value) =>
+        tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          FormFactor.deviceChannel.name,
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall(FormFactor.multiWindowModeChangedMethod, value),
+          ),
+          (_) {},
+        );
+
     /// 폴더블 판정 조회 채널 응답을 [foldable]·[fold](창 배치 첫 값의 접힘, #158)로 고정한다.
     void mockFoldableDevice(
       WidgetTester tester, {
@@ -421,8 +464,13 @@ void main() {
         final keypad = tester.getRect(
           find.byKey(const ValueKey('calc-keypad')),
         );
-        expect(lcd.right, lessThanOrEqualTo(420));
+        // 책 자세(#143): 오른손잡이라 LCD·키패드는 오른쪽 절반, 계산 기록은 왼쪽 절반
+        expect(lcd.left, greaterThanOrEqualTo(420));
         expect(keypad.left, greaterThanOrEqualTo(420));
+        expect(
+          tester.getRect(find.byType(HistoryPanel)).right,
+          lessThanOrEqualTo(420),
+        );
       },
     );
 
@@ -818,6 +866,314 @@ void main() {
       },
     );
 
+    testWidgets(
+      '여러 창 모드(분할 화면)에서는 방향을 고정하지 않고, 전체 화면으로 돌아오면 다시 세로로 고정한다 (#137)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // Android 16 폰 에뮬레이터(1080×2400·420dpi) 실측: 화면 411.43×914.29dp, 1/3 분할 창 411.43×304.76dp.
+        // 세로로 고정하면 Android가 이 가로로 긴 창을 301.7×304.8dp 레터박스로 줄여 안내가 나왔다.
+        const display = Size(411.43, 914.29);
+        const third = Size(411.43, 304.76);
+        setDevice(tester, display);
+        tester.view.physicalSize = third * 2;
+        var multiWindow = true;
+        final methods = mockMultiWindow(tester, () => multiWindow);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        // 처음부터 세로 고정을 보내지 않는다 — 보내면 그 사이 레터박스로 줄었다가 돌아온다.
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(methods, contains(FormFactor.multiWindowModeMethod));
+        expect(
+          printed,
+          contains(
+            startsWith(
+              'AltCalc 방향 요청: any (기기 phone, 화면 411.4x914.3, 여러 창 모드)',
+            ),
+          ),
+        );
+        // 창 전체(가로로 긴 창)를 가로형으로 쓴다
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+        expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+
+        // 분할 화면 경계를 옮겨도(여전히 여러 창 모드) 다시 요청하지 않는다
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(1));
+
+        // 여러 창 모드 답이 잠깐만 false였다가 돌아오면(분할 화면에서 화면을 돌릴 때 실측) 세로 고정을 보내지 않는다
+        multiWindow = false;
+        tester.view.physicalSize = const Size(452.19, 411.43) * 2;
+        await tester.pump();
+        multiWindow = true;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(1));
+
+        // 전체 화면(창 = 물리 화면)으로 돌아오면 확인 대기 없이 바로 세로로 고정한다 (#137 R1 — 가로로 든 폰에서 가로
+        // 화면이 오래 보이지 않게)
+        multiWindow = false;
+        tester.view.physicalSize = display * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [
+          anyOrientation,
+          ['DeviceOrientation.portraitUp'],
+        ]);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.portrait,
+        );
+
+        // 다시 분할 화면에 들어가면 고정을 푼다
+        multiWindow = true;
+        tester.view.physicalSize = third * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+      },
+    );
+
+    testWidgets(
+      'Android의 여러 창 모드 변경 알림으로 다시 판정한다 — 화면 정보가 바뀐 때의 답이 아직 false여도 (#137 R1)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        const display = Size(411.43, 914.29);
+        setDevice(tester, display);
+        var multiWindow = false;
+        mockMultiWindow(tester, () => multiWindow);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [
+          ['DeviceOrientation.portraitUp'],
+        ]);
+
+        // 분할 화면에 들어가 창이 줄었는데, 그때 물은 답은 아직 false다(진입 쪽 일시 오답)
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(1));
+
+        // Android가 여러 창 모드에 들어갔다고 알리면 다시 묻고 고정을 푼다 — 창 크기는 그대로다
+        multiWindow = true;
+        await notifyMultiWindow(tester, true);
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        expect(printed, contains(startsWith('AltCalc 여러 창 모드: 알림 true')));
+        expect(printed, contains(startsWith('AltCalc 여러 창 모드: false → true')));
+
+        // 창 크기가 그대로인 채 여러 창 모드에 들어가고 나와도(자유 형식 창 최대화 등) 알림으로 다시 판정한다
+        multiWindow = false;
+        tester.view.physicalSize = display * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        multiWindow = true;
+        await notifyMultiWindow(tester, true);
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        // 여러 창 모드에서 나왔다는 알림 뒤의 false 답은 창이 아직 작아도(화면 정보가 늦게 옴) 재확인 없이 믿는다
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        multiWindow = false;
+        await notifyMultiWindow(tester, false);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        expect(
+          printed.where((l) => l.contains('재확인')),
+          isEmpty,
+          reason: '알림 뒤에는 기다리지 않는다',
+        );
+      },
+    );
+
+    testWidgets(
+      '여러 창 모드 중 조회가 실패하면 지난 값을 쓰고, 창이 작을 때의 false 답은 재확인하며, stop() 뒤에 끝난 재확인은 버린다 (#137 R1)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        setDevice(tester, const Size(411.43, 914.29));
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        var fail = false;
+        var multiWindow = true;
+        mockMultiWindow(tester, () => multiWindow, fail: () => fail);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+
+        // 조회가 실패하면(모름) 지난 값(여러 창 모드)을 쓴다 — 나왔다고 보지 않으므로 재확인도 없다
+        fail = true;
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        fail = false;
+        expect(orientationRequests(calls), hasLength(1));
+        expect(printed.where((l) => l.contains('재확인')), isEmpty);
+
+        // 창이 작은데 false가 오면 기다렸다 다시 묻는다 — 다시 물은 답은 true
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        await tester.pump();
+        multiWindow = true;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(1));
+        expect(
+          printed,
+          contains(startsWith('AltCalc 여러 창 모드: 재확인 100ms 뒤 true — 유지')),
+        );
+
+        // 재확인을 기다리는 동안 stop()하면 그 결과로 요청하거나 기록하지 않는다
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        DeviceOrientationLock.instance.stop();
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(1));
+        expect(DeviceOrientationLock.instance.appliedPolicy, isNull);
+      },
+    );
+
+    testWidgets(
+      '판정 체인: 예외 뒤에도 이어 가고, stop() 전에 줄에 선 판정은 버리며, 알림 값으로 조회 실패를 메우고, 낡은 나옴 알림은 재확인을 건너뛰게 하지 않는다 (#137 R2)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        setDevice(tester, const Size(411.43, 914.29));
+        var multiWindow = false;
+        var fail = false;
+        final methods = mockMultiWindow(
+          tester,
+          () => multiWindow,
+          fail: () => fail,
+        );
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [
+          ['DeviceOrientation.portraitUp'],
+        ]);
+
+        // ① 앞 판정이 예외로 끝나도(진단 로그 출력 실패) 줄에 선 판정과 그 뒤 판정이 이어진다
+        var throwOnce = true;
+        LayoutLog.enable(
+          sink: (line) {
+            if (throwOnce && line.contains('여러 창 모드: false → true')) {
+              throwOnce = false;
+              throw StateError('로그 실패');
+            }
+            printed.add(line);
+          },
+          frameTimings: false,
+        );
+        multiWindow = true;
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        tester.view.physicalSize = const Size(411.43, 300) * 2;
+        await tester.pump();
+        expect(throwOnce, isFalse);
+        expect(orientationRequests(calls).last, anyOrientation);
+        methods.clear();
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        expect(methods, contains(FormFactor.multiWindowModeMethod));
+
+        // ② 알림(true) 뒤의 조회가 실패하면 알린 값을 쓴다 — 지난 값(false)으로 세로 고정하지 않는다
+        multiWindow = false;
+        await notifyMultiWindow(tester, false);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        fail = true;
+        await notifyMultiWindow(tester, true);
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        fail = false;
+
+        // ③ 나옴 알림(false) 뒤 다시 들어가 조회로 true를 받았으면, 그 나옴 알림은 낡은 것이다 — 창이 작을 때의 일시
+        // false는 다시 재확인한다
+        multiWindow = false;
+        await notifyMultiWindow(tester, false);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        multiWindow = true;
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        final requests = orientationRequests(calls).length;
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        multiWindow = true;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(requests));
+
+        // ④ stop() 전에 줄에 섰지만 아직 시작하지 않은 판정은 stop() 뒤에 요청하지 않는다
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 914.29) * 2;
+        tester.view.physicalSize = const Size(411.43, 900) * 2;
+        DeviceOrientationLock.instance.stop();
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(requests));
+        expect(DeviceOrientationLock.instance.appliedPolicy, isNull);
+      },
+    );
+
+    testWidgets('태블릿: 여러 창 모드에서는 고정을 풀고, 전체 화면으로 돌아오면 가로로 고정한다 (#137 R1)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      const display = Size(1280, 800);
+      setDevice(tester, display);
+      // 가로 태블릿의 좌우 1/2 분할 창 (세로로 긴 창 — 가로 고정이면 레터박스로 줄 수 있다)
+      tester.view.physicalSize = const Size(635, 800) * 2;
+      var multiWindow = true;
+      mockMultiWindow(tester, () => multiWindow);
+      final calls = recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      expect(orientationRequests(calls), [anyOrientation]);
+      expect(
+        printed,
+        contains(
+          startsWith('AltCalc 방향 요청: any (기기 tablet, 화면 1280x800, 여러 창 모드)'),
+        ),
+      );
+
+      multiWindow = false;
+      tester.view.physicalSize = display * 2;
+      await tester.pump();
+      expect(orientationRequests(calls).last, [
+        'DeviceOrientation.landscapeLeft',
+        'DeviceOrientation.landscapeRight',
+      ]);
+      expect(
+        DeviceOrientationLock.instance.appliedPolicy,
+        OrientationPolicy.landscape,
+      );
+    });
+
+    testWidgets('화면 정보가 잇달아 바뀌면 기다리는 판정을 하나로 합친다 (#137 R1)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      setDevice(tester, const Size(411.43, 914.29));
+      tester.view.physicalSize = const Size(296, 658.29) * 2;
+      final methods = mockMultiWindow(tester, () => true);
+      recordPlatformCalls(tester);
+      await app.main();
+      await tester.pump();
+      methods.clear();
+      // 자유 형식 창을 끌어 크기를 바꾸는 것처럼 한 프레임 안에 여러 번 바뀐다
+      for (var h = 600.0; h > 400; h -= 20) {
+        tester.view.physicalSize = Size(296, h) * 2;
+      }
+      await tester.pump();
+      // 처음 바뀐 판정 하나가 바로 시작하고, 나머지는 기다리는 판정 하나로 합쳐진다
+      expect(
+        methods.where((m) => m == FormFactor.multiWindowModeMethod),
+        hasLength(2),
+      );
+    });
+
     testWidgets('방향 요청이 실패해도 앱은 뜨고, 다음 화면 정보 변화 때 다시 요청한다', (tester) async {
       SharedPreferences.setMockInitialValues({});
       setDevice(tester, const Size(390, 844));
@@ -868,6 +1224,8 @@ void main() {
     for (final (size, padding, minTouchHeight, minLegendFont) in const [
       (Size(320, 568), EdgeInsets.zero, floor, 5.0),
       (Size(320, 568), EdgeInsets.only(top: 20), floor, 5.0),
+      // Android 320×568 에뮬레이터(상태바·제스처 막대 각 24dp, #173·#203)
+      (Size(320, 568), EdgeInsets.only(top: 24, bottom: 24), floor, 5.0),
       (Size(360, 640), EdgeInsets.zero, floor, 5.0),
       (Size(360, 640), EdgeInsets.only(top: 24, bottom: 48), floor, 5.0),
       (Size(390, 844), EdgeInsets.zero, floor, 5.0),
@@ -967,33 +1325,62 @@ void main() {
               greaterThanOrEqualTo(cellArea * (vertical ? 1.0 : 1.1)),
               reason: '${sector.name} 넓이 ${pad.size}',
             );
-            // 스크린리더 시맨틱 영역(#166): 허브 고리 일부까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
-            // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 측정은 568×320 창 약 18.7dp, 360×300 분할 화면 약 13.5dp)
-            // (측정 22.6~34.9dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
-            // 이 목록에 없는 Android 320×568(위·아래 인셋 각 24dp)은 에뮬레이터에서 21.3dp로 하한 아래였다(#173).
-            // 하한과 인셋 조합은 #203에서 정한다.
+            // 스크린리더 시맨틱 영역(#166, #203): 그 방향만 읽히는 사각형의 짧은 변이 키 터치 높이 하한(28dp) 이상이다.
+            // ◀·▶는 노드 영역 전체(가장 위에 놓인다), ▲·▼는 허브 폭(중심에서 가로 허브 반지름 안)의 세로 띠다 —
+            // ▲·▼ 노드는 셀 반쪽 전체지만 옆은 ◀·▶ 노드가 덮는다.
+            // 측정 31.8~47.7dp — 가장 작은 곳은 Android 320×568(인셋 24/24)의 ▲·▼ 31.8dp다.
+            // #166의 겹치지 않는 사각형에서는 22.6~34.9dp였고, 그 인셋에서는 에뮬레이터 실측 21.3dp로 22dp 하한 아래였다(#173).
+            // 세로 폰 화면만 본다 — 짧은 창·가로 창은 패드가 작아 더 낮다.
             final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
+            final readable = vertical
+                ? Rect.fromLTRB(
+                    g.center.dx - g.hubRadius,
+                    semantic.top,
+                    g.center.dx + g.hubRadius,
+                    semantic.bottom,
+                  )
+                : semantic;
+            for (var i = 0; i <= 8; i++) {
+              for (var j = 0; j <= 8; j++) {
+                final p = Offset(
+                  readable.left + 0.01 + (readable.width - 0.02) * i / 8,
+                  readable.top + 0.01 + (readable.height - 0.02) * j / 8,
+                );
+                expect(
+                  g.semanticSectorAt(p, bounds),
+                  sector,
+                  reason: '${sector.name} $p',
+                );
+              }
+            }
             expect(
-              semantic.shortestSide,
-              greaterThanOrEqualTo(22.0),
-              reason: '${sector.name} 시맨틱 영역 $semantic',
+              readable.shortestSide,
+              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
+              reason: '${sector.name} 시맨틱 영역 $readable',
             );
           }
-          // 셀 여백은 ▲·▼와 ◀·▶가 고르게 나눠 갖는다 — 두 영역 높이가 같다(#166 R2: 패드에만 묶으면
-          // 셀이 패드보다 조금 높은 390×844 등에서 ◀·▶가 2dp쯤 낮아진다).
-          expect(
-            CursorPad.semanticRect(CursorPadSector.up, pad.size, bounds).height,
-            moreOrLessEquals(
-              CursorPad.semanticRect(
-                CursorPadSector.left,
-                pad.size,
-                bounds,
-              ).height,
-              epsilon: 1e-6,
-            ),
-          );
         });
       }
+    }
+  });
+
+  group('커서 패드 터치 탐색 — 실제 화면 (#203)', () {
+    // 키패드만 띄운 테스트(calc_keypad_test·keypad_wide_arrangement_test)와 달리 LCD·기록 영역 등 화면 전체 트리에서
+    // 커서 패드 셀을 짚어도 semanticSectorAt 방향의 노드에 닿는지 본다(키패드 위를 덮는 노드가 생기면 실패한다).
+    for (final (size, padding) in const [
+      (
+        Size(411, 914),
+        EdgeInsets.only(top: 24, bottom: 24),
+      ), // Android 기본 인셋 세로 폰(#173 에뮬레이터)
+      (Size(2000, 400), EdgeInsets.zero), // 가로형·넓은 셀
+    ]) {
+      testWidgets('${size.width}×${size.height}', (tester) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester, size: size, padding: padding);
+        expectCursorPadTouchExplorationMatchesSpec(tester, reason: '$size');
+        handle.dispose();
+      });
     }
   });
 

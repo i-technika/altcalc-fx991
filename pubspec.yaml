@@ -84,9 +84,11 @@ flutter:
   assets:
     - assets/fonts/NotoSansMono-OFL.txt
     - assets/fonts/NotoSansMath-OFL.txt
+    - assets/fonts/Saira-OFL.txt
+    - assets/fonts/NotoSerif-OFL.txt
 
-  # LCD·키캡 글꼴 (#16). 출처·서브셋 범위는 assets/fonts/README.md 참조.
-  # 패밀리 이름은 CalcTheme.monoFontFamily / CalcTheme.mathFontFamily와 같아야 한다(테스트로 검증).
+  # LCD·키캡 글꼴 (#16, 키캡 각인 비례폭 글꼴·변수 이탤릭은 #156). 출처·서브셋 범위는 assets/fonts/README.md 참조.
+  # 패밀리 이름은 CalcTheme.monoFontFamily / mathFontFamily / keyFontFamily / keyVariableFontFamily와 같아야 한다(테스트로 검증).
   fonts:
     - family: NotoSansMono
       fonts:
@@ -100,6 +102,17 @@ flutter:
     - family: NotoSansMath
       fonts:
         - asset: assets/fonts/NotoSansMath-Regular.ttf
+    - family: Saira
+      fonts:
+        - asset: assets/fonts/Saira-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Saira-SemiBold.ttf
+          weight: 600
+    - family: NotoSerifItalic
+      fonts:
+        - asset: assets/fonts/NotoSerif-BoldItalic.ttf
+          weight: 700
+          style: italic
 
   # To add assets to your application, add an assets section, like this:
   # assets:

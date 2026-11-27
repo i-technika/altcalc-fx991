@@ -8,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/korean_locale.dart';
+import '../support/semantics_hit_testing.dart';
 
 /// 넓은 키패드 배열 (#80) — 숫자부를 함수부 오른쪽에 나란히 두는 배열의 치수·배치·선택 규칙.
 
@@ -230,6 +231,30 @@ void main() {
       // 둘 다 0이면(같으면) 실물 배열
       expect(
         KeypadMetrics.preferredArrangementFor(Size.zero),
+        KeypadArrangement.standard,
+      );
+    });
+
+    test('preferredArrangementFor는 터치 높이가 아니라 셀 높이로 비교한다 (#143)', () {
+      // 880×790: 실물 배열은 키캡이 48dp를 넘어 터치 높이가 각인 띠를 뺀 48.3dp로 줄고(셀 67.2dp), 넓은 배열은 셀·터치
+      // 48.4dp다. 터치 높이로 비교하면 넓은 배열이 이기지만 키는 실물 배열이 훨씬 크다.
+      const size = Size(880, 790);
+      expect(
+        KeypadMetrics.minKeyTouchHeightOf(size, KeypadArrangement.wide),
+        greaterThan(
+          KeypadMetrics.minKeyTouchHeightOf(size, KeypadArrangement.standard),
+        ),
+      );
+      expect(
+        KeypadMetrics.minKeyCellHeightOf(size, KeypadArrangement.standard),
+        moreOrLessEquals(67.2, epsilon: 0.05),
+      );
+      expect(
+        KeypadMetrics.minKeyCellHeightOf(size, KeypadArrangement.wide),
+        moreOrLessEquals(48.4, epsilon: 0.05),
+      );
+      expect(
+        KeypadMetrics.preferredArrangementFor(size),
         KeypadArrangement.standard,
       );
     });
@@ -510,6 +535,11 @@ void main() {
         expect(order.sublist(firstNumber), [
           for (final r in numberRows) ...r.map((d) => d.id),
         ]);
+        // 터치 탐색: 커서 패드 셀 어디를 짚어도 semanticSectorAt 방향의 노드에 닿는다 (#203)
+        expectCursorPadTouchExplorationMatchesSpec(
+          tester,
+          reason: '${arrangement.name} $numbersOnLeft',
+        );
         handle.dispose();
       });
     }

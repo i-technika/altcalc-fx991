@@ -27,14 +27,11 @@ enum KeypadArrangement {
   /// 실물 배열 — 숫자부가 함수부 아래에 있다.
   standard,
 
-  /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 반 접은 테이블톱 자세의 아래
-  /// 절반처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
-  /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
+  /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 가로 접힘선 기준 배치의 아래 패널
+  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
+  /// 같은 높이에서 키가 약 2배가 된다(#80 당시 Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 기본으로 오른쪽이고(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것), `CalcKeypad.numbersOnLeft`로
-  /// 좌우를 맞바꿀 수 있다 — 가로형 배치는 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, 사용자 결정).
-  /// 테이블톱 배치는 #143까지 손잡이와 무관하게 숫자부가 오른쪽이고, 블록 폭 상한
-  /// (`CalcTheme.screenTabletopKeypadMaxBlockWidth`)에 걸리는 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
-  /// 가장자리로 가서 왼손잡이면 숫자부가 화면 가운데 쪽에 온다.
+  /// 좌우를 맞바꿀 수 있다 — 두 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, 사용자 결정).
   wide,
 }
 
@@ -80,8 +77,15 @@ class KeypadMetrics {
   /// 키패드 전체에 통일해 주입하는 각인 글자 크기 (배율 반영 전, dp)
   final double legendFontSize;
 
-  /// 키패드 전체에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
+  /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
   final double mainLabelFontSize;
+
+  /// 숫자부(숫자·사칙연산·`=`·DEL·AC 등)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp, #156).
+  ///
+  /// 실물 숫자부 각인은 함수부보다 훨씬 크다(근접 사진: 숫자 키캡 높이의 약 0.69가 숫자 높이, 함수 키는 약 0.55가 대문자
+  /// 높이 — 키도 더 크다). [mainLabelFontSize]의 [CalcTheme.keyNumberMainLabelScale]배를 목표로 하고, 숫자부 키캡 높이와
+  /// 숫자부 라벨 폭에 들어가는 크기까지 줄이되 [mainLabelFontSize] 아래로는 내리지 않는다.
+  final double numberMainLabelFontSize;
 
   /// 함수부·상단 조작부 키의 터치 영역을 각인 띠까지 넓힐지 여부
   final bool extendFunctionHitArea;
@@ -100,6 +104,7 @@ class KeypadMetrics {
     required this.numberRowHeight,
     required this.legendFontSize,
     required this.mainLabelFontSize,
+    required this.numberMainLabelFontSize,
     required this.extendFunctionHitArea,
     required this.extendNumberHitArea,
   });
@@ -135,7 +140,7 @@ class KeypadMetrics {
   /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
   /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
   @visibleForTesting
-  static ({double main, double legend}) debugWidthLimits({
+  static ({double main, double numberMain, double legend}) debugWidthLimits({
     required double functionKeyWidth,
     required double numberKeyWidth,
     bool Function(CalcKeyDef def)? where,
@@ -145,7 +150,11 @@ class KeypadMetrics {
       numberKeyWidth: numberKeyWidth,
       where: where,
     );
-    return (main: limits.main, legend: limits.legend);
+    return (
+      main: limits.main,
+      numberMain: limits.numberMain,
+      legend: limits.legend,
+    );
   }
 
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
@@ -189,11 +198,13 @@ class KeypadMetrics {
     return Size(width, math.min(availableHeight, maxHeight));
   }
 
-  /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키가 [KeypadArrangement.standard]보다
-  /// **클 때만** wide다(같으면 실물 배열). 낮고 넓은 영역(반 접은 테이블톱 자세의 아래 절반)에서 쓴다 (#80).
+  /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키 셀([minKeyCellHeightOf])이
+  /// [KeypadArrangement.standard]보다 **높을 때만** wide다(같으면 실물 배열). 가로 접힘선 기준 배치의 아래 패널에서 쓴다
+  /// (#80, #143). 셀 높이로 비교하는 이유는 가로형·세로형 비교(`CalculatorScreen`, #142)와 같다 — 터치 높이는 키가 커질 때
+  /// 각인 띠를 빼며 한 번 줄어 큰 영역의 비교가 뒤집힌다. #143 전에는 터치 높이로 비교했다.
   static KeypadArrangement preferredArrangementFor(Size available) =>
-      minKeyTouchHeightOf(available, KeypadArrangement.wide) >
-          minKeyTouchHeightOf(available, KeypadArrangement.standard)
+      minKeyCellHeightOf(available, KeypadArrangement.wide) >
+          minKeyCellHeightOf(available, KeypadArrangement.standard)
       ? KeypadArrangement.wide
       : KeypadArrangement.standard;
 
@@ -321,6 +332,9 @@ class KeypadMetrics {
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
+  /// 4. **숫자부 메인 라벨** (#156): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 키는 그 크기의
+  ///    [CalcTheme.keyNumberMainLabelScale]배를 목표로 숫자부 키캡 높이·숫자부 라벨 폭에 들어가게 줄이고(함수부 크기
+  ///    아래로는 내리지 않는다), [numberMainLabelFontSize]로 따로 주입한다.
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(
@@ -405,6 +419,36 @@ class KeypadMetrics {
       byHeight * CalcTheme.keypadUniformFontMinRatio,
     );
 
+    final mainLabelFontSize = unify(mainByHeight, widths.main);
+
+    // 4. 숫자부 메인 라벨 (#156) — 함수부 크기의 배수를 목표로, 숫자부 키캡 높이·폭에 들어가게 줄인다(함수부보다 작아지지 않는다).
+    final numberCapHeight = capHeightOf(numberRowHeight);
+    final numberCapInnerHeight =
+        numberCapHeight -
+        math.min(CalcTheme.keyPressedOffset, numberCapHeight) -
+        2 * CalcTheme.keyBorderWidth;
+    final numberByHeight = _fitToHeight(
+      math.max(
+        minFittedFontSize,
+        math.min(
+          mainLabelFontSize * CalcTheme.keyNumberMainLabelScale,
+          CalcTheme.keyNumberMainLabelMaxFontSize,
+        ),
+      ),
+      maxHeight: numberCapInnerHeight,
+      textScaler: scaler,
+      style: CalcTheme.keyMainLabelStyle,
+      tallLegends: limits.tallNumberMains,
+    );
+    final numberMainLabelFontSize = math.max(
+      mainLabelFontSize,
+      fitFontSize(
+        numberByHeight,
+        textScaler: scaler,
+        fits: (scaled) => scaled <= widths.numberMain,
+      ),
+    );
+
     return KeypadMetrics._(
       arrangement: arrangement,
       size: size,
@@ -415,7 +459,8 @@ class KeypadMetrics {
       functionRowHeight: functionRowHeight,
       numberRowHeight: numberRowHeight,
       legendFontSize: unify(legendByHeight, widths.legend),
-      mainLabelFontSize: unify(mainByHeight, widths.main),
+      mainLabelFontSize: mainLabelFontSize,
+      numberMainLabelFontSize: numberMainLabelFontSize,
       extendFunctionHitArea: capHeight < CalcTheme.keyMinTouchTargetHeight,
       extendNumberHitArea:
           capHeightOf(numberRowHeight) < CalcTheme.keyMinTouchTargetHeight,
@@ -428,19 +473,32 @@ class KeypadMetrics {
 /// 크기는 실제 글꼴로 그린 각인 크기([KeyLegendView.emSize] — 2차원 각인 포함, 글자 크기 1dp당 값)로 잰다.
 /// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 폭이 글자 크기에 비례하지 않는 일은 없다.)
 class _LabelLimits {
-  /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp)
+  /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp) — 숫자부를 뺀 키
   final double main;
+
+  /// 숫자부 메인 라벨 최대 글자 크기 (배율 반영 후, dp, #156)
+  final double numberMain;
 
   /// 각인 최대 글자 크기 (배율 반영 후, dp)
   final double legend;
 
-  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155)
+  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155) — 숫자부를 뺀 키
   final List<KeyLegendEmMetrics> tallMains;
+
+  /// 숫자부 2차원 메인 각인(`×10ˣ`)의 em 치수 (#156)
+  final List<KeyLegendEmMetrics> tallNumberMains;
 
   /// 2차원 SHIFT·ALPHA 각인의 em 치수
   final List<KeyLegendEmMetrics> tallLegends;
 
-  const _LabelLimits(this.main, this.legend, this.tallMains, this.tallLegends);
+  const _LabelLimits(
+    this.main,
+    this.numberMain,
+    this.legend,
+    this.tallMains,
+    this.tallNumberMains,
+    this.tallLegends,
+  );
 
   static double _emWidth(KeyLegend legend, TextStyle style) =>
       KeyLegendView.emSize(legend, style).width;
@@ -452,8 +510,10 @@ class _LabelLimits {
     bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
+    var numberMain = double.infinity;
     var legend = double.infinity;
     final tallMains = <KeyLegendEmMetrics>[];
+    final tallNumberMains = <KeyLegendEmMetrics>[];
     final tallLegends = <KeyLegendEmMetrics>[];
     final numberIds = {
       for (final row in numberRows)
@@ -464,9 +524,8 @@ class _LabelLimits {
     for (final def in allKeys) {
       if (cursorIds.contains(def.id)) continue;
       if (where != null && !where(def)) continue;
-      final width = numberIds.contains(def.id)
-          ? numberKeyWidth
-          : functionKeyWidth;
+      final number = numberIds.contains(def.id);
+      final width = number ? numberKeyWidth : functionKeyWidth;
 
       // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인을 SHIFT·ALPHA 각인과 함께 각인 띠에 한 줄로 인쇄한다
       // (CalcKeyButton의 `_BodyPrintRow`). 띠 폭에 그 줄이 들어가는 각인 크기까지 줄인다.
@@ -494,13 +553,16 @@ class _LabelLimits {
       final capInner =
           width * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
           2 * CalcTheme.keyBorderWidth;
-      main = math.min(
-        main,
-        math.max(0.0, capInner) /
-            _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle),
-      );
+      final mainLimit =
+          math.max(0.0, capInner) /
+          _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle);
+      if (number) {
+        numberMain = math.min(numberMain, mainLimit);
+      } else {
+        main = math.min(main, mainLimit);
+      }
       if (!def.mainLegend.isPlain) {
-        tallMains.add(
+        (number ? tallNumberMains : tallMains).add(
           KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
         );
       }
@@ -542,7 +604,14 @@ class _LabelLimits {
         legend = math.min(legend, usable / 2 / shortEm);
       }
     }
-    return _LabelLimits(main, legend, tallMains, tallLegends);
+    return _LabelLimits(
+      main,
+      numberMain,
+      legend,
+      tallMains,
+      tallNumberMains,
+      tallLegends,
+    );
   }
 }
 
@@ -668,6 +737,12 @@ class _KeypadBody extends StatelessWidget {
     vertical: metrics.verticalGap / 2,
   );
 
+  /// 숫자부 키 — 메인 라벨을 [KeypadMetrics.numberMainLabelFontSize]로 그린다 (#156)
+  static final Set<CalcKeyId> _numberKeyIds = {
+    for (final row in numberRows)
+      for (final def in row) def.id,
+  };
+
   Widget _button(
     CalcKeyDef def, {
     bool showLegendBand = true,
@@ -727,7 +802,9 @@ class _KeypadBody extends StatelessWidget {
       showLegendBand: showLegendBand,
       extendHitAreaToLegend: showLegendBand && extendHitArea,
       legendFontSize: metrics.legendFontSize,
-      mainLabelFontSize: metrics.mainLabelFontSize,
+      mainLabelFontSize: _numberKeyIds.contains(def.id)
+          ? metrics.numberMainLabelFontSize
+          : metrics.mainLabelFontSize,
       focusable: def.id == settingsKey,
     );
   }
@@ -896,6 +973,13 @@ class CursorPadGeometry {
   /// 누를 수 없는 가운데 원의 반지름 (dp, [hubRadius] 이하)
   final double deadZoneRadius;
 
+  /// 그리는 X자 홈의 두께 (dp, #156) — 패드 높이의 [CalcTheme.cursorPadGrooveWidthRatio]이되 [CalcTheme.cursorPadDividerWidth]
+  /// 보다 가늘지 않다. 그림만 이 두께이고 터치 경계는 선이다. 화살표 라벨 검사(테스트)도 이 값을 쓴다.
+  double get grooveStrokeWidth => math.max(
+    CalcTheme.cursorPadDividerWidth,
+    size.height * CalcTheme.cursorPadGrooveWidthRatio,
+  );
+
   factory CursorPadGeometry(Size size) {
     const inset = CalcTheme.cursorPadDividerWidth / 2;
     final rx = math.max(0.0, size.width / 2 - inset);
@@ -1032,80 +1116,86 @@ class CursorPadGeometry {
     ];
   }
 
-  /// [sector]의 시맨틱(스크린리더 터치 탐색) 영역 (패드 로컬 좌표).
+  /// 시맨틱 노드를 쌓는 순서 — 뒤의 것이 위에 놓여, 영역이 겹친 곳에서는 뒤의 방향이 읽힌다(#203).
   ///
-  /// 네 영역은 서로 겹치지 않는다. 각 영역은 자기 방향이 입력되는 곳에만 걸친다. 외곽 안에서는 자기 구역이고,
-  /// 그려진 허브의 고리(데드존 밖) 중 가운데 사각형(|dx| < X이고 |dy| < Y, 아래) 밖 부분도 포함한다.
-  /// 외곽 밖에서는 자기 방향의 터치 영역이다. 데드존은 덮지 않는다(#166).
-  /// 누르면 입력되는 곳과 스크린리더가 읽는 곳을 맞추기 위해서다. #43에서는 그려진 허브 전체를 피했다.
-  /// 그런데 허브를 실측대로 키운 뒤(#65) 320×568·상태바 20dp의 ▲·▼ 영역 높이가 17.4dp로 낮아졌다.
+  /// 엔진 코드상 Android(TalkBack)·iOS(VoiceOver) 브리지는 터치 탐색 때 겹친 노드 가운데 히트 테스트 순서
+  /// (위에 그린 것부터)로 처음 닿는 노드를 고른다(Flutter 엔진 `AccessibilityBridge.java` `hitTest`,
+  /// `SemanticsObject.mm` `search:`). [CursorPad]는 이 순서로 노드를 쌓는다.
+  /// - Android는 TalkBack 에뮬레이터에서 확인했다(#203, 411×914 격자 588점이 [semanticSectorAt]과 모두 일치).
+  /// - iOS는 엔진이 비공개 API `_accessibilityHitTest:`를 재정의해 이 순서를 쓴다. 재정의가 불리지 않으면
+  ///   UIKit 기본 판정(iOS 16부터 왼쪽 위 요소 우선)이 되어 위쪽 반에서 ▲가 ◀·▶를 가린다.
+  ///   실기기로만 확인할 수 있다(#181, M8).
+  static const List<CursorPadSector> semanticStackOrder = [
+    CursorPadSector.up,
+    CursorPadSector.down,
+    CursorPadSector.left,
+    CursorPadSector.right,
+  ];
+
+  /// [sector]의 시맨틱(스크린리더 터치 탐색) 노드 영역 (패드 로컬 좌표). 네 영역은 겹치며, 겹친 곳은
+  /// [semanticStackOrder]로 정한다 — 실제로 읽히는 방향은 [semanticSectorAt]이다(#203).
   ///
-  /// 화면 좌표에서 홈은 |dx| = m·|dy| (m = k·[radiusX]/[radiusY])이다. ◀·▶ 영역을 |dx| ≥ X, |dy| ≤ Y,
-  /// ▲·▼ 영역을 |dx| ≤ X, |dy| ≥ Y로 두고 X = m·Y로 맞추면 각 영역이 홈을 넘지 않는다.
-  /// - Y는 중심에서 위쪽 변까지 거리 H의 1/3이다. 위쪽 변은 셀([bounds])의 위 변이고, 없으면 패드 상자의 위 변이다.
-  ///   [bounds]가 위아래로 대칭이면 ▲·▼ 영역 높이(H − Y)와 ◀·▶ 영역 높이(2Y)가 같다.
-  ///   [bounds]를 생략하면 ▲·▼ 영역의 위 변은 외곽 위 끝이라서 ▲·▼가 선 두께만큼 낮다.
-  /// - 셀이 패드보다 크게 높으면 H/3이 홈 끝(홈이 외곽과 만나는 점)보다 높아질 수 있다. 그러면 X = m·Y가 홈 끝을
-  ///   넘어 ▲·▼ 영역이 외곽 밖 ◀·▶ 터치 영역을 덮고, 더 높으면 ◀·▶ 사각형이 뒤집힌다(리뷰 R1).
-  ///   그래서 Y의 상한을 홈 끝 높이의 98%로 둔다. 셀까지 넓힌 영역이 자기 방향 터치 영역 안에 머무는 조건은
-  ///   Y ≤ 홈 끝 높이 하나다. 지금 k에서 홈 끝 높이는 외곽 반높이의 약 0.66이다. 지금 배치의 셀은 패드 높이의
-  ///   1.08배 이하라서 상한이 걸리지 않는다. Y가 셀 높이를 따르므로 셀 여백은 ▲·▼와 ◀·▶가 고르게 나눠 갖는다.
-  ///   R1에서 Y를 패드에만 묶었더니 390×844 등 흔한 세로 폰에서 ◀·▶ 짧은 변이 2dp쯤 줄었다(리뷰 R2).
-  /// - 데드존을 피하도록 Y와 X는 데드존 반지름 이상으로 둔다. 지금 상수(데드존 0.1)에서는 H/3이 항상 더
-  ///   커서 걸리지 않는 안전장치다.
-  /// - 측정(320×568·상태바 20dp, 패드 97.7×67.8dp): ▲·▼ 43.1×17.4 → 29.6×22.6dp, ◀·▶ 27.3×32.9 → 34.1×22.6dp.
-  ///   짧은 변이 17.4dp에서 22.6dp가 된다.
-  /// - 대가: 고리를 덮으려고 X·Y를 줄이면 홈 옆 대각선 빈 곳(|dx| > X이고 |dy| > Y)이 커진다. 그래서 누르면
-  ///   입력되는 곳 가운데 터치 탐색으로 읽히는 넓이는 오히려 준다(리뷰 R2 측정, 셀 기준).
-  ///   320×568·상태바 20dp에서 50.1% → 43.7%, 412×915에서 49.7% → 42.7%다.
-  ///   사각형 네 개로 덮는 넓이는 Y가 허브 반지름쯤일 때 가장 크다. 따라서 짧은 변을 키우는 대신 치르는 값이다.
-  ///   가운데 사각형(|dx| < X이고 |dy| < Y)도 빈 곳이다. X는 허브 반지름에 가깝고 Y는 그보다 더 작아서
-  ///   (411×914에서 허브 22.2dp, X 20.6dp, Y 16.3dp) 고리 대부분이 여기에 든다. 이 빈 곳은 이 문서에는 없고
-  ///   #166 테스트 주석(패드 상자 기준 고리 약 21~48%, 하한 18%)에만 있었다. 앱 배치 수치는 아래(#173).
-  /// - m < 1이면(지금 k와 패드 비율 1.4 이상에서는 m ≥ 1.26) ▲·▼ 폭 2·m·Y가 가장 짧은 변이 될 수 있다.
-  /// - TalkBack 에뮬레이터 확인(#173, Android 16 Google Play 이미지, 411×914dp·상태바와 제스처 막대 각 24dp).
-  ///   확인된 동작:
-  ///   - 터치 탐색이 초점을 둔 노드가 이 영역과 12px(4.6dp) 격자 690점 모두 일치했다.
-  ///     영역 경계 0.5px(약 0.2dp) 안의 점은 어긋날 수 있다(고리 위 96점 중 ▼ 경계 2점).
-  ///   - 쓸어 넘기기 순서는 ◀ ▲ ▼ ▶이다(정렬 키 없이 위치로 정해진다).
-  ///   - 두 번 탭하면 초점 방향이 입력된다.
+  /// - ▲·▼: 셀([bounds])의 위·아래 반쪽 전체. 가운데 가로선(중심 높이)에서 나뉜다.
+  /// - ◀·▶: 허브 가장자리(중심에서 가로 [hubRadius])부터 셀 옆 변까지, 위아래는 중심에서 홈 끝(홈이 외곽과 만나는 점)
+  ///   높이까지. 셀이 패드보다 높으면 그 높이를 셀 높이 / 패드 높이 배로 늘린다. 셀이 패드보다 넓으면
+  ///   셀 반높이 쪽으로 (1 − 패드 폭 / 셀 폭)만큼 더 늘린다. ▲·▼ 위에 놓인다.
   ///
-  ///   빈 곳 두 가지(홈 옆 대각선·가운데 사각형)가 그대로 나타났다. 1px 계산으로는 누르면 입력되는 곳 가운데
-  ///   읽히는 곳이 약 44%, 허브 고리 가운데는 약 19%다. 위 R2 측정(412×915 42.7%)은 인셋 없는 화면이다.
-  ///   ◀·▶는 고리 바깥 가장자리 약 1.6dp 띠에서만 읽힌다. 빈 곳을 짚으면 초점이 앞 방향에 남는다.
-  ///   그 상태에서 두 번 탭하면 손가락 아래 방향이 아니라 앞 방향이 입력된다. 대응은 #203에서 정한다.
-  ///   짧은 변 실측(uiautomator)은 Android 320×568(상태바·제스처 막대 각 24dp)에서 21.3dp, 411×914 화면의
-  ///   반 분할 창(411×452dp)에서 17.1dp였다.
+  /// 그래서 셀 안 어디를 짚어도 어느 한 방향이 읽힌다(빈 곳 없음). [bounds]를 생략하면 셀 대신 패드 상자다.
+  /// [bounds]는 패드 상자를 품어야 하고([hitSectorAt]과 같은 전제), 위아래가 비대칭이면 짧은 쪽 반높이를 쓴다.
   ///
-  /// [bounds](셀)를 주면 바깥쪽 변을 셀 변까지 넓힌다 — 터치 영역(#64)과 같게, 셀 여백을 손가락으로
-  /// 훑어도 그쪽 방향이 읽힌다. 넓힌 부분도 그 방향의 터치 영역([hitSectorAt]) 안이다.
+  /// ## 왜 겹치게 두는가 (#203)
+  /// 터치 탐색에서 아무 노드에도 닿지 않으면 초점이 앞 방향에 남는다. 그 상태로 두 번 탭하면 손가락 아래가 아니라
+  /// 앞 방향이 입력된다. 방금 짚은 곳에서는 아무것도 듣지 못했는데 다른 방향이 입력되는 것이다.
+  /// 읽힌 방향이 손가락 아래의 터치 방향([hitSectorAt])과 달라도, 두 번 탭은 읽힌 방향을 입력한다.
+  /// 그러므로 빈 곳을 없애는 것이 우선이다.
+  /// - #166의 겹치지 않는 사각형 네 개는 각 영역이 자기 터치 영역 안에만 있었다. 대신 홈 옆 대각선과 가운데 사각형이
+  ///   비어, 누르면 입력되는 곳의 약 44%만 읽혔다(#173 에뮬레이터 실측 45.5%, 허브 고리는 약 19%).
+  /// - 사각형 노드는 쐐기 모양을 그대로 덮을 수 없다. 방향마다 노드를 여러 개 두면 쓸어 넘기기에서 같은 방향이
+  ///   여러 번 읽힌다. 터치 탐색에 잡히는 조건(라벨·동작이 있는 노드)이 쓸어 넘기기에 들어가는 조건과 같기 때문이다.
+  ///   회전 변환 노드는 Android만 변환을 따르고, iOS는 감싸는 축 정렬 사각형(`globalRect`)으로 판정한다.
+  /// - 그래서 방향마다 노드 하나를 두고 겹침 순서로 모양을 만든다.
+  ///   ◀·▶ 사각형을 ▲·▼ 반쪽 위에 두는 배치와, ▲·▼ 사각형을 ◀·▶ 반쪽 위에 두는 배치는 최적이 거의 같다(약 83.5%).
+  ///   셀이 패드보다 넓을 때 앞쪽이 조금 낫다. X = 허브 반지름, Y = 홈 끝 높이는 X·Y를 1dp 단위로 찾은 최적보다
+  ///   셀 폭 = 패드 폭에서 약 0.2~0.5%p 낮다(터치 영역 중 같은 방향이 읽히는 넓이).
+  ///   셀이 패드보다 가로로 넓으면 ◀·▶ 터치 영역이 셀 옆 모서리까지 위아래로 퍼져, 최적의 Y가 더 크다.
+  ///   Y를 홈 끝 높이로 고정하면 최적보다 411×452 분할 창 1.7%p, 2000×400 넓은 셀(#159) 3.5%p 낮았다(#203 R1·R2).
+  ///   그래서 넓은 셀에서는 Y를 셀 반높이 쪽으로 늘린다. 셀 비(셀 폭/패드 폭) 1.19~2.02의 셀에서 83.0~83.1% →
+  ///   84.0~86.3%다(0.3dp 격자). Y를 폭 비로 곱하거나 X를 늘리는 규칙은 더 나빴다.
+  /// - 411×914(Android 기본 인셋, #173과 같은 셀) 1px 계산: 터치 영역 중 같은 방향이 읽히는 곳 44.4% → 83.4%,
+  ///   빈 곳 55.6% → 0%. ▲·▼ 91.6%, ◀·▶ 75.4%다. 나머지 16.6%는 이웃 방향이 읽히는 곳이고, 세 가지다.
+  ///   - 셀 옆 변 위아래 끝 6.5%: 누르면 ◀·▶인데 ◀·▶ 노드(중심 ±Y) 밖이라 ▲·▼로 읽힌다(411×914에서 위아래 약 17dp씩).
+  ///   - 허브 고리의 ◀·▶ 쪽 5.1%: ◀·▶ 노드가 허브 가장자리에서 시작해 ▲·▼로 읽힌다. 고리는 전부 읽히고
+  ///     (18.6% → 100%) 그중 57.5%가 같은 방향이다.
+  ///   - 홈 근처 5.1%: 사각형 모서리가 홈 양쪽으로 넘는 곳.
   Rect semanticRect(CursorPadSector sector, [Rect? bounds]) {
     if (_isEmpty) return Rect.zero;
-    final m = _k * radiusX / radiusY;
-    final top = bounds?.top ?? 0;
-    final grooveHeight =
-        center.dy - _grooveEnd(CursorPadSector.up, CursorPadSector.left).dy;
-    final y = math.max(
-      math.min((center.dy - top) / 3, grooveHeight * 0.98),
-      math.max(deadZoneRadius, deadZoneRadius / m),
-    );
-    final x = m * y;
+    assert(bounds == null || _debugBoundsContainPad(bounds));
+    final cell = bounds ?? Offset.zero & size;
     final c = center;
+    final x = hubRadius;
+    // 홈 끝 높이 — 셀이 패드보다 높으면 그 비율만큼 늘린다(외곽 밖 ◀·▶ 터치 영역이 셀 모서리까지 퍼지므로).
+    final groove =
+        c.dy - _grooveEnd(CursorPadSector.up, CursorPadSector.left).dy;
+    final halfHeight = math.min(c.dy - cell.top, cell.bottom - c.dy);
+    final halfWidth = math.min(c.dx - cell.left, cell.right - c.dx);
+    final tall = groove * halfHeight / c.dy;
+    // 셀이 패드보다 넓으면 셀 반높이 쪽으로 늘린다 — 패드 반폭/셀 반폭이 1이면 그대로, 0에 가까우면 셀 반높이.
+    final y = tall + (halfHeight - tall) * (1 - c.dx / halfWidth);
     return switch (sector) {
       CursorPadSector.up => Rect.fromLTRB(
-        c.dx - x,
-        bounds?.top ?? c.dy - radiusY,
-        c.dx + x,
-        c.dy - y,
+        cell.left,
+        cell.top,
+        cell.right,
+        c.dy,
       ),
       CursorPadSector.down => Rect.fromLTRB(
-        c.dx - x,
-        c.dy + y,
-        c.dx + x,
-        bounds?.bottom ?? c.dy + radiusY,
+        cell.left,
+        c.dy,
+        cell.right,
+        cell.bottom,
       ),
       CursorPadSector.left => Rect.fromLTRB(
-        bounds?.left ?? c.dx - radiusX,
+        cell.left,
         c.dy - y,
         c.dx - x,
         c.dy + y,
@@ -1113,10 +1203,21 @@ class CursorPadGeometry {
       CursorPadSector.right => Rect.fromLTRB(
         c.dx + x,
         c.dy - y,
-        bounds?.right ?? c.dx + radiusX,
+        cell.right,
         c.dy + y,
       ),
     };
+  }
+
+  /// 터치 탐색으로 [localPosition](패드 로컬 좌표)을 짚으면 읽히는 방향 — [semanticRect] 영역을
+  /// [semanticStackOrder]의 위(뒤)부터 찾아 처음 닿는 방향이다. 영역 판정은 엔진 브리지처럼 왼쪽·위 변은 넣고
+  /// 오른쪽·아래 변은 뺀다. 셀 밖·유한하지 않은 좌표면 `null`이다.
+  CursorPadSector? semanticSectorAt(Offset localPosition, [Rect? bounds]) {
+    if (_isEmpty || !localPosition.isFinite) return null;
+    for (final sector in semanticStackOrder.reversed) {
+      if (semanticRect(sector, bounds).contains(localPosition)) return sector;
+    }
+    return null;
   }
 
   /// [sector] 구역 넓이 (dp², [sectorPath] 다각형의 신발끈 공식)
@@ -1274,7 +1375,7 @@ class CursorPadGeometry {
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
 /// - 셀 밖(셀 여백 `_cellPadding`)은 넓히지 않는다 — 이웃 키와의 간격은 다른 키 사이와 같다.
 /// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
-/// - 스크린리더 시맨틱 영역도 바깥쪽 변을 셀 변까지 넓힌다([CursorPadGeometry.semanticRect]의 `bounds`).
+/// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203).
 /// - 패드 상자는 셀 **가운데**에 있다고 가정한다([hitPath]가 상자 크기만으로 셀·패드를 되돌린다).
 ///
 /// ## 허브 한가운데만 데드존이다 (#43)
@@ -1287,8 +1388,10 @@ class CursorPadGeometry {
 ///
 /// 패드 상자는 셀 가운데에 [fitSize]로 가로/세로 비를 제한해 놓는다(셀의 남는 부분도 위 규칙의 터치 영역).
 ///
-/// 버튼의 시맨틱 영역은 반쪽 사각형이라 서로 겹치므로(터치 탐색으로 ▲·▼에 닿을 수 없음),
-/// 버튼 시맨틱은 빼고 방향별로 겹치지 않는 [semanticRect] 영역에 시맨틱 노드를 따로 둔다.
+/// 버튼의 시맨틱 영역은 반쪽 사각형이라 그대로 두면 터치 탐색으로 ▲·▼에 닿을 수 없다(◀·▶ 상자가 위에 놓인다).
+/// 그래서 버튼 시맨틱은 빼고, 방향별 시맨틱 노드를 [semanticRect] 영역에 따로 둔다. 노드는 겹치게 쌓아
+/// 셀 어디를 짚어도 한 방향이 읽히게 한다([CursorPadGeometry.semanticStackOrder], #203).
+/// 쓸어 넘기기 순서는 쌓는 순서와 따로 [semanticTraversalOrder]로 정한다.
 class CursorPad extends StatelessWidget {
   /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 네 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`·`labelInsets`에
   /// 넘겨야 한다(보통 `showLegendBand: false`인 [CalcKeyButton]).
@@ -1398,6 +1501,15 @@ class CursorPad extends StatelessWidget {
         .shift(pad.topLeft - box.topLeft);
   }
 
+  /// 쓸어 넘기기(다음 항목) 순서 — TalkBack 에뮬레이터에서 확인한 #173의 위치순 순서를 그대로 지킨다.
+  /// 영역이 겹쳐 위치순 정렬로는 순서가 정해지지 않으므로 정렬 키로 고정한다(#203).
+  static const List<CursorPadSector> semanticTraversalOrder = [
+    CursorPadSector.left,
+    CursorPadSector.up,
+    CursorPadSector.down,
+    CursorPadSector.right,
+  ];
+
   /// [size] 패드 안에서 [sector]의 시맨틱 영역 ([CursorPadGeometry.semanticRect], [bounds]는 패드 로컬 좌표의 셀)
   static Rect semanticRect(CursorPadSector sector, Size size, [Rect? bounds]) =>
       CursorPadGeometry(size).semanticRect(sector, bounds);
@@ -1467,67 +1579,76 @@ class CursorPad extends StatelessWidget {
         ); // 패드 로컬 좌표의 셀
         final press = onKeyPressed;
         final strings = CalcSemanticStrings.of(context);
-        return SizedBox.fromSize(
-          size: cell,
-          child: Stack(
-            children: [
-              // 방향 키: 버튼 상자는 셀의 반쪽(터치 영역), 그림은 그 안의 패드 반쪽 (#64)
-              for (final sector in CursorPadSector.values)
-                Positioned.fromRect(
-                  rect: sectorBox(sector, cell),
-                  child: ExcludeSemantics(
-                    child: buttonBuilder(defOf(sector), (
-                      shape: shapeOf(sector),
-                      hitShape: hitShapeOf(sector),
-                      hitOutset: hitOutsetOf(sector, cell),
-                      labelInsets: labelInsetsOf(sector, size),
-                    )),
+        // 네 방향 노드를 한 노드 아래에 묶는다 — 정렬 키가 이웃 키와 섞이지 않고 네 노드끼리만 비교된다.
+        // 묶는 노드는 라벨·동작이 없어 스크린리더 초점을 받지 않는다.
+        return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: SizedBox.fromSize(
+            size: cell,
+            child: Stack(
+              children: [
+                // 방향 키: 버튼 상자는 셀의 반쪽(터치 영역), 그림은 그 안의 패드 반쪽 (#64)
+                for (final sector in CursorPadSector.values)
+                  Positioned.fromRect(
+                    rect: sectorBox(sector, cell),
+                    child: ExcludeSemantics(
+                      child: buttonBuilder(defOf(sector), (
+                        shape: shapeOf(sector),
+                        hitShape: hitShapeOf(sector),
+                        hitOutset: hitOutsetOf(sector, cell),
+                        labelInsets: labelInsetsOf(sector, size),
+                      )),
+                    ),
                   ),
-                ),
-              Positioned.fromRect(
-                rect: padRect,
-                child: Stack(
-                  key: const ValueKey('cursor-pad'),
-                  children: [
-                    // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
-                    // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            painter: _CursorPadDecorationPainter(
-                              CalcPalette.of(context).keyBorder,
+                Positioned.fromRect(
+                  rect: padRect,
+                  child: Stack(
+                    key: const ValueKey('cursor-pad'),
+                    children: [
+                      // X자 홈·외곽선·허브 (터치는 통과시켜 아래 방향 키가 받는다 — 한가운데는 키 경로 밖이라 데드존)
+                      // 키를 누를 때마다 장식(128각형 외곽 등)을 다시 그리지 않도록 레이어를 분리한다.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: _CursorPadDecorationPainter(
+                                CalcPalette.of(context).cursorPadGroove,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              // 겹치지 않는 시맨틱 영역 — 바깥쪽 변은 셀 변까지 (자식이 없어 터치는 받지 않는다)
-              for (final sector in CursorPadSector.values)
-                Positioned.fromRect(
-                  rect: semanticRect(
-                    sector,
-                    size,
-                    bounds,
-                  ).shift(padRect.topLeft),
-                  child: Semantics(
-                    container: true,
-                    button: true,
-                    enabled: press != null,
-                    label: strings.keyButton(defOf(sector).id),
-                    onTap: press == null
-                        ? null
-                        : () {
-                            if (enableHaptics) HapticFeedback.lightImpact();
-                            press(defOf(sector).id);
-                          },
-                    child: const SizedBox.expand(),
+                    ],
                   ),
                 ),
-            ],
+                // 겹쳐 쌓은 시맨틱 영역 — 뒤에 쌓은 ◀·▶가 겹친 곳을 가진다 (자식이 없어 터치는 받지 않는다, #203)
+                for (final sector in CursorPadGeometry.semanticStackOrder)
+                  Positioned.fromRect(
+                    rect: semanticRect(
+                      sector,
+                      size,
+                      bounds,
+                    ).shift(padRect.topLeft),
+                    child: Semantics(
+                      container: true,
+                      sortKey: OrdinalSortKey(
+                        semanticTraversalOrder.indexOf(sector).toDouble(),
+                      ),
+                      button: true,
+                      enabled: press != null,
+                      label: strings.keyButton(defOf(sector).id),
+                      onTap: press == null
+                          ? null
+                          : () {
+                              if (enableHaptics) HapticFeedback.lightImpact();
+                              press(defOf(sector).id);
+                            },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -1537,7 +1658,7 @@ class CursorPad extends StatelessWidget {
 
 /// 커서 패드 X자 홈·외곽선과 가운데 허브
 class _CursorPadDecorationPainter extends CustomPainter {
-  /// 홈·외곽선·허브 둘레 색 (키캡 테두리와 같다 — 고대비 모드에서 바뀐다, #54)
+  /// 홈·외곽선·허브 둘레 색 ([CalcPalette.cursorPadGroove] — 은색 키 사이의 어두운 틈, 고대비 모드에서 바뀐다, #156)
   final Color lineColor;
 
   const _CursorPadDecorationPainter(this.lineColor);
@@ -1549,8 +1670,14 @@ class _CursorPadDecorationPainter extends CustomPainter {
       ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = CalcTheme.cursorPadDividerWidth;
+    // X자 홈은 실물처럼 넓은 어두운 틈으로 그린다 (#156) — 터치 경계는 선 그대로다.
+    final groove = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..strokeWidth = geometry.grooveStrokeWidth;
     for (final (from, to) in geometry.grooves()) {
-      canvas.drawLine(from, to, line);
+      canvas.drawLine(from, to, groove);
     }
     canvas
       ..drawPath(geometry.outlinePath(), line)
