@@ -225,14 +225,21 @@ abstract final class FormFactor {
   ///   달라(Galaxy Z Fold는 세로, Pixel Fold는 가로) 세로로 고정하면 Pixel Fold에서는 오히려 접힘선이 가로로
   ///   눕는다. 배치는 고정 대신 접힘선 방향을 따른다([arrangementOf]). Android 16 이상은 대화면에서 어차피
   ///   방향 고정을 무시하므로, 어떤 버전에서도 같은 동작이 된다.
+  /// - 펼친 트라이폴드(창을 가로지르는 접힘선이 둘 이상 — [multipleHinges], [crossesMultipleHinges], #144): 화면 크기와
+  ///   상관없이 네 방향 모두. 배치는 태블릿과 같지만(가로형·세로형) 세로로 돌려도 세로형으로 쓸 수 있게 가로로 고정하지
+  ///   않는다. 크기로만 정하지 않는 것은 짧은 변이 600dp 경계에 가깝기 때문이다 — Galaxy Z TriFold 공개 해상도는 밀도
+  ///   2.625 가정으로 약 823×603dp라, 화면 크기 설정을 키우면 600 아래로 내려가 세로로 고정될 수 있다. [multipleHinges]는
+  ///   접힘 정보가 온 뒤에만 참이다 — 그 전(시작 직후)에는 크기 규칙을 따르지만, 앱 시작은 접힘 정보가 올 때까지 첫 방향
+  ///   요청을 미룬다(#158, `main()`).
   static OrientationPolicy orientationPolicyOf(
     DeviceKind kind,
-    Size displaySize,
-  ) => switch (kind) {
+    Size displaySize, {
+    bool multipleHinges = false,
+  }) => switch (kind) {
     DeviceKind.phone => OrientationPolicy.portrait,
     DeviceKind.tablet => OrientationPolicy.landscape,
     DeviceKind.foldable =>
-      displaySize.shortestSide >= largeScreenMinShortestSide
+      multipleHinges || displaySize.shortestSide >= largeScreenMinShortestSide
           ? OrientationPolicy.any
           : OrientationPolicy.portrait,
   };
@@ -264,45 +271,92 @@ abstract final class FormFactor {
   /// 본체 크기로 다시 판정한다(`CalculatorScreen`, `KeypadMetrics.minKeyTouchHeightOf`).
   static const double hingeMinPanelExtent = 280.0;
 
-  /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge). 영역은 창 좌표다.
-  /// 없으면 `null`. 화면 구멍(cutout)과, 창 밖에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는 세지 않는다.
+  /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge) 모두 (#144). 영역은 창 좌표이고,
+  /// 순서는 [features] 그대로이고, 같은 접힘선(같은 방향으로 겹치거나 1dp 안에 붙음)이 두 번 오면 하나만 남긴다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
+  /// 세지 않는다.
   ///
   /// 접힘 정보의 좌표는 그 정보를 담은 `MediaQuery`가 가리키는 화면(창)의 좌표다. 실제 앱에서는 창 = 화면이다.
+  static List<DisplayFeature> crossingHingesOf(
+    Size windowSize,
+    Iterable<DisplayFeature> features,
+  ) {
+    final crossing = <DisplayFeature>[];
+    for (final f in features) {
+      if (!_crossesWindow(windowSize, f)) continue;
+      // 같은 접힘선이 두 번 보고되어도(같은 자리, 또는 폭 있는 힌지와 그 안의 폭 0 접힘선처럼 겹침) 하나로 센다 — 개수가
+      // 2가 되면 접힘선 1개 기기가 접힘선을 잃는다(#144 R1·R2). 둘 중 화면을 실제로 나누는 쪽([separates] — 반 접힘·
+      // 물리 힌지)을 남긴다 — 평평한 쪽을 남기면 테이블톱 배치를 놓친다.
+      final same = crossing.indexWhere((c) => _sameHinge(c.bounds, f.bounds));
+      if (same < 0) {
+        crossing.add(f);
+      } else if (!separates(crossing[same]) && separates(f)) {
+        crossing[same] = f;
+      }
+    }
+    return crossing;
+  }
+
+  /// 창을 가로지르는 두 접힘선 영역이 같은 접힘선인지 — 방향이 같고, 접힘선에 수직인 축으로 겹치거나
+  /// [_hingeSpanTolerance] 안에 붙어 있다.
+  static bool _sameHinge(Rect a, Rect b) {
+    const t = _hingeSpanTolerance;
+    final vertical = isVerticalHinge(a);
+    if (vertical != isVerticalHinge(b)) return false;
+    return vertical
+        ? a.left <= b.right + t && b.left <= a.right + t
+        : a.top <= b.bottom + t && b.top <= a.bottom + t;
+  }
+
+  /// [f]가 창([windowSize])을 한 축으로 끝까지 가로지르는 접히는 부분인지 ([crossingHingesOf])
+  static bool _crossesWindow(Size windowSize, DisplayFeature f) {
+    const t = _hingeSpanTolerance;
+    if (f.type != DisplayFeatureType.fold &&
+        f.type != DisplayFeatureType.hinge) {
+      return false;
+    }
+    final b = f.bounds;
+    if (!(b.left.isFinite &&
+        b.top.isFinite &&
+        b.right.isFinite &&
+        b.bottom.isFinite)) {
+      return false;
+    }
+    final spansHeight = b.top <= t && b.bottom >= windowSize.height - t;
+    final spansWidth = b.left <= t && b.right >= windowSize.width - t;
+    final insideX = b.left >= -t && b.right <= windowSize.width + t;
+    final insideY = b.top >= -t && b.bottom <= windowSize.height + t;
+    // 접힘선 양쪽에 창이 남는지 (창 가장자리에 놓인 접힘선은 창을 나누지 않는다)
+    final splitsX = b.left > t && b.right < windowSize.width - t;
+    final splitsY = b.top > t && b.bottom < windowSize.height - t;
+    // 세로 접힘선: 위에서 아래까지 정확히 창 높이만큼, 좌우로는 창 안쪽 (가로 접힘선은 반대).
+    // 창보다 긴 접힘 정보는 받지 않는다 — 회전 직후 창 크기는 새 값인데 접힘 정보는 이전 방향 값으로
+    // 몇 프레임 늦게 올 수 있다(#25 R2). 그동안은 접힘선이 없는 것으로 본다(폴더블이면 위아래 배치).
+    // 창 가장자리의 접힘선은 세지 않는다 — 트라이폴드에서 두 장에 걸친 분할 화면 창은 둘째 접힘선이 창 경계에 오는데,
+    // 이것을 세면 접힘선 2개로 판정되어 창 가운데의 접힘선까지 무시하게 된다(#144). 그 창은 접힘선 1개 규칙을 탄다 —
+    // 장 폭이 [hingeMinPanelExtent] 이상이면 가운데 접힘선 기준 배치, 아니면(공개 사양 근사 약 274dp) 위아래 배치다.
+    // 가장자리 접힘선은 어차피 배치를 나누지 않는다(한쪽 패널 길이 0 < [hingeMinPanelExtent]).
+    if (spansHeight && splitsX && insideY) return true;
+    return spansWidth && splitsY && insideX;
+  }
+
+  /// 창을 가로지르는 접힘선이 [multiHingeMinCount]개 이상인지 (#144) — 펼친 트라이폴드(세 장, 접힘선 2개)다.
+  /// 이런 창은 접힘선을 무시하고 접힘선 없는 창과 같은 배치로 그린다([arrangementOf] 1번, [picksFormByKeySize]).
+  static bool crossesMultipleHinges(
+    Size windowSize,
+    Iterable<DisplayFeature> features,
+  ) => crossingHingesOf(windowSize, features).length >= multiHingeMinCount;
+
+  /// 접힘선을 무시하는 창의 가로지르는 접힘선 개수 하한 ([crossesMultipleHinges], #144)
+  static const int multiHingeMinCount = 2;
+
+  /// 배치에 쓰는 접힘선 — 창([windowSize], dp)을 끝까지 가로지르는 접히는 부분([crossingHingesOf])이 **하나뿐일 때** 그것.
+  /// 없거나 둘 이상(펼친 트라이폴드, [crossesMultipleHinges])이면 `null`이다. 영역은 창 좌표다.
   static DisplayFeature? hingeOf(
     Size windowSize,
     Iterable<DisplayFeature> features,
   ) {
-    const t = _hingeSpanTolerance;
-    for (final f in features) {
-      if (f.type != DisplayFeatureType.fold &&
-          f.type != DisplayFeatureType.hinge) {
-        continue;
-      }
-      final b = f.bounds;
-      if (!(b.left.isFinite &&
-          b.top.isFinite &&
-          b.right.isFinite &&
-          b.bottom.isFinite)) {
-        continue;
-      }
-      final spansHeight = b.top <= t && b.bottom >= windowSize.height - t;
-      final spansWidth = b.left <= t && b.right >= windowSize.width - t;
-      final insideX = b.left >= -t && b.right <= windowSize.width + t;
-      final insideY = b.top >= -t && b.bottom <= windowSize.height + t;
-      // 세로 접힘선: 위에서 아래까지 정확히 창 높이만큼, 좌우로는 창 안 (가로 접힘선은 반대).
-      // 창보다 긴 접힘 정보는 받지 않는다 — 회전 직후 창 크기는 새 값인데 접힘 정보는 이전 방향 값으로
-      // 몇 프레임 늦게 올 수 있다(#25 R2). 그동안은 접힘선이 없는 것으로 본다(폴더블이면 위아래 배치).
-      if (spansHeight && insideX && insideY && b.width < windowSize.width - t) {
-        return f;
-      }
-      if (spansWidth &&
-          insideX &&
-          insideY &&
-          b.height < windowSize.height - t) {
-        return f;
-      }
-    }
-    return null;
+    final crossing = crossingHingesOf(windowSize, features);
+    return crossing.length == 1 ? crossing.single : null;
   }
 
   /// [hinge]가 세로 접힘선(위에서 아래로 가로지름)인지. 폭이 0인 접힘선도 판정된다.
@@ -316,16 +370,23 @@ abstract final class FormFactor {
       hinge.bounds.shortestSide > 0 ||
       hinge.state == DisplayFeatureState.postureHalfOpened;
 
-  /// 화면이 본체 크기로 세로형과 가로형 중 키가 큰 쪽을 고르는 창인지 (#142) — 접힘 정보([features])가 없고 폴더블
-  /// 기기([foldableDevice])도 아닌 창이다. [arrangementOf] 3번의 창이다.
+  /// 화면이 본체 크기로 세로형과 가로형 중 키가 큰 쪽을 고르는 창인지 (#142) — [arrangementOf] 3번의 창이다.
+  /// - 접힘 정보([features])가 없고 폴더블 기기([foldableDevice])도 아닌 창
+  /// - 창([windowSize])을 가로지르는 접힘선이 둘 이상인 창([crossesMultipleHinges] — 펼친 트라이폴드, #144).
+  ///   폴더블 기기여도 그렇다 — 접힘 정보가 이미 왔으므로 아래 깜빡임 방지 규칙의 대상이 아니다.
   static bool picksFormByKeySize(
+    Size windowSize,
     Iterable<DisplayFeature> features, {
     bool foldableDevice = false,
-  }) => !foldableDevice && !hasFoldOrHinge(features);
+  }) =>
+      (!foldableDevice && !hasFoldOrHinge(features)) ||
+      crossesMultipleHinges(windowSize, features);
 
   /// 앱 창([windowSize], dp)의 배치.
   ///
-  /// 1. 창을 가로지르는 접힘선([hingeOf]) 양쪽이 모두 [hingeMinPanelExtent] 이상이면 접힘선을 경계로 나눈다 (#25).
+  /// 1. 창을 가로지르는 접힘선이 하나뿐이고([hingeOf]) 그 양쪽이 모두 [hingeMinPanelExtent] 이상이면 접힘선을 경계로
+  ///    나눈다 (#25). 가로지르는 접힘선이 둘 이상이면([crossesMultipleHinges] — 펼친 트라이폴드) 접힘선을 모두 무시하고
+  ///    3번 창으로 다룬다(#144, 아래 "트라이폴드").
   ///    - 세로 접힘선: 항상 [ScreenArrangement.hingeSplit]. 펼친 상태(flat)여도 나눈다 — 주름이 키·글자 한가운데를
   ///      지나지 않게 하는 것이 이슈 요구이고, 좌우로 나눠도 각 절반이 폰 폭이라 키 크기 손해가 작다.
   ///    - 가로 접힘선: 화면을 실제로 나눌 때([separates] — 반 접은 테이블톱 자세, 물리 힌지)만
@@ -339,10 +400,43 @@ abstract final class FormFactor {
   ///    제약: 폴더블 여부는 기기 단위라, 폴더블을 외부 디스플레이(DeX 등)에 띄운 넓은 창도 위아래 배치다.
   ///    시작 구간에만 기기 단위로 보려면 "접힘 정보가 아직 안 옴"과 "접힘선 없음"을 구분해야 하는데 그런
   ///    신호가 없고, 시간 제한을 두면 펼칠 때마다 배치가 한 번씩 튄다. 드문 경우라 위아래 배치로 둔다 (#25 검토).
-  /// 3. 그 밖의 창([picksFormByKeySize] — 접힘 정보가 없는 폴더블이 아닌 창)은 창 모양으로 답한다: 가로(폭 > 높이) 창이면
+  /// 3. 그 밖의 창([picksFormByKeySize] — 접힘 정보가 없는 폴더블이 아닌 창, 접힘선이 둘 이상 가로지르는 창)은 창 모양으로
+  ///    답한다: 가로(폭 > 높이) 창이면
   ///    [ScreenArrangement.landscape], 아니면 위아래 배치다. 화면은 이 창들을 모두 인셋·화면 여백을 뺀 본체 크기로
   ///    세로형과 가로형 중 키가 큰 쪽으로 다시 고른다 (`CalculatorScreen`, #142) — 그래서 이 답은 창 모양에서 기대하는
   ///    배치일 뿐이고, 정사각형에 가까운 가로 창(768×768 전후)이나 아주 작은 세로 창은 다른 쪽으로 그려질 수 있다.
+  ///
+  /// ## 트라이폴드 (#144, 2026-11-26 사용자 결정)
+  /// 세 장을 모두 펼친 트라이폴드는 접힘선이 2개다. 접힘선 하나를 경계로 나누면 키패드가 다른 접힘선에 걸치므로,
+  /// **태블릿으로 다룬다** — 가로로 들면 가로형, 세로로 돌리면 세로형이다(화면이 본체 크기로 키가 큰 쪽을 고른다).
+  /// 접힘선 2개가 LCD와 키 열 위를 지나가지만 키 모양을 우선한다. 자세(펼침·반 접힘)와 상관없이 같다 — Galaxy Z TriFold는
+  /// Flex 모드가 없어 펴서만 쓰는 것으로 알려져 있고(기사 한 건 기준, 공식 문서 미확인), 힌지 각도를 유지하는 Z자형 기기
+  /// (Huawei Mate XT)를 꺾어 쓰는 경우는 따로 대응하지 않는다.
+  /// - 접은 커버 화면은 접힘선이 창을 가로지르지 않아 폰과 같은 규칙(2번 — 폴더블 기기의 위아래 배치, 짧은 창 비교)이다.
+  ///   두 장만 펼친 상태(그런 기기가 있으면)나, 분할 화면 창이 접힘선 하나에만 걸친 경우는 접힘선 1개 규칙(1번)이다.
+  /// - 시작 깜빡임 방지(2번)는 접힘 정보가 **오기 전**에만 위아래 배치로 둔다. 트라이폴드는 접힘 정보가 오면 이 3번이
+  ///   되므로 가로형을 막지 않는다. 앱 시작 때는 Android가 창 배치 첫 값에 접히는 부분이 있다고 알리면 `main()`이 접힘
+  ///   정보가 올 때까지 첫 화면을 미루므로(#158) 첫 프레임부터 가로형이다.
+  /// - 회전·화면 크기 설정 변경 직후 몇 프레임은 접힘 정보가 이전 값이라 창을 가로지르지 않을 수 있다([crossingHingesOf]) —
+  ///   그동안은 2번(위아래 배치)이다. 폴더블의 회전과 같다. 아래 에뮬레이터 기록에서 방향 판정은 그런 순간을 만났지만(확대
+  ///   화면 회전), 진단 로그의 배치 줄에는 가로 창이 위아래 배치로 그려진 프레임이 없었다(가로지르는 접힘선 0인 배치 줄은
+  ///   창이 아직 세로인 프레임뿐이었다). 실기기 확인은 #200.
+  /// - 방향 정책은 화면 크기와 상관없이 네 방향이다([orientationPolicyOf]의 `multipleHinges`).
+  /// - **가정 (미확인)**: 펼친 트라이폴드가 Jetpack WindowManager로 접히는 부분(`FoldingFeature`) 2개를 보고한다는 것과
+  ///   펼친 화면 dp 크기·접힘선 위치는 실기기로 확인하지 못했다(트라이폴드 에뮬레이터 기기 정의가 없다). 미리보기 프리셋은
+  ///   Galaxy Z TriFold 공개 해상도 2160×1584 px를 밀도 2.625로 바꾼 823×603dp에 세 장 같은 폭(접힘선 x≈274·549)을
+  ///   가정했다(이슈가 처음 가정한 크기는 960×704dp). 실기기 확인은 출시 QA(M8, #200)에서 한다.
+  /// - 에뮬레이터 기록 (#144, Pixel Fold 에뮬레이터 Android 16 진단 릴리스 빌드 — 흉내 낸 값이라 실기기 보고 값은 아니다):
+  ///   `adb shell wm size`로 화면 크기를 바꾸고 `adb shell settings put global display_features 'fold-[…];fold-[…]'`(Jetpack
+  ///   확장이 읽는 접힘 정보 덮어쓰기)로 접힘선 2개를 주었다. 세 크기 모두 Flutter 화면 특징에 폭 0 `fold`·`postureFlat`
+  ///   2개가 왔다. 시작 판정 첫 값이 "접힘"이라 첫 프레임부터 가로형이었고, 방향 요청은 네 방향이었다.
+  ///   - 2160×1584 px(밀도 420 → 822.9×603.4dp, 접힘선 x=274.3·548.6): 가로형, 세로로 돌리면 세로형, 다시 돌리면 가로형.
+  ///   - 같은 화면을 밀도 480으로 확대(720×528dp): 가로형·세로형은 같다. 회전할 때 접힘 정보가 늦게 와 창을 가로지르지
+  ///     않는 순간에 세로 고정을 한 번 요청했다가 푸는 것이 보여, 접힘선 2개를 본 화면을 기억해 막았다(`DeviceOrientationLock`
+  ///     "트라이폴드 방향 기억"). 고친 뒤에는 네 번 돌려도 방향 요청이 다시 나가지 않았다. 세로→가로에서 창이 아직
+  ///     세로인 프레임(약 0.5초)은 위아래 배치였다 — 회전 중 창 크기 그대로다.
+  ///   - 2520×1848 px(960×704dp, 이슈의 처음 가정)과 원래 크기(841×701dp)에 접힘선 2개: 가로형.
+  ///   - 7.6" Fold-in 에뮬레이터(Android 14)는 원래 설정(힌지 1개)에서도 접힘 정보를 보고하지 않아 쓸 수 없었다.
   ///
   /// 2번에서 위아래 배치를 돌려받은 창이라도 짧은 변이 [largeScreenMinShortestSide] 미만이면(폴더블 커버 화면의 분할 화면
   /// 등) 화면이 본체 크기로 가로형과 비교해 키가 더 큰 쪽으로 그린다 (짧은 창, #38). 접힘선 기준 배치를 쓸 수 없을 때
@@ -352,6 +446,7 @@ abstract final class FormFactor {
     Iterable<DisplayFeature> features, {
     bool foldableDevice = false,
   }) {
+    // 접힘선이 둘 이상 가로지르면 hingeOf가 null이다(트라이폴드 — 접힘선 없는 창으로 다룬다, #144)
     final hinge = hingeOf(windowSize, features);
     if (hinge != null) {
       final b = hinge.bounds;
@@ -365,7 +460,11 @@ abstract final class FormFactor {
         if (separates(hinge)) return ScreenArrangement.hingeStacked;
       }
     }
-    if (!picksFormByKeySize(features, foldableDevice: foldableDevice)) {
+    if (!picksFormByKeySize(
+      windowSize,
+      features,
+      foldableDevice: foldableDevice,
+    )) {
       return ScreenArrangement.stacked;
     }
     return windowSize.width > windowSize.height

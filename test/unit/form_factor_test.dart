@@ -419,13 +419,159 @@ void main() {
       );
     });
 
-    test('여러 개면 창을 가로지르는 첫 접힘선을 쓴다', () {
+    test('여러 개여도 창을 가로지르는 접힘선이 하나뿐이면 그것을 쓴다', () {
       final hinge = FormFactor.hingeOf(window, [
         _cutout,
         feature(const Rect.fromLTWH(336, 100, 0, 600)),
         feature(const Rect.fromLTWH(336, 0, 0, 841)),
       ]);
       expect(hinge?.bounds, const Rect.fromLTWH(336, 0, 0, 841));
+    });
+
+    test('창을 가로지르는 접힘선이 둘 이상이면 배치에 쓰는 접힘선이 없다 (#144)', () {
+      final left = feature(const Rect.fromLTWH(224, 0, 0, 841));
+      final right = feature(const Rect.fromLTWH(448, 0, 0, 841));
+      final across = feature(const Rect.fromLTWH(0, 420, 673, 0));
+      for (final features in [
+        [left, right],
+        [_cutout, right, left],
+        [left, across], // 세로·가로가 하나씩이어도 둘이다
+      ]) {
+        expect(
+          FormFactor.crossingHingesOf(window, features),
+          features.where((f) => f != _cutout).toList(),
+        );
+        expect(FormFactor.crossesMultipleHinges(window, features), isTrue);
+        expect(FormFactor.hingeOf(window, features), isNull);
+      }
+      expect(FormFactor.crossesMultipleHinges(window, [left]), isFalse);
+      expect(FormFactor.crossesMultipleHinges(window, const []), isFalse);
+      // 가로지르지 않는 접힘 정보는 세지 않는다
+      expect(
+        FormFactor.crossesMultipleHinges(window, [
+          left,
+          feature(const Rect.fromLTWH(448, 100, 0, 600)),
+        ]),
+        isFalse,
+      );
+    });
+
+    test('창 가장자리에 놓인 접힘선은 창을 나누지 않으므로 세지 않는다 (#144 — 트라이폴드 두 장에 걸친 분할 창)', () {
+      // 펼친 트라이폴드(960×704, 접힘선 x=320·640)의 왼쪽 두 장을 차지한 창 640×704: 둘째 접힘선이 창 오른쪽 끝에 온다.
+      const twoPanels = Size(640, 704);
+      final middle = feature(const Rect.fromLTWH(320, 0, 0, 704));
+      for (final x in [0.0, 0.5, 639.5, 640.0]) {
+        final edge = feature(Rect.fromLTWH(x, 0, 0, 704));
+        expect(FormFactor.crossingHingesOf(twoPanels, [middle, edge]), [
+          middle,
+        ], reason: 'x=$x');
+        expect(
+          FormFactor.hingeOf(twoPanels, [middle, edge]),
+          same(middle),
+          reason: 'x=$x',
+        );
+        // 접힘선 1개 규칙: 가운데 접힘선 기준 좌우 배치
+        expect(
+          FormFactor.arrangementOf(twoPanels, [
+            middle,
+            edge,
+          ], foldableDevice: true),
+          ScreenArrangement.hingeSplit,
+          reason: 'x=$x',
+        );
+        // 가장자리 접힘선만 있으면 배치에 쓰는 접힘선이 없다(접힘 정보는 있으므로 위아래 배치)
+        expect(FormFactor.hingeOf(twoPanels, [edge]), isNull, reason: 'x=$x');
+      }
+      // 가로 접힘선도 같다
+      const tall = Size(704, 640);
+      expect(
+        FormFactor.crossingHingesOf(tall, [
+          feature(const Rect.fromLTWH(0, 320, 704, 0)),
+          feature(const Rect.fromLTWH(0, 640, 704, 0)),
+        ]),
+        hasLength(1),
+      );
+      // 장 폭이 [hingeMinPanelExtent] 미만이면(공개 사양 근사 823×603의 두 장 약 548.5×603) 접힘선 1개 규칙에서도
+      // 나누지 않는다 — 가장자리 접힘선을 빼도 배치는 위아래다(짧은 변 600 미만이 아니므로 화면도 비교하지 않는다).
+      const specTwoPanels = Size(548.5, 603);
+      final specFolds = [
+        feature(const Rect.fromLTWH(274.5, 0, 0, 603)),
+        feature(const Rect.fromLTWH(548.5, 0, 0, 603)),
+      ];
+      expect(FormFactor.crossingHingesOf(specTwoPanels, specFolds), [
+        specFolds.first,
+      ]);
+      expect(
+        FormFactor.arrangementOf(
+          specTwoPanels,
+          specFolds,
+          foldableDevice: true,
+        ),
+        ScreenArrangement.stacked,
+      );
+    });
+
+    test('같은 접힘선이 두 번 보고되면 하나로 센다 (접힘선 1개 기기가 접힘선을 잃지 않는다)', () {
+      final fold = feature(const Rect.fromLTWH(336.5, 0, 0, 841));
+      // 같은 상태의 중복: 앞의 것을 남긴다
+      for (final again in [
+        fold,
+        feature(const Rect.fromLTWH(336.5, 0, 0, 841)),
+        feature(const Rect.fromLTWH(337, 0, 0, 840.5)), // 허용 오차(1dp) 안
+        feature(const Rect.fromLTWH(337.4, 0, 0, 841)), // 1dp 안에 붙음
+      ]) {
+        expect(FormFactor.crossingHingesOf(window, [fold, again]), [fold]);
+        expect(FormFactor.hingeOf(window, [fold, again]), same(fold));
+        expect(
+          FormFactor.crossesMultipleHinges(window, [fold, again]),
+          isFalse,
+        );
+      }
+      // 화면을 나누는 쪽(반 접힘·물리 힌지)을 남긴다 — 순서와 상관없다. 평평한 쪽을 남기면 테이블톱을 놓친다.
+      const across = Size(841, 673);
+      final flat = feature(const Rect.fromLTWH(0, 336.5, 841, 0));
+      final half = DisplayFeature(
+        bounds: const Rect.fromLTWH(0, 336.5, 841, 0),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureHalfOpened,
+      );
+      for (final features in [
+        [flat, half],
+        [half, flat],
+      ]) {
+        expect(FormFactor.crossingHingesOf(across, features), [half]);
+        expect(
+          FormFactor.arrangementOf(across, features, foldableDevice: true),
+          ScreenArrangement.hingeStacked,
+        );
+      }
+      // 폭 있는 힌지와 그 안의 폭 0 접힘선(겹침)도 하나 — 힌지를 남긴다
+      final hinge = feature(
+        const Rect.fromLTWH(326.5, 0, 20, 841),
+        type: DisplayFeatureType.hinge,
+      );
+      for (final features in [
+        [fold, hinge],
+        [hinge, fold],
+      ]) {
+        expect(FormFactor.crossingHingesOf(window, features), [hinge]);
+        expect(FormFactor.hingeOf(window, features), same(hinge));
+      }
+      // 1dp보다 떨어지거나 방향이 다르면 다른 접힘선이다
+      expect(
+        FormFactor.crossesMultipleHinges(window, [
+          fold,
+          feature(const Rect.fromLTWH(338, 0, 0, 841)),
+        ]),
+        isTrue,
+      );
+      expect(
+        FormFactor.crossesMultipleHinges(window, [
+          fold,
+          feature(const Rect.fromLTWH(0, 420, 673, 0)),
+        ]),
+        isTrue,
+      );
     });
 
     test('화면을 실제로 나누는 접힘선: 폭이 있는 힌지 또는 반 접힘 (isSeparating과 같은 기준)', () {
@@ -490,12 +636,16 @@ void main() {
     });
 
     test('세로형과 가로형을 키 크기로 고르는 창은 접힘 정보가 없는 폴더블이 아닌 창이다', () {
-      expect(FormFactor.picksFormByKeySize(const []), isTrue);
-      expect(FormFactor.picksFormByKeySize(const [_cutout]), isTrue);
-      expect(FormFactor.picksFormByKeySize(const [_fold]), isFalse);
-      expect(FormFactor.picksFormByKeySize(const [_hinge]), isFalse);
+      const window = Size(841, 701);
+      expect(FormFactor.picksFormByKeySize(window, const []), isTrue);
+      expect(FormFactor.picksFormByKeySize(window, const [_cutout]), isTrue);
+      expect(FormFactor.picksFormByKeySize(window, const [_fold]), isFalse);
       expect(
-        FormFactor.picksFormByKeySize(const [], foldableDevice: true),
+        FormFactor.picksFormByKeySize(const Size(1114, 720), const [_hinge]),
+        isFalse,
+      );
+      expect(
+        FormFactor.picksFormByKeySize(window, const [], foldableDevice: true),
         isFalse,
       );
     });
@@ -640,6 +790,234 @@ void main() {
           foldableDevice: true,
         ),
         ScreenArrangement.stacked,
+      );
+    });
+  });
+
+  group('트라이폴드 (접힘선 2개, #144)', () {
+    // 이슈 #144의 가정: 펼친 화면 960×704dp, 세로 접힘선 x=320·640 (실기기 미확인)
+    const landscape = Size(960, 704);
+    const portrait = Size(704, 960);
+    List<DisplayFeature> vertical(DisplayFeatureState state) => [
+      for (final x in [320.0, 640.0])
+        DisplayFeature(
+          bounds: Rect.fromLTWH(x, 0, 0, 704),
+          type: DisplayFeatureType.fold,
+          state: state,
+        ),
+    ];
+    List<DisplayFeature> horizontal(DisplayFeatureState state) => [
+      for (final y in [640.0, 320.0])
+        DisplayFeature(
+          bounds: Rect.fromLTWH(0, y, 704, 0),
+          type: DisplayFeatureType.fold,
+          state: state,
+        ),
+    ];
+
+    test('펼친 트라이폴드는 접힘선을 무시하고 태블릿처럼 가로면 가로형, 세로면 세로형이다 (자세·폴더블 여부 무관)', () {
+      for (final state in DisplayFeatureState.values) {
+        for (final foldable in [true, false]) {
+          final reason = '$state foldable=$foldable';
+          expect(
+            FormFactor.arrangementOf(
+              landscape,
+              vertical(state),
+              foldableDevice: foldable,
+            ),
+            ScreenArrangement.landscape,
+            reason: reason,
+          );
+          expect(
+            FormFactor.arrangementOf(
+              portrait,
+              horizontal(state),
+              foldableDevice: foldable,
+            ),
+            ScreenArrangement.stacked,
+            reason: reason,
+          );
+          // 화면이 본체 크기로 세로형·가로형 중 키가 큰 쪽을 고른다 — 접힘선 없는 창과 같다
+          expect(
+            FormFactor.picksFormByKeySize(
+              landscape,
+              vertical(state),
+              foldableDevice: foldable,
+            ),
+            isTrue,
+            reason: reason,
+          );
+          expect(
+            FormFactor.picksFormByKeySize(
+              portrait,
+              horizontal(state),
+              foldableDevice: foldable,
+            ),
+            isTrue,
+            reason: reason,
+          );
+        }
+      }
+    });
+
+    test('폭이 있는 물리 힌지 2개도 같다', () {
+      final hinges = [
+        for (final x in [310.0, 630.0])
+          DisplayFeature(
+            bounds: Rect.fromLTWH(x, 0, 20, 704),
+            type: DisplayFeatureType.hinge,
+            state: DisplayFeatureState.postureFlat,
+          ),
+      ];
+      expect(
+        FormFactor.arrangementOf(landscape, hinges, foldableDevice: true),
+        ScreenArrangement.landscape,
+      );
+    });
+
+    test('접힘 정보가 오기 전(시작 직후)에는 폴더블 기기 규칙대로 위아래 배치이고, 오면 가로형이 된다', () {
+      expect(
+        FormFactor.arrangementOf(landscape, const [], foldableDevice: true),
+        ScreenArrangement.stacked,
+      );
+      expect(
+        FormFactor.picksFormByKeySize(
+          landscape,
+          const [],
+          foldableDevice: true,
+        ),
+        isFalse,
+      );
+      expect(
+        FormFactor.arrangementOf(
+          landscape,
+          vertical(DisplayFeatureState.postureFlat),
+          foldableDevice: true,
+        ),
+        ScreenArrangement.landscape,
+      );
+    });
+
+    test('회전 직후 이전 방향의 접힘 정보는 창을 가로지르지 않아 위아래 배치다 (폴더블 회전과 같음)', () {
+      // 세로로 돌린 직후: 창은 704×960인데 접힘 정보는 가로 화면의 세로 접힘선(높이 704)
+      expect(
+        FormFactor.crossingHingesOf(
+          portrait,
+          vertical(DisplayFeatureState.postureFlat),
+        ),
+        isEmpty,
+      );
+      expect(
+        FormFactor.arrangementOf(
+          portrait,
+          vertical(DisplayFeatureState.postureFlat),
+          foldableDevice: true,
+        ),
+        ScreenArrangement.stacked,
+      );
+      // 가로로 돌린 직후: 창은 960×704인데 접힘 정보는 세로 화면의 가로 접힘선(폭 704)
+      expect(
+        FormFactor.crossingHingesOf(
+          landscape,
+          horizontal(DisplayFeatureState.postureFlat),
+        ),
+        isEmpty,
+      );
+      expect(
+        FormFactor.arrangementOf(
+          landscape,
+          horizontal(DisplayFeatureState.postureFlat),
+          foldableDevice: true,
+        ),
+        ScreenArrangement.stacked,
+      );
+    });
+
+    test('기기 종류는 폴더블이고 방향 정책은 네 방향 모두다', () {
+      final kind = FormFactor.deviceKindOf(
+        landscape,
+        vertical(DisplayFeatureState.postureFlat),
+      );
+      expect(kind, DeviceKind.foldable);
+      for (final display in [landscape, portrait]) {
+        expect(
+          FormFactor.orientationPolicyOf(kind, display),
+          OrientationPolicy.any,
+          reason: '$display',
+        );
+      }
+      // 시작 판정만으로 폴더블인 경우(접힘 정보 오기 전)도 같다
+      expect(
+        FormFactor.orientationPolicyOf(
+          FormFactor.deviceKindOf(landscape, const [], foldableDevice: true),
+          landscape,
+        ),
+        OrientationPolicy.any,
+      );
+    });
+
+    test('짧은 변이 600dp 미만인 트라이폴드(공개 사양 근사 823×603을 확대)도 접힘선이 2개면 네 방향이다', () {
+      // Galaxy Z TriFold 공개 해상도 2160×1584 px를 밀도 2.625로 바꾸면 약 823×603dp — 화면 크기 설정을 키우면
+      // 짧은 변이 600 아래로 내려간다.
+      for (final display in const [
+        Size(823, 603),
+        Size(768, 563),
+        Size(563, 768),
+      ]) {
+        final folds = [
+          for (final f in [1 / 3, 2 / 3])
+            DisplayFeature(
+              bounds: display.width > display.height
+                  ? Rect.fromLTWH(display.width * f, 0, 0, display.height)
+                  : Rect.fromLTWH(0, display.height * f, display.width, 0),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        final multiple = FormFactor.crossesMultipleHinges(display, folds);
+        expect(multiple, isTrue, reason: '$display');
+        expect(
+          FormFactor.orientationPolicyOf(
+            DeviceKind.foldable,
+            display,
+            multipleHinges: multiple,
+          ),
+          OrientationPolicy.any,
+          reason: '$display',
+        );
+        // 가로면 가로형, 세로면 위아래 배치
+        expect(
+          FormFactor.arrangementOf(display, folds, foldableDevice: true),
+          display.width > display.height
+              ? ScreenArrangement.landscape
+              : ScreenArrangement.stacked,
+          reason: '$display',
+        );
+      }
+      // 접힘선이 2개가 아니면 예전처럼 크기로 정한다(접은 커버 화면·Flip 내부는 세로)
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.foldable,
+          const Size(768, 563),
+        ),
+        OrientationPolicy.portrait,
+      );
+      // 폰·태블릿은 접힘선 개수와 상관없다
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.phone,
+          const Size(390, 844),
+          multipleHinges: true,
+        ),
+        OrientationPolicy.portrait,
+      );
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.tablet,
+          const Size(1280, 800),
+          multipleHinges: true,
+        ),
+        OrientationPolicy.landscape,
       );
     });
   });

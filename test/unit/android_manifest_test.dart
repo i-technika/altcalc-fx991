@@ -56,7 +56,8 @@ void main() {
       'density',
       'uiMode',
       // #96 — Android 14+ "색상 대비"를 바꾸면 리소스 오버레이가 바뀌어 CONFIG_ASSETS_PATHS만 바뀐다
-      // (API 34·36.1 에뮬레이터 logcat의 configDiff). 빠지면 고대비 전환 때마다 입력이 사라진다.
+      // (#96: API 34·36.1 에뮬레이터 logcat의 configDiff 로그. #182: API 35 events 버퍼의 system_server
+      // `configuration_changed`가 0x80000000 하나뿐). 빠지면 고대비 전환 때마다 입력 상태가 사라진다.
       'assetsPaths',
       // fontWeightAdjustment("굵은 텍스트")는 넣지 않는다: 선언하면 엔진이 MediaQuery.boldText를 갱신하지 않는다.
       // 그래서 지금은 굵은 텍스트를 바꾸면 다시 만들어진다 — #148.
