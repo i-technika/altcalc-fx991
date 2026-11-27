@@ -1088,7 +1088,7 @@ void main() {
 
       // 기본은 꺼짐 — 꺼진 표시기 색으로 자리만 흐리게 남는다.
       expect(status().keepScreenOn, isFalse);
-      expect(iconColor(), isNot(CalcTheme.lcdStatusActive));
+      expect(iconColor(), CalcTheme.lcdStatusInactive);
 
       await tester.tap(toggle);
       await tester.pumpAndSettle();

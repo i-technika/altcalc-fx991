@@ -14,7 +14,7 @@ import '../support/bundled_fonts.dart';
 
 /// 직접 그리는 상태 아이콘(#57)과 반전 상자 글자(#160)를 실제 번들 글꼴로 그린 **픽셀**로 검증한다.
 /// - 잉크가 같은 줄 대문자(E)의 높이 띠 안, 슬롯 경계 안에 있는지 (슬롯 밖까지 넓혀 스캔)
-/// - 모양(근호 윗선 아래에 매달린 ⊏, 연필, ‖ 반전 상자의 두 획, 화살표·상자 안 x, 상자 안 글자, ◉ 뜬 눈)이 실제로 그려지는지
+/// - 모양(근호 윗선 아래에 매달린 ⊏, 연필, ‖ 반전 상자의 두 획, 화살표·상자 안 x, 상자 안 글자, 👁 뜬 눈)이 실제로 그려지는지
 /// - 꺼진 색·켜짐↔꺼짐 전환이 픽셀에 반영되는지
 
 /// 모든 표시기가 켜진 상태
@@ -405,14 +405,16 @@ void _expectMathInk(
   );
 }
 
-/// ◉(화면 켜짐 유지, #233)의 크기·위치와 작은 크기에서 알아볼 수 있는지 검사한다.
+/// 👁(화면 켜짐 유지, #233)의 크기·위치와 작은 크기에서 알아볼 수 있는지 검사한다.
 /// [letter]는 같은 줄 대문자 E의 잉크, [shrink]는 글자가 상자에 맞춰 줄어든 비율이다.
-/// 기대 좌표는 페인터와 같은 계산이다: 잉크는 한 칸(글리프 폭) 폭, 대문자 높이 띠 가운데에 높이 0.76.
-/// - 크기·가운데: 잉크 폭은 한 칸, 높이는 대문자 높이의 0.76이고 슬롯 가운데·띠 가운데에 놓인다. 위아래 끝은 대문자 높이 띠를
-///   넘지 않는다. 눈꺼풀 양 끝은 뾰족해서 끝 픽셀 덮임이 옅으므로 폭은 끝마다 물리 1.5px(임의 위상 2px)까지 줄 수 있다.
-/// - 알아볼 수 있음: 눈동자 가운데가 진하고, 눈동자 왼쪽·오른쪽의 흰자에 배경만큼 밝은(빨강 170 초과 — 덮임 40% 미만)
-///   픽셀이 있다 — 눈이 한 덩어리 얼룩으로 뭉개지지 않는다. 6dp·2x에서는 흰자가 1물리 픽셀 안팎이라 "테 안의 점"으로 보인다
-///   (문서 한계 — 다른 아이콘도 이 크기에서 획이 1픽셀 안팎이다).
+/// 기대 좌표는 페인터와 같은 계산이다: 잉크는 [CalcTheme.lcdStatusEyeInkCells]칸 폭으로 2칸 슬롯 가운데, 대문자 높이 띠
+/// 가운데에 높이 0.62.
+/// - 크기·가운데: 위아래 끝은 대문자 높이 띠를 넘지 않고 띠 가운데에 놓인다. 폭·높이는 안티에일리어싱 몫
+///   (물리 1.5px, 임의 위상 2px)까지만 어긋난다(6dp·2x는 양 끝 몫 — 아래 주석).
+/// - 원(⊙ — ☉ = 해)으로 뭉개지지 않음(#233 리뷰 R1): 잉크가 가로로 길고(가로:세로 1.5 이상), 눈동자가 위아래 눈꺼풀에
+///   닿아 가운데 세로줄이 한 덩어리다(떠 있는 점이 아니다).
+/// - 알아볼 수 있음: 눈동자 가운데가 진하고, 눈동자 왼쪽·오른쪽 흰자에 배경만큼 밝은(빨강 170 초과 — 덮임 40% 미만)
+///   픽셀이 있다.
 /// [anyPhase]: 표시줄을 물리 1px 미만만큼 옮긴 위상에서 그렸는지 — 끝 픽셀 덮임이 위상에 따라 달라 허용치를 넓힌다.
 void _expectEyeInk(
   WidgetTester tester,
@@ -423,18 +425,19 @@ void _expectEyeInk(
   bool anyPhase = false,
 }) {
   final slot = _slotRect(tester, LcdIndicatorSlot.keepScreenOn);
-  // 페인터(`LcdStatusIconMetrics.cell`)와 같이 글리프 폭과 진행 폭 중 작은 값
+  // 페인터(`LcdStatusIconMetrics.cell`)와 같이 글리프 폭과 진행 폭 중 작은 값 (2칸 슬롯)
+  final advance = slot.width / 2;
   final cell = math.min(
-    slot.width - CalcTheme.lcdStatusStyle.letterSpacing!,
-    slot.width,
+    advance - CalcTheme.lcdStatusStyle.letterSpacing!,
+    advance,
   );
-  final width = cell * shrink;
+  final width = CalcTheme.lcdStatusEyeInkCells * cell * shrink;
   final left = slot.center.dx - width / 2;
   final cap = letter.height;
   final mid = letter.center.dy;
   final ink = shot.inkBounds(_scanRect(tester, LcdIndicatorSlot.keepScreenOn))!;
   final tolerance = (anyPhase ? 2.0 : 1.5) / dpr;
-  final reason = '◉ 잉크 $ink, E $letter, 슬롯 $slot';
+  final reason = '👁 잉크 $ink, E $letter, 슬롯 $slot';
   // 대문자 높이 띠 안, 띠 가운데
   expect(ink.top, greaterThanOrEqualTo(letter.top - tolerance), reason: reason);
   expect(
@@ -443,16 +446,28 @@ void _expectEyeInk(
     reason: reason,
   );
   expect(ink.center.dy, closeTo(mid, tolerance), reason: reason);
-  expect(ink.height, closeTo(cap * 0.76, 2 * tolerance), reason: reason);
-  // 한 칸 폭, 슬롯 가운데 (뾰족한 양 끝은 덮임이 옅어 잉크 문턱 아래로 떨어질 수 있다)
+  // 크기 허용치: 대문자 높이가 물리 10px 아래(6dp·2x)면 눈꺼풀 꼭대기·뾰족한 끝 픽셀의 덮임이 잉크 문턱(50%) 아래로
+  // 떨어져 끝마다 물리 1px쯤 줄어든다 — 그때만 양 끝 몫(2배)을 준다.
+  final size = cap * dpr < 10 ? 2 * tolerance : tolerance;
+  expect(ink.height, closeTo(cap * 0.62, size), reason: reason);
+  // 1.4칸 폭, 슬롯 가운데
   expect(ink.left, greaterThanOrEqualTo(left - tolerance), reason: reason);
   expect(
     ink.right,
     lessThanOrEqualTo(left + width + tolerance),
     reason: reason,
   );
-  expect(ink.width, closeTo(width, 2 * tolerance), reason: reason);
+  expect(ink.width, closeTo(width, size), reason: reason);
   expect(ink.center.dx, closeTo(slot.center.dx, tolerance), reason: reason);
+  // 가로로 길다 — 원(⊙)이 아니다. 설계는 약 1.9:1이고, 6dp·2x에서는 픽셀 문턱 때문에 1.6:1까지 내려간다
+  // (한 칸에 그린 #233 첫 안은 약 1.1:1이었다).
+  expect(ink.width / ink.height, greaterThanOrEqualTo(1.5), reason: reason);
+  // 눈동자가 위아래 눈꺼풀에 닿는다: 가운데 세로줄의 잉크가 한 구간이다.
+  expect(
+    shot.inkRunsVertical(slot.center.dx, letter.top, letter.bottom),
+    1,
+    reason: '가운데 세로줄 — $reason',
+  );
   // 눈동자 가운데는 진하다(가운데 둘레 물리 1px 안에 잉크).
   expect(
     shot.anyInk(
@@ -465,12 +480,12 @@ void _expectEyeInk(
     isTrue,
     reason: '눈동자 — $reason',
   );
-  // 흰자: 눈동자 왼쪽·오른쪽(칸 폭의 0.1~0.28·0.72~0.9, 가운데 높이 ±대문자 높이의 0.1)에 배경만큼 밝은 픽셀이 있다.
+  // 흰자: 눈동자 왼쪽·오른쪽(잉크 폭의 0.1~0.32·0.68~0.9, 가운데 높이 ±대문자 높이의 0.08)에 배경만큼 밝은 픽셀이 있다.
   int brightest(double from, double to) {
     var best = 0;
     for (
-      var py = ((mid - cap * 0.1) * dpr).floor();
-      py < ((mid + cap * 0.1) * dpr).ceil();
+      var py = ((mid - cap * 0.08) * dpr).floor();
+      py < ((mid + cap * 0.08) * dpr).ceil();
       py++
     ) {
       for (
@@ -484,8 +499,8 @@ void _expectEyeInk(
     return best;
   }
 
-  expect(brightest(0.1, 0.28), greaterThan(170), reason: '왼쪽 흰자 — $reason');
-  expect(brightest(0.72, 0.9), greaterThan(170), reason: '오른쪽 흰자 — $reason');
+  expect(brightest(0.1, 0.32), greaterThan(170), reason: '왼쪽 흰자 — $reason');
+  expect(brightest(0.68, 0.9), greaterThan(170), reason: '오른쪽 흰자 — $reason');
 }
 
 /// 글꼴 파일 OS/2 테이블의 (sxHeight, sCapHeight) / unitsPerEm
@@ -583,7 +598,7 @@ void main() {
           lessThanOrEqualTo(letter.bottom + tolerance),
           reason: reason,
         );
-        // ◉(뜬 눈, #233)는 띠 가운데에 놓여 기준선까지 내려오지 않는다 — 아래 [_expectEyeInk]가 본다.
+        // 👁(뜬 눈, #233)는 띠 가운데에 놓여 기준선까지 내려오지 않는다 — 아래 [_expectEyeInk]가 본다.
         if (slot.icon != LcdIndicatorIcon.keepScreenOn) {
           expect(
             ink.bottom,
@@ -746,7 +761,7 @@ void main() {
     });
   }
 
-  // ◉ 작은 크기·픽셀 위상(#233): 이슈가 든 작은 끝(6dp·2x, 8dp×1.3·2.625x)과 폰 실제 크기에서, 표시줄을 물리 1px 미만만큼
+  // 👁 작은 크기·픽셀 위상(#233): 이슈가 든 작은 끝(6dp·2x, 8dp×1.3·2.625x)과 폰 실제 크기에서, 표시줄을 물리 1px 미만만큼
   // 옮긴 여러 위상으로 본다(√▭✎ 위상 검사와 같은 방식).
   for (final (fontSize, scale, dpr) in [
     (6.0, 1.0, 2.0),
@@ -759,7 +774,7 @@ void main() {
       (0.6, 0.45),
       (0.85, 0.7),
     ]) {
-      testWidgets('◉ 잉크 크기·가운데와 눈동자 둘레의 흰자 — 픽셀 위상 '
+      testWidgets('👁 잉크 크기·가운데와 눈동자 둘레의 흰자 — 픽셀 위상 '
           '(글자 $fontSize, 배율 $scale, 화면 ${dpr}x, 위상 물리 ($fx, $fy)px, #233)', (
         tester,
       ) async {
@@ -927,43 +942,49 @@ void main() {
       expect(redAt(dark), lessThan(100), reason: '어두운 곳 $dark');
     }
 
-    // ◉ (1칸, #233) — 뜬 눈: 양 끝이 뾰족한 눈꺼풀 띠 안에 눈동자가 떠 있다.
-    final eye = _slotRect(tester, LcdIndicatorSlot.keepScreenOn);
-    final eyeInk = shot.inkBounds(eye)!;
+    // 👁 (2칸 슬롯 가운데에 1.4칸, #233) — 뜬 눈: 양 끝이 뾰족한 눈꺼풀 띠와, 위아래 눈꺼풀에 닿는 눈동자.
+    final eyeSlot = _slotRect(tester, LcdIndicatorSlot.keepScreenOn);
+    final eyeCell = eyeSlot.width / 2 - CalcTheme.lcdStatusStyle.letterSpacing!;
+    final eyeWidth = CalcTheme.lcdStatusEyeInkCells * eyeCell;
+    final eye = Rect.fromCenter(
+      center: eyeSlot.center,
+      width: eyeWidth,
+      height: eyeSlot.height,
+    );
+    final eyeInk = shot.inkBounds(eyeSlot)!;
     final mid = e.center.dy;
     double eyeX(double fraction) => eye.left + eye.width * fraction;
-    // 가운데 세로줄: 위 눈꺼풀 · 눈동자 · 아래 눈꺼풀 세 구간 (사이는 흰자)
-    expect(shot.inkRunsVertical(eye.center.dx, e.top, e.bottom), 3);
-    // 가운데 가로줄: 왼쪽 끝 · 눈동자 · 오른쪽 끝 세 구간 (양 끝은 위아래 눈꺼풀이 만나는 뾰족한 끝)
+    // 가운데 세로줄: 위 눈꺼풀 · 눈동자 · 아래 눈꺼풀이 한 구간으로 이어진다(눈동자가 눈꺼풀에 닿는다).
+    expect(shot.inkRunsVertical(eye.center.dx, e.top, e.bottom), 1);
+    // 가운데 가로줄: 왼쪽 끝 · 눈동자 · 오른쪽 끝 세 구간 (사이는 흰자)
     expect(shot.inkRuns(mid, eye), 3);
-    // 눈동자와 눈꺼풀 사이(가운데 세로줄, 위·아래)는 배경까지 밝다.
-    for (final dy in [-0.21, 0.21]) {
+    for (final fx in [0.2, 0.8]) {
       expect(
-        shot.red(eye.center.dx.floor(), (mid + cap * dy).floor()),
+        shot.red(eyeX(fx).floor(), mid.floor()),
         greaterThan(240),
-        reason: '흰자 $dy',
+        reason: '흰자 $fx',
       );
+      // 흰자 자리의 세로줄은 위아래 눈꺼풀 두 구간이다.
+      expect(shot.inkRunsVertical(eyeX(fx), e.top, e.bottom), 2, reason: '$fx');
     }
     // 눈동자 가운데는 진하다.
     expect(shot.inked(eye.center.dx.floor(), mid.floor()), isTrue);
-    // 눈꺼풀은 양 끝에서 뾰족하다: 가운데 가로줄에서 바깥 끝 구간은 짧고, 끝에서 칸 폭의 0.2 안쪽 세로줄은 위아래
-    // 두 구간(눈동자 없음)이다.
+    // 눈꺼풀은 양 끝에서 뾰족하다: 가운데 가로줄의 바깥 끝 구간은 잉크 폭의 0.08(안쪽 렌즈 끝)보다 짧다.
     expect(
-      shot.longestRun(mid, Rect.fromLTRB(eye.left, 0, eyeX(0.2), 200)),
-      lessThan(eye.width * 0.15),
+      shot.longestRun(mid, Rect.fromLTRB(eye.left - 2, 0, eyeX(0.2), 200)),
+      lessThan(eye.width * 0.1),
     );
-    expect(shot.inkRunsVertical(eyeX(0.2), e.top, e.bottom), 2);
-    expect(shot.inkRunsVertical(eyeX(0.8), e.top, e.bottom), 2);
-    // 잉크는 한 칸 폭을 채우고, 대문자 높이 띠 가운데에 위아래로 대문자 높이의 0.12씩 띄운다(높이 0.76).
+    // 잉크는 1.4칸 폭, 대문자 높이 띠 가운데에 높이 0.62(위아래로 대문자 높이의 0.19씩 띄운다).
     expect(eyeInk.width, closeTo(eye.width, 2), reason: '$eyeInk');
-    expect(eyeInk.top, closeTo(e.top + cap * 0.12, 2), reason: '$eyeInk');
-    expect(eyeInk.bottom, closeTo(e.bottom - cap * 0.12, 2), reason: '$eyeInk');
+    expect(eyeInk.center.dx, closeTo(eyeSlot.center.dx, 1), reason: '$eyeInk');
+    expect(eyeInk.top, closeTo(e.top + cap * 0.19, 2), reason: '$eyeInk');
+    expect(eyeInk.bottom, closeTo(e.bottom - cap * 0.19, 2), reason: '$eyeInk');
     // 반전 상자가 아니다 — 눈 바깥 네 귀퉁이는 비었다.
     for (final (fx, fy) in [
-      (0.05, 0.2),
-      (0.95, 0.2),
-      (0.05, 0.8),
-      (0.95, 0.8),
+      (0.05, 0.25),
+      (0.95, 0.25),
+      (0.05, 0.75),
+      (0.95, 0.75),
     ]) {
       expect(
         shot.anyInk(

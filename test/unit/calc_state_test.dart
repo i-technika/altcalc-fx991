@@ -4,6 +4,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 
 /// 키를 순서대로 누른 결과 상태
 CalcState _press(List<CalcKeyId> ids) =>

@@ -28,7 +28,7 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
 /// 상태줄 세그먼트 스프라이트 (#58).
 /// 출처: CasioEmu models/fx991cnx/model.lua의 rsd_* 사각형(LCD 왼쪽 x=47 기준으로 뺀 값)과,
 /// interface.png(RGBA)를 흰 배경에 알파 합성하고 회색(PIL `L`)으로 바꾼 뒤, y=603~610에서 회색값 < 200인
-/// 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶도 적어 둔다. ☀ 자리는 앱 고유 화면 켜짐 유지 슬롯(`◉`, #233)이다.
+/// 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶도 적어 둔다. ☀ 자리는 앱 고유 화면 켜짐 유지 슬롯(`👁`, #233)이다.
 /// 슬롯 대표 문자가 실물 세그먼트와 다른 슬롯은 [_spriteOf]로 이름을 바꿔 찾는다.
 const _sprites = <String, (int, int, int, int)>{
   // 이름: (x, 폭, 잉크 lo, 잉크 hi)
@@ -73,7 +73,7 @@ void main() {
   group('LcdIndicatorSlot 불변식', () {
     test('슬롯 순서는 fx-991EX 실물 LCD 세그먼트 순서를 따른다 (#58)', () {
       // 출처: LcdIndicatorSlot 문서 주석 — 실물 사진·ClassWiz 세그먼트 좌표 대조.
-      // ⇩·◀·▶는 가이드 표시기 표에 없어 슬롯이 없다(자리만 비워 둔다). 맨 끝 ☀ 자리는 앱 고유 화면 켜짐 유지(◉, #233).
+      // ⇩·◀·▶는 가이드 표시기 표에 없어 슬롯이 없다(자리만 비워 둔다). 맨 끝 ☀ 자리는 앱 고유 화면 켜짐 유지(👁, #233).
       expect(LcdIndicatorSlot.values.map((s) => s.template), [
         'S',
         'A',
@@ -91,7 +91,7 @@ void main() {
         '▼',
         '▲',
         '‖',
-        '◉',
+        '👁',
       ]);
     });
 
@@ -214,7 +214,7 @@ void main() {
       expect(up.dotCenter - down.dotCenter, greaterThan(5));
     });
 
-    test('가이드의 표시기를 모두 표시할 수 있다 (☀ 태양광은 앱에 해당 상태가 없어 제외 — 그 자리는 화면 켜짐 유지 ◉, '
+    test('가이드의 표시기를 모두 표시할 수 있다 (☀ 태양광은 앱에 해당 상태가 없어 제외 — 그 자리는 화면 켜짐 유지 👁, '
         'RCL은 가이드 표에 없음)', () {
       final all = _possibleIndicators().values.expand((e) => e).toSet();
       for (final required in [
@@ -234,7 +234,7 @@ void main() {
         '▲',
         '▼',
         '‖',
-        '◉',
+        '👁',
       ]) {
         expect(all, contains(required), reason: required);
       }
@@ -243,7 +243,7 @@ void main() {
       }
     });
 
-    test('아이콘으로 그리는 슬롯은 →x·√▭✎·‖·◉ 넷이고 아이콘이 겹치지 않는다 (#57, #233)', () {
+    test('아이콘으로 그리는 슬롯은 →x·√▭✎·‖·👁 넷이고 아이콘이 겹치지 않는다 (#57, #233)', () {
       final icons = {
         for (final slot in LcdIndicatorSlot.values)
           if (slot.icon != null) slot: slot.icon,
@@ -263,25 +263,23 @@ void main() {
         }
       }
       // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸(잉크는 가운데 2.4칸, #217), ‖ 1칸,
-      // ◉ 1칸(☀ 잉크 6도트·S 상자 7도트와 같은 한 칸, #233)
+      // 👁 2칸(잉크는 가운데 1.4칸 — ☀ 잉크 6도트쯤, #233)
       expect(LcdIndicatorSlot.store.columns, 2);
       expect(LcdIndicatorSlot.math.columns, 3);
       expect(LcdIndicatorSlot.disp.columns, 1);
-      expect(LcdIndicatorSlot.keepScreenOn.columns, 1);
+      expect(LcdIndicatorSlot.keepScreenOn.columns, 2);
     });
 
-    test('화면 켜짐 유지(◉)는 실물 ☀ 자리의 맨 끝 슬롯이고 반전 상자가 아니다 (#233)', () {
+    test('화면 켜짐 유지(👁)는 실물 ☀ 자리의 맨 끝 슬롯이고 반전 상자가 아니다 (#233)', () {
       const slot = LcdIndicatorSlot.keepScreenOn;
       expect(LcdIndicatorSlot.values.last, slot);
       expect(slot.dotCenter, _spriteCenter('☀'));
-      // 한 칸(≈ S 상자 잉크 7도트) 폭이 실물 ☀ 사각형(183~192도트) 안에 들고, 앞 ‖ 잉크(~180도트)와 겹치지 않는다.
-      final (x, w, _, _) = _sprites['☀']!;
+      // 실물 좌표 정합성: ☀는 맨 오른쪽 세그먼트이고 그 잉크(184~190도트)는 앞 ‖ 잉크와 떨어져 있다.
+      // 앱 슬롯이 실제로 표시줄 안에 들고 이웃과 겹치지 않는지는 표시줄 배치 테스트(`lcd_display_test.dart`)가 본다.
+      final (x, w, lo, hi) = _sprites['☀']!;
       final (_, _, _, dispInkEnd) = _sprites['‖']!;
-      final (_, _, sLo, sHi) = _sprites['S']!;
-      final half = (sHi - sLo) / 2;
-      expect(slot.dotCenter - half, greaterThanOrEqualTo(dispInkEnd));
-      expect(slot.dotCenter - half, greaterThanOrEqualTo(x));
-      expect(slot.dotCenter + half, lessThanOrEqualTo(x + w));
+      expect(lo, greaterThan(dispInkEnd));
+      expect(hi, lessThanOrEqualTo(LcdIndicatorSlot.dotColumns));
       expect(x + w, LcdIndicatorSlot.dotColumns, reason: '오른쪽 끝 세그먼트');
       expect(slot.boxed, isFalse);
       // 대표 문자는 태양(☀)이 아니다 — 앱에는 태양광 상태가 없다.
@@ -359,10 +357,10 @@ void main() {
       expect(LcdStatus.initial.keepScreenOn, isFalse);
     });
 
-    test('화면 켜짐 유지는 자기 자리(◉) 하나만 켜고 맨 끝에 놓인다 (#233)', () {
+    test('화면 켜짐 유지는 자기 자리(👁) 하나만 켜고 맨 끝에 놓인다 (#233)', () {
       const s = LcdStatus(keepScreenOn: true, disp: true);
-      expect(s.indicatorFor(LcdIndicatorSlot.keepScreenOn), '◉');
-      expect(s.activeIndicators, ['√◻', 'D', '‖', '◉']);
+      expect(s.indicatorFor(LcdIndicatorSlot.keepScreenOn), '👁');
+      expect(s.activeIndicators, ['√◻', 'D', '‖', '👁']);
       expect(
         const LcdStatus().indicatorFor(LcdIndicatorSlot.keepScreenOn),
         isNull,
