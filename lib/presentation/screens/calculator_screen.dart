@@ -364,6 +364,8 @@ typedef _HingeRegions = ({
 ///   순간 키 크기가 그대로(28dp) 이어지며 LCD가 손 쪽 패널로 돌아온다(R2: 줄이지 않으면 841×508 → 510에서 39.8 → 28.1dp로
 ///   줄었다). 그 사이 키패드 위가 빈다. 세로형 그대로면 LCD 최소 높이(112dp)가 짧은 패널 높이를 먼저 가져가 키가 위아래
 ///   배치와 같아지고(841×355: 16.2dp), 쓸 수 있는 크기 경계에서 접힘선을 가로지르는 가로형(31.6dp)과 키가 2배로 튀었다.
+///   위 시스템 제스처 영역이 본체 윗변 아래로 들어오는 기기(`topGestureDepth`, #172)는 키패드가 그 아래부터만 쓴다 — 첫 행이
+///   영역에 들면 그 행만 손을 뗄 때 입력된다(#50).
 ///   패널 폭에 묶여 키가 커지지 않는 창(접힘선이 치우쳐 손 쪽 패널이 좁은 창)과, 반대쪽 패널이 활성 LCD 최소 폭
 ///   ([CalcTheme.screenShortBookLcdMinWidth] 200dp)보다 좁은 창은 세로형 그대로다. 기록 패널의 최소 폭은 두지 않는다 —
 ///   좁은 기록을 어떻게 보일지는 #145에서 정한다.
@@ -391,12 +393,14 @@ class CalcHingeSplitLayout {
   });
 
   /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)를 세로 접힘선 [hinge](본체 좌표)로 나눠 [handedness] 쪽 패널에 세로형을
-  /// 둔다.
+  /// 둔다. [topGestureDepth]는 위 시스템 제스처 영역이 본체 윗변 아래로 들어오는 깊이다([CalcTheme.screenTopGestureDepth],
+  /// #172) — 손 쪽 패널이 짧아 키패드가 패널 높이를 쓸 때 키패드 윗변을 그 아래에 둔다.
   factory CalcHingeSplitLayout.of(
     Size body,
     Rect hinge,
-    Handedness handedness,
-  ) {
+    Handedness handedness, {
+    double topGestureDepth = 0,
+  }) {
     double finite(double v) => v.isFinite ? math.max(0.0, v) : 0.0;
     final width = finite(body.width);
     final height = finite(body.height);
@@ -422,7 +426,12 @@ class CalcHingeSplitLayout {
     );
     // 손 쪽 패널이 짧은 창 (#143 R1): 키패드가 패널 높이를 다 쓰면 키가 커질 때만 LCD를 반대쪽 패널로 옮긴다.
     // 반대쪽 패널이 활성 LCD 최소 폭보다 좁으면(접힘선이 치우친 창) 옮기지 않는다 — 줄 글자가 LCD 최소 높이 글자보다 작아진다.
-    final fullKeypad = KeypadMetrics.fitSize(handSize);
+    // "패널 높이"는 위 시스템 제스처 영역 아래부터다(#172) — 첫 행이 알림창 끌어내리기 영역에 들지 않게 한다.
+    final keypadRoom = math.max(
+      0.0,
+      height - (topGestureDepth.isFinite ? math.max(0.0, topGestureDepth) : 0),
+    );
+    final fullKeypad = KeypadMetrics.fitSize(Size(handSize.width, keypadRoom));
     final fullTouch = KeypadMetrics.minKeyTouchHeightOf(
       fullKeypad,
       KeypadArrangement.standard,
@@ -666,6 +675,9 @@ class CalcTabletopLayout {
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
 ///   아래 제스처 영역은 반대로 여백으로 피한다(위 광고 슬롯 항목) — 깊이 차이가 작아 대부분 기기에서 비용이 없다.
+/// - 위 제스처 영역(알림창 끌어내리기)은 본체 위 여백으로 피하지 않는다 — 거의 모든 배치에서 본체 윗변에는 키가 아니라
+///   활성 LCD가 온다. 키패드가 본체 윗변 가까이 오는 배치(손 쪽 패널이 짧은 책 자세)만 키패드를 영역 아래에 둔다
+///   ([CalcTheme.screenTopGestureDepth], #172).
 /// - 배치는 기기 종류가 아니라 창 크기로 고른다 — 방향 고정이 무시되는 경우가 있다(`FormFactor` 참조).
 ///   폴더블 기기([foldableDeviceProvider])는 접힘 정보가 오기 전까지 위아래 배치다(짧은 변 600dp 미만 창은 짧은 창
 ///   규칙으로 가로형일 수 있다, #38). 앱 시작 때는
@@ -717,6 +729,12 @@ class CalculatorScreen extends ConsumerWidget {
       ),
       bottomGestureInset: gestureInsets.bottom,
     );
+    // 위 제스처 영역이 본체 윗변 아래로 들어오는 깊이 (#172) — 키패드가 본체 윗변 가까이 오는 배치가 키패드를 그 아래에 둔다.
+    // 본체 위 여백은 넓히지 않는다(본체 원점·접힘선 좌표가 그대로다, [CalcTheme.screenTopGestureDepth]).
+    final topGestureDepth = CalcTheme.screenTopGestureDepth(
+      topInset: padding.top,
+      topGestureInset: gestureInsets.top,
+    );
     // 진단 로그 (#118) — 기기별 시스템 인셋·제스처 영역을 실기기 logcat으로 잰다(진단 빌드에서만)
     if (LayoutLog.enabled) {
       LayoutLog.systemInsets(
@@ -756,12 +774,14 @@ class CalculatorScreen extends ConsumerWidget {
                       window.shortestSide <
                       FormFactor.largeScreenMinShortestSide,
                   hinge: hinge,
+                  topGestureDepth: topGestureDepth,
                   // 진단 로그용 (#158) — 켜져 있을 때만 넘긴다
                   diagnostics: LayoutLog.enabled
                       ? (
                           window: window,
                           features: features,
                           foldableDevice: foldableDevice,
+                          bodyOrigin: bodyOrigin,
                         )
                       : null,
                 ),
@@ -1009,9 +1029,19 @@ class _Body extends ConsumerWidget {
   /// 창의 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인지 — 짧은 창 판정 (#38 R1)
   final bool smallWindow;
 
-  /// 진단 로그([LayoutLog], #158)에 적을 창 크기·화면 특징·폴더블 여부. 로그가 꺼져 있으면 `null`이다 — 부모가 이미
-  /// 읽은 값을 받으므로 이 위젯은 로그 때문에 따로 의존을 걸지 않는다.
-  final ({Size window, List<DisplayFeature> features, bool foldableDevice})?
+  /// 위 시스템 제스처 영역이 본체 윗변 아래로 들어오는 깊이 (dp, [CalcTheme.screenTopGestureDepth], #172) — 손 쪽 패널이
+  /// 짧은 책 자세([CalcHingeSplitLayout])의 키패드 윗변 하한
+  final double topGestureDepth;
+
+  /// 진단 로그([LayoutLog], #158)에 적을 창 크기·화면 특징·폴더블 여부와 본체 원점(화면 좌표 — 키패드 위치를 화면 좌표로
+  /// 적는다, #172). 로그가 꺼져 있으면 `null`이다 — 부모가 이미 읽은 값을 받으므로 이 위젯은 로그 때문에 따로 의존을 걸지
+  /// 않는다.
+  final ({
+    Size window,
+    List<DisplayFeature> features,
+    bool foldableDevice,
+    Offset bodyOrigin,
+  })?
   diagnostics;
 
   const _Body({
@@ -1020,6 +1050,7 @@ class _Body extends ConsumerWidget {
     required this.picksFormByKeySize,
     required this.smallWindow,
     this.hinge,
+    this.topGestureDepth = 0,
     this.diagnostics,
   });
 
@@ -1061,6 +1092,7 @@ class _Body extends ConsumerWidget {
           body,
           hinge,
           h,
+          topGestureDepth: topGestureDepth,
         )._regions,
         ScreenArrangement.hingeStacked => CalcTabletopLayout.of(
           body,
@@ -1143,6 +1175,7 @@ class _Body extends ConsumerWidget {
             (lcd.right <= keypad.left + _epsilon ||
                 lcd.left >= keypad.right - _epsilon),
         tooSmall: tooSmall,
+        keypad: keypad.shift(diagnostics.bodyOrigin),
         window: diagnostics.window,
         features: diagnostics.features,
         foldableDevice: diagnostics.foldableDevice,

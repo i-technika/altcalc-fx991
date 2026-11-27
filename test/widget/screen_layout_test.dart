@@ -3360,6 +3360,71 @@ void _hingeLayoutTests() {
       );
     });
 
+    test('세로 접힘선: 위 제스처 영역 깊이만큼 짧은 손 쪽 패널의 키패드가 아래에서 시작한다 (#172)', () {
+      // (본체, 접힘선) — 짧은 손 쪽 패널 창(640×360·700×392·841×360)과 짧지 않은 창(Pixel Fold 내부 본체 825×640.8)
+      const cases = <(Size, Rect)>[
+        (Size(624, 320), Rect.fromLTWH(312, 0, 0, 320)),
+        (Size(684, 344), Rect.fromLTWH(342, 0, 0, 344)),
+        (Size(825, 320), Rect.fromLTWH(272, 0, 0, 320)),
+        (Size(825, 640.8), Rect.fromLTWH(412.5, 0, 0, 640.8)),
+      ];
+      for (final (body, hinge) in cases) {
+        for (final h in Handedness.values) {
+          final base = CalcHingeSplitLayout.of(body, hinge, h);
+          // 깊이 0은 기본값과 같다.
+          expect(
+            CalcHingeSplitLayout.of(body, hinge, h, topGestureDepth: 0).keypad,
+            base.keypad,
+          );
+          for (final depth in [0.5, 4.2, 12.2, 24.0]) {
+            final l = CalcHingeSplitLayout.of(
+              body,
+              hinge,
+              h,
+              topGestureDepth: depth,
+            );
+            final reason = '$body $h depth=$depth $l';
+            expect(l.shortHandPanel, base.shortHandPanel, reason: reason);
+            expect(
+              l.keypad.top,
+              greaterThanOrEqualTo(depth - 0.001),
+              reason: reason,
+            );
+            // 키패드는 그대로 본체 아래·같은 패널에 붙고, LCD·기록은 바뀌지 않는다.
+            expect(l.keypad.bottom, moreOrLessEquals(body.height));
+            expect(l.keypad.left, moreOrLessEquals(base.keypad.left));
+            expect(l.lcd, base.lcd, reason: reason);
+            expect(l.history, base.history, reason: reason);
+            if (!base.shortHandPanel || base.keypad.top >= depth) {
+              // 키패드가 이미 영역 아래면(세로형 — LCD가 위에 있다, 또는 키 하한으로 줄인 키패드) 바뀌지 않는다.
+              expect(
+                l.keypad,
+                rectMoreOrLessEquals(base.keypad),
+                reason: reason,
+              );
+            } else {
+              // 높이에 묶인 키패드는 영역 아랫변부터 본체 아래까지다.
+              expect(
+                l.keypad.top,
+                moreOrLessEquals(depth, epsilon: 0.001),
+                reason: reason,
+              );
+            }
+          }
+        }
+      }
+      // 비유한·음수 깊이는 0으로 본다.
+      for (final depth in [double.nan, double.infinity, -5.0]) {
+        final l = CalcHingeSplitLayout.of(
+          const Size(624, 320),
+          const Rect.fromLTWH(312, 0, 0, 320),
+          Handedness.right,
+          topGestureDepth: depth,
+        );
+        expect(l.keypad.top, moreOrLessEquals(0), reason: '$depth');
+      }
+    });
+
     test('세로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
         Size(double.nan, double.nan),

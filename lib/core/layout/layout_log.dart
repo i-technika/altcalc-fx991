@@ -200,11 +200,13 @@ abstract final class LayoutLog {
   /// - [chosen]: 창 크기·접힘선으로 고른 배치 ([FormFactor.arrangementOf])
   /// - [drawn]: 실제로 그린 배치 (키가 작아 접힘선 기준 배치를 못 쓰면 위아래 배치·가로형으로 대체)
   /// - [tooSmall]: 계산기 대신 창을 키워 달라는 안내를 띄웠는지
+  /// - [keypad]: 키패드 영역 (화면 좌표, dp) — 첫 행·맨 아래 행과 시스템 제스처 영역("시스템 영역" 줄)을 견줄 때 쓴다(#172)
   static void layout({
     required ScreenArrangement chosen,
     required ScreenArrangement drawn,
     required bool tooSmall,
     bool lcdBesideKeypad = false,
+    Rect? keypad,
     required Size window,
     required Iterable<DisplayFeature> features,
     required bool foldableDevice,
@@ -215,7 +217,9 @@ abstract final class LayoutLog {
         '${drawn == chosen ? '' : ' (고른 배치 ${chosen.name})'}'
         '${lcdBesideKeypad ? ' (LCD 옆 패널)' : ''}'
         '${tooSmall ? ' 안내' : ''}'
-        ' — 창 ${_size(window)}, 화면 특징 [${features.map(_feature).join(', ')}], '
+        ' — 창 ${_size(window)}, '
+        '${keypad == null ? '' : '키패드 ${_rect2(keypad)}, '}'
+        '화면 특징 [${features.map(_feature).join(', ')}], '
         // 창을 가로지르는 접힘선 수 — 2 이상이면 접힘선을 무시한다(트라이폴드, #144)
         '가로지르는 접힘선 ${FormFactor.crossingHingesOf(window, features).length}, '
         '폴더블=$foldableDevice';
@@ -304,6 +308,10 @@ abstract final class LayoutLog {
 
   static String _rect(Rect r) =>
       '${_n(r.left)},${_n(r.top)}-${_n(r.right)},${_n(r.bottom)}';
+
+  /// 시스템 영역 줄과 견줄 영역 — 소수 둘째 자리까지 (#172)
+  static String _rect2(Rect r) =>
+      '${_n2(r.left)},${_n2(r.top)}-${_n2(r.right)},${_n2(r.bottom)}';
 
   /// dp 값을 소수 둘째 자리까지 (끝의 0은 지운다 — 정수면 소수점 없이)
   static String _n2(double v) => _fixed(v, 2);
