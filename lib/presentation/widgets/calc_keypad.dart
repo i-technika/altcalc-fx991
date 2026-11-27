@@ -1034,9 +1034,13 @@ class CursorPadGeometry {
 
   /// 시맨틱 노드를 쌓는 순서 — 뒤의 것이 위에 놓여, 영역이 겹친 곳에서는 뒤의 방향이 읽힌다(#203).
   ///
-  /// Android(TalkBack)·iOS(VoiceOver) 브리지는 터치 탐색 때 겹친 노드 가운데 히트 테스트 순서
+  /// 엔진 코드상 Android(TalkBack)·iOS(VoiceOver) 브리지는 터치 탐색 때 겹친 노드 가운데 히트 테스트 순서
   /// (위에 그린 것부터)로 처음 닿는 노드를 고른다(Flutter 엔진 `AccessibilityBridge.java` `hitTest`,
   /// `SemanticsObject.mm` `search:`). [CursorPad]는 이 순서로 노드를 쌓는다.
+  /// - Android는 TalkBack 에뮬레이터에서 확인했다(#203, 411×914 격자 588점이 [semanticSectorAt]과 모두 일치).
+  /// - iOS는 엔진이 비공개 API `_accessibilityHitTest:`를 재정의해 이 순서를 쓴다. 재정의가 불리지 않으면
+  ///   UIKit 기본 판정(iOS 16부터 왼쪽 위 요소 우선)이 되어 위쪽 반에서 ▲가 ◀·▶를 가린다.
+  ///   실기기로만 확인할 수 있다(#181, M8).
   static const List<CursorPadSector> semanticStackOrder = [
     CursorPadSector.up,
     CursorPadSector.down,
@@ -1052,6 +1056,7 @@ class CursorPadGeometry {
   ///   높이까지. 셀이 패드보다 높으면 그 높이를 셀 높이 / 패드 높이 배로 늘린다. ▲·▼ 위에 놓인다.
   ///
   /// 그래서 셀 안 어디를 짚어도 어느 한 방향이 읽힌다(빈 곳 없음). [bounds]를 생략하면 셀 대신 패드 상자다.
+  /// [bounds]는 패드 상자를 품어야 하고([hitSectorAt]과 같은 전제), 위아래가 비대칭이면 짧은 쪽 반높이를 쓴다.
   ///
   /// ## 왜 겹치게 두는가 (#203)
   /// 터치 탐색에서 아무 노드에도 닿지 않으면 초점이 앞 방향에 남는다. 그 상태로 두 번 탭하면 손가락 아래가 아니라
@@ -1065,20 +1070,26 @@ class CursorPadGeometry {
   ///   회전 변환 노드는 Android만 변환을 따르고, iOS는 감싸는 축 정렬 사각형(`globalRect`)으로 판정한다.
   /// - 그래서 방향마다 노드 하나를 두고 겹침 순서로 모양을 만든다.
   ///   ◀·▶ 사각형을 ▲·▼ 반쪽 위에 두는 배치와, ▲·▼ 사각형을 ◀·▶ 반쪽 위에 두는 배치는 최적이 거의 같다(약 83.5%).
-  ///   셀이 패드보다 넓을 때 앞쪽이 조금 낫다. X = 허브 반지름, Y = 홈 끝 높이는 X·Y를 1dp 단위로 찾은 최적과
-  ///   약 1%p 차이다(터치 영역 중 같은 방향이 읽히는 넓이, 0.2dp 격자 계산).
+  ///   셀이 패드보다 넓을 때 앞쪽이 조금 낫다. X = 허브 반지름, Y = 홈 끝 높이는 X·Y를 1dp 단위로 찾은 최적보다
+  ///   셀 폭 = 패드 폭에서 약 0.2~0.5%p 낮다(터치 영역 중 같은 방향이 읽히는 넓이).
+  ///   셀이 패드보다 가로로 넓으면 차이가 커진다. 예: 411×452 분할 창 1.7%p, 2000×400 넓은 셀(#159) 3.5%p.
+  ///   ◀·▶ 터치 영역이 셀 옆 모서리까지 위아래로 퍼져서, 최적은 Y가 더 크다. 그래도 단순한 규칙을 택했다.
   /// - 411×914(Android 기본 인셋, #173과 같은 셀) 1px 계산: 터치 영역 중 같은 방향이 읽히는 곳 44.4% → 83.4%,
-  ///   빈 곳 55.6% → 0%. ▲·▼ 91.6%, ◀·▶ 75.4%다. 나머지 16.6%는 홈 근처에서 이웃 방향이 읽히는 곳이다.
-  ///   허브 고리는 전부 읽히고(18.6% → 100%) 그중 57.5%가 같은 방향이다. 고리의 ◀·▶ 쪽은 ▲·▼로 읽힌다.
+  ///   빈 곳 55.6% → 0%. ▲·▼ 91.6%, ◀·▶ 75.4%다. 나머지 16.6%는 이웃 방향이 읽히는 곳이고, 세 가지다.
+  ///   - 셀 옆 변 위아래 끝 6.5%: 누르면 ◀·▶인데 ◀·▶ 노드(중심 ±Y) 밖이라 ▲·▼로 읽힌다(411×914에서 위아래 약 17dp씩).
+  ///   - 허브 고리의 ◀·▶ 쪽 5.1%: ◀·▶ 노드가 허브 가장자리에서 시작해 ▲·▼로 읽힌다. 고리는 전부 읽히고
+  ///     (18.6% → 100%) 그중 57.5%가 같은 방향이다.
+  ///   - 홈 근처 5.1%: 사각형 모서리가 홈 양쪽으로 넘는 곳.
   Rect semanticRect(CursorPadSector sector, [Rect? bounds]) {
     if (_isEmpty) return Rect.zero;
+    assert(bounds == null || _debugBoundsContainPad(bounds));
     final cell = bounds ?? Offset.zero & size;
     final c = center;
     final x = hubRadius;
     // 홈 끝 높이 — 셀이 패드보다 높으면 그 비율만큼 늘린다(외곽 밖 ◀·▶ 터치 영역이 셀 모서리까지 퍼지므로).
     final groove =
         c.dy - _grooveEnd(CursorPadSector.up, CursorPadSector.left).dy;
-    final y = groove * (c.dy - cell.top) / c.dy;
+    final y = groove * math.min(c.dy - cell.top, cell.bottom - c.dy) / c.dy;
     return switch (sector) {
       CursorPadSector.up => Rect.fromLTRB(
         cell.left,
