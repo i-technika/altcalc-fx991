@@ -614,7 +614,7 @@ abstract final class CalcTheme {
   );
 
   /// LCD 상태 표시줄 텍스트 스타일 (M, FIX 등 — 슬롯은 `LcdIndicatorSlot`. S·A·D/R/G는 `LcdStatusBoxedLetter`가,
-  /// →x·√▭✎·‖는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
+  /// →x·√▭✎·‖·👁(화면 켜짐 유지)는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
   static const TextStyle lcdStatusStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -1066,6 +1066,14 @@ abstract final class CalcTheme {
   /// 2.66배다(자간은 dp 고정이라 글자가 작을수록 비율이 커진다).
   /// 내부 배치(근호 : 틈 : 칸 : 연필, #160 사진 측정)는 그대로 두고 가로로만 이 폭에 맞춰 줄인다(`LcdStatusIcon`).
   static const double lcdStatusMathInkCells = 2.4;
+
+  /// `👁`(화면 켜짐 유지, 앱 고유 — #233) 잉크 전체 폭 (한 칸 글리프 폭 대비). 2칸 슬롯 가운데에 놓는다.
+  /// 근거: 눈이 가로:세로 약 1.9:1로 가로로 길어야 작은 크기에서 원(⊙ — ☉ = 해)으로 뭉개지지 않는다(#233 리뷰 R1 —
+  /// 한 칸이면 1.1:1이었다). 그래서 다른 아이콘이 쓰는 척도(대문자 높이 대비 폭)로는 실물 그 자리 ☀ 잉크(6도트 ÷ 대문자
+  /// 높이 7도트 = 0.86배, #58 스프라이트 표)보다 약 37% 넓다(1.4 × 0.6em ÷ 0.714em = 1.18배) — 의도한 차이다.
+  /// 표시줄 폭 대비로는 LCD마다 다르다: 폭이 상태 글자 크기를 정하는 폰 세로 LCD에서는 한 칸 진행 폭이 실물 약
+  /// 4.3~5.5도트(글자 배율 1~1.3)라 1.4칸이 대략 ☀ 잉크 폭이고, 넓은 가로 LCD에서는 그 절반쯤이다(#233 리뷰 R2 실측).
+  static const double lcdStatusEyeInkCells = 1.4;
 
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
