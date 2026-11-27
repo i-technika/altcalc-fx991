@@ -130,6 +130,24 @@ class KeypadMetrics {
   static double wideBlockWidthOf(double width) =>
       math.max(0.0, width) / _wideWidthUnits;
 
+  /// 셀 너비 [functionKeyWidth]·[numberKeyWidth]에서 폭 기준이 허락하는 (배율 반영) 최대 글자 크기 — 메인 라벨·각인.
+  ///
+  /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
+  /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
+  @visibleForTesting
+  static ({double main, double legend}) debugWidthLimits({
+    required double functionKeyWidth,
+    required double numberKeyWidth,
+    bool Function(CalcKeyDef def)? where,
+  }) {
+    final limits = _LabelLimits.measure(
+      functionKeyWidth: functionKeyWidth,
+      numberKeyWidth: numberKeyWidth,
+      where: where,
+    );
+    return (main: limits.main, legend: limits.legend);
+  }
+
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
   double get functionKeyWidth =>
       math.max(0.0, blockWidth / functionColumns - horizontalGap);
@@ -427,9 +445,11 @@ class _LabelLimits {
   static double _emWidth(KeyLegend legend, TextStyle style) =>
       KeyLegendView.emSize(legend, style).width;
 
+  /// [where]가 있으면 그 키만 잰다(테스트용 — [KeypadMetrics.debugWidthLimits]).
   static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,
+    bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
     var legend = double.infinity;
@@ -443,6 +463,7 @@ class _LabelLimits {
 
     for (final def in allKeys) {
       if (cursorIds.contains(def.id)) continue;
+      if (where != null && !where(def)) continue;
       final width = numberIds.contains(def.id)
           ? numberKeyWidth
           : functionKeyWidth;
@@ -1172,7 +1193,9 @@ class CursorPadGeometry {
 ///   - 홈을 그대로 연장하는 방식은 (#64 당시 모양에서) 되찾은 넓이의 약 80%를 이미 넓던 ▲·▼에 주고,
 ///     옆 변의 위·아래 끝까지 ▲·▼로 만들었다(왼쪽 가장자리를 눌렀는데 ▲ — 리뷰 R1).
 ///   - 홈 기울기 실측(#65) 뒤 터치 넓이는 함수 키 셀 대비 ◀·▶ 약 1.14~1.20배, ▲·▼ 약 1.05~1.11배다.
-///     셀이 패드 비율 상한보다 넓은 키패드(#159)에서는 ▲·▼가 약 0.54~0.66배까지 낮아진다.
+///     셀이 패드 비율 상한보다 넓은 키패드에서는 ▲·▼가 셀 비에 따라 더 낮아진다(600×610 창 0.88배, 2000×300 창 0.62배).
+///     함수 키가 옆으로만 넓어지기 때문이다. ▲·▼ 내접원은 함수 키 터치 높이 대비 보통 셀 이상(약 0.98배)이라서 모양은 그대로 둔다
+///     ([CalcTheme.cursorPadMaxAspectRatio], #159).
 ///   - 방향 키에 들어가는 가장 큰 원(내접원)은 셀이 패드와 비슷하면 셀까지 넓혀도 조금만 는다(▲·▼ 약 +1~4dp).
 ///     홈 사이 쐐기와 셀 변이 정하기 때문이며, 쐐기는 실물 모양이라 바꾸지 않는다. 지금은 실물처럼 ▲·▼ 쪽이
 ///     좁다(세로 폰 ▲·▼ 약 30~46dp, ◀·▶ 약 36~52dp). 셀이 패드보다 가로로 긴 배치(분할 화면 등)에서는

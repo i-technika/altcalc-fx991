@@ -44,6 +44,12 @@ class LcdLineOverflow {
 ///
 /// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다.
 ///
+/// ## 상한 (#189)
+/// - 줄 글자는 배율 반영 후 크기가 [CalcTheme.lcdLineMaxFontSize]를 넘지 않는다. 큰 창에서 LCD 글자가 키 각인
+///   ([CalcTheme.keyMainLabelMaxFontSize])의 5~8배로 커지지 않게 한다.
+/// - 화면 배치는 LCD 높이도 [heightAtMaxLineFont]까지만 쓴다 — 그보다 높은 LCD는 글자가 상한에 묶여 식과 답만 세로로
+///   멀어진다(`CalculatorScreen`의 배치들).
+///
 /// ## 시스템 글자 배율
 /// - **줄 글자**는 이미 LCD를 채우는 크기라 배율로 더 키울 공간이 없다. 그래서 배율 반영 후 크기가
 ///   LCD 크기로 정해진다(배율과 무관하게 같은 크기로 보인다).
@@ -87,10 +93,6 @@ class LcdFontSizes {
       finite(size.height, LcdDisplay.fallbackSize.height) - chrome,
     );
 
-    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
-    // LcdDisplay는 줄 높이를 flex 비율로 나누므로, 줄마다 분수 막대 몫을 정확히 받으려면 두 줄의
-    // 행 수가 같아야 한다 (calc_theme_test 불변식).
-    const fractionLines = 2;
     const columns = CalcTheme.lcdLineColumns;
 
     // 상태 표시 글자 크기 (배율 반영 전) — 배율 반영 줄 글자 × 비율 (위 "시스템 글자 배율" 참고)
@@ -102,13 +104,11 @@ class LcdFontSizes {
     // [line]: 배율 반영 전 줄 글자 크기
     bool fits(double line) {
       final scaledLine = textScaler.scale(line);
-      final scaledStatus = textScaler.scale(statusOf(line));
-      // 높이: 상태 표시줄은 LcdDisplay와 같은 식이다. 분수의 분자·분모 Text는 각각 높이가 정수로
-      // 올림되므로 행마다 1dp를 더한다.
-      final height =
-          scaledStatus * CalcTheme.lcdStatusBarHeightRatio +
-          rowCount * (scaledLine * _lineHeightFactor + 1) +
-          fractionLines * scaledLine * CalcTheme.lcdFractionBarRatio;
+      if (scaledLine > CalcTheme.lcdLineMaxFontSize) return false;
+      final height = _usedHeight(
+        scaledLine: scaledLine,
+        scaledStatus: textScaler.scale(statusOf(line)),
+      );
       // 폭: ◄/► 자리는 _ScrollArrow와 같은 식(줄 글자 × 비율을 배율 반영). 자간은 배율과 무관하다.
       final arrow =
           textScaler.scale(line * CalcTheme.lcdScrollArrowFontRatio) *
@@ -118,7 +118,8 @@ class LcdFontSizes {
               (scaledLine * CalcTheme.lcdLineCharWidthRatio +
                   _maxLetterSpacing) +
           2 * arrow;
-      return height <= innerHeight && width <= innerWidth;
+      // 높이는 [heightAtMaxLineFont]처럼 같은 식으로 만든 LCD 높이에서 베젤을 다시 뺄 때의 반올림 오차를 허용한다.
+      return height <= innerHeight + _heightTolerance && width <= innerWidth;
     }
 
     // 탐색 상한은 폭 기준만으로 정한 값(자간·◄/► 무시)이다. 배율이 1보다 작으면 배율 반영 전 크기로
@@ -128,16 +129,57 @@ class LcdFontSizes {
       minFittedFontSize,
       innerWidth / (columns * CalcTheme.lcdLineCharWidthRatio),
     );
-    final scaleAtBound = textScaler.scale(widthBound) / widthBound;
+    // 상한([CalcTheme.lcdLineMaxFontSize])도 같은 식으로 배율 반영 전 크기로 되돌려, 탐색 시작값이 상한을 크게 넘지 않게
+    // 한다. 배율 1이면 상한에 걸리는 LCD가 정확히 상한 값을 얻는다.
+    // 탐색은 시작값에서 아래로만 찾으므로, 시작값이 실제 최대 이상이어야 한다. 그러려면 배율 계수 scale(x) / x가 x에 대해
+    // 줄지 않아야 한다(선형 배율, 큰 글자를 덜 키우는 Android 14 이상의 확대 배율은 만족한다). 큰 글자를 더 줄이는 축소 배율이면
+    // 글자가 최대보다 조금 작아질 수 있다(#189 R1 — Android의 축소 배율은 선형이다).
+    double unscaled(double bound) {
+      final scale = textScaler.scale(bound) / bound;
+      return scale < 1 && scale > 0 ? bound / scale : bound;
+    }
+
     final line = fitFontSize(
-      scaleAtBound < 1 && scaleAtBound > 0
-          ? widthBound / scaleAtBound
-          : widthBound,
+      math.min(unscaled(widthBound), unscaled(CalcTheme.lcdLineMaxFontSize)),
       textScaler: TextScaler.noScaling,
       fits: fits,
     );
     return LcdFontSizes(status: statusOf(line), input: line, result: line);
   }
+
+  /// 줄 글자가 [CalcTheme.lcdLineMaxFontSize](배율 1)에 닿는 가장 낮은 LCD 높이 (dp, 베젤 포함) — 화면 배치의 LCD 최대 높이
+  /// 상한이다 (#189). 이보다 높여도 줄 글자는 커지지 않고 입력·결과 줄 사이만 벌어진다.
+  ///
+  /// 폭이 충분하면(폭 기준 글자가 상한 이상) 이 높이의 LCD는 줄 글자가 정확히 상한이다. 상태 표시줄 + 4행 + 분수 막대를
+  /// [forSize]의 높이 기준과 같은 식으로 더한 값이다.
+  static final double heightAtMaxLineFont =
+      _usedHeight(
+        scaledLine: CalcTheme.lcdLineMaxFontSize,
+        scaledStatus: math.max(
+          minFittedFontSize,
+          CalcTheme.lcdLineMaxFontSize * CalcTheme.lcdStatusFontRatio,
+        ),
+      ) +
+      2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
+
+  /// 배율 반영 줄 글자 [scaledLine]·상태 표시 글자 [scaledStatus]일 때 LCD 안쪽 높이 사용량 (dp) — [forSize]의 높이 기준.
+  /// 상태 표시줄은 LcdDisplay와 같은 식이다. 분수의 분자·분모 Text는 각각 높이가 정수로 올림되므로 행마다 1dp를 더한다.
+  /// 입력·결과 줄이 각각 분수 1단을 담도록 2행 줄마다 분수 막대 몫을 더한다.
+  static double _usedHeight({
+    required double scaledLine,
+    required double scaledStatus,
+  }) {
+    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
+    // LcdDisplay는 줄 높이를 flex 비율로 나누므로, 줄마다 분수 막대 몫을 정확히 받으려면 두 줄의
+    // 행 수가 같아야 한다 (calc_theme_test 불변식).
+    const fractionLines = 2;
+    return scaledStatus * CalcTheme.lcdStatusBarHeightRatio +
+        rowCount * (scaledLine * _lineHeightFactor + 1) +
+        fractionLines * scaledLine * CalcTheme.lcdFractionBarRatio;
+  }
+
+  /// 높이 기준 비교의 반올림 오차 허용값 (dp)
+  static const double _heightTolerance = 1e-9;
 
   /// 입력·결과 줄 스타일 중 큰 줄 높이 배수 (행 높이 = 글자 크기 × 이 값)
   static double get _lineHeightFactor => math.max(

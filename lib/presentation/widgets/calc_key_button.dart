@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/key_definitions.dart';
+import '../../core/layout/layout_log.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
 import 'key_legend_view.dart';
@@ -185,6 +186,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     super.didUpdateWidget(oldWidget);
     if (_pressed && (!_enabled || oldWidget.keyDef.id != widget.keyDef.id)) {
       // 누른 채 비활성이 되거나 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
+      _logRelease(key: oldWidget.keyDef.id);
       _release();
     } else if (widget.onRepeat == null) {
       _cancelRepeat();
@@ -201,6 +203,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   @override
   void dispose() {
+    if (_pressed) {
+      _logRelease(key: widget.keyDef.id);
+    }
     _cancelRepeat();
     super.dispose();
   }
@@ -255,6 +260,29 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         p.dy > screen.height - insets.bottom;
   }
 
+  /// 진단 로그 (#118) — 진단 빌드에서만 남는다([LayoutLog.keyInput]). [at]은 전역 좌표다.
+  /// 꺼져 있으면 좌표 변환도 하지 않는다.
+  void _log(KeyInputEvent event, {required Offset at}) {
+    if (!LayoutLog.enabled) return;
+    LayoutLog.keyInput(
+      event,
+      key: widget.keyDef.id.name,
+      at: ScreenCoordinateRoot.globalToScreen(context, at),
+    );
+  }
+
+  /// 좌표 없는 진단 로그 — 위젯 쪽 사정으로 눌림이 끝날 때(dispose에서도 부르므로 context를 쓰지 않는다).
+  /// [key]는 누르던 키다(다른 키로 바뀐 경우 옛 키).
+  void _logRelease({required CalcKeyId key}) {
+    if (!LayoutLog.enabled) return;
+    LayoutLog.keyInput(
+      _deferred
+          ? KeyInputEvent.releasedDeferred
+          : KeyInputEvent.releasedAfterPress,
+      key: key.name,
+    );
+  }
+
   void _handlePointerDown(PointerDownEvent event) {
     // 비활성, 이미 다른 손가락이 누르는 중, 입력으로 취급하지 않는 포인터는 무시한다.
     if (!_enabled || _pressed || _isIgnoredPointer(event)) return;
@@ -263,6 +291,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       _activePointer = event.pointer;
       _deferred = deferred;
     });
+    _log(
+      deferred ? KeyInputEvent.deferred : KeyInputEvent.pressed,
+      at: event.position,
+    );
     if (deferred) return; // 손을 뗄 때 확정
     _commitPress();
     _startRepeat();
@@ -273,6 +305,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (_hitAreaContains(event.localPosition)) return;
     if (_deferred) {
       // 시스템 제스처일 가능성이 높으므로 확정하지 않고 버린다.
+      _log(KeyInputEvent.discardedMovedOut, at: event.position);
       setState(_release);
     } else {
       _cancelRepeat();
@@ -284,11 +317,22 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (!mounted || event.pointer != _activePointer) return;
     final commit = _deferred;
     setState(_release);
-    if (commit) _commitPress();
+    if (commit) {
+      _log(KeyInputEvent.committedOnRelease, at: event.position);
+      _commitPress();
+    } else {
+      _log(KeyInputEvent.liftedAfterPress, at: event.position);
+    }
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
     if (!mounted || event.pointer != _activePointer) return;
+    _log(
+      _deferred
+          ? KeyInputEvent.cancelledDeferred
+          : KeyInputEvent.cancelledAfterPress,
+      at: event.position,
+    );
     setState(_release);
   }
 

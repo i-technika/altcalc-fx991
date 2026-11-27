@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show TargetPlatform;
+import 'package:flutter/painting.dart' show EdgeInsets;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
@@ -48,6 +49,32 @@ void main() {
     window: window,
     features: features,
     foldableDevice: foldableDevice,
+  );
+
+  // Pixel Fold 내부(밀도 2.625) — 2208×1840px 창, 상태 표시줄 74px, 뒤로가기 78px, 작업 표시줄 84px
+  const foldDpr = 2.625;
+  void insets({
+    Size window = const Size(2208 / foldDpr, 1840 / foldDpr),
+    EdgeInsets padding = const EdgeInsets.only(
+      top: 74 / foldDpr,
+      bottom: 84 / foldDpr,
+    ),
+    EdgeInsets viewPadding = const EdgeInsets.only(
+      top: 74 / foldDpr,
+      bottom: 84 / foldDpr,
+    ),
+    EdgeInsets gestures = const EdgeInsets.fromLTRB(
+      78 / foldDpr,
+      74 / foldDpr,
+      78 / foldDpr,
+      84 / foldDpr,
+    ),
+  }) => LayoutLog.systemInsets(
+    window: window,
+    devicePixelRatio: foldDpr,
+    padding: padding,
+    viewPadding: viewPadding,
+    gestures: gestures,
   );
 
   /// [enable]부터 잰 ms로 빌드 시작·래스터 끝을 준 프레임
@@ -107,7 +134,91 @@ void main() {
     );
     layout();
     LayoutLog.onFrameTimings([frame(1, 0, 10)]);
+    insets();
+    LayoutLog.keyInput(KeyInputEvent.pressed, key: 'ac');
     expect(lines, isEmpty);
+  });
+
+  group('시스템 영역·키 입력 줄 (#118)', () {
+    test(
+      '시스템 영역 줄은 창·밀도·인셋·시스템 바·제스처 영역(왼/위/오른/아래)을 소수 둘째 자리까지 적고, 바뀔 때만 남긴다',
+      () {
+        insets();
+        insets(); // 같은 값 — 남기지 않는다
+        now += 5000;
+        insets(
+          padding: const EdgeInsets.only(top: 74 / foldDpr, bottom: 56),
+          viewPadding: const EdgeInsets.only(top: 74 / foldDpr, bottom: 56),
+          gestures: const EdgeInsets.fromLTRB(
+            78 / foldDpr,
+            74 / foldDpr,
+            78 / foldDpr,
+            56,
+          ),
+        );
+        expect(lines, [
+          'AltCalc 시스템 영역: 창 841.14x700.95, 밀도 2.625, 인셋 0/28.19/0/32, '
+              '시스템 바 0/28.19/0/32, 제스처 영역 29.71/28.19/29.71/32 @0.0ms',
+          'AltCalc 시스템 영역: 창 841.14x700.95, 밀도 2.625, 인셋 0/28.19/0/56, '
+              '시스템 바 0/28.19/0/56, 제스처 영역 29.71/28.19/29.71/56 @5.0ms',
+        ]);
+      },
+    );
+
+    test('다시 켜면 같은 시스템 영역도 다시 남긴다', () {
+      insets();
+      enable();
+      insets();
+      expect(lines, hasLength(2));
+    });
+
+    test('키 입력 줄은 단계·키 이름·화면 좌표를 적고, 매번 남긴다', () {
+      for (final event in KeyInputEvent.values) {
+        LayoutLog.keyInput(event, key: 'ac', at: const Offset(1262, 517.25));
+      }
+      LayoutLog.keyInput(KeyInputEvent.releasedDeferred, key: 'num7');
+      expect(lines, [
+        'AltCalc 키 입력(누를 때): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 보류(제스처 영역): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 입력(뗄 때): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 뗌(이미 입력): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 버림(벗어남): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 취소(보류 버림): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 취소(이미 입력): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 해제(보류 버림): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 해제(이미 입력): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 해제(보류 버림): num7 @0.0ms',
+      ]);
+    });
+
+    test('밀도 2.625 기기의 끝나지 않는 경계(78px = 29.714…dp)도 키 좌표와 밀도로 px로 되돌려 안팎을 구분할 수 있다', () {
+      insets();
+      // 터치는 기기 px 단위로 온다 — 경계 바로 안쪽 77px(보류)과 경계 위 78px(영역 밖, 즉시 입력)
+      LayoutLog.keyInput(
+        KeyInputEvent.deferred,
+        key: 'num7',
+        at: const Offset(77 / foldDpr, 400),
+      );
+      LayoutLog.keyInput(
+        KeyInputEvent.pressed,
+        key: 'num7',
+        at: const Offset(78 / foldDpr, 400),
+      );
+      double first(RegExp re, String line) =>
+          double.parse(re.firstMatch(line)!.group(1)!);
+      final dpr = first(RegExp(r'밀도 ([\d.]+)'), lines[0]);
+      final edgePx = (first(RegExp(r'제스처 영역 ([\d.]+)/'), lines[0]) * dpr)
+          .round();
+      int xPx(String line) =>
+          (first(RegExp(r'\(([\d.]+),'), line) * dpr).round();
+      expect(dpr, foldDpr);
+      expect(edgePx, 78);
+      expect(xPx(lines[1]), lessThan(edgePx)); // 영역 안 (x < 왼쪽 영역 폭)
+      expect(xPx(lines[2]), edgePx); // 경계 위 = 영역 밖
+      // dp 표기만으로는 경계 위 좌표와 경계가 같은 글자다 — 그래서 밀도를 함께 적는다
+      expect(lines[2], contains('(29.71,400)'));
+      expect(lines[0], contains('제스처 영역 29.71/'));
+    });
   });
 
   test('모든 줄은 머리말로 시작한다 (logcat flutter 태그에서 골라 읽는다)', () {
@@ -156,6 +267,12 @@ void main() {
       display: const Size(800, 1280),
       error: 'boom',
     );
+    LayoutLog.orientationRequest(
+      OrientationPolicy.any,
+      kind: DeviceKind.foldable,
+      display: const Size(720, 528),
+      reason: '접힘선 2개 기억',
+    );
     expect(lines, [
       'AltCalc 시작 판정 받음: 폴더블=true, 접힘=있음',
       'AltCalc 시작 판정 받음: 폴더블=true, 접힘=없음',
@@ -166,6 +283,7 @@ void main() {
       'AltCalc 폴더블 기억: 물리 화면 변경 (360x860 → 841.4x701)',
       'AltCalc 방향 요청: portrait (기기 phone, 화면 360x860)',
       'AltCalc 방향 요청: landscape (기기 tablet, 화면 800x1280) 실패: boom',
+      'AltCalc 방향 요청: any (기기 foldable, 화면 720x528, 접힘선 2개 기억)',
     ]);
   });
 
@@ -181,9 +299,10 @@ void main() {
     );
     expect(lines, [
       'AltCalc 배치: hingeSplit — 창 841x701.5, '
-          '화면 특징 [fold postureFlat 420,0-420,701.5], 폴더블=true @0.0ms',
+          '화면 특징 [fold postureFlat 420,0-420,701.5], 가로지르는 접힘선 1, '
+          '폴더블=true @0.0ms',
       'AltCalc 배치: stacked (고른 배치 hingeSplit) 안내 — 창 841x701.5, '
-          '화면 특징 [], 폴더블=false @60.0ms',
+          '화면 특징 [], 가로지르는 접힘선 0, 폴더블=false @60.0ms',
     ]);
   });
 

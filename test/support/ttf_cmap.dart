@@ -96,6 +96,32 @@ typedef GlyphYBounds = ({double yMin, double yMax});
 ///
 /// 테스트 전용 최소 구현이다. TrueType 윤곽(`glyf`·`loca`) 글꼴만 읽는다. 윤곽이 없는 글리프(공백 등)는 `null`.
 GlyphYBounds? readGlyphYBounds(ByteData data, int codePoint) {
+  final glyph = _glyphRecord(data, codePoint);
+  if (glyph == null) return null;
+  final (record, unitsPerEm) = glyph;
+  return (
+    yMin: data.getInt16(record + 4) / unitsPerEm,
+    yMax: data.getInt16(record + 8) / unitsPerEm,
+  );
+}
+
+/// 글리프의 가로 잉크 범위 (em 단위, 글자 원점 기준).
+typedef GlyphXBounds = ({double xMin, double xMax});
+
+/// [data] 글꼴에서 [codePoint] 글리프의 가로 잉크 범위(`glyf` 테이블의 xMin·xMax ÷ unitsPerEm)를 읽는다.
+/// 조건과 한계는 [readGlyphYBounds]와 같다.
+GlyphXBounds? readGlyphXBounds(ByteData data, int codePoint) {
+  final glyph = _glyphRecord(data, codePoint);
+  if (glyph == null) return null;
+  final (record, unitsPerEm) = glyph;
+  return (
+    xMin: data.getInt16(record + 2) / unitsPerEm,
+    xMax: data.getInt16(record + 6) / unitsPerEm,
+  );
+}
+
+/// [codePoint] 글리프의 `glyf` 레코드 시작 위치와 unitsPerEm. 윤곽이 없는 글리프는 `null`.
+(int, int)? _glyphRecord(ByteData data, int codePoint) {
   final glyph = readCmap(data)[codePoint];
   if (glyph == null) {
     throw FormatException('글리프 없음: U+${codePoint.toRadixString(16)}');
@@ -115,9 +141,5 @@ GlyphYBounds? readGlyphYBounds(ByteData data, int codePoint) {
           data.getUint16(loca + glyph * 2 + 2) * 2,
         );
   if (end == start) return null;
-  final record = glyf + start;
-  return (
-    yMin: data.getInt16(record + 4) / unitsPerEm,
-    yMax: data.getInt16(record + 8) / unitsPerEm,
-  );
+  return (glyf + start, unitsPerEm);
 }

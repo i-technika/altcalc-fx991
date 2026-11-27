@@ -646,6 +646,93 @@ void main() {
     });
 
     testWidgets(
+      '트라이폴드(짧은 변 600dp 미만으로 확대): 접힘선 2개면 네 방향이고, 회전 직후 접힘 정보가 늦어도 세로 고정을 '
+      '요청하지 않으며, 접으면 세로다 (#144 R1)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // 공개 해상도 근사 823×603dp를 화면 크기 설정으로 키운 화면 (에뮬레이터에서 흉내 낸 720×528dp)
+        const landscape = Size(720, 528);
+        const portrait = Size(528, 720);
+        const cover = Size(360, 780);
+        List<DisplayFeature> folds(Size size) => [
+          for (final at in [240.0, 480.0])
+            DisplayFeature(
+              bounds: size.width > size.height
+                  ? Rect.fromLTWH(at, 0, 0, size.height)
+                  : Rect.fromLTWH(0, at, size.width, 0),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        setDevice(tester, landscape);
+        tester.view.displayFeatures = folds(landscape);
+        addTearDown(tester.view.resetDisplayFeatures);
+        mockFoldableDevice(tester, foldable: true);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+
+        // 세로로 돈 직후: 창·화면은 새 방향인데 접힘 정보는 아직 가로 화면 값(창을 가로지르지 않음)
+        tester.view.display.size = portrait * 2;
+        tester.view.physicalSize = portrait * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        // 접힘 정보가 온다
+        tester.view.displayFeatures = folds(portrait);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(isStackedArrangement(tester), isTrue);
+
+        // 다시 가로로 (같은 순서)
+        tester.view.display.size = landscape * 2;
+        tester.view.physicalSize = landscape * 2;
+        await tester.pump();
+        tester.view.displayFeatures = folds(landscape);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+
+        // 화면 크기 설정을 줄였다 다시 키운다(같은 비율의 다른 dp 크기, R2): 접힘 정보가 늦게 오는 동안에도 세로 고정을
+        // 요청하지 않는다
+        const smaller = Size(823, 603);
+        tester.view.display.size = smaller * 2;
+        tester.view.physicalSize = smaller * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = [
+          for (final x in [274.5, 548.5])
+            DisplayFeature(
+              bounds: Rect.fromLTWH(x, 0, 0, smaller.height),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        await tester.pump();
+        tester.view.display.size = landscape * 2;
+        tester.view.physicalSize = landscape * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = folds(landscape);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(printed.where((l) => l.contains('방향 요청')), [
+          'AltCalc 방향 요청: any (기기 foldable, 화면 720x528, 접힘선 2개)',
+        ]);
+
+        // 접는다: 커버 화면(비율이 다른 화면)이라 기억을 쓰지 않고 세로다
+        tester.view.display.size = cover * 2;
+        tester.view.physicalSize = cover * 2;
+        tester.view.displayFeatures = const [];
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+      },
+    );
+
+    testWidgets(
       '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·가로형 없음 (#70)',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
@@ -910,6 +997,110 @@ void main() {
     }
   });
 
+  group('커서 패드 ▲·▼ 기준 — 넓은 키패드 셀 (#159)', () {
+    // #159에서 패드 모양(비율 상한 [CalcTheme.cursorPadMaxAspectRatio])과 터치 경계를 그대로 두기로 정했고, 아래 기준을 고정한다.
+    // - 내접원(손가락이 들어가는 크기): 함수 키(sin) 터치 높이 대비 ▲·▼ 0.95배, ◀·▶ 1.0배 이상이다. 보통 셀과 넓은 셀에
+    //   같은 기준을 쓴다(test/support/touch_metrics.dart). 측정 ▲·▼는 보통 셀 0.956~0.982배, 넓은 셀 0.981~0.985배,
+    //   큰 키 1.33~1.36배다.
+    // - 넓이(넓은 셀만): 함수 키 셀 대비 ◀·▶는 1.1배 이상이다. ▲·▼는 창마다 측정값보다 약 0.02 아래를 하한으로 둔다
+    //   (결정 ③ — 지금 값에서 더 나빠지지 않게). 함수 키가 옆으로만 넓어져 ▲·▼ 넓이 비율은 셀 비가 커질수록 계속 내려간다.
+    //   패드를 비율 2.5까지 넓히면 600×610 등은 1.06배로 돌아오지만 내접원은 거의 그대로다(600×610 34.0 → 34.4dp).
+    //
+    // 배치나 셀 비가 바뀌면(#143 접힘선 재정의, #18 광고, #145 기록 영역 등) 아래 전제 검사가 먼저 실패한다.
+    // 그때는 그 창을 다시 재어 목록(배치·하한)을 갱신한다.
+    const stale = '배치·셀 비가 바뀌었다 — 이 창을 다시 재어 목록(배치·하한)을 갱신한다 (#159)';
+
+    // 보통 셀(패드가 비율 상한에 닿지 않는 셀) — 내접원만 본다. 넓이는 세로 폰 화면 테스트("세로 폰 화면의 키 크기 하한")와
+    // 키패드 테스트가 본다. 가장 낮은 곳은 셀 비 1.3인 셀이다.
+    for (final (size, arrangement) in const [
+      (Size(320, 568), DrawnArrangement.stacked), // 0.957
+      (Size(412, 915), DrawnArrangement.stacked), // 0.956
+      (Size(410, 400), DrawnArrangement.landscape), // 작은 가로형 창, 0.957
+      (Size(360, 300), DrawnArrangement.landscape), // 0.956
+      (Size(844, 390), DrawnArrangement.landscape), // 가로 폰, 0.963
+      (Size(841, 701), DrawnArrangement.landscape), // 폴더블 내부 가로, 0.956
+      // 큰 태블릿 세로(큰 키) — #189로 LCD가 줄 글자 상한 높이에서 멈춰 키패드가 높아졌다. 셀 비 1.89 → 1.70이라 넓은 셀에서 빠졌다.
+      (Size(1024, 1366), DrawnArrangement.stacked),
+    ]) {
+      testWidgets(
+        '보통 셀 ${size.width}×${size.height} (${arrangement.name}): 내접원 하한',
+        (tester) async {
+          await _pumpScreen(tester, size: size);
+          expect(drawnArrangementOf(tester), arrangement, reason: stale);
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          expect(
+            pad.width / pad.height,
+            lessThan(CalcTheme.cursorPadMaxAspectRatio - 1e-6),
+            reason: stale,
+          );
+          expectCursorPadInscribedVersusFunctionKey(tester, reason: '$size');
+        },
+      );
+    }
+
+    // 넓은 셀 (창, 배치, ▲·▼ 넓이 비율 하한) — 주석: 셀 비, 측정값
+    for (final (size, arrangement, minUpDownAreaRatio) in const [
+      (
+        Size(673, 841),
+        DrawnArrangement.stacked,
+        0.97,
+      ), // 폴더블 내부 세로, 1.98, 0.997
+      (Size(768, 1024), DrawnArrangement.stacked, 0.99), // 태블릿 세로, 1.92, 1.015
+      (Size(800, 900), DrawnArrangement.stacked, 0.91), // 2.20, 0.936
+      (Size(412, 450), DrawnArrangement.stacked, 0.89), // 분할 화면, 2.32, 0.915
+      (Size(600, 610), DrawnArrangement.stacked, 0.86), // 2.47, 0.881
+      (Size(768, 768), DrawnArrangement.stacked, 0.85), // 정사각형 창, 2.49, 0.874
+      (
+        Size(1280, 400),
+        DrawnArrangement.landscape,
+        0.94,
+      ), // 데스크톱 창, 2.12, 0.959
+      (Size(2000, 400), DrawnArrangement.landscape, 0.73), // 3.32, 0.755
+      (Size(2000, 300), DrawnArrangement.landscape, 0.60), // 5.50, 0.622
+    ]) {
+      testWidgets(
+        '넓은 셀 ${size.width}×${size.height} (${arrangement.name}): 내접원·넓이 하한',
+        (tester) async {
+          await _pumpScreen(tester, size: size);
+          expect(drawnArrangementOf(tester), arrangement, reason: stale);
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final cellAspect = cell.width / cell.height;
+          // 이 창들이 넓은 셀(패드가 비율 상한에서 멈춘 경우)이어야 넓이 하한이 뜻이 있다.
+          expect(
+            cell.width,
+            greaterThan(pad.width + 1),
+            reason: '$stale (셀 비 $cellAspect)',
+          );
+          expect(
+            pad.width / pad.height,
+            moreOrLessEquals(CalcTheme.cursorPadMaxAspectRatio, epsilon: 1e-6),
+            reason: '$stale (셀 비 $cellAspect)',
+          );
+          expectCursorPadInscribedVersusFunctionKey(tester, reason: '$size');
+          final sin = tester.getSize(
+            find.byWidgetPredicate(
+              (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+            ),
+          );
+          final g = CursorPadGeometry(pad.size);
+          final bounds = cell.shift(-pad.topLeft);
+          for (final sector in CursorPadSector.values) {
+            final vertical =
+                sector == CursorPadSector.up || sector == CursorPadSector.down;
+            expect(
+              g.hitArea(sector, bounds) / (sin.width * sin.height),
+              greaterThanOrEqualTo(vertical ? minUpDownAreaRatio : 1.1),
+              reason:
+                  '${sector.name} 넓이 (sin $sin, 셀 비 $cellAspect) — 퇴행인지, '
+                  '의도한 배치 변경이면 다시 재어 하한을 갱신할지 판단한다',
+            );
+          }
+        },
+      );
+    }
+  });
+
   group('화면 배치 기준 (CalcScreenLayout)', () {
     void expectSumsToBody(Size body, CalcScreenLayout l) {
       for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
@@ -986,38 +1177,37 @@ void main() {
       expectSumsToBody(body, l);
     });
 
-    test(
-      '태블릿 세로 본체: 폭 상한이 없어 키패드 최대 높이에 닿지 않고, LCD는 목표 비율·키패드는 나머지 전부다 (#141)',
-      () {
-        // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 최대 1008 / 1.75 = 576.
-        // 키패드가 실물 크기(640)보다 높아 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다 — 늘린 몫은 키패드만 낸다
-        // (LCD는 최소 띠 기준 목표 비율 그대로, #141 R1·R2).
-        const fullRow =
-            CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
-        const body = Size(1008, 1306);
-        final l = CalcScreenLayout.of(body);
-        expect(l.lcdHeight, moreOrLessEquals((1306 - strip) * 0.28));
-        expect(
-          l.keypadHeight,
-          moreOrLessEquals(
-            1306 - fullRow - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
-          ),
-        );
-        expect(l.top, moreOrLessEquals(fullRow));
-        expectSumsToBody(body, l);
+    test('태블릿 세로 본체: 폭 상한이 없어 키패드 최대 높이에 닿지 않고, LCD는 줄 글자 상한 높이·키패드는 나머지 전부다 (#141, #189)', () {
+      // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 폭 기준 최대 1008 / 1.75 = 576.
+      // LCD 목표(최소 띠 기준 × 0.28 = 362.3)가 줄 글자 상한 높이(약 273.5, #189)보다 높아 LCD는 그 높이에서 멈추고,
+      // 남는 높이는 키패드가 받는다. 키패드가 실물 크기(640)보다 높아 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다 —
+      // 늘린 몫은 키패드만 낸다(#141 R1·R2).
+      const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
+      const body = Size(1008, 1306);
+      final l = CalcScreenLayout.of(body);
+      expect(l.lcdHeight, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+      expect((1306 - strip) * 0.28, greaterThan(l.lcdHeight));
+      expect(
+        l.keypadHeight,
+        moreOrLessEquals(
+          1306 - fullRow - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
+        ),
+      );
+      expect(l.top, moreOrLessEquals(fullRow));
+      expectSumsToBody(body, l);
 
-        // 10인치 Android 세로 본체 784×1192: 설계 시안(2026-11-26 확정안)의 띠 44·LCD 330·키패드 838에 가깝다.
-        final android = CalcScreenLayout.of(const Size(784, 1192));
-        expect(android.lcdHeight, moreOrLessEquals(330.4, epsilon: 0.1));
-        expect(android.keypadHeight, moreOrLessEquals(813.6, epsilon: 0.1));
-        expect(android.top, moreOrLessEquals(fullRow));
+      // 10인치 Android 세로 본체 784×1192: #189 전에는 LCD 330.4·키패드 813.6(설계 시안 2026-11-26 확정안 띠 44·LCD 330·
+      // 키패드 838에 가까웠다). 줄 글자 상한으로 LCD가 273.5로 낮아지고 그만큼 키패드가 높아진다.
+      final android = CalcScreenLayout.of(const Size(784, 1192));
+      expect(android.lcdHeight, moreOrLessEquals(273.5, epsilon: 0.1));
+      expect(android.keypadHeight, moreOrLessEquals(870.5, epsilon: 0.1));
+      expect(android.top, moreOrLessEquals(fullRow));
 
-        // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 가로형으로 그린다(#38, #142).
-        final short = CalcScreenLayout.of(const Size(2000, 300));
-        expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
-        expectSumsToBody(const Size(2000, 300), short);
-      },
-    );
+      // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 가로형으로 그린다(#38, #142).
+      final short = CalcScreenLayout.of(const Size(2000, 300));
+      expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
+      expectSumsToBody(const Size(2000, 300), short);
+    });
 
     test(
       '큰 세로 창의 띠: 키패드를 실물 크기(640dp) 아래로 줄이지 않는 만큼만 줄 전체 높이까지 늘린다 (#141 R1)',
