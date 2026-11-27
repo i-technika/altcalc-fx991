@@ -3,6 +3,7 @@ import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
@@ -385,4 +386,99 @@ void main() {
       });
     }
   });
+
+  testWidgets(
+    '진단 로그 (#118): 화면이 시스템 인셋·제스처 영역을 남기고, 가장자리 키의 보류·확정·취소와 안쪽 키의 즉시 입력을 남긴다',
+    (tester) async {
+      final printed = <String>[];
+      LayoutLog.enable(sink: printed.add, frameTimings: false);
+      addTearDown(LayoutLog.disable);
+      // Pixel Tablet(API 36) 제스처 내비게이션 임시 작업 표시줄 실측값 — 가로형 배치
+      const size = Size(1280, 800);
+      const gesture = EdgeInsets.fromLTRB(30, 24, 30, 32);
+      var container = await _pumpScreen(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24, bottom: 32),
+        gesture: gesture,
+      );
+      expect(printed.where((l) => l.contains(' 시스템 영역: ')), [
+        startsWith(
+          '${LayoutLog.prefix} 시스템 영역: 창 1280x800, 밀도 1, 인셋 0/24/0/32, '
+          '시스템 바 0/24/0/32, 제스처 영역 30/24/30/32 @',
+        ),
+      ]);
+      // 작업 표시줄을 항상 보이게 바꾸면(실측 56) 화면이 다시 빌드되며 새 줄을 남긴다
+      await _pumpScreen(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24, bottom: 56),
+        gesture: const EdgeInsets.fromLTRB(30, 24, 30, 56),
+      );
+      expect(printed.where((l) => l.contains(' 시스템 영역: ')), [
+        contains('제스처 영역 30/24/30/32 @'),
+        contains('인셋 0/24/0/56, 시스템 바 0/24/0/56, 제스처 영역 30/24/30/56 @'),
+      ]);
+      // 임시 작업 표시줄로 되돌려 아래 키 위치를 처음과 같게 둔다 (새 계산기 상태로 시작한다)
+      container = await _pumpScreen(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24, bottom: 32),
+        gesture: gesture,
+      );
+
+      // 오른쪽 끝 열의 AC (오른손잡이 가로형 숫자부의 바깥쪽 열)
+      final ac = tester.getRect(
+        find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.ac)),
+      );
+      expect(ac.right, greaterThan(size.width - gesture.right));
+      expect(ac.center.dx, lessThan(size.width - gesture.right));
+      List<String> keyLines() => [
+        for (final l in printed)
+          if (l.startsWith('${LayoutLog.prefix} 키 '))
+            l.substring('${LayoutLog.prefix} 키 '.length).split(' @').first,
+      ];
+      String at(Offset p) => '(${p.dx.round()},${p.dy.round()})';
+
+      // 기대 문자열을 간단히 쓰려고 정수 좌표만 누른다(로그는 소수 둘째 자리까지 적는다)
+      final edge = Offset(
+        (ac.right - 2).floorToDouble(),
+        ac.center.dy.roundToDouble(),
+      );
+      final hold = await tester.startGesture(edge);
+      await tester.pump();
+      expect(container.read(calcProvider).inputCount, 0);
+      await hold.up();
+      await tester.pump();
+      expect(container.read(calcProvider).inputCount, 1);
+
+      final back = await tester.startGesture(edge);
+      await back.cancel(); // 시스템 뒤로가기가 가로챈 경우
+      await tester.pump();
+
+      final swipe = await tester.startGesture(edge);
+      final inward = Offset((ac.left - 20).roundToDouble(), edge.dy);
+      await swipe.moveTo(inward);
+      await swipe.up();
+      await tester.pump();
+
+      final middle = Offset(
+        ac.center.dx.roundToDouble(),
+        ac.center.dy.roundToDouble(),
+      );
+      await tester.tapAt(middle);
+      await tester.pump();
+      expect(container.read(calcProvider).inputCount, 2);
+      expect(keyLines(), [
+        '보류(제스처 영역): ac ${at(edge)}',
+        '입력(뗄 때): ac ${at(edge)}',
+        '보류(제스처 영역): ac ${at(edge)}',
+        '취소(보류 버림): ac ${at(edge)}',
+        '보류(제스처 영역): ac ${at(edge)}',
+        '버림(벗어남): ac ${at(inward)}',
+        '입력(누를 때): ac ${at(middle)}',
+        '뗌(이미 입력): ac ${at(middle)}',
+      ]);
+    },
+  );
 }

@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
+import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/round_key_face.dart';
@@ -1025,6 +1026,107 @@ void main() {
         expect(haptics, isEmpty);
         expect(_isPressed(tester, CalcKeyId.num1), isFalse);
       });
+
+      testWidgets(
+        '진단 로그 (#118): 누름 하나는 첫 줄 뒤 끝 줄 하나로 끝난다 — 뗌, 이미 입력한 누름의 취소, 누른 채 키가 사라진 해제',
+        (tester) async {
+          final lines = <String>[];
+          LayoutLog.enable(sink: lines.add, frameTimings: false);
+          addTearDown(LayoutLog.disable);
+          final pressed = <CalcKeyId>[];
+          await tester.pumpWidget(edgeHost(pressed));
+
+          // 제스처 영역 밖(키 가운데 x=32)에서 누르고 뗀다
+          await tester.tapAt(const Offset(32, 300));
+          await tester.pump();
+          expect(pressed, [CalcKeyId.num1]);
+
+          // 제스처 영역 밖에서 누른 뒤 취소 — 입력은 이미 됐다
+          final inside = await tester.startGesture(const Offset(32, 300));
+          await inside.cancel();
+          await tester.pump();
+          expect(pressed, [CalcKeyId.num1, CalcKeyId.num1]);
+
+          // 가장자리(x=10)에서 누른 채 키가 사라진다 — 보류한 누름은 입력되지 않는다
+          final edge = await tester.startGesture(const Offset(10, 300));
+          await tester.pump();
+          await tester.pumpWidget(const SizedBox());
+          await edge.up();
+          expect(pressed, [CalcKeyId.num1, CalcKeyId.num1]);
+
+          expect(lines.map((l) => l.split(' @').first).toList(), [
+            'AltCalc 키 입력(누를 때): num1 (32,300)',
+            'AltCalc 키 뗌(이미 입력): num1 (32,300)',
+            'AltCalc 키 입력(누를 때): num1 (32,300)',
+            'AltCalc 키 취소(이미 입력): num1 (32,300)',
+            'AltCalc 키 보류(제스처 영역): num1 (10,300)',
+            'AltCalc 키 해제(보류 버림): num1',
+          ]);
+        },
+      );
+
+      testWidgets(
+        '진단 로그 (#118): 누른 채 비활성이 되거나 다른 키로 바뀌면 누르던 키의 해제 줄을 남기고, 로그를 끈 뒤에는 줄이 늘지 않는다',
+        (tester) async {
+          final lines = <String>[];
+          LayoutLog.enable(sink: lines.add, frameTimings: false);
+          addTearDown(LayoutLog.disable);
+          Widget host(
+            ValueChanged<CalcKeyId>? onPressed, {
+            CalcKeyId id = CalcKeyId.num1,
+          }) => MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(800, 600),
+                systemGestureInsets: EdgeInsets.symmetric(horizontal: 30),
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 64,
+                  height: 72,
+                  child: CalcKeyButton(
+                    keyDef: keyDefOf(id),
+                    onPressed: onPressed,
+                  ),
+                ),
+              ),
+            ),
+          );
+          final pressed = <CalcKeyId>[];
+          await tester.pumpWidget(host(pressed.add));
+          final g = await tester.startGesture(const Offset(10, 300));
+          await tester.pump();
+          await tester.pumpWidget(host(null));
+          await g.up();
+          await tester.pump();
+          expect(pressed, isEmpty);
+
+          // 영역 밖에서 누른 채 같은 자리의 키가 다른 키(num2)로 바뀐다 — 해제 줄은 누르던 키(num1) 이름이다
+          await tester.pumpWidget(host(pressed.add));
+          final g2 = await tester.startGesture(const Offset(32, 300));
+          await tester.pump();
+          await tester.pumpWidget(host(pressed.add, id: CalcKeyId.num2));
+          await g2.up();
+          await tester.pump();
+          expect(pressed, [CalcKeyId.num1]);
+
+          expect(lines.map((l) => l.split(' @').first).toList(), [
+            'AltCalc 키 보류(제스처 영역): num1 (10,300)',
+            'AltCalc 키 해제(보류 버림): num1',
+            'AltCalc 키 입력(누를 때): num1 (32,300)',
+            'AltCalc 키 해제(이미 입력): num1',
+          ]);
+
+          LayoutLog.disable();
+          await tester.pumpWidget(host(pressed.add));
+          await tester.tapAt(const Offset(10, 300));
+          await tester.tapAt(const Offset(32, 300));
+          await tester.pump();
+          expect(pressed, [CalcKeyId.num1, CalcKeyId.num1, CalcKeyId.num1]);
+          expect(lines, hasLength(4), reason: '꺼진 뒤에는 줄이 늘지 않는다');
+        },
+      );
 
       testWidgets('가장자리 밖(안쪽)의 터치는 즉시 입력된다', (tester) async {
         _recordHaptics(tester);

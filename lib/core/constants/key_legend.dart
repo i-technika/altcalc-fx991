@@ -12,8 +12,8 @@ import 'package:meta/meta.dart';
 //   그리는 쪽은 `presentation/widgets/key_legend_view.dart`(`KeyLegendView`)다.
 // - 이 파일은 도메인 계층에서도 쓰도록 UI 패키지에 의존하지 않는다.
 //
-// M2의 LCD 수식 렌더링(`MathNodeWidget`)과의 관계: 이 모델은 키캡 각인 전용이다. 입력 칸은 글자(`◼`·`◻`)로
-// 두고 커서·편집 정보가 없다. LCD 수식 AST(`domain/models/math_node.dart`)와 노드 종류(분수·첨자·근호)는
+// M2의 LCD 수식 렌더링(`MathNodeWidget`)과의 관계: 이 모델은 키캡 각인 전용이다. 입력 칸은 자리별 모양을 가진
+// 그림([LegendBox])이고 커서·편집 정보가 없다. LCD 수식 AST(`domain/models/math_node.dart`)와 노드 종류(분수·첨자·근호)는
 // 겹치므로, M2에서 같은 배치 규칙(첨자 크기·분수 막대 높이 등)을 공유할지 정한다.
 
 /// 키캡 각인(메인·SHIFT·ALPHA 한 층)의 구조.
@@ -43,7 +43,8 @@ sealed class KeyLegend {
   bool get isPlain => this is LegendText;
 }
 
-/// 글자열 각인 조각. 입력 칸은 글자 `◼`(커서가 처음 들어가는 칸)·`◻`(나머지 칸)로 쓴다.
+/// 글자열 각인 조각. 입력 칸은 글자가 아니라 [LegendBox]로 쓴다(#186) — 한 줄 표기에서만 `◼`(커서가 처음 들어가는
+/// 칸)·`◻`(나머지 칸)가 된다.
 final class LegendText extends KeyLegend {
   /// 그릴 글자열
   final String text;
@@ -123,11 +124,17 @@ final class LegendScript extends KeyLegend {
   /// g의 내림 획까지 내려가지 않는다(Quick Start Guide 1쪽 제품 사진, #169).
   final bool subscriptOnBaseline;
 
+  /// 아래첨자를 바탕 글자의 기울기만큼 왼쪽으로 당긴다. `∫`의 아래 끝 칸 — 실물은 ∫ 아래쪽 끝을 따라 위 끝 칸보다
+  /// 왼쪽에 있다(근접 사진에서 9px, 메인 각인 글자 크기 약 33px 대비, #186). 당기는 길이는 ∫ 기울기에 맞춘 상수
+  /// (`CalcTheme.keyLegendIntegralSubscriptShift`)라 ∫ 말고 다른 바탕에 쓰면 그 바탕에 맞는 길이를 따로 정해야 한다.
+  final bool subscriptFollowsSlant;
+
   const LegendScript(
     this.base, {
     this.superscript,
     this.subscript,
     this.subscriptOnBaseline = false,
+    this.subscriptFollowsSlant = false,
   }) : assert(superscript != null || subscript != null, '첨자가 하나는 있어야 한다');
 
   @override
@@ -189,7 +196,8 @@ final class LegendScript extends KeyLegend {
       other.base == base &&
       other.superscript == superscript &&
       other.subscript == subscript &&
-      other.subscriptOnBaseline == subscriptOnBaseline;
+      other.subscriptOnBaseline == subscriptOnBaseline &&
+      other.subscriptFollowsSlant == subscriptFollowsSlant;
 
   @override
   int get hashCode => Object.hash(
@@ -198,12 +206,14 @@ final class LegendScript extends KeyLegend {
     superscript,
     subscript,
     subscriptOnBaseline,
+    subscriptFollowsSlant,
   );
 
   @override
   String toString() =>
       'LegendScript($base, sup: $superscript, sub: $subscript'
-      '${subscriptOnBaseline ? ', sub on baseline' : ''})';
+      '${subscriptOnBaseline ? ', sub on baseline' : ''}'
+      '${subscriptFollowsSlant ? ', sub follows slant' : ''})';
 }
 
 /// 바탕 바로 위·아래에 작게 쌓은 끝 칸 (`∑`의 위아래 끝 — #169). **∑ 각인 전용이다.**
@@ -249,19 +259,70 @@ final class LegendLimits extends KeyLegend {
   String toString() => 'LegendLimits($base, over: $over, under: $under)';
 }
 
-/// 글자(`◼`·`◻`) 대신 직접 그리는 입력 칸의 모양 (#169)
+/// 글자(`◼`·`◻`) 대신 직접 그리는 입력 칸의 모양 — 각인 속 자리 하나에 하나씩 (#169, #186)
+///
+/// 실물 칸은 자리마다 가로세로 비가 다르다. 비(사진 원본 픽셀)는 `CalcTheme.keyLegendBoxAspectRatio`에,
+/// 크기 규칙은 그리는 쪽(`KeyLegendView`)에 있다. 값 하나가 키캡 각인의 자리 하나를 가리킨다(테스트로 고정) —
+/// 자리마다 잰 비가 다르므로 같은 모양을 다른 각인에 돌려 쓰지 않는다. M2의 LCD 수식 렌더링이 입력 칸을 그릴 때는
+/// 이 키캡 전용 자리 이름이 아니라 칸 종류(비·높이 규칙)를 따로 정한다. 아래 픽셀은 실물 키패드 근접 사진(가로 2048px, 메인 각인 글자
+/// 크기 약 33px·SHIFT 각인 약 22px)에서 잰 가로×세로다(#186 — ∑ 칸은 Quick Start Guide 1쪽 제품 사진, #169).
 enum LegendBoxShape {
   /// ∑ 위아래 끝 칸 — 납작한 직사각형(사진 9×4px, ∑ 잉크 7×7px 대비)
   sumLimit,
 
   /// ∑ 오른쪽 본문 칸 — 납작한 직사각형(사진 8×4px), 세로 가운데가 ∑ 가운데와 같다
   sumOperand,
+
+  /// ∫ 오른쪽 위·아래 끝 칸 — 거의 정사각형(사진 위 14×13px·아래 13×13px)
+  integralLimit,
+
+  /// ∫ 본문 칸 — 가로로 긴 직사각형(사진 25×12px)
+  integralOperand,
+
+  /// `d/dx◼`의 칸 — 가로로 조금 긴 직사각형(사진 14×10px)
+  derivativeOperand,
+
+  /// 분수 키 `◼/◻`의 분자·분모 칸 — 가로로 긴 직사각형(사진 둘 다 25×14px)
+  fractionPart,
+
+  /// 대분수 `◼ ◻/◻`의 정수 칸(사진 14×11px)
+  mixedWhole,
+
+  /// 대분수 `◼ ◻/◻`의 분자·분모 칸 — 가로로 긴 직사각형(사진 둘 다 18×11px)
+  mixedFractionPart,
+
+  /// `√◼`의 피개법수 칸(사진 16×15px)
+  squareRootRadicand,
+
+  /// `∛◼`의 피개법수 칸(사진 12×11px)
+  cubeRootRadicand,
+
+  /// `◼√◻`의 지수 칸(사진 12×10px)
+  rootIndex,
+
+  /// `◼√◻`의 피개법수 칸(사진 14×11px)
+  rootRadicand,
+
+  /// `x^◼`의 지수 칸 — 정사각형(사진 14×14px)
+  powerExponent,
+
+  /// `10^◼`의 지수 칸(사진 11×10px)
+  tenPowerExponent,
+
+  /// `e^◼`의 지수 칸(사진 10×9px)
+  ePowerExponent,
+
+  /// `log◼◻`의 밑 칸 — 세로로 조금 긴 직사각형(사진 11×13px), 아래끝이 기준선
+  logBase,
+
+  /// `log◼◻`의 진수 칸 — 세로로 긴 직사각형(사진 13×26px), 기준선에서 `l` 윗끝까지
+  logArgument,
 }
 
-/// 글자 대신 직사각형으로 그리는 입력 칸 (#169). 크기와 자리는 [shape]마다 그리는 쪽(`KeyLegendView`)이 정한다.
+/// 글자 대신 직사각형으로 그리는 입력 칸 (#169, #186). 크기와 자리는 [shape]마다 그리는 쪽(`KeyLegendView`)이 정한다.
 ///
-/// 실물 각인의 칸은 글꼴의 정사각형 `◼`·`◻`와 달리 자리에 따라 가로세로 비가 다른 직사각형이다. 지금은 ∑ 각인만
-/// 실물 비율로 그린다 — 다른 각인의 칸 모양은 후속 이슈에서 다룬다. 한 줄 표기와 칸 개수 검사([texts])에서는
+/// 실물 각인의 칸은 글꼴의 정사각형 `◼`·`◻`와 달리 자리에 따라 가로세로 비가 다른 직사각형이라, 모든 각인의 칸을
+/// 이것으로 그린다(사용자 결정 "모든 칸 사진 비율로", #186). 한 줄 표기와 칸 개수 검사([texts])에서는
 /// 글자 `◼`(채움)·`◻`(빈 칸)와 같다.
 final class LegendBox extends KeyLegend {
   /// 칸 모양

@@ -130,6 +130,24 @@ class KeypadMetrics {
   static double wideBlockWidthOf(double width) =>
       math.max(0.0, width) / _wideWidthUnits;
 
+  /// 셀 너비 [functionKeyWidth]·[numberKeyWidth]에서 폭 기준이 허락하는 (배율 반영) 최대 글자 크기 — 메인 라벨·각인.
+  ///
+  /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
+  /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
+  @visibleForTesting
+  static ({double main, double legend}) debugWidthLimits({
+    required double functionKeyWidth,
+    required double numberKeyWidth,
+    bool Function(CalcKeyDef def)? where,
+  }) {
+    final limits = _LabelLimits.measure(
+      functionKeyWidth: functionKeyWidth,
+      numberKeyWidth: numberKeyWidth,
+      where: where,
+    );
+    return (main: limits.main, legend: limits.legend);
+  }
+
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
   double get functionKeyWidth =>
       math.max(0.0, blockWidth / functionColumns - horizontalGap);
@@ -427,9 +445,11 @@ class _LabelLimits {
   static double _emWidth(KeyLegend legend, TextStyle style) =>
       KeyLegendView.emSize(legend, style).width;
 
+  /// [where]가 있으면 그 키만 잰다(테스트용 — [KeypadMetrics.debugWidthLimits]).
   static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,
+    bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
     var legend = double.infinity;
@@ -443,6 +463,7 @@ class _LabelLimits {
 
     for (final def in allKeys) {
       if (cursorIds.contains(def.id)) continue;
+      if (where != null && !where(def)) continue;
       final width = numberIds.contains(def.id)
           ? numberKeyWidth
           : functionKeyWidth;
