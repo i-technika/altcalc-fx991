@@ -33,12 +33,12 @@ enum ScreenArrangement {
   /// 숫자부와 활성 LCD는 주로 쓰는 손 쪽이다 (태블릿 가로, 가로로 돌린 폰, 분할 화면·데스크톱의 가로 창).
   landscape,
 
-  /// 세로 접힘선 기준 좌우 배치 (폴더블 내부 화면, 책 자세): 접힘선 한쪽 절반에 키패드(주로 쓰는 손 쪽),
-  /// 다른 절반에 LCD. 어느 것도 접힘선을 가로지르지 않는다.
+  /// 세로 접힘선 기준 좌우 배치 ("책 자세", #143 — 폴더블 내부 화면의 세로 접힘선, 펼침·반 접힘 모두): 주로 쓰는 손 쪽
+  /// 패널에 세로형(위 활성 LCD, 아래 실물 배열 키패드), 반대쪽 패널 전체에 계산 기록. 어느 것도 접힘선을 가로지르지 않는다.
   hingeSplit,
 
-  /// 가로 접힘선 기준 위아래 배치 (반 접어 세운 테이블톱 자세, 물리 힌지 — 펼친 폭 0 가로 접힘선은 제외):
-  /// 접힘선 위 절반에 LCD, 아래 절반에 키패드. 어느 것도 접힘선을 가로지르지 않는다.
+  /// 가로 접힘선 기준 위아래 배치 (#143 — 폴더블 내부 화면의 가로 접힘선, 펼침·반 접음(테이블톱 자세) 모두): 아래 패널에
+  /// 키패드(넓은 배열과 실물 배열 중 키가 큰 쪽), 위 패널에 활성 LCD와 계산 기록. 어느 것도 접힘선을 가로지르지 않는다.
   hingeStacked,
 }
 
@@ -266,10 +266,16 @@ abstract final class FormFactor {
   static const double _hingeSpanTolerance = 1.0;
 
   /// 접힘선 기준으로 나눌 때 접힘선 양쪽 각각이 가져야 하는 최소 길이 (dp, 창 좌표·접힘선에 수직인 방향).
-  /// 접힘선이 창 가장자리에 치우친 창이나 인셋 안의 접힘선처럼 한쪽 패널(LCD 쪽 포함)이 쓸 수 없게 좁아지는
-  /// 경우를 걸러 내는 거친 사전 판정이다. 인셋·화면 여백을 뺀 실제 키패드가 터치 하한을 지키는지는 화면이
-  /// 본체 크기로 다시 판정한다(`CalculatorScreen`, `KeypadMetrics.minKeyTouchHeightOf`).
-  static const double hingeMinPanelExtent = 280.0;
+  /// 접힘선이 창 가장자리에 치우친 창이나 인셋 안의 접힘선처럼 한쪽 패널이 쓸 수 없게 좁아지는 경우를 걸러 내는 거친
+  /// 사전 판정이다. 인셋·화면 여백을 뺀 실제 크기 — 키가 쓸 수 있는 크기인지, 활성 LCD가 최소 높이인지 — 는 화면이 본체
+  /// 크기로 다시 판정한다(`CalculatorScreen`).
+  ///
+  /// 값은 활성 LCD 최소 높이(`CalcTheme.screenLcdMinHeight` 112) + 화면 여백(8) + 접힘선 여백(8)이다 — 인셋이 없을 때 가로
+  /// 접힘선 위 패널에 활성 LCD 최소 높이가 들어가는 길이다(`test/unit/form_factor_test.dart`가 테마 값과 대조한다). 키패드 쪽은
+  /// 넓은 배열(5행, #80)이면 이보다 낮은 패널에서도 키를 쓸 수 있어 따로 정하지 않는다. #143 전에는 실물 배열 키패드
+  /// 폭(약 264dp)에서 정한 280dp였다 — 넓은 배열이 생긴 뒤로는 "화면 크기"를 키운 Fold 673×539(절반 269.5dp)처럼 넓은 배열이면
+  /// 키가 큰데도 사전 판정에서 떨어졌다(#139).
+  static const double hingeMinPanelExtent = 128.0;
 
   /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge) 모두 (#144). 영역은 창 좌표이고,
   /// 순서는 [features] 그대로이고, 같은 접힘선(같은 방향으로 겹치거나 1dp 안에 붙음)이 두 번 오면 하나만 남긴다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
@@ -285,7 +291,8 @@ abstract final class FormFactor {
       if (!_crossesWindow(windowSize, f)) continue;
       // 같은 접힘선이 두 번 보고되어도(같은 자리, 또는 폭 있는 힌지와 그 안의 폭 0 접힘선처럼 겹침) 하나로 센다 — 개수가
       // 2가 되면 접힘선 1개 기기가 접힘선을 잃는다(#144 R1·R2). 둘 중 화면을 실제로 나누는 쪽([separates] — 반 접힘·
-      // 물리 힌지)을 남긴다 — 평평한 쪽을 남기면 테이블톱 배치를 놓친다.
+      // 물리 힌지)을 남긴다 — 배치는 자세와 무관하지만(#143), 설정 대화상자는 Flutter가 나누는 접힘선인지를 보고 앱이 한 번
+      // 더 나눌지 정한다(`SettingsLauncher`). 평평한 쪽을 남기면 Flutter와 앱이 대화상자를 두 번 나눈다.
       final same = crossing.indexWhere((c) => _sameHinge(c.bounds, f.bounds));
       if (same < 0) {
         crossing.add(f);
@@ -333,7 +340,7 @@ abstract final class FormFactor {
     // 몇 프레임 늦게 올 수 있다(#25 R2). 그동안은 접힘선이 없는 것으로 본다(폴더블이면 위아래 배치).
     // 창 가장자리의 접힘선은 세지 않는다 — 트라이폴드에서 두 장에 걸친 분할 화면 창은 둘째 접힘선이 창 경계에 오는데,
     // 이것을 세면 접힘선 2개로 판정되어 창 가운데의 접힘선까지 무시하게 된다(#144). 그 창은 접힘선 1개 규칙을 탄다 —
-    // 장 폭이 [hingeMinPanelExtent] 이상이면 가운데 접힘선 기준 배치, 아니면(공개 사양 근사 약 274dp) 위아래 배치다.
+    // 장 폭(공개 사양 근사 약 274dp)이 [hingeMinPanelExtent] 이상이라 가운데 접힘선 기준 배치(책 자세, #143)다.
     // 가장자리 접힘선은 어차피 배치를 나누지 않는다(한쪽 패널 길이 0 < [hingeMinPanelExtent]).
     if (spansHeight && splitsX && insideY) return true;
     return spansWidth && splitsY && insideX;
@@ -385,18 +392,20 @@ abstract final class FormFactor {
   /// 앱 창([windowSize], dp)의 배치.
   ///
   /// 1. 창을 가로지르는 접힘선이 하나뿐이고([hingeOf]) 그 양쪽이 모두 [hingeMinPanelExtent] 이상이면 접힘선을 경계로
-  ///    나눈다 (#25). 가로지르는 접힘선이 둘 이상이면([crossesMultipleHinges] — 펼친 트라이폴드) 접힘선을 모두 무시하고
+  ///    나눈다 (#25, #143). 가로지르는 접힘선이 둘 이상이면([crossesMultipleHinges] — 펼친 트라이폴드) 접힘선을 모두 무시하고
   ///    3번 창으로 다룬다(#144, 아래 "트라이폴드").
-  ///    - 세로 접힘선: 항상 [ScreenArrangement.hingeSplit]. 펼친 상태(flat)여도 나눈다 — 주름이 키·글자 한가운데를
-  ///      지나지 않게 하는 것이 이슈 요구이고, 좌우로 나눠도 각 절반이 폰 폭이라 키 크기 손해가 작다.
-  ///    - 가로 접힘선: 화면을 실제로 나눌 때([separates] — 반 접은 테이블톱 자세, 물리 힌지)만
-  ///      [ScreenArrangement.hingeStacked]. 펼친 폭 0 가로 접힘선(Fold 내부 화면을 가로로 돌림, Flip을 펼침)은
-  ///      나누지 않는다(아래 2번). #25에서는 나누면 키패드가 아래 절반에 갇혀 터치 하한(28dp) 아래로 작아진다는 것이
-  ///      근거였으나, 넓은 키패드 배열(#80)이 생긴 뒤로는 Fold 가로도 나누는 쪽 키가 더 크다(위아래 32.1dp, 나누면
-  ///      39.9dp) — 펼친 가로 접힘선을 나눌지는 후속 이슈에서 다시 정한다.
+  ///    - 세로 접힘선: [ScreenArrangement.hingeSplit] (책 자세 — 손 쪽 패널에 세로형, 반대쪽 패널에 계산 기록).
+  ///    - 가로 접힘선: [ScreenArrangement.hingeStacked] (위 패널에 활성 LCD·기록, 아래 패널에 키패드).
+  ///    접힘선의 자세(펼침·반 접힘, [separates])와 **무관하게** 나눈다(#143, 2026-11-26 사용자 결정). 폴더블은 살짝 꺾어
+  ///    쓸 수 있는데, 시스템은 접힌 상태를 펼침과 반 접힘 두 가지로만 알려 주고 살짝 꺾은 각도는 대개 펼침으로 들어온다 —
+  ///    앱은 둘을 구분할 수 없으므로 접힘선을 언제나 경계로 본다. 완전히 펼친 Flip도 나눈다.
+  ///    (#143 전에는 펼친 폭 0 가로 접힘선을 나누지 않았다 — #25 당시 키패드가 아래 절반에 갇혀 작아진다는 것이 근거였으나,
+  ///    넓은 키패드 배열(#80)이 생긴 뒤로는 Fold 가로도 나누는 쪽 키가 더 크다.)
   /// 2. 접힘 정보는 있는데 위 조건에 맞지 않거나, 폴더블 기기([foldableDevice])인데 접힘선이 없으면
   ///    위아래 배치다. 폴더블 내부 화면은 접힘 정보가 창이 붙은 뒤 늦게 오므로, 그 전 몇 프레임 동안
   ///    접힘선을 무시한 가로형으로 그렸다가 바뀌는 깜빡임을 막는다. 접은 커버 화면은 어차피 위아래 배치다.
+  ///    그 몇 프레임은 위아래 배치였다가 접힘선 기준 배치로 바뀐다 — 앱 시작 때는 `main()`이 접힘 정보를 기다려(#158) 첫
+  ///    프레임부터 접힘선 기준 배치이고, 펼치거나 돌린 직후에만 보일 수 있다(#143부터 가로 접힘선의 펼친 Flip·Fold도 그렇다).
   ///    제약: 폴더블 여부는 기기 단위라, 폴더블을 외부 디스플레이(DeX 등)에 띄운 넓은 창도 위아래 배치다.
   ///    시작 구간에만 기기 단위로 보려면 "접힘 정보가 아직 안 옴"과 "접힘선 없음"을 구분해야 하는데 그런
   ///    신호가 없고, 시간 제한을 두면 펼칠 때마다 배치가 한 번씩 튄다. 드문 경우라 위아래 배치로 둔다 (#25 검토).
@@ -456,8 +465,9 @@ abstract final class FormFactor {
           ? windowSize.width - b.right
           : windowSize.height - b.bottom;
       if (before >= hingeMinPanelExtent && after >= hingeMinPanelExtent) {
-        if (vertical) return ScreenArrangement.hingeSplit;
-        if (separates(hinge)) return ScreenArrangement.hingeStacked;
+        return vertical
+            ? ScreenArrangement.hingeSplit
+            : ScreenArrangement.hingeStacked;
       }
     }
     if (!picksFormByKeySize(
