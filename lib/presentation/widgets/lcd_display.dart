@@ -131,6 +131,9 @@ class LcdFontSizes {
     );
     // 상한([CalcTheme.lcdLineMaxFontSize])도 같은 식으로 배율 반영 전 크기로 되돌려, 탐색 시작값이 상한을 크게 넘지 않게
     // 한다. 배율 1이면 상한에 걸리는 LCD가 정확히 상한 값을 얻는다.
+    // 탐색은 시작값에서 아래로만 찾으므로, 시작값이 실제 최대 이상이어야 한다. 그러려면 배율 계수 scale(x) / x가 x에 대해
+    // 줄지 않아야 한다(선형 배율, 큰 글자를 덜 키우는 Android 14 이상의 확대 배율은 만족한다). 큰 글자를 더 줄이는 축소 배율이면
+    // 글자가 최대보다 조금 작아질 수 있다(#189 R1 — Android의 축소 배율은 선형이다).
     double unscaled(double bound) {
       final scale = textScaler.scale(bound) / bound;
       return scale < 1 && scale > 0 ? bound / scale : bound;

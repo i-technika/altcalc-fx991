@@ -612,7 +612,7 @@ void main() {
       }
     });
 
-    test('기록 영역 문턱: 위 띠 높이·블록 폭·글자 비율 조건을 모두 만족할 때만 기록이 있고, 그때 활성 LCD는 실물 비율 이하 높이다', () {
+    test('기록 영역 문턱: 위 띠 높이·블록 폭·글자 비율 조건을 모두 만족할 때만 기록이 있고, 그때 활성 LCD는 실물 비율·줄 글자 상한 높이 이하다', () {
       for (var height = 150.0; height <= 1400; height += 7) {
         for (final width in const [
           1984.0,
@@ -630,9 +630,13 @@ void main() {
           );
           final block = KeypadMetrics.wideBlockWidthOf(width);
           final band = l.band;
+          // 활성 LCD 높이 상한 — 블록 폭의 실물 비율 높이와 줄 글자 상한 높이(#189) 중 낮은 쪽(하한 LCD 최소 높이)
           final cap = math.max(
             CalcTheme.screenLcdMinHeight,
-            block / CalcTheme.screenLcdMinAspectRatio,
+            math.min(
+              block / CalcTheme.screenLcdMinAspectRatio,
+              LcdFontSizes.heightAtMaxLineFont,
+            ),
           );
           double font(Size s) =>
               LcdFontSizes.forSize(s, TextScaler.noScaling).input;
@@ -649,6 +653,17 @@ void main() {
             expect(l.history!.height, moreOrLessEquals(band.height));
           } else {
             expect(l.lcd.width, moreOrLessEquals(width), reason: reason);
+            expect(
+              l.lcd.height,
+              lessThanOrEqualTo(
+                math.max(
+                      CalcTheme.screenLcdMinHeight,
+                      LcdFontSizes.heightAtMaxLineFont,
+                    ) +
+                    1e-6,
+              ),
+              reason: reason,
+            );
           }
           // 위 띠 높이는 세로형과 같은 규칙을 본체 폭으로 쓴 값이다(기록 영역과 무관).
           expect(
@@ -714,7 +729,8 @@ void main() {
           .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
           .first
           .mainLabelFontSize!;
-      // 활성 LCD 655×374.5(블록 폭의 실물 비율 높이 — 위 띠 479.1dp 중 아래쪽, #142 R2) — 줄 글자 약 54.7dp. 키 메인 각인은 상한 16.5dp.
+      // 활성 LCD 655×273.5(줄 글자 상한 높이 — 위 띠 479.1dp 중 아래쪽, #189. #189 전에는 블록 폭의 실물 비율 높이 655×374.5·
+      // 54.7dp) — 줄 글자는 상한 40dp. 키 메인 각인은 상한 16.5dp.
       expect(keyFont, moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize));
       expect(lineFont, greaterThan(keyFont));
       expect(

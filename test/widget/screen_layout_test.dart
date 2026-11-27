@@ -238,7 +238,7 @@ void main() {
 
   group('테이블톱 배치: LCD 폭 상한 고정값 (#92)', () {
     // Galaxy Z Fold 내부 가로 반 접힘 841×673, 인셋 24/24: 본체 825 폭, 접힘선 336.5(본체 304.5).
-    // 상한 전 LCD 825×296.5 → 480×274.3. 키패드는 넓은 배열로 아래 절반 폭을 다 쓰고(825dp, #80), LCD는 넓히지
+    // 상한 전 LCD 825×296.5 → 480×273.5(높이는 줄 글자 상한 높이, #189 — 폭 기준 274.3). 키패드는 넓은 배열로 아래 절반 폭을 다 쓰고(825dp, #80), LCD는 넓히지
     // 않는다(근거는 `CalcTheme.screenTabletopLcdMaxWidth` — #143까지). LCD 손 쪽 끝이 키패드 바깥 끝과 맞는다.
     for (final handedness in Handedness.values) {
       testWidgets('Fold 가로 반 접힘·${handedness.name}', (tester) async {
@@ -261,7 +261,10 @@ void main() {
           KeypadArrangement.wide,
         );
         expect(lcd.size.width, moreOrLessEquals(480));
-        expect(lcd.size.height, moreOrLessEquals(480 / 1.75));
+        expect(
+          lcd.size.height,
+          moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+        );
         expect(lcd.bottom, moreOrLessEquals(336.5 - 8));
         if (handedness.keypadOnRight) {
           expect(lcd.right, moreOrLessEquals(833));
@@ -277,8 +280,9 @@ void main() {
   testWidgets(
     '12.9인치 iPad를 돌려도 LCD 줄 글자 크기는 크게 바뀌지 않는다 (#71 — #141 뒤로는 LCD 폭이 회전마다 바뀐다)',
     (tester) async {
-      // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×362, 가로는 가로형의
-      // 활성 LCD 655×374.5(블록 폭의 실물 비율 높이, #142 R2)다. 줄 글자(세로 54.1·가로 54.7dp)는 회전해도 10% 안에서 움직인다.
+      // #141 전에는 위아래·좌우 모두 LCD가 480dp라 크기가 같았다. 폭 상한을 푼 뒤로 세로는 1008×273.5, 가로는 가로형의
+      // 활성 LCD 655×273.5다(둘 다 줄 글자 상한 높이, #189). 줄 글자는 둘 다 상한 40dp라 회전해도 그대로다(#189 전 세로 54.1·
+      // 가로 54.7dp — 10% 안에서 움직였다).
       const padding = EdgeInsets.only(top: 24, bottom: 20);
       double lineFont() => DefaultTextStyle.of(
         tester.element(find.byKey(const ValueKey('lcd-input-text'))),
@@ -2614,7 +2618,7 @@ void _hingeLayoutTests() {
       expect(r.keypad.width, moreOrLessEquals(350 * 1.25));
       expect(r.settingsButton.top, r.keypad.top);
       expect(r.lcd.width, CalcTheme.screenTabletopLcdMaxWidth);
-      expect(r.lcd.height, moreOrLessEquals(480 / 1.75));
+      expect(r.lcd.height, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
       expect(r.lcd.right, body.width);
       expect(r.lcd.bottom, moreOrLessEquals(304.5 - 8));
       // 왼손잡이는 좌우 대칭
@@ -2645,7 +2649,11 @@ void _hingeLayoutTests() {
         // 키패드 옆 자리가 없어 버튼은 위 절반 모서리, LCD(480)는 버튼 옆으로 비켜 있어 줄지 않는다.
         expect(l.settingsButton.top, 0, reason: '$h');
         expect(l.lcd.width, CalcTheme.screenTabletopLcdMaxWidth, reason: '$h');
-        expect(l.lcd.height, moreOrLessEquals(480 / 1.75), reason: '$h');
+        expect(
+          l.lcd.height,
+          moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+          reason: '$h',
+        );
         expect(l.lcd.overlaps(l.settingsButton), isFalse, reason: '$h');
         expect(
           h.keypadOnRight ? l.lcd.right : l.lcd.left,
@@ -2664,7 +2672,11 @@ void _hingeLayoutTests() {
         expect(clear.keypad.width, 480, reason: '$h');
         expect(clear.settingsButton.top, 0, reason: '$h');
         expect(clear.lcd.width, 480, reason: '$h');
-        expect(clear.lcd.height, moreOrLessEquals(480 / 1.75), reason: '$h');
+        expect(
+          clear.lcd.height,
+          moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+          reason: '$h',
+        );
         expect(clear.lcd.overlaps(clear.settingsButton), isFalse);
         final gap = h.keypadOnRight
             ? clear.lcd.left - clear.settingsButton.right
@@ -2699,7 +2711,9 @@ void _hingeLayoutTests() {
         expect(l.settingsButton.top, 0, reason: '$width');
         expect(
           l.lcd.height,
-          shrinks ? moreOrLessEquals(292 - 56) : moreOrLessEquals(480 / 1.75),
+          shrinks
+              ? moreOrLessEquals(292 - 56)
+              : moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
           reason: '$width',
         );
         expect(l.lcd.overlaps(l.settingsButton), isFalse, reason: '$width');

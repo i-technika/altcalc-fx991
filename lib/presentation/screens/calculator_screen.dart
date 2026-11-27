@@ -192,8 +192,10 @@ double _lcdMaxHeightOf(double lcdWidth) => math.min(
 ///   - 블록이 [CalcTheme.screenLandscapeHistoryMinLcdWidth]보다 좁다 (좁은 창)
 ///   - 블록 폭 활성 LCD의 줄 글자가 띠 폭 전체 LCD의 [CalcTheme.screenLandscapeHistoryMinLcdFontRatio]배보다 작다 (#142 R2 —
 ///     위 띠가 높은데 블록이 좁은 창. 경계에서 줄 글자가 30%보다 많이 줄지 않게 한다)
-///   기록 영역이 없는 가로형의 무과금 광고 자리는 #18에서 정한다(기록 영역을 줄여 넣을 곳이 없다).
-/// - 설정 버튼·장식: 상단 띠의 내용 줄([CalcTopStripLayout])이 위 띠([band]) 바로 위에서 위 띠 폭 전체를 쓴다 — 세로형과 같이 워드마크는 왼쪽 끝,
+///   기록 영역이 없는 가로형의 무과금 광고 자리는 #18에서 정한다 — 기록 영역은 없지만, 위 띠가 활성 LCD(줄 글자 상한 높이, #189)
+///   보다 높은 창은 상단 띠 내용 줄 위가 빈다(본체 729×678: 약 120dp).
+/// - 설정 버튼·장식: 상단 띠의 내용 줄([CalcTopStripLayout])이 [stripBase](기록 영역이 있으면 위 띠 전체, 없으면 활성 LCD) 바로
+///   위에서 위 띠 폭 전체를 쓴다 — 기록 영역이 없는 창에서 위 띠가 활성 LCD보다 높으면 빈 곳은 내용 줄 위로 간다. 세로형과 같이 워드마크는 왼쪽 끝,
 ///   설정 버튼은 오른쪽 끝, 태양전지는 그 왼쪽이다. 손잡이와 무관하다.
 /// - 모든 영역은 본체 안에 있다 (음수·비유한 크기는 0으로 본다).
 @immutable
@@ -222,10 +224,17 @@ class CalcLandscapeLayout {
     required this.numbersOnLeft,
   });
 
-  /// 위 띠 전체 (상단 띠 아래 ~ 키패드 위 간격, 본체 폭 전체, 본체 좌표) — 활성 LCD와 기록 영역이 이 안에 있고, 상단 띠의
-  /// 내용 줄이 이 위에 이 폭으로 놓인다. 높이는 기록 영역 유무와 무관하다. 활성 LCD가 이보다 낮으면(블록 폭 실물 비율 #142 R2,
-  /// 줄 글자 상한 #189) 활성 LCD 위가 빈다.
+  /// 위 띠 전체 (상단 띠 아래 ~ 키패드 위 간격, 본체 폭 전체, 본체 좌표) — 활성 LCD와 기록 영역이 이 안에 있다. 높이는 기록
+  /// 영역 유무와 무관하다. 활성 LCD가 이보다 낮으면(블록 폭 실물 비율 #142 R2, 줄 글자 상한 #189) 활성 LCD 위가 빈다.
   final Rect band;
+
+  /// 상단 띠의 내용 줄을 바로 위에 놓는 영역 (본체 좌표) — 활성 LCD와 기록 영역을 합친 영역이다.
+  /// 기록 영역이 있으면 [band]와 같다(기록 영역이 위 띠 전체). 없으면 활성 LCD라, 위 띠가 활성 LCD보다 높을 때 빈 곳은
+  /// 내용 줄 위로 간다 — 세로형 큰 창과 같이 설정 버튼·워드마크가 LCD 바로 위에 붙는다(#189 R1).
+  Rect get stripBase {
+    final history = this.history;
+    return history == null ? lcd : lcd.expandToInclude(history);
+  }
 
   /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)의 가로형 배치. [handedness]가 숫자부·활성 LCD 쪽을 정한다.
   factory CalcLandscapeLayout.of(Size body, Handedness handedness) {
@@ -268,8 +277,9 @@ class CalcLandscapeLayout {
     final blockLcdHeight = activeLcdHeightOf(block);
     final fullLcdHeight = activeLcdHeightOf(width);
     // 기록 영역을 두면 활성 LCD 줄 글자가 띠 폭 전체일 때보다 많이 작아지지 않아야 한다 — 폭 방향 경계에서 글자가 절반으로
-    // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다. 띠 폭 전체 LCD도
-    // 실제로 그릴 높이(줄 글자 상한 높이까지, #189)로 잰다 — 상한에 묶인 글자와 비교한다.
+    // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다. 비교 대상은
+    // 기록 영역이 없을 때 실제로 그릴 띠 폭 전체 LCD다. `forSize`가 줄 글자 상한(#189)을 반영하므로 그 글자는 상한에 묶인다
+    // (높이를 상한 높이로 줄여도 글자는 같다) — 그래서 상한에 묶인 창(데스크톱 1000×800 등)은 #189 전보다 기록 영역이 쉽게 생긴다.
     double lineFontOf(Size lcd) =>
         LcdFontSizes.forSize(lcd, TextScaler.noScaling).input;
     final withHistory =
@@ -468,7 +478,7 @@ class CalcHingeSplitLayout {
 ///   상한은 실제 키패드 폭이 아니라 키패드 최대 폭 기준이다. 실물 배열의 키패드가 아래 절반 높이에 묶여 좁아질 때
 ///   보는 쪽인 위 절반의 LCD까지 그 폭으로 줄이면 글자만 작아지므로 LCD가 키패드보다 넓을 수 있고,
 ///   반대로 넓은 배열의 키패드(Fold 가로 반 접힘 825dp)보다는 좁다 — 근거는 [CalcTheme.screenTabletopLcdMaxWidth].
-///   높이는 폭의 최대 높이(폭 / [CalcTheme.screenLcdMinAspectRatio])와 위 절반 높이 중
+///   높이는 폭의 최대 높이([_lcdMaxHeightOf] — 폭 / [CalcTheme.screenLcdMinAspectRatio]와 줄 글자 상한 높이 #189 중 낮은 쪽)와 위 절반 높이 중
 ///   작은 쪽이고, 접힘선 쪽(아래)에 붙인다 — 남는 높이는 LCD 위 띠가 된다(위아래 배치와 같은 방식,
 ///   장식은 [CalcTopStripLayout]).
 /// - 설정 버튼: 아래 절반에서 키패드 반대쪽 끝, 키패드 윗변 높이. 그 자리가 없으면(키패드가 아래 절반 폭을
@@ -568,9 +578,10 @@ class CalcTabletopLayout {
       }
     }
 
-    // 줄 글자 상한 높이(#189)는 적용하지 않는다 — LCD 폭 상한(480dp)에서 줄 글자가 폭에 묶여(39.1dp) 상한에 닿지 않는다.
+    // LCD 최대 높이는 다른 배치와 같은 규칙이다(#189) — 폭 상한(480dp)에서는 줄 글자가 폭에 묶여(39.1dp) 상한에 닿지 않지만,
+    // 높이는 상한 높이(273.5dp)에서 멈춘다(폭 기준 274.3dp). #143에서 폭 상한을 풀어도 높이 상한은 남는다.
     final lcdHeight = math.min(
-      lcdWidth / CalcTheme.screenLcdMinAspectRatio,
+      _lcdMaxHeightOf(lcdWidth),
       topEnd - lcdRegionTop,
     );
     final lcd = Rect.fromLTWH(lcdLeft, topEnd - lcdHeight, lcdWidth, lcdHeight);
@@ -1263,7 +1274,7 @@ class _Body extends ConsumerWidget {
         if (landscape != null) {
           lcd = landscape.lcd;
           history = landscape.history;
-          stripBase = landscape.band;
+          stripBase = landscape.stripBase;
           keypad = landscape.keypad;
           keypadArrangement = KeypadArrangement.wide;
           numbersOnLeft = landscape.numbersOnLeft;

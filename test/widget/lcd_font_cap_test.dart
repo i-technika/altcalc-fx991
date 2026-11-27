@@ -137,13 +137,40 @@ void main() {
       );
     });
 
-    test('세로형: 창 폭을 넓혀도 가장 낮은 키 셀이 줄지 않는다 — 높이 900~1300 (#188의 원인 구간 포함)', () {
+    test('세로형: 창 높이를 키워도 가장 낮은 키 셀이 줄지 않는다 — 폭 250~2600 (#188)', () {
+      for (var width = 250.0; width <= 2600; width += 7) {
+        double? previous;
+        for (var height = 200.0; height <= 4000; height += 1) {
+          final l = CalcScreenLayout.of(Size(width, height));
+          final cell = KeypadMetrics.minKeyCellHeightOf(
+            Size(width, l.keypadHeight),
+            KeypadArrangement.standard,
+          );
+          final p = previous;
+          if (p != null) {
+            expect(
+              cell,
+              greaterThanOrEqualTo(p - 1e-9),
+              reason: '$width×$height $l',
+            );
+          }
+          previous = cell;
+        }
+      }
+    });
+
+    test('세로형: 창 폭을 넓혀도 가장 낮은 키 셀이 줄지 않는다 — 높이 200~4000 (#188의 원인 구간 포함)', () {
       // #189 전에는 본체 약 489~515 × 978~1024에서 LCD가 폭 기준 최대 높이(폭 / 1.75)까지 자라는 몫을 키패드가 내줘 키 셀이
       // 약 1.2% 줄었다(#188). LCD가 폭 478.7dp에서 상한 높이(273.5dp)에 닿아 멈추므로, 키패드가 실물 크기(640dp, 폭 480dp)를
       // 넘어 띠를 늘리는 구간에서는 LCD가 더 자라지 않는다.
-      for (var height = 900.0; height <= 1300; height += 1) {
+      // #188이 요구한 높이 950~1100은 1dp 간격, 그 밖(200~4000)은 13dp 간격으로 훑는다.
+      final heights = [
+        for (var h = 950.0; h <= 1100; h += 1) h,
+        for (var h = 200.0; h <= 4000; h += 13) h,
+      ];
+      for (final height in heights) {
         double? previous;
-        for (var width = 300.0; width <= 1000; width += 0.5) {
+        for (var width = 250.0; width <= 2600; width += 0.5) {
           final l = CalcScreenLayout.of(Size(width, height));
           final cell = KeypadMetrics.minKeyCellHeightOf(
             Size(width, l.keypadHeight),
@@ -226,6 +253,84 @@ void main() {
         l.lcd.top - l.band.top,
         moreOrLessEquals(l.band.height - LcdFontSizes.heightAtMaxLineFont),
       );
+    });
+
+    test(
+      '가로형 데스크톱 1000×800: 띠 폭 전체 LCD의 글자가 상한에 묶여 기록 영역이 생긴다 (#189 전에는 없었다)',
+      () {
+        // 본체 984×784: #189 전에는 띠 폭 전체 LCD 984×417.6의 글자 62.9dp의 0.7배(44dp)에 블록 폭 LCD(38.9dp)가 못 미쳐
+        // 기록 영역이 없었다. 이제 띠 폭 전체 LCD 글자가 상한 40dp라 0.7배(28dp)를 넘는다.
+        final l = CalcLandscapeLayout.of(
+          const Size(984, 784),
+          Handedness.right,
+        );
+        expect(l.history, isNotNull);
+        expect(l.band.height, moreOrLessEquals(417.6, epsilon: 0.1));
+        expect(
+          l.lcd,
+          rectMoreOrLessEquals(
+            const Rect.fromLTRB(506.3, 184.6, 984, 457.6),
+            epsilon: 0.1,
+          ),
+        );
+        expect(_lineFontOf(l.lcd.size), moreOrLessEquals(38.9, epsilon: 0.05));
+        expect(_lineFontOf(Size(984, l.band.height)), _cap);
+      },
+    );
+
+    test('가로형 기록 영역 없음: 위 띠가 활성 LCD보다 높으면 상단 띠 내용 줄은 활성 LCD 바로 위이고 빈 곳은 그 위다 (#189 R1)', () {
+      // 본체 729×678: 블록 폭 LCD 글자가 띠 폭 전체(상한 40dp)의 0.7배 미만이라 기록 영역이 없다. 위 띠 394.1, 활성 LCD
+      // 729×273.5 — 남는 약 120dp는 내용 줄 위로 간다(세로형 큰 창과 같다).
+      const body = Size(729, 678);
+      final l = CalcLandscapeLayout.of(body, Handedness.right);
+      expect(l.history, isNull);
+      expect(l.band.height, moreOrLessEquals(394.1, epsilon: 0.1));
+      expect(l.lcd.height, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+      expect(l.stripBase, l.lcd);
+      final strip = CalcTopStripLayout.of(body, l.stripBase);
+      expect(strip.row.bottom, moreOrLessEquals(l.lcd.top));
+      expect(strip.row.width, moreOrLessEquals(729));
+      expect(strip.row.height, CalcTheme.topStripRowMaxHeight);
+      // 기록 영역이 있으면 내용 줄 기준은 위 띠 전체다.
+      final withHistory = CalcLandscapeLayout.of(
+        const Size(1984, 1384),
+        Handedness.right,
+      );
+      expect(withHistory.stripBase, rectMoreOrLessEquals(withHistory.band));
+    });
+
+    test('테이블톱 배치도 LCD 높이는 상한 높이 이하다 (폭 상한 480dp: 274.3 → 273.5, 글자 그대로)', () {
+      for (var width = 300.0; width <= 2400; width += 61) {
+        for (var height = 400.0; height <= 2000; height += 47) {
+          final body = Size(width, height);
+          final hinge = Rect.fromLTWH(0, height * 0.5, width, 0);
+          for (final h in Handedness.values) {
+            final l = CalcTabletopLayout.of(body, hinge, h);
+            final reason = '$body $h $l';
+            expect(
+              l.lcd.height,
+              lessThanOrEqualTo(_lcdHeightLimit + 1e-9),
+              reason: reason,
+            );
+            expect(
+              _lineFontOf(l.lcd.size),
+              lessThanOrEqualTo(_cap),
+              reason: reason,
+            );
+          }
+        }
+      }
+      final wide = CalcTabletopLayout.of(
+        const Size(1600, 1200),
+        const Rect.fromLTWH(0, 600, 1600, 0),
+        Handedness.right,
+      );
+      expect(wide.lcd.width, CalcTheme.screenTabletopLcdMaxWidth);
+      expect(
+        wide.lcd.height,
+        moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+      );
+      expect(_lineFontOf(wide.lcd.size), moreOrLessEquals(39.1, epsilon: 0.05));
     });
 
     test('세로 접힘선 배치(책 자세)도 LCD 높이는 상한 높이 이하다', () {
