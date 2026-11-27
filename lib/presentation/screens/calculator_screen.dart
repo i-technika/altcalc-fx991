@@ -1194,6 +1194,8 @@ class _Body extends ConsumerWidget {
       arrangement: drawn,
       handednessApplies: handednessApplies,
       handednessKeepsArrangement: handednessKeepsArrangement,
+      // 손잡이와 무관한 값만 — 바뀌면 열린 대화상자가 지금 설정 키 쪽으로 옮겨 간다(#218)
+      geometry: (body: body, hinge: hinge, chosen: arrangement),
       child: Stack(
         children: [
           Positioned.fromRect(

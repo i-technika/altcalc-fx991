@@ -410,39 +410,53 @@ class _LcdStatusIconPainter extends CustomPainter {
         // "⊏" 모양(위·왼쪽·아래 변, 오른쪽은 위에 짧은 변만 남기고 열림)이고, 연필 촉이 열린 곳으로 들어간다.
         // 가이드 표시기 표의 아이콘 구조를 따랐다(실물 사진의 "√E✎"처럼 보이는 모양과도 맞다).
         // 근호 왼쪽 획은 짧은 꺾임 없이 대문자 높이의 절반쯤에서 시작한다. 윗선 끝과 칸 오른쪽 끝은 같은 x다(가이드).
-        final boxLeft = x(1, 0.1);
-        final boxRight = x(1, 0.9);
+        // 가로(#217): 잉크 전체는 [CalcTheme.lcdStatusMathInkCells]칸이고 3칸 슬롯 가운데에 놓는다 — 실물 잉크 가운데가
+        // 세그먼트 가운데([LcdIndicatorSlot.dotCenter])다. 가로 위치는 #160에서 사진으로 잰 배치(잉크 폭을 3으로 본
+        // 좌표: 근호 0~0.85, 칸 1.1~1.9, 연필 위 끝 3)를 잉크 폭에 비례해 줄인 것이다 — 내부 비율은 그대로다
+        // (연필 촉만 아래 설명대로 옮겼다).
+        // 3칸 슬롯(폭 = 3 × 진행 폭)의 가운데는 진행 폭의 1.5배만큼 오른쪽이다(`LcdStatusBar`가 주는 슬롯 폭을 전제).
+        const inkCells = CalcTheme.lcdStatusMathInkCells;
+        final inkLeft = 1.5 * m.advance / m.cell - inkCells / 2;
+        double inkX(double p) => x(0, inkLeft + p * inkCells / 3);
+        final boxLeft = inkX(1.1);
+        final boxRight = inkX(1.9);
         final boxTop = ct + cap * 0.3;
         canvas
           ..drawPath(
             Path()
-              // 시작점은 슬롯 왼쪽 끝에서 선 굵기 절반만큼 안쪽 — 대각선 획의 모서리가 슬롯 밖으로 나가지 않게.
-              ..moveTo(x(0, 0) + half, bl - cap * 0.52)
-              ..lineTo(x(0, 0.4), bl - half)
-              ..lineTo(x(0, 0.85), ct + half)
+              // 시작점은 잉크 왼쪽 끝에서 선 굵기 절반만큼 안쪽 — 대각선 획의 모서리가 잉크 폭 밖으로 나가지 않게.
+              ..moveTo(inkX(0) + half, bl - cap * 0.52)
+              ..lineTo(inkX(0.4), bl - half)
+              ..lineTo(inkX(0.85), ct + half)
               ..lineTo(boxRight, ct + half),
-            // 뾰족한 V 꼭짓점은 miter 비율(약 2.2)이 한계 1.5를 넘어 잘린 모서리(bevel)로 그려진다 — 기준선 아래로
+            // 뾰족한 V 꼭짓점은 miter 비율(2 이상 — #160 약 2.2, #217에서 가팔라져 약 2.7)이 한계 1.5를 넘어 잘린 모서리(bevel)로 그려진다 — 기준선 아래로
             // 나가 띠 클립에 잘리지 않는다. 윗선 모서리(둔각)는 한계 안이라 각진 채로 남는다(#160 리뷰 R1·R2).
             stroke(StrokeJoin.miter)..strokeMiterLimit = 1.5,
           )
           ..drawPath(
             Path()
-              // 오른쪽 위 짧은 변: 바깥 윗변에서 대문자 높이의 0.21까지 (연필과 떨어지도록 가이드의 0.2쯤)
-              ..moveTo(boxRight - half, boxTop + cap * 0.21)
+              // 오른쪽 위 짧은 변: 바깥 윗변에서 대문자 높이의 0.19까지 (연필과 떨어지도록 가이드의 0.2쯤 — #160은 0.21,
+              // #217에서 연필과의 틈을 넓히려 줄였다)
+              ..moveTo(boxRight - half, boxTop + cap * 0.19)
               ..lineTo(boxRight - half, boxTop + half)
               ..lineTo(boxLeft + half, boxTop + half)
               ..lineTo(boxLeft + half, bl - half)
               ..lineTo(boxRight, bl - half),
             stroke(StrokeJoin.miter),
           );
-        // 연필: 촉은 칸 안 오른쪽 아래(기준선 위 0.25), 위 끝은 셋째 칸 오른쪽·대문자 윗선 아래 0.2(가이드 0.3과 사진의
-        // 윗선 사이), 굵기는 대문자 높이의 0.22(가이드 0.21). 짧은 변·아랫변과 대문자 높이의 약 0.09씩 떨어진다.
+        // 연필: 촉은 칸의 열린 곳, 짧은 변 아래(기준선 위 0.26), 위 끝은 잉크 오른쪽 끝·대문자 윗선 아래 0.3(가이드),
+        // 굵기는 대문자 높이의 0.2(가이드 0.21). 짧은 변과 대문자 높이의 0.10, 아랫변과 0.12 떨어진다(계산값).
+        // #217: 가로로만 줄이면 연필이 가팔라져 틈이 짧은 변 쪽 0.07로 줄고, 작은 크기(대문자 높이 약 15물리 px 아래)에서
+        // 픽셀 위상에 따라 안티에일리어싱 회색으로 칸과 이어 보였다(#160 배치는 자간 덕에 더 완만해 0.10·0.11이었다).
+        // 그래서 위 끝을 가이드 값(#160: 사진과 가이드 사이 0.2)으로 낮추고, 촉(#160: 1.72·0.25)을 짧은 변 안쪽 끝
+        // (잉크 좌표 약 1.69) 바로 오른쪽인 1.7·0.26에, 굵기(#160: 0.22)를 0.2에, 짧은 변(#160: 0.21)을 0.19에 두었다.
+        // 상태 글자 6dp·2x까지 모든 위상(물리 1/8px 간격 64가지)에서 칸과 떨어지는 것을 확인했다.
         _paintPencil(
           canvas,
           fill,
-          Offset(x(1, 0.72), bl - cap * 0.25),
-          Offset(x(2, 1.0), ct + cap * 0.2),
-          cap * 0.11,
+          Offset(inkX(1.7), bl - cap * 0.26),
+          Offset(inkX(3), ct + cap * 0.3),
+          cap * 0.1,
         );
     }
     canvas.restore();

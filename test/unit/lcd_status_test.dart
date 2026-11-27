@@ -237,7 +237,7 @@ void main() {
           expect(labels, {slot.template}, reason: slot.name);
         }
       }
-      // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸, ‖ 1칸
+      // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸(잉크는 가운데 2.4칸, #217), ‖ 1칸
       expect(LcdIndicatorSlot.store.columns, 2);
       expect(LcdIndicatorSlot.math.columns, 3);
       expect(LcdIndicatorSlot.disp.columns, 1);
