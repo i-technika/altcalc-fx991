@@ -125,7 +125,8 @@ final class LegendScript extends KeyLegend {
   final bool subscriptOnBaseline;
 
   /// 아래첨자를 바탕 글자의 기울기만큼 왼쪽으로 당긴다. `∫`의 아래 끝 칸 — 실물은 ∫ 아래쪽 끝을 따라 위 끝 칸보다
-  /// 왼쪽에 있다(근접 사진에서 약 8px, ∫ 높이 33px 대비, #186).
+  /// 왼쪽에 있다(근접 사진에서 약 8px, 메인 각인 글자 크기 약 33px 대비, #186). 당기는 길이는 ∫ 기울기에 맞춘 상수
+  /// (`CalcTheme.keyLegendIntegralSubscriptShift`)라 ∫ 말고 다른 바탕에 쓰면 그 바탕에 맞는 길이를 따로 정해야 한다.
   final bool subscriptFollowsSlant;
 
   const LegendScript(
@@ -261,7 +262,9 @@ final class LegendLimits extends KeyLegend {
 /// 글자(`◼`·`◻`) 대신 직접 그리는 입력 칸의 모양 — 각인 속 자리 하나에 하나씩 (#169, #186)
 ///
 /// 실물 칸은 자리마다 가로세로 비가 다르다. 비(사진 원본 픽셀)는 `CalcTheme.keyLegendBoxAspectRatio`에,
-/// 크기 규칙은 그리는 쪽(`KeyLegendView`)에 있다. 아래 픽셀은 실물 키패드 근접 사진(가로 2048px, 메인 각인 글자
+/// 크기 규칙은 그리는 쪽(`KeyLegendView`)에 있다. 값 하나가 키캡 각인의 자리 하나를 가리킨다(테스트로 고정) —
+/// 자리마다 잰 비가 다르므로 같은 모양을 다른 각인에 돌려 쓰지 않는다. M2의 LCD 수식 렌더링이 입력 칸을 그릴 때는
+/// 이 키캡 전용 자리 이름이 아니라 칸 종류(비·높이 규칙)를 따로 정한다. 아래 픽셀은 실물 키패드 근접 사진(가로 2048px, 메인 각인 글자
 /// 크기 약 33px·SHIFT 각인 약 22px)에서 잰 가로×세로다(#186 — ∑ 칸은 Quick Start Guide 1쪽 제품 사진, #169).
 enum LegendBoxShape {
   /// ∑ 위아래 끝 칸 — 납작한 직사각형(사진 9×4px, ∑ 잉크 7×7px 대비)

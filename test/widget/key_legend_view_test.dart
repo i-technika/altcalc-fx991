@@ -688,28 +688,34 @@ void main() {
       }
     });
 
-    testWidgets('그린 log 진수 칸: 기준선에서 l 윗끝까지 서고, 폭은 높이의 약 절반이다 (사진 13×26px)', (
-      tester,
-    ) async {
-      final ink = await inkPixels(
-        tester,
-        keyDefOf(CalcKeyId.logBase).mainLegend,
-        140,
-      );
-      final columns = runsOf(ink.map((p) => p.$1));
-      // l · o · g · 밑 칸 · 진수 칸
-      expect(columns.length, greaterThanOrEqualTo(4), reason: '$columns');
-      (int, int, int, int) columnBounds((int, int) col) =>
-          boundsOf(ink.where((p) => p.$1 >= col.$1 && p.$1 <= col.$2));
-      final l = columnBounds(columns.first);
-      final argument = columnBounds(columns.last);
-      expect(argument.$2, moreOrLessEquals(l.$2.toDouble(), epsilon: 2));
-      expect(argument.$4, moreOrLessEquals(l.$4.toDouble(), epsilon: 2));
-      expect(aspectOf(argument), inInclusiveRange(0.45, 0.55));
-    });
+    testWidgets(
+      '그린 log 진수 칸: 기준선에서 l 윗끝까지 서고, 폭은 높이의 약 절반이며, 밑 칸에 거의 붙는다 (사진 13×26px)',
+      (tester) async {
+        const fontSize = 140.0;
+        final ink = await inkPixels(
+          tester,
+          keyDefOf(CalcKeyId.logBase).mainLegend,
+          fontSize,
+        );
+        final columns = runsOf(ink.map((p) => p.$1));
+        // l · o · g · 밑 칸 · 진수 칸
+        expect(columns.length, greaterThanOrEqualTo(5), reason: '$columns');
+        (int, int, int, int) columnBounds((int, int) col) =>
+            boundsOf(ink.where((p) => p.$1 >= col.$1 && p.$1 <= col.$2));
+        final l = columnBounds(columns.first);
+        final base = columnBounds(columns[columns.length - 2]);
+        final argument = columnBounds(columns.last);
+        expect(argument.$2, moreOrLessEquals(l.$2.toDouble(), epsilon: 2));
+        expect(argument.$4, moreOrLessEquals(l.$4.toDouble(), epsilon: 2));
+        expect(aspectOf(argument), inInclusiveRange(0.45, 0.55));
+        // 사진은 두 칸이 0~1px(약 0.03em 이하)로 맞닿는다. 진수 칸은 왼쪽 여백이 없어 밑 칸의 오른쪽 여백
+        // (첨자 크기의 0.059em ≈ 0.04em)만 남는다 — 양쪽에 여백을 두면 약 0.1em이 벌어진다.
+        expect(argument.$1 - base.$3 - 1, lessThan(fontSize * 0.05));
+      },
+    );
 
     testWidgets(
-      '그린 ∫ 각인: 본문 칸은 약 2:1로 가로로 길고, 아래 끝 칸은 ∫ 기울기를 따라 위 끝 칸보다 왼쪽이다 (사진)',
+      '그린 ∫ 각인: 본문 칸은 약 2:1이고 사진 높이이며, 아래 끝 칸은 ∫ 기울기를 따라 위 끝 칸보다 왼쪽이다 (사진)',
       (tester) async {
         const fontSize = 140.0;
         final ink = await inkPixels(
@@ -722,18 +728,27 @@ void main() {
         expect(columns.length, greaterThanOrEqualTo(2), reason: '$columns');
         final body = boundsOf(ink.where((p) => p.$1 >= columns.last.$1));
         expect(aspectOf(body), moreOrLessEquals(25 / 12, epsilon: 0.1));
+        expect(
+          body.$4 - body.$2 + 1,
+          moreOrLessEquals(
+            fontSize * CalcTheme.keyLegendIntegralOperandHeight,
+            epsilon: 2,
+          ),
+        );
         final rest = ink.where((p) => p.$1 < columns.last.$1).toList();
         final (_, top, _, bottom) = boundsOf(rest);
         final band = (bottom - top) ~/ 4;
         // 위·아래 1/4 띠에서 맨 오른쪽 덩어리가 위·아래 끝 칸이다(∫의 머리·꼬리와 떨어져 있다).
-        (int, int) rightmostIn(bool Function(int y) inBand) {
+        List<(int, int)> runsIn(bool Function(int y) inBand) {
           final runs = runsOf(rest.where((p) => inBand(p.$2)).map((p) => p.$1));
           expect(runs.length, greaterThanOrEqualTo(2), reason: '$runs');
-          return runs.last;
+          return runs;
         }
 
-        final upper = rightmostIn((y) => y < top + band);
-        final lower = rightmostIn((y) => y > bottom - band);
+        final upperRuns = runsIn((y) => y < top + band);
+        final lowerRuns = runsIn((y) => y > bottom - band);
+        final upper = upperRuns.last;
+        final lower = lowerRuns.last;
         expect(
           upper.$1 - lower.$1,
           moreOrLessEquals(
@@ -741,93 +756,151 @@ void main() {
             epsilon: 3,
           ),
         );
+        // 당겨도 아래 끝 칸은 ∫ 꼬리와 떨어져 있다(사진도 떨어져 있다).
+        final tail = lowerRuns[lowerRuns.length - 2];
+        expect(lower.$1 - tail.$2, greaterThan(fontSize * 0.05));
+        // 위 끝 칸과 본문 칸은 사진에서 맞닿는다 — 끝 칸 오른쪽 여백만 남는다.
+        expect(columns.last.$1 - upper.$2 - 1, lessThan(fontSize * 0.05));
       },
     );
 
-    testWidgets('그린 분수 키 각인: 분자·분모 칸이 가로로 길다 (사진 25×14px)', (tester) async {
-      final ink = await inkPixels(
-        tester,
-        keyDefOf(CalcKeyId.fraction).mainLegend,
-        140,
-      );
-      final rows = runsOf(ink.map((p) => p.$2));
-      expect(rows, hasLength(3), reason: '분자·가로줄·분모 $rows');
-      for (final row in [rows.first, rows.last]) {
-        final part = boundsOf(
-          ink.where((p) => p.$2 >= row.$1 && p.$2 <= row.$2),
+    testWidgets(
+      '그린 분수 키 각인: 분자·분모 칸이 가로로 길고(사진 25×14px), 가로줄이 칸보다 사진만큼 길다(약 1.46배)',
+      (tester) async {
+        final ink = await inkPixels(
+          tester,
+          keyDefOf(CalcKeyId.fraction).mainLegend,
+          140,
         );
-        expect(aspectOf(part), moreOrLessEquals(25 / 14, epsilon: 0.1));
+        final rows = runsOf(ink.map((p) => p.$2));
+        expect(rows, hasLength(3), reason: '분자·가로줄·분모 $rows');
+        (int, int, int, int) rowBounds((int, int) row) =>
+            boundsOf(ink.where((p) => p.$2 >= row.$1 && p.$2 <= row.$2));
+        for (final row in [rows.first, rows.last]) {
+          expect(
+            aspectOf(rowBounds(row)),
+            moreOrLessEquals(25 / 14, epsilon: 0.1),
+          );
+        }
+        final part = rowBounds(rows.first);
+        final bar = rowBounds(rows[1]);
+        expect(
+          (bar.$3 - bar.$1 + 1) / (part.$3 - part.$1 + 1),
+          moreOrLessEquals(1.46, epsilon: 0.08),
+        );
+      },
+    );
+
+    /// [legend]의 입력 칸을 #186 전처럼 글꼴 칸(`◼`·`◻`)으로 바꾼 각인 (∑ 칸은 #169부터 직접 그렸으므로 그대로)
+    KeyLegend glyphBoxes(KeyLegend legend) => switch (legend) {
+      LegendText() => legend,
+      LegendBox(:final shape, :final glyph) =>
+        shape == LegendBoxShape.sumLimit || shape == LegendBoxShape.sumOperand
+            ? legend
+            : LegendText(glyph),
+      LegendRow(:final children) => LegendRow([
+        for (final c in children) glyphBoxes(c),
+      ]),
+      LegendScript(
+        :final base,
+        :final superscript,
+        :final subscript,
+        :final subscriptOnBaseline,
+      ) =>
+        LegendScript(
+          glyphBoxes(base),
+          superscript: superscript == null ? null : glyphBoxes(superscript),
+          subscript: subscript == null ? null : glyphBoxes(subscript),
+          subscriptOnBaseline: subscriptOnBaseline,
+        ),
+      LegendLimits() => legend,
+      LegendFraction(:final numerator, :final denominator) => LegendFraction(
+        glyphBoxes(numerator),
+        glyphBoxes(denominator),
+      ),
+      LegendRadical(:final radicand, :final index) => LegendRadical(
+        glyphBoxes(radicand),
+        index: index == null ? null : glyphBoxes(index),
+      ),
+    };
+
+    test('칸 모양을 바꿔도 모든 2차원 각인의 높이·잉크 위아래 끝은 글꼴 칸일 때와 같다 — 각인 높이 예산이 그대로다', () {
+      for (final (k, legend, style) in _twoDimensional()) {
+        final now = KeyLegendView.emMetrics(legend, style);
+        final before = KeyLegendView.emMetrics(glyphBoxes(legend), style);
+        final reason = '${k.id.name} ${legend.plainText}';
+        expect(
+          now.size.height,
+          moreOrLessEquals(before.size.height),
+          reason: reason,
+        );
+        expect(now.inkTop, moreOrLessEquals(before.inkTop), reason: reason);
+        expect(
+          now.inkBottom,
+          moreOrLessEquals(before.inkBottom),
+          reason: reason,
+        );
       }
     });
 
-    for (final scale in [1.0, 1.3]) {
-      test(
-        '배율 $scale: 칸 모양이 바뀐 2차원 각인은 키패드 통일 글자 크기를 정하지 않는다 — 폭 여유 5% 이상',
-        () {
-          // 통일 글자 크기는 가장 좁게 들어가는 라벨이 정한다(`KeypadMetrics`의 폭 기준 — 메인 SHIFT·ALPHA, 각인
-          // Ran#·RanInt). 칸을 넓힌 각인(∫◻◻◼ 등)이 그 자리를 차지하면 키패드 전체 글자가 작아진다.
-          final numberIds = {
-            for (final row in numberRows)
-              for (final d in row) d.id,
-          };
-          final scaler = TextScaler.linear(scale)
-              .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
-          double em(KeyLegend l, TextStyle s) =>
-              KeyLegendView.emSize(l, s).width;
-          for (final size in const [Size(400, 560), Size(360, 480)]) {
-            final m = KeypadMetrics.compute(size, TextScaler.linear(scale));
-            for (final k in allKeys) {
-              final width = numberIds.contains(k.id)
-                  ? m.numberKeyWidth
-                  : m.functionKeyWidth;
-              final reason = '${k.id.name} @$size';
-              if (!k.mainLegend.isPlain) {
-                final capInner =
-                    width * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
-                    2 * CalcTheme.keyBorderWidth;
-                expect(
-                  scaler.scale(m.mainLabelFontSize) * 1.05,
-                  lessThan(
-                    capInner / em(k.mainLegend, CalcTheme.keyMainLabelStyle),
-                  ),
-                  reason: '$reason 메인',
-                );
-              }
-              final shift = k.shiftLegend;
-              final alpha = k.alphaLegend;
-              if ((shift?.isPlain ?? true) && (alpha?.isPlain ?? true)) {
-                continue;
-              }
-              // CalcKeyButton 각인 띠의 배분 규칙 (`_LabelLimits.measure`와 같다)
-              final double limit;
-              if (shift == null || alpha == null) {
-                limit = shift != null
-                    ? width / em(shift, CalcTheme.keyShiftLabelStyle)
-                    : width / em(alpha!, CalcTheme.keyAlphaLabelStyle);
-              } else {
-                final usable =
-                    width * (1 - CalcTheme.keyLegendGapMaxWidthRatio);
-                final se = em(shift, CalcTheme.keyShiftLabelStyle);
-                final ae = em(alpha, CalcTheme.keyAlphaLabelStyle);
-                final sr = shift.plainText.runes.length;
-                final ar = alpha.plainText.runes.length;
-                limit = math.min(
-                  usable / (se + ae),
-                  math.min(sr, ar) <= CalcTheme.keyLegendPriorityMaxRunes
-                      ? usable / 2 / (sr <= ar ? se : ae)
-                      : double.infinity,
-                );
-              }
-              expect(
-                scaler.scale(m.legendFontSize) * 1.05,
-                lessThan(limit),
-                reason: '$reason 각인',
-              );
-            }
-          }
-        },
-      );
-    }
+    test('칸 모양으로 넓어진 메인 각인도 SHIFT보다 좁고, log◼◻는 글꼴 칸일 때보다 좁다', () {
+      const style = CalcTheme.keyMainLabelStyle;
+      double width(KeyLegend l) => KeyLegendView.emSize(l, style).width;
+      final shift = width(const LegendText('SHIFT'));
+      for (final k in allKeys) {
+        if (k.mainLegend.isPlain) continue;
+        expect(
+          width(k.mainLegend),
+          lessThan(shift / 1.05),
+          reason: k.mainLegend.plainText,
+        );
+      }
+      final integral = keyDefOf(CalcKeyId.integral).mainLegend;
+      expect(width(integral), moreOrLessEquals(2.15, epsilon: 0.03));
+      final log = keyDefOf(CalcKeyId.logBase).mainLegend;
+      expect(width(log), lessThan(width(glyphBoxes(log))));
+    });
+
+    test(
+      '2차원 각인이 있는 키는 키패드 통일 글자 크기의 폭 기준을 정하지 않는다 — 제품 규칙으로 5% 이상 여유 (배열 둘)',
+      () {
+        // 통일 글자 크기는 가장 좁게 들어가는 라벨이 정한다(`KeypadMetrics.compute` 2단계 — 메인 SHIFT·ALPHA, 각인
+        // Ran#·RanInt 쌍). 칸을 넓힌 각인(∫◻◻◼ 등)이 그 자리를 차지하면 키패드 전체 글자가 작아진다. 폭 기준은
+        // 셀 너비에 비례하므로 배열마다 한 크기로 충분하다(함수부·숫자부 셀 너비 비가 배열마다 다르다).
+        bool twoDimensionalMain(CalcKeyDef d) => !d.mainLegend.isPlain;
+        bool twoDimensionalLegend(CalcKeyDef d) =>
+            !(d.shiftLegend?.isPlain ?? true) ||
+            !(d.alphaLegend?.isPlain ?? true);
+        for (final m in [
+          KeypadMetrics.compute(const Size(400, 560), TextScaler.noScaling),
+          KeypadMetrics.compute(
+            const Size(1000, 420),
+            TextScaler.noScaling,
+            arrangement: KeypadArrangement.wide,
+          ),
+        ]) {
+          ({double main, double legend}) limits([
+            bool Function(CalcKeyDef)? where,
+          ]) => KeypadMetrics.debugWidthLimits(
+            functionKeyWidth: m.functionKeyWidth,
+            numberKeyWidth: m.numberKeyWidth,
+            where: where,
+          );
+          final all = limits();
+          final reason = '${m.arrangement}';
+          expect(
+            limits(twoDimensionalMain).main,
+            greaterThan(all.main * 1.05),
+            reason: reason,
+          );
+          expect(
+            limits(twoDimensionalLegend).legend,
+            greaterThan(all.legend * 1.05),
+            reason: reason,
+          );
+        }
+      },
+    );
   });
 
   group('키 버튼에서 (#155 체크리스트)', () {

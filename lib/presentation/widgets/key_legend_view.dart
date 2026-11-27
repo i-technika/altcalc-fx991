@@ -9,8 +9,8 @@ import '../../core/theme/calc_theme.dart';
 /// 키캡 각인([KeyLegend])을 실물처럼 2차원으로 그리는 위젯 (#155).
 ///
 /// 분수는 위아래로 쌓고 가로줄을 긋고, 위첨자·아래첨자는 작게 올리거나 내리며, 근호는 가로줄이 피개법수를
-/// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 실물 비율이 필요한 칸([LegendBox])은 글자 대신
-/// 직사각형으로 직접 그린다. 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
+/// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 입력 칸([LegendBox])은 모두 글자 대신 자리별 비율의
+/// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
 /// 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
 ///
 /// ## 크기·기준선
@@ -45,6 +45,9 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값(SemiBold·Medium의 평균,
   /// ∫·∑는 Noto Sans Math)을 적어 둔다. 실제 글꼴과 맞는지, 2차원 각인의 모든 글자가 표에 있는지
   /// 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를 잉크로 본다.
+  ///
+  /// `◼`는 직접 그리는 칸의 기본 높이로 쓴다. `◻`는 그리는 데 쓰지 않지만, 칸의 한 줄 표기 글자([LegendBox.texts])라
+  /// "2차원 각인의 모든 글자가 표에 있다" 검사가 찾으므로 함께 둔다(글자 조각으로 다시 쓰일 때도 맞는 값이다).
   static const Map<String, (double, double)> glyphInk = {
     '◼': (0.0, 0.482),
     '◻': (0.0, 0.482),
@@ -379,6 +382,7 @@ class _LegendLayout {
             legend.denominator,
             fontSize,
             partScale: CalcTheme.keyLegendDisplayFractionScale,
+            overhangRatio: CalcTheme.keyLegendDisplayFractionOverhang,
           )
         : builder.layout(legend, fontSize);
     // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자).
@@ -625,9 +629,10 @@ class _Builder {
               fontSize * CalcTheme.keyLegendSubscriptDrop,
               sub.inkBottom - basePiece.inkBottom,
             );
-      // 기울어진 바탕(∫)은 아래첨자를 바탕 아래쪽 끝을 따라 왼쪽으로 당긴다(#186 사진 대조).
+      // 기울어진 바탕(∫)은 아래첨자를 바탕 아래쪽 끝을 따라 왼쪽으로 당긴다(#186 사진 대조). 당기는 길이는 ∫ 기준
+      // 상수다(이 표시를 쓰는 바탕은 ∫뿐 — 테스트로 고정). 첨자가 조각 왼쪽 밖으로 나가지 않게 [x]를 넘지 않는다.
       final pull = subscriptFollowsSlant
-          ? fontSize * CalcTheme.keyLegendIntegralSubscriptShift
+          ? math.min(fontSize * CalcTheme.keyLegendIntegralSubscriptShift, x)
           : 0.0;
       ops.addAll(sub.shifted(x - pull, -drop));
       top = math.max(top, sub.inkTop - drop);
@@ -643,33 +648,57 @@ class _Builder {
   ///   × ∑ 잉크 범위)에 [CalcTheme.keyLegendSumBoxHeightRatio]를 곱한 높이. 끝 칸은 아래끝이 기준선이고 [_limits]가
   ///   ∑ 위·아래로 옮기며, 본문 칸은 세로 가운데가 분수 축 높이([CalcTheme.keyLegendFractionAxis] — 쌓은 ∑의 가운데)다.
   /// - [LegendBoxShape.logArgument]: 기준선에서 `l` 윗끝까지(근접 사진 — 진수 칸이 log 글자 높이만큼 선다).
-  /// - 그 밖: 글꼴 `◼`·`◻`의 잉크 높이로 기준선에 앉는다. 좌우에 글꼴 칸과 같은 여백
-  ///   ([CalcTheme.keyLegendBoxSideBearing])을 두어, 비가 1이면 글꼴 칸과 같은 자리·폭이다.
+  /// - [LegendBoxShape.integralOperand]: [CalcTheme.keyLegendIntegralOperandHeight] — 사진의 ∫ 본문 칸 높이(R1 #186:
+  ///   글꼴 칸 높이면 ∫ 끝 칸보다 1.5배 높고 각인이 사진보다 24% 넓다).
+  /// - 그 밖: 글꼴 `◼`·`◻`의 잉크 높이로 기준선에 앉는다.
+  /// ∑ 칸 말고는 좌우에 글꼴 칸과 같은 여백([CalcTheme.keyLegendBoxSideBearing])을 두어, 비가 1이면 글꼴 칸과 같은
+  /// 자리·폭이다. 다만 앞에 칸이 붙는 자리(log 진수 칸, ∫ 본문 칸)는 왼쪽 여백이 없다 — 사진에서 두 칸이 거의 맞닿는다.
   /// 빈 칸은 테두리 선(바깥 끝이 칸 크기)으로, 채운 칸은 칸 전체를 칠한다.
   _Piece _box(LegendBoxShape shape, bool filled, double fontSize) {
-    final double height;
-    var bottom = 0.0;
-    var left = 0.0;
-    var right = 0.0;
-    switch (shape) {
-      case LegendBoxShape.sumLimit || LegendBoxShape.sumOperand:
-        final sigma = KeyLegendView.glyphInk['∑']!;
-        height =
-            (sigma.$2 - sigma.$1) *
-            fontSize *
-            CalcTheme.keyLegendLimitBaseScale *
-            CalcTheme.keyLegendSumBoxHeightRatio;
-        if (shape == LegendBoxShape.sumOperand) {
-          bottom = fontSize * CalcTheme.keyLegendFractionAxis - height / 2;
-          // 본문 칸은 쌓은 ∑와 끝 칸 간격만큼 띄운다(사진 약 1px).
-          left = fontSize * CalcTheme.keyLegendLimitGap;
-        }
-      default:
-        final top = shape == LegendBoxShape.logArgument ? 'l' : '◼';
-        height = fontSize * KeyLegendView.glyphInk[top]!.$2;
-        left = fontSize * CalcTheme.keyLegendBoxSideBearing;
-        right = left;
-    }
+    final sigma = KeyLegendView.glyphInk['∑']!;
+    final sumHeight =
+        (sigma.$2 - sigma.$1) *
+        fontSize *
+        CalcTheme.keyLegendLimitBaseScale *
+        CalcTheme.keyLegendSumBoxHeightRatio;
+    final glyphHeight = fontSize * KeyLegendView.glyphInk['◼']!.$2;
+    final bearing = fontSize * CalcTheme.keyLegendBoxSideBearing;
+    // (높이, 아래끝, 왼쪽 여백, 오른쪽 여백) — 모양마다 빠짐없이 정한다(새 모양은 여기서 규칙을 고른다).
+    final (height, bottom, left, right) = switch (shape) {
+      LegendBoxShape.sumLimit => (sumHeight, 0.0, 0.0, 0.0),
+      // 본문 칸은 세로 가운데가 분수 축이고, 쌓은 ∑와 끝 칸 간격만큼 띄운다(사진 약 1px).
+      LegendBoxShape.sumOperand => (
+        sumHeight,
+        fontSize * CalcTheme.keyLegendFractionAxis - sumHeight / 2,
+        fontSize * CalcTheme.keyLegendLimitGap,
+        0.0,
+      ),
+      LegendBoxShape.logArgument => (
+        fontSize * KeyLegendView.glyphInk['l']!.$2,
+        0.0,
+        0.0,
+        bearing,
+      ),
+      LegendBoxShape.integralOperand => (
+        fontSize * CalcTheme.keyLegendIntegralOperandHeight,
+        0.0,
+        0.0,
+        bearing,
+      ),
+      LegendBoxShape.integralLimit ||
+      LegendBoxShape.derivativeOperand ||
+      LegendBoxShape.fractionPart ||
+      LegendBoxShape.mixedWhole ||
+      LegendBoxShape.mixedFractionPart ||
+      LegendBoxShape.squareRootRadicand ||
+      LegendBoxShape.cubeRootRadicand ||
+      LegendBoxShape.rootIndex ||
+      LegendBoxShape.rootRadicand ||
+      LegendBoxShape.powerExponent ||
+      LegendBoxShape.tenPowerExponent ||
+      LegendBoxShape.ePowerExponent ||
+      LegendBoxShape.logBase => (glyphHeight, 0.0, bearing, bearing),
+    };
     final width = height * CalcTheme.keyLegendBoxAspectRatio(shape);
     // 조각 좌표(위가 +): rect.top이 아래끝, rect.bottom이 위끝이다(`_BarOp`와 같은 규칙).
     final rect = Rect.fromLTRB(left, bottom, left + width, bottom + height);
@@ -740,17 +769,19 @@ class _Builder {
     ]);
   }
 
-  /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓는다.
+  /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓고, 가로줄을 분자·분모 조각 폭보다 좌우로
+  /// 글자 크기 × [overhangRatio]만큼 더 긋는다.
   _Piece fraction(
     KeyLegend numerator,
     KeyLegend denominator,
     double fontSize, {
     required double partScale,
+    double overhangRatio = CalcTheme.keyLegendFractionOverhang,
   }) {
     final partSize = fontSize * partScale;
     final num = layout(numerator, partSize);
     final den = layout(denominator, partSize);
-    final overhang = fontSize * CalcTheme.keyLegendFractionOverhang;
+    final overhang = fontSize * overhangRatio;
     final width = math.max(num.width, den.width) + 2 * overhang;
     final axis = fontSize * CalcTheme.keyLegendFractionAxis;
     final bar = fontSize * CalcTheme.keyLegendFractionBarThickness;
