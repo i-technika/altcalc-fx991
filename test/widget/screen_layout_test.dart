@@ -3704,6 +3704,148 @@ void _hingeLayoutTests() {
       );
     });
 
+    test('세로 접힘선: 위 제스처 영역 깊이만큼 짧은 손 쪽 패널의 키패드가 아래에서 시작한다 (#172)', () {
+      // (본체, 접힘선) — 짧은 손 쪽 패널 창의 본체(640×360 인셋 24 → 624×320, 700×392 인셋 24/24 → 684×344(키 하한으로
+      // 줄인 키패드), 841×360 인셋 24 → 825×320)와 짧지 않은 창(Pixel Fold 내부 본체 825×640.8)
+      const cases = <(Size, Rect)>[
+        (Size(624, 320), Rect.fromLTWH(312, 0, 0, 320)),
+        (Size(684, 344), Rect.fromLTWH(342, 0, 0, 344)),
+        (Size(825, 320), Rect.fromLTWH(272, 0, 0, 320)),
+        (Size(825, 640.8), Rect.fromLTWH(412.5, 0, 0, 640.8)),
+      ];
+      for (final (body, hinge) in cases) {
+        for (final h in Handedness.values) {
+          final base = CalcHingeSplitLayout.of(body, hinge, h);
+          // 깊이 0은 기본값과 같다.
+          expect(
+            CalcHingeSplitLayout.of(body, hinge, h, topGestureDepth: 0).keypad,
+            base.keypad,
+          );
+          for (final depth in [0.5, 4.2, 12.2, 24.0]) {
+            final l = CalcHingeSplitLayout.of(
+              body,
+              hinge,
+              h,
+              topGestureDepth: depth,
+            );
+            final reason = '$body $h depth=$depth $l';
+            expect(l.shortHandPanel, base.shortHandPanel, reason: reason);
+            expect(
+              l.keypad.top,
+              greaterThanOrEqualTo(depth - 0.001),
+              reason: reason,
+            );
+            // 키패드는 그대로 본체 아래·같은 패널에 붙고, LCD·기록은 바뀌지 않는다.
+            expect(l.keypad.bottom, moreOrLessEquals(body.height));
+            expect(l.keypad.left, moreOrLessEquals(base.keypad.left));
+            expect(l.lcd, base.lcd, reason: reason);
+            expect(l.history, base.history, reason: reason);
+            if (!base.shortHandPanel || base.keypad.top >= depth) {
+              // 키패드가 이미 영역 아래면(세로형 — LCD가 위에 있다, 또는 키 하한으로 줄인 키패드) 바뀌지 않는다.
+              expect(
+                l.keypad,
+                rectMoreOrLessEquals(base.keypad),
+                reason: reason,
+              );
+            } else {
+              // 높이에 묶인 키패드는 영역 아랫변부터 본체 아래까지다.
+              expect(
+                l.keypad.top,
+                moreOrLessEquals(depth, epsilon: 0.001),
+                reason: reason,
+              );
+            }
+          }
+        }
+      }
+      // 비유한·음수 깊이는 0으로 본다.
+      for (final depth in [double.nan, double.infinity, -5.0]) {
+        final l = CalcHingeSplitLayout.of(
+          const Size(624, 320),
+          const Rect.fromLTWH(312, 0, 0, 320),
+          Handedness.right,
+          topGestureDepth: depth,
+        );
+        expect(l.keypad.top, moreOrLessEquals(0), reason: '$depth');
+      }
+    });
+
+    test('세로 접힘선: 위 제스처 영역 깊이가 있어도 창 높이를 키울 때 키가 줄지 않고 쓸 수 있는 크기 경계가 같다 (#172 R1)', () {
+      double touchOf(CalcHingeSplitLayout l) =>
+          KeypadMetrics.minKeyTouchHeightOf(
+            l.keypad.size,
+            KeypadArrangement.standard,
+          );
+      for (final width in [624.0, 825.0]) {
+        for (final h in Handedness.values) {
+          for (final depth in [4.2, 12.2, 24.0, 60.0]) {
+            var last = 0.0;
+            for (var height = 150.0; height <= 700; height += 0.5) {
+              final body = Size(width, height);
+              final hinge = Rect.fromLTWH(width / 2, 0, 0, height);
+              final base = CalcHingeSplitLayout.of(body, hinge, h);
+              final l = CalcHingeSplitLayout.of(
+                body,
+                hinge,
+                h,
+                topGestureDepth: depth,
+              );
+              final reason = '$width×$height $h depth=$depth';
+              final touch = touchOf(l);
+              expect(touch, greaterThanOrEqualTo(last - 0.01), reason: reason);
+              last = touch;
+              // 쓸 수 있는 크기(16dp) 판정은 깊이 0과 같다.
+              expect(
+                touch >= CalcTheme.keyTouchHeightUsableMin,
+                touchOf(base) >= CalcTheme.keyTouchHeightUsableMin,
+                reason: reason,
+              );
+              expect(l.keypad.bottom, moreOrLessEquals(height), reason: reason);
+              // 키패드 윗변은 영역 아랫변 이상이거나(쓸 수 있는 크기를 지키려고 덜 비운 경우) 키가 쓸 수 있는 크기 근처다.
+              if (l.shortHandPanel && l.keypad.top < depth - 0.01) {
+                expect(
+                  touch,
+                  lessThan(CalcTheme.keyTouchHeightUsableMin + 0.05),
+                  reason: reason,
+                );
+              }
+            }
+          }
+        }
+      }
+    });
+
+    test(
+      '세로 접힘선: 깊이가 활성 LCD 최소 높이 + 간격(120dp) 이상이면(가정 밖) 세로형으로 돌아간다 (#172 R2)',
+      () {
+        // 실측 최대 깊이는 4.2dp라 이런 기기는 없다고 본다(CalcHingeSplitLayout 문서). 깊이만큼 비운 키패드가 세로형보다 키가
+        // 작아지면 LCD가 손 쪽 패널로 돌아오고, 세로형 키패드 윗변(120dp)은 영역 안에 든다 — 의도한 동작으로 고정한다.
+        const body = Size(624, 320);
+        const hinge = Rect.fromLTWH(312, 0, 0, 320);
+        final l = CalcHingeSplitLayout.of(
+          body,
+          hinge,
+          Handedness.right,
+          topGestureDepth: 125,
+        );
+        expect(l.shortHandPanel, isFalse);
+        expect(
+          l,
+          isA<CalcHingeSplitLayout>().having(
+            (l) => l.keypad.top,
+            'keypad.top',
+            moreOrLessEquals(
+              CalcTheme.screenLcdMinHeight + CalcTheme.screenLcdKeypadGap,
+            ),
+          ),
+        );
+        expect(
+          CalcHingeSplitLayout.of(body, hinge, Handedness.right).keypad.top,
+          lessThan(1),
+        );
+      },
+    );
+
     test('세로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
         Size(double.nan, double.nan),
