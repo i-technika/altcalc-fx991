@@ -3471,6 +3471,37 @@ void _hingeLayoutTests() {
       }
     });
 
+    test(
+      '세로 접힘선: 깊이가 활성 LCD 최소 높이 + 간격(120dp) 이상이면(가정 밖) 세로형으로 돌아간다 (#172 R2)',
+      () {
+        // 실측 최대 깊이는 4.2dp라 이런 기기는 없다고 본다(CalcHingeSplitLayout 문서). 깊이만큼 비운 키패드가 세로형보다 키가
+        // 작아지면 LCD가 손 쪽 패널로 돌아오고, 세로형 키패드 윗변(120dp)은 영역 안에 든다 — 의도한 동작으로 고정한다.
+        const body = Size(624, 320);
+        const hinge = Rect.fromLTWH(312, 0, 0, 320);
+        final l = CalcHingeSplitLayout.of(
+          body,
+          hinge,
+          Handedness.right,
+          topGestureDepth: 125,
+        );
+        expect(l.shortHandPanel, isFalse);
+        expect(
+          l,
+          isA<CalcHingeSplitLayout>().having(
+            (l) => l.keypad.top,
+            'keypad.top',
+            moreOrLessEquals(
+              CalcTheme.screenLcdMinHeight + CalcTheme.screenLcdKeypadGap,
+            ),
+          ),
+        );
+        expect(
+          CalcHingeSplitLayout.of(body, hinge, Handedness.right).keypad.top,
+          lessThan(1),
+        );
+      },
+    );
+
     test('세로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
         Size(double.nan, double.nan),

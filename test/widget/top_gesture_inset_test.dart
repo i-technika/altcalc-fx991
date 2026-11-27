@@ -216,6 +216,8 @@ void main() {
           await edge.cancel();
           await tester.pump();
           expect(container.read(calcProvider).inputCount, 0);
+          // 아래 탐색 도우미가 로그를 따로 켜고 끈다 — 이 수집은 여기서 끝낸다.
+          LayoutLog.disable();
           // 첫 행 키마다 가장 위의 터치 지점(각인 띠까지 넓힌 터치 영역의 윗변 — 키캡보다 위)을 눌러도 보류 없이 누르는 순간
           // 입력된다. 진단 로그의 키 입력 단계로 본다(SHIFT·ALPHA는 입력 수를 늘리지 않는 모디파이어다). ON은 설정을 여므로
           // 마지막에 누른다.
@@ -228,7 +230,7 @@ void main() {
           ]) {
             final r = _keycap(tester, id);
             final hit = await _topmostHit(tester, id, r.center.dx, keypad.top);
-            expect(hit.y, greaterThanOrEqualTo(topGesture), reason: '$id');
+            // 키패드 윗변(= 영역 아랫변, 위에서 단언)부터 찾으므로 반응 지점은 영역 밖이다 — 고정하는 것은 그 지점의 입력 단계다.
             expect(
               hit.line,
               startsWith('입력(누를 때): ${id.name} '),

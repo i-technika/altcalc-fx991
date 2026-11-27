@@ -370,7 +370,8 @@ typedef _HingeRegions = ({
 /// - 위 시스템 제스처 영역(#172): 영역이 본체 윗변 아래로 들어오는 기기(`topGestureDepth` > 0)는 짧은 손 쪽 패널의 키패드가
 ///   그 아래부터만 쓴다 — 첫 행이 영역에 들면 그 행만 손을 뗄 때 입력된다(#50). 그만큼 비우면 키가 쓸 수 있는 크기보다 작아지는
 ///   창은 그 크기를 지키는 만큼만 비운다([_keypadRoomBelowTopGesture]). 보통 책 자세는 키패드 위에 활성 LCD가 있어 해당하지
-///   않는다(깊이가 활성 LCD 최소 높이 + 간격 120dp 이상인 기기는 없다고 본다 — 실측 최대 12.2dp).
+///   않는다(깊이가 활성 LCD 최소 높이 + 간격 120dp 이상인 기기는 없다고 본다 — 실측 최대 깊이 4.2dp(위 제스처 − 인셋 12.2dp). 그런 기기는 키패드가
+///   패널 높이를 다 써도 키가 커지지 않아 세로형으로 돌아가고, 그 첫 행은 영역에 든다 — screen_layout_test가 이 동작을 고정한다).
 /// - LCD·기록·키패드 어느 것도 접힘선 위에 놓이지 않는다. 모든 영역은 본체 안에 있다(음수·비유한 크기는 0으로 본다).
 @immutable
 class CalcHingeSplitLayout {
@@ -472,7 +473,8 @@ class CalcHingeSplitLayout {
   /// 비유한·음수는 0) 아래 높이다(#172). 단, 그만큼 비우면 키가 쓸 수 있는 크기([CalcTheme.keyTouchHeightUsableMin])보다 작아지는
   /// 창은 그 크기를 지키는 높이까지만 비운다(#172 R1) — 첫 행이 영역에 들어 손을 뗄 때 입력되더라도(#50) 계산기를 쓸 수 있는
   /// 쪽이 "창이 너무 작다" 안내보다 낫다. 그래서 쓸 수 있는 크기 경계가 깊이와 무관하고, 높이를 키우면 키패드 윗변이 영역 안에서
-  /// 영역 아랫변까지 이어서 내려온다(키는 줄지 않는다). 패널 높이 전체로도 쓸 수 없는 창은 깊이만큼 비운다(어차피 안내다).
+  /// 영역 아랫변까지 이어서 내려온다(키는 줄지 않는다). 패널 높이 전체로도 쓸 수 없는 창은 깊이만큼 비운다(어차피 접힘선 기준 배치를
+  /// 쓰지 않는다 — `_Body`가 위아래 배치·가로형으로 대체하거나 안내를 띄운다).
   static double _keypadRoomBelowTopGesture(Size panel, double topGestureDepth) {
     final height = panel.height;
     final depth = topGestureDepth.isFinite
@@ -486,7 +488,9 @@ class CalcHingeSplitLayout {
       KeypadArrangement.standard,
     );
     if (wholeTouch < CalcTheme.keyTouchHeightUsableMin) return room;
-    // 키캡이 48dp보다 작은 동안(쓸 수 있는 크기 근처) 가장 낮은 키의 터치 높이는 키패드 높이에 비례한다. 반올림 오차로 경계
+    // 키캡이 48dp보다 작은 동안(쓸 수 있는 크기 근처) 가장 낮은 키의 터치 높이는 키패드 높이에 비례한다(실물 배열의 가장 낮은
+    // 키 = 키패드 높이의 약 0.085배). 키캡이 48dp 이상인 큰 패널(높이 약 560dp 이상)에서는 이 비례가 틀리지만, 그 결과는
+    // 깊이가 패널 높이에서 약 190dp를 뺀 값보다 깊을 때만 쓰인다 — 깊이는 120dp 미만으로 본다(위 클래스 문서). 반올림 오차로 경계
     // 아래로 떨어지지 않게 조금(0.01dp) 더 둔다.
     final usableHeight =
         whole.height * CalcTheme.keyTouchHeightUsableMin / wholeTouch + 0.01;
