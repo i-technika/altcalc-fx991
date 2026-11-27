@@ -12,7 +12,8 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 /// - 키패드가 LCD 바로 아래에 있다(간격 [CalcTheme.screenLcdKeypadGap]). 가로 접힘선 기준 배치는
 ///   그 사이에 접힘선과 양쪽 여백이 있어 더 떨어져 있다.
 /// - LCD와 키패드의 좌우 끝이 같다(둘 다 본체 폭, #141).
-/// - 계산 기록 영역이 옆에 보이지 않는다. 책 자세(세로 접힘선, #143)는 손 쪽 패널이 세로형이고 옆 패널이 기록이다.
+/// - 계산 기록 영역이 옆에 보이지 않는다. 책 자세(세로 접힘선, #143)는 손 쪽 패널이 세로형이고 옆 패널이 기록이다(손 쪽
+///   패널이 짧으면 LCD도 옆 패널이라 키패드 위가 LCD가 아니다).
 bool isStackedArrangement(WidgetTester tester) =>
     drawnArrangementOf(tester) == DrawnArrangement.stacked;
 
@@ -24,7 +25,8 @@ enum DrawnArrangement {
   /// 가로형 (#142) — 넓은 배열 키패드가 활성 LCD 바로 아래(간격 [CalcTheme.screenLcdKeypadGap])에 있다
   landscape,
 
-  /// 책 자세 (세로 접힘선 기준 배치, #143) — 손 쪽 패널에 LCD·키패드(세로형), 그 옆 패널에 계산 기록
+  /// 책 자세 (세로 접힘선 기준 배치, #143) — 손 쪽 패널에 LCD·키패드(세로형), 그 옆 패널에 계산 기록. 손 쪽 패널이 짧으면
+  /// 옆 패널 맨 위에 LCD, 그 아래 기록(#143 R1)
   sideBySide,
 
   /// 위 LCD·아래 키패드이지만 사이가 간격보다 넓음 (가로 접힘선 기준 배치 — 사이에 접힘선)
@@ -66,11 +68,16 @@ DrawnArrangement drawnArrangementOf(WidgetTester tester) {
         ? DrawnArrangement.sideBySide
         : DrawnArrangement.stacked;
   }
-  // 손 쪽 패널이 짧은 책 자세(#143 R1): 활성 LCD가 반대쪽 패널 맨 위로 옮겨 가 키패드와 가로로 겹치지 않는다.
+  // 손 쪽 패널이 짧은 책 자세(#143 R1): 활성 LCD가 반대쪽 패널 맨 위로 옮겨 가 키패드와 가로로 겹치지 않는다. 기록이
+  // 있으면 LCD와 같은 패널(같은 좌우 끝)의 LCD 아래에 있다.
   if (!wide &&
       (keypad.left >= lcd.right - tolerance ||
           keypad.right <= lcd.left + tolerance) &&
-      lcd.top <= keypad.top + tolerance) {
+      lcd.top <= keypad.top + tolerance &&
+      (history == null ||
+          ((history.left - lcd.left).abs() <= tolerance &&
+              (history.right - lcd.right).abs() <= tolerance &&
+              history.top >= lcd.bottom - tolerance))) {
     return DrawnArrangement.sideBySide;
   }
   if (gap > CalcTheme.screenLcdKeypadGap + tolerance) {

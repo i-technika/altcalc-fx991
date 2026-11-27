@@ -136,7 +136,8 @@ class SettingsLauncher extends StatefulWidget {
   /// [SettingsLauncher] "접힘선이 있을 때 대화상자 위치" 4). 이보다 좁으면 카드가 200dp 아래로 줄어 읽기 어려워 화면 전체에
   /// 띄운다(#129 R2). 가로 접힘선(#143)은 같은 값을 높이로 비교한다 — 위아래 여백이 48dp라 카드 높이 232dp가 하한이고,
   /// 대화상자는 제목·선택지가 함께 스크롤되고 닫기 버튼만 고정이라 넘치지 않는다(Fold 가로 펼침, 글자 배율 2.0 테스트).
-  /// 펼친 Fold 가로(아래 절반 인셋 제외 312.5dp)는 이 값을 넘어 아래 절반에 뜬다(반 접힘과 같다). #143 전에는 접힘선 기준 배치의 패널 최소 길이(`FormFactor.hingeMinPanelExtent`)와 같은 값이었다 —
+  /// 펼친 Fold 가로(아래 절반 인셋 제외 312.5dp)는 이 값을 넘어 아래 절반에 뜬다(반 접힘과 같다).
+  /// #143 전에는 접힘선 기준 배치의 패널 최소 길이(`FormFactor.hingeMinPanelExtent`)와 같은 값이었다 —
   /// 그 값은 #143에서 128dp로 낮췄고, 대화상자 기준은 그대로 둔다.
   static const double dialogMinHalfExtent = 280;
 

@@ -6,7 +6,7 @@ import '../l10n/calc_semantic_strings.dart';
 /// 계산 기록 영역 (#142, #143) — 놓이는 곳:
 /// - 가로형 배치(`CalcLandscapeLayout`)와 가로 접힘선의 넓은 배열(`CalcTabletopLayout`): 위 띠(위 패널)에서 함수부 위,
 ///   활성 LCD 옆
-/// - 책 자세(`CalcHingeSplitLayout`): 손 쪽 반대 패널 전체
+/// - 책 자세(`CalcHingeSplitLayout`): 손 쪽 반대 패널 전체 (손 쪽 패널이 짧은 창은 그 패널의 활성 LCD 아래)
 /// - 가로 접힘선의 실물 배열(Flip 내부, `CalcTabletopLayout`): 위 패널에서 활성 LCD 아래
 ///
 /// LCD와 같은 바탕·베젤로 그린다 — 기록은 LCD 자리가 실물 비율보다 넓게 남는 곳에 두는 "LCD의 연장"이다(#141 결정).

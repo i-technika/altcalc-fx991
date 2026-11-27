@@ -424,44 +424,94 @@ void main() {
       }
     }
 
-    // #143 R1: 세로 접힘선이 있는 창도 높이를 키울 때 키가 크게 튀지 않는다. 책 자세가 쓸 수 있는 크기(16dp) 경계에서
-    // 가로형(접힘선을 가로지름)과 바뀌던 것은 손 쪽 패널이 짧으면 LCD를 반대쪽 패널로 옮겨 없앴다(841×350 → 355: 31.6 → 16.2dp).
-    // 남는 경계는 세로형으로 돌아오는 일반 하한(28dp) 근처다 — 그 아래로는 줄지 않는다.
-    for (final width in [640.0, 841.0]) {
-      testWidgets('세로 접힘선 창 폭 $width: 높이를 키울 때 키가 일반 하한 아래로 튀지 않는다 (#143 R1)', (
+    // #143 R1·R2: 세로 접힘선이 있는 창도 창을 키울 때 키가 줄지 않는다(부동소수점 오차만 허용). 손 쪽 패널이 짧으면 활성
+    // LCD를 반대쪽 패널로 옮기고(R1 — 쓸 수 있는 크기 경계에서 가로형과 키가 2배로 튀던 것: 841×350 → 355 31.6 → 16.2dp,
+    // 560×348 → 350 29.9 → 16.1dp), 그때 키패드는 키가 일반 하한을 넘지 않는 높이까지만 써서(R2 — 841×508 → 510 39.8 → 28.1dp)
+    // 세로형으로 돌아오는 경계에서도 이어진다.
+    Future<double> touchAt(
+      WidgetTester tester,
+      Size size,
+      double hingeX,
+      Handedness handedness,
+    ) async {
+      await _pump(
+        tester,
+        size: size,
+        padding: const EdgeInsets.only(top: 24),
+        handedness: handedness,
+        displayFeatures: [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(hingeX, 0, 0, size.height),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+      );
+      expect(tester.takeException(), isNull, reason: '$size');
+      return _lowestDrawnTouch(tester);
+    }
+
+    for (final handedness in Handedness.values) {
+      testWidgets(
+        '세로 접힘선 창: 높이를 키울 때 키가 줄지 않는다 (#143 R1·R2, ${handedness.name})',
+        (tester) async {
+          for (final width in [560.0, 600.0, 640.0, 700.0, 841.0]) {
+            double? previous;
+            for (var height = 300.0; height <= 720; height += 4) {
+              final size = Size(width, height);
+              final touch = await touchAt(tester, size, width / 2, handedness);
+              expect(
+                touch,
+                greaterThanOrEqualTo((previous ?? 0) - 0.05),
+                reason: '$size ${handedness.name}: $previous → $touch',
+              );
+              previous = touch;
+            }
+          }
+        },
+      );
+
+      testWidgets('세로 접힘선 창: 폭을 키울 때 키가 줄지 않는다 (#143 R2, ${handedness.name})', (
         tester,
       ) async {
-        const padding = EdgeInsets.only(top: 28);
-        double? previous;
-        for (var height = 300.0; height <= 700; height += 5) {
-          final size = Size(width, height);
-          await _pump(
-            tester,
-            size: size,
-            padding: padding,
-            displayFeatures: [
-              DisplayFeature(
-                bounds: Rect.fromLTWH(width / 2, 0, 0, height),
-                type: DisplayFeatureType.fold,
-                state: DisplayFeatureState.postureFlat,
-              ),
-            ],
-          );
-          expect(tester.takeException(), isNull, reason: '$size');
-          final touch = _lowestDrawnTouch(tester);
-          final p = previous;
-          if (p != null && touch < p) {
-            // 줄어드는 것은 일반 하한 근처에서 세로형으로 돌아올 때뿐이고, 하한 아래로는 줄지 않는다.
+        for (final height in [340.0, 360.0, 400.0, 520.0]) {
+          double? previous;
+          for (var width = 520.0; width <= 900; width += 4) {
+            final size = Size(width, height);
+            final touch = await touchAt(tester, size, width / 2, handedness);
             expect(
               touch,
-              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor - 0.01),
-              reason: '$size $p → $touch',
+              greaterThanOrEqualTo((previous ?? 0) - 0.05),
+              reason: '$size ${handedness.name}: $previous → $touch',
             );
+            previous = touch;
           }
-          previous = touch;
         }
       });
     }
+
+    testWidgets(
+      '접힘선이 치우친 짧은 창(841×360, x=280)은 두 손잡이 모두 LCD를 옮겨 키가 같다 (#143 R2)',
+      (tester) async {
+        // 반대쪽 패널: 오른손잡이 264dp, 왼손잡이 537dp — 둘 다 활성 LCD 최소 폭(200dp) 이상이다.
+        final right = await touchAt(
+          tester,
+          const Size(841, 360),
+          280,
+          Handedness.right,
+        );
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        final left = await touchAt(
+          tester,
+          const Size(841, 360),
+          280,
+          Handedness.left,
+        );
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(right, moreOrLessEquals(27.2, epsilon: 0.05));
+        expect(left, moreOrLessEquals(right));
+      },
+    );
 
     testWidgets('접힘선 기준 배치를 쓰지 않는 가로 접힘선이어도 짧은 창이면 가로형과 비교한다', (tester) async {
       // 위 패널이 패널 최소 길이(128dp)보다 짧은 가로 접힘선은 접힘선 기준 배치 조건에 맞지 않아 위아래 배치를 받는다.
