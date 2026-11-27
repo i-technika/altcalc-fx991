@@ -155,15 +155,18 @@ abstract final class LayoutLog {
   }
 
   /// 방향 요청 — [kind]·[display](물리 화면, dp)로 고른 [policy]를 보냈다. 실패하면 [error]가 있다.
+  /// [reason]은 크기 규칙 말고 따로 정한 근거다 — 펼친 트라이폴드의 `접힘선 2개`·`접힘선 2개 기억`(#144).
   static void orientationRequest(
     OrientationPolicy policy, {
     required DeviceKind kind,
     required Size display,
+    String? reason,
     Object? error,
   }) {
     if (!enabled) return;
     _write(
-      '방향 요청: ${policy.name} (기기 ${kind.name}, 화면 ${_size(display)})'
+      '방향 요청: ${policy.name} (기기 ${kind.name}, 화면 ${_size(display)}'
+      '${reason == null ? '' : ', $reason'})'
       '${error == null ? '' : ' 실패: $error'}',
     );
   }

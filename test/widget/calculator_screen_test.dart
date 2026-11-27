@@ -694,7 +694,34 @@ void main() {
         expect(orientationRequests(calls), [anyOrientation]);
         expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
 
-        // 접는다: 커버 화면(다른 크기의 화면)이라 기억을 쓰지 않고 세로다
+        // 화면 크기 설정을 줄였다 다시 키운다(같은 비율의 다른 dp 크기, R2): 접힘 정보가 늦게 오는 동안에도 세로 고정을
+        // 요청하지 않는다
+        const smaller = Size(823, 603);
+        tester.view.display.size = smaller * 2;
+        tester.view.physicalSize = smaller * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = [
+          for (final x in [274.5, 548.5])
+            DisplayFeature(
+              bounds: Rect.fromLTWH(x, 0, 0, smaller.height),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        await tester.pump();
+        tester.view.display.size = landscape * 2;
+        tester.view.physicalSize = landscape * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = folds(landscape);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(printed.where((l) => l.contains('방향 요청')), [
+          'AltCalc 방향 요청: any (기기 foldable, 화면 720x528, 접힘선 2개)',
+        ]);
+
+        // 접는다: 커버 화면(비율이 다른 화면)이라 기억을 쓰지 않고 세로다
         tester.view.display.size = cover * 2;
         tester.view.physicalSize = cover * 2;
         tester.view.displayFeatures = const [];

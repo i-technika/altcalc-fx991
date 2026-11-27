@@ -511,16 +511,14 @@ void main() {
       );
     });
 
-    test('같은 자리에 두 번 보고된 접힘선은 하나로 센다 (접힘선 1개 기기가 접힘선을 잃지 않는다)', () {
+    test('같은 접힘선이 두 번 보고되면 하나로 센다 (접힘선 1개 기기가 접힘선을 잃지 않는다)', () {
       final fold = feature(const Rect.fromLTWH(336.5, 0, 0, 841));
+      // 같은 상태의 중복: 앞의 것을 남긴다
       for (final again in [
         fold,
         feature(const Rect.fromLTWH(336.5, 0, 0, 841)),
         feature(const Rect.fromLTWH(337, 0, 0, 840.5)), // 허용 오차(1dp) 안
-        feature(
-          const Rect.fromLTWH(336.5, 0, 0, 841),
-          type: DisplayFeatureType.hinge,
-        ),
+        feature(const Rect.fromLTWH(337.4, 0, 0, 841)), // 1dp 안에 붙음
       ]) {
         expect(FormFactor.crossingHingesOf(window, [fold, again]), [fold]);
         expect(FormFactor.hingeOf(window, [fold, again]), same(fold));
@@ -529,11 +527,48 @@ void main() {
           isFalse,
         );
       }
-      // 허용 오차보다 떨어지면 다른 접힘선이다
+      // 화면을 나누는 쪽(반 접힘·물리 힌지)을 남긴다 — 순서와 상관없다. 평평한 쪽을 남기면 테이블톱을 놓친다.
+      const across = Size(841, 673);
+      final flat = feature(const Rect.fromLTWH(0, 336.5, 841, 0));
+      final half = DisplayFeature(
+        bounds: const Rect.fromLTWH(0, 336.5, 841, 0),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureHalfOpened,
+      );
+      for (final features in [
+        [flat, half],
+        [half, flat],
+      ]) {
+        expect(FormFactor.crossingHingesOf(across, features), [half]);
+        expect(
+          FormFactor.arrangementOf(across, features, foldableDevice: true),
+          ScreenArrangement.hingeStacked,
+        );
+      }
+      // 폭 있는 힌지와 그 안의 폭 0 접힘선(겹침)도 하나 — 힌지를 남긴다
+      final hinge = feature(
+        const Rect.fromLTWH(326.5, 0, 20, 841),
+        type: DisplayFeatureType.hinge,
+      );
+      for (final features in [
+        [fold, hinge],
+        [hinge, fold],
+      ]) {
+        expect(FormFactor.crossingHingesOf(window, features), [hinge]);
+        expect(FormFactor.hingeOf(window, features), same(hinge));
+      }
+      // 1dp보다 떨어지거나 방향이 다르면 다른 접힘선이다
       expect(
         FormFactor.crossesMultipleHinges(window, [
           fold,
           feature(const Rect.fromLTWH(338, 0, 0, 841)),
+        ]),
+        isTrue,
+      );
+      expect(
+        FormFactor.crossesMultipleHinges(window, [
+          fold,
+          feature(const Rect.fromLTWH(0, 420, 673, 0)),
         ]),
         isTrue,
       );
@@ -975,6 +1010,14 @@ void main() {
           multipleHinges: true,
         ),
         OrientationPolicy.portrait,
+      );
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.tablet,
+          const Size(1280, 800),
+          multipleHinges: true,
+        ),
+        OrientationPolicy.landscape,
       );
     });
   });

@@ -272,7 +272,7 @@ abstract final class FormFactor {
   static const double hingeMinPanelExtent = 280.0;
 
   /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge) 모두 (#144). 영역은 창 좌표이고,
-  /// 순서는 [features] 그대로이고, 같은 자리(허용 오차 안)에 두 번 온 접힘선은 앞의 것 하나만 남긴다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
+  /// 순서는 [features] 그대로이고, 같은 접힘선(같은 방향으로 겹치거나 1dp 안에 붙음)이 두 번 오면 하나만 남긴다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
   /// 세지 않는다.
   ///
   /// 접힘 정보의 좌표는 그 정보를 담은 `MediaQuery`가 가리키는 화면(창)의 좌표다. 실제 앱에서는 창 = 화면이다.
@@ -283,21 +283,29 @@ abstract final class FormFactor {
     final crossing = <DisplayFeature>[];
     for (final f in features) {
       if (!_crossesWindow(windowSize, f)) continue;
-      // 같은 자리의 접힘선이 두 번 보고되어도 하나로 센다 — 개수가 2가 되면 접힘선 1개 기기가 접힘선을 잃는다(#144 R1)
-      final duplicate = crossing.any(
-        (c) => _sameRect(c.bounds, f.bounds, _hingeSpanTolerance),
-      );
-      if (!duplicate) crossing.add(f);
+      // 같은 접힘선이 두 번 보고되어도(같은 자리, 또는 폭 있는 힌지와 그 안의 폭 0 접힘선처럼 겹침) 하나로 센다 — 개수가
+      // 2가 되면 접힘선 1개 기기가 접힘선을 잃는다(#144 R1·R2). 둘 중 화면을 실제로 나누는 쪽([separates] — 반 접힘·
+      // 물리 힌지)을 남긴다 — 평평한 쪽을 남기면 테이블톱 배치를 놓친다.
+      final same = crossing.indexWhere((c) => _sameHinge(c.bounds, f.bounds));
+      if (same < 0) {
+        crossing.add(f);
+      } else if (!separates(crossing[same]) && separates(f)) {
+        crossing[same] = f;
+      }
     }
     return crossing;
   }
 
-  /// 두 영역의 네 변이 [tolerance] 안에서 같은지
-  static bool _sameRect(Rect a, Rect b, double tolerance) =>
-      (a.left - b.left).abs() <= tolerance &&
-      (a.top - b.top).abs() <= tolerance &&
-      (a.right - b.right).abs() <= tolerance &&
-      (a.bottom - b.bottom).abs() <= tolerance;
+  /// 창을 가로지르는 두 접힘선 영역이 같은 접힘선인지 — 방향이 같고, 접힘선에 수직인 축으로 겹치거나
+  /// [_hingeSpanTolerance] 안에 붙어 있다.
+  static bool _sameHinge(Rect a, Rect b) {
+    const t = _hingeSpanTolerance;
+    final vertical = isVerticalHinge(a);
+    if (vertical != isVerticalHinge(b)) return false;
+    return vertical
+        ? a.left <= b.right + t && b.left <= a.right + t
+        : a.top <= b.bottom + t && b.top <= a.bottom + t;
+  }
 
   /// [f]가 창([windowSize])을 한 축으로 끝까지 가로지르는 접히는 부분인지 ([crossingHingesOf])
   static bool _crossesWindow(Size windowSize, DisplayFeature f) {
@@ -409,8 +417,10 @@ abstract final class FormFactor {
   /// - 시작 깜빡임 방지(2번)는 접힘 정보가 **오기 전**에만 위아래 배치로 둔다. 트라이폴드는 접힘 정보가 오면 이 3번이
   ///   되므로 가로형을 막지 않는다. 앱 시작 때는 Android가 창 배치 첫 값에 접히는 부분이 있다고 알리면 `main()`이 접힘
   ///   정보가 올 때까지 첫 화면을 미루므로(#158) 첫 프레임부터 가로형이다.
-  /// - 회전 직후 몇 프레임은 접힘 정보가 이전 방향 값이라 창을 가로지르지 않을 수 있다([crossingHingesOf]) — 그동안은
-  ///   2번(위아래 배치)이다. 폴더블의 회전과 같다(아래 에뮬레이터 기록에서는 보이지 않았다).
+  /// - 회전·화면 크기 설정 변경 직후 몇 프레임은 접힘 정보가 이전 값이라 창을 가로지르지 않을 수 있다([crossingHingesOf]) —
+  ///   그동안은 2번(위아래 배치)이다. 폴더블의 회전과 같다. 아래 에뮬레이터 기록에서 방향 판정은 그런 순간을 만났지만(확대
+  ///   화면 회전), 진단 로그의 배치 줄에는 가로 창이 위아래 배치로 그려진 프레임이 없었다(가로지르는 접힘선 0인 배치 줄은
+  ///   창이 아직 세로인 프레임뿐이었다). 실기기 확인은 #200.
   /// - 방향 정책은 화면 크기와 상관없이 네 방향이다([orientationPolicyOf]의 `multipleHinges`).
   /// - **가정 (미확인)**: 펼친 트라이폴드가 Jetpack WindowManager로 접히는 부분(`FoldingFeature`) 2개를 보고한다는 것과
   ///   펼친 화면 dp 크기·접힘선 위치는 실기기로 확인하지 못했다(트라이폴드 에뮬레이터 기기 정의가 없다). 미리보기 프리셋은
@@ -422,7 +432,7 @@ abstract final class FormFactor {
   ///   2개가 왔다. 시작 판정 첫 값이 "접힘"이라 첫 프레임부터 가로형이었고, 방향 요청은 네 방향이었다.
   ///   - 2160×1584 px(밀도 420 → 822.9×603.4dp, 접힘선 x=274.3·548.6): 가로형, 세로로 돌리면 세로형, 다시 돌리면 가로형.
   ///   - 같은 화면을 밀도 480으로 확대(720×528dp): 가로형·세로형은 같다. 회전할 때 접힘 정보가 늦게 와 창을 가로지르지
-  ///     않는 순간에 세로 고정을 한 번 요청했다가 푸는 것이 보여, 창 크기를 기억해 막았다(`DeviceOrientationLock`
+  ///     않는 순간에 세로 고정을 한 번 요청했다가 푸는 것이 보여, 접힘선 2개를 본 화면을 기억해 막았다(`DeviceOrientationLock`
   ///     "트라이폴드 방향 기억"). 고친 뒤에는 네 번 돌려도 방향 요청이 다시 나가지 않았다. 세로→가로에서 창이 아직
   ///     세로인 프레임(약 0.5초)은 위아래 배치였다 — 회전 중 창 크기 그대로다.
   ///   - 2520×1848 px(960×704dp, 이슈의 처음 가정)과 원래 크기(841×701dp)에 접힘선 2개: 가로형.

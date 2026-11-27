@@ -119,7 +119,8 @@ class PreviewDevice {
   ///
   /// 폴더블 프리셋은 앱의 방향 정책([FormFactor.orientationPolicyOf], 폴더블 기기·프리셋 크기 = 물리 화면 크기)을 따른다.
   /// 짧은 변이 [FormFactor.largeScreenMinShortestSide] 미만인 화면(Flip 내부)은 앱이 세로로 고정하므로 세로뿐이고,
-  /// Fold 계열 내부 화면은 네 방향을 허용하므로 세로·가로 둘 다다. 폴더블이 아니면 고를 수 없으므로 기본 방향뿐이다.
+  /// Fold 계열 내부 화면은 네 방향을 허용하므로 세로·가로 둘 다다. 접힘선이 2개인 트라이폴드는 크기와 상관없이 네
+  /// 방향이다(`multipleHinges`, #144). 폴더블이 아니면 고를 수 없으므로 기본 방향뿐이다.
   List<PreviewOrientation> get orientations {
     final base = this.base;
     final natural = base.naturalOrientation;

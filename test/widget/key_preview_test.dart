@@ -517,7 +517,7 @@ void main() {
           PreviewOrientation.landscape,
         ],
         '플립형 폴더블 내부': [PreviewOrientation.portrait],
-        // 펼친 트라이폴드도 폴더블 대화면이라 네 방향 허용 (#144)
+        // 펼친 트라이폴드는 접힘선이 2개라 크기와 상관없이 네 방향 허용 (#144)
         '트라이폴드': [PreviewOrientation.portrait, PreviewOrientation.landscape],
       };
       for (final d in previewDevices) {

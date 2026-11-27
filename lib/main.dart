@@ -85,10 +85,12 @@ Future<void> main() async {
 /// 펼친 트라이폴드는 화면 크기와 상관없이 네 방향을 허용한다([FormFactor.orientationPolicyOf]의 `multipleHinges`). 그런데
 /// 회전 직후 몇 프레임은 접힘 정보가 이전 방향 값이라 창을 가로지르지 않는다. 그때 크기 규칙으로 돌아가면, 짧은 변이
 /// 600dp 미만인 화면(화면 크기 설정을 키운 트라이폴드)에서 세로 고정을 한 번 요청했다가 다시 네 방향으로 푼다 —
-/// 에뮬레이터(720×528dp로 흉내 냄)에서 회전할 때마다 그랬다. 그래서 접힘선 2개를 본 창 크기를 기억해, 같은 크기의 창
-/// (돌린 것 포함)인 동안은 접힘 정보가 잠깐 맞지 않아도 네 방향으로 둔다. 창이 다른 크기(접은 커버 화면, 분할 화면,
-/// 화면 크기 설정 변경)가 되면 기억은 쓰이지 않는다. 물리 화면 크기가 아니라 창 크기로 기억하는 것은, 접을 때 물리 화면
-/// 크기가 창·접힘 정보보다 먼저 바뀌는 순간(위젯 테스트에서 재현)에 커버 화면 크기를 기억하지 않게 하려는 것이다.
+/// 에뮬레이터(720×528dp로 흉내 냄)에서 회전할 때마다 그랬다. 화면 크기 설정을 바꿀 때도(창 크기가 바뀌고 접힘 정보는
+/// 늦게 온다) 같은 일이 생길 수 있다. 그래서 접힘선 2개를 본 물리 화면을 기억해, 지금 물리 화면이 그 화면과 같은 화면
+/// ([FormFactor.isOtherScreen]이 거짓 — 회전·화면 크기 설정 변경은 비율이 같다)인 동안은 접힘 정보가 잠깐 맞지 않아도
+/// 네 방향으로 둔다. 접은 커버 화면은 비율이 달라 기억을 쓰지 않는다.
+/// 기억할 때는 창과 물리 화면이 같은 화면이어야 한다 — 접을 때 물리 화면 크기가 창·접힘 정보보다 먼저 바뀌는 순간(위젯
+/// 테스트에서 재현)에 커버 화면을 기억하지 않게 한다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -101,9 +103,9 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   /// 마지막으로 본 실제 물리 화면 크기 (dp, 플랫폼이 알려 주지 않으면 갱신하지 않는다) — [FormFactor.isOtherScreen] 비교용
   Size? _lastDisplay;
 
-  /// 창을 가로지르는 접힘선이 둘 이상이었던 창 크기 (dp, 펼친 트라이폴드 — 아래 "트라이폴드 방향 기억", #144).
+  /// 창을 가로지르는 접힘선이 둘 이상이었던 물리 화면 크기 (dp, 펼친 트라이폴드 — 아래 "트라이폴드 방향 기억", #144).
   /// 없으면 `null`.
-  Size? _multiHingeWindow;
+  Size? _multiHingeDisplay;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -139,15 +141,20 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _applied = null;
     _foldableDevice.value = false;
     _lastDisplay = null;
-    _multiHingeWindow = null;
+    _multiHingeDisplay = null;
     _pending = null;
   }
 
   /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다.
   OrientationPolicy currentPolicy() => _currentDecision().policy;
 
-  /// 방향 정책과 그 근거(기기 종류·물리 화면 크기 — 진단 로그용, #158). 화면이 없으면 크기 0의 폰이다.
-  ({OrientationPolicy policy, DeviceKind kind, Size display})
+  /// 방향 정책과 그 근거(기기 종류·물리 화면 크기·접힘선 2개 판정 — 진단 로그용, #158·#144). 화면이 없으면 크기 0의 폰이다.
+  ({
+    OrientationPolicy policy,
+    DeviceKind kind,
+    Size display,
+    String? multipleHinges,
+  })
   _currentDecision() {
     final view = _view;
     if (view == null) {
@@ -155,6 +162,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         policy: OrientationPolicy.portrait,
         kind: DeviceKind.phone,
         display: Size.zero,
+        multipleHinges: null,
       );
     }
     final displaySize = FormFactor.displaySizeOf(view);
@@ -163,31 +171,33 @@ class DeviceOrientationLock with WidgetsBindingObserver {
       view.displayFeatures,
       foldableDevice: _foldableDevice.value,
     );
-    // 접힘 정보 좌표는 창 기준이다 — 창 크기로 센다 (트라이폴드, #144)
-    final window = view.physicalSize / view.devicePixelRatio;
-    final multipleHinges = FormFactor.crossesMultipleHinges(
-      window,
-      view.displayFeatures,
-    );
-    if (multipleHinges) _multiHingeWindow = window;
-    final remembered = _multiHingeWindow;
+    // 펼친 트라이폴드 (#144) — 지금 접힘선 2개가 창을 가로지르거나, 같은 물리 화면에서 본 적이 있다(위 "트라이폴드 방향
+    // 기억"). 진단 로그에 어느 쪽인지 적는다.
+    final remembered = _multiHingeDisplay;
+    final String? multipleHinges = _crossesMultipleHinges(view)
+        ? '접힘선 2개'
+        : remembered != null &&
+              !FormFactor.isOtherScreen(remembered, displaySize)
+        ? '접힘선 2개 기억'
+        : null;
     return (
       policy: FormFactor.orientationPolicyOf(
         kind,
         displaySize,
-        multipleHinges:
-            multipleHinges ||
-            (remembered != null && _sameSize(remembered, window)),
+        multipleHinges: multipleHinges != null,
       ),
       kind: kind,
       display: displaySize,
+      multipleHinges: multipleHinges,
     );
   }
 
-  /// [a]와 [b]가 돌린 것까지 같은 크기인지 (1dp 허용)
-  static bool _sameSize(Size a, Size b) =>
-      (a.shortestSide - b.shortestSide).abs() <= 1 &&
-      (a.longestSide - b.longestSide).abs() <= 1;
+  /// [view] 창을 가로지르는 접힘선이 둘 이상인지 — 접힘 정보 좌표는 창 기준이라 창 크기로 센다 (트라이폴드, #144)
+  static bool _crossesMultipleHinges(FlutterView view) =>
+      FormFactor.crossesMultipleHinges(
+        view.physicalSize / view.devicePixelRatio,
+        view.displayFeatures,
+      );
 
   /// 접힘 정보를 기다리는 최대 시간 (#158). Flutter 엔진도 같은 출처(Jetpack WindowManager)를 따로 구독해 화면 정보로
   /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Dart가 판정 답을 받은 뒤
@@ -231,13 +241,22 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     return dispatcher.implicitView ?? dispatcher.views.firstOrNull;
   }
 
-  /// 지금 화면 정보로 폴더블 여부를 갱신한다 (위 "폴더블 기억").
+  /// 지금 화면 정보로 폴더블 여부와 트라이폴드 방향 기억을 갱신한다 (위 "폴더블 기억"·"트라이폴드 방향 기억").
   void _observeScreen() {
     final view = _view;
     if (view == null) return;
     final display = FormFactor.reportedDisplaySizeOf(view);
     final previous = _lastDisplay;
     if (display != null) _lastDisplay = display;
+    // 트라이폴드 방향 기억 — 창과 물리 화면이 같은 화면일 때만 (위 "트라이폴드 방향 기억")
+    if (display != null &&
+        _crossesMultipleHinges(view) &&
+        !FormFactor.isOtherScreen(
+          view.physicalSize / view.devicePixelRatio,
+          display,
+        )) {
+      _multiHingeDisplay = display;
+    }
     if (_foldableDevice.value) return;
     if (FormFactor.hasFoldOrHinge(view.displayFeatures)) {
       _foldableDevice.value = true;
@@ -264,14 +283,19 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   Future<void> _applyNow() async {
-    final (:policy, :kind, :display) = _currentDecision();
+    final (:policy, :kind, :display, :multipleHinges) = _currentDecision();
     if (policy == _applied) return;
     try {
       await SystemChrome.setPreferredOrientations(
         FormFactor.preferredOrientationsOf(policy),
       );
       _applied = policy;
-      LayoutLog.orientationRequest(policy, kind: kind, display: display);
+      LayoutLog.orientationRequest(
+        policy,
+        kind: kind,
+        display: display,
+        reason: multipleHinges,
+      );
     } catch (error) {
       // 기록하지 않으므로 다음 화면 정보 변화 때 다시 시도한다.
       debugPrint('화면 방향 요청 실패: $error');
@@ -279,6 +303,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         policy,
         kind: kind,
         display: display,
+        reason: multipleHinges,
         error: error,
       );
     }
