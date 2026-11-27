@@ -1285,11 +1285,11 @@ void main() {
         CalcTheme.keyNumberMainLabelMaxFontSize,
         greaterThan(CalcTheme.keyMainLabelMaxFontSize),
       );
-      // 글자 각인은 숫자보다 작고(실물 약 0.83), 연산 기호는 숫자 대비 크게 키운다(실물/Mono 비 1.35~1.43)
+      // 글자 각인은 숫자보다 작고(실물 약 0.83), 연산 기호는 숫자 대비 크게 키운다(실물/Mono 비 1.38~1.47 — 평균은 number_label_size_test가 고정한다)
       expect(CalcTheme.keyNumberWordLabelScale, inExclusiveRange(0.8, 0.86));
       expect(
         CalcTheme.keyNumberOperatorLabelScale,
-        inInclusiveRange(1.35, 1.43),
+        inInclusiveRange(1.38, 1.47),
       );
     });
 

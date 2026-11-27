@@ -22,14 +22,17 @@ import '../support/ttf_cmap.dart';
 const _photoDigitPerNumberCap = 0.57;
 const _photoUpperPerFunctionCap = 0.48;
 
-/// 근접 사진의 연산 기호 잉크 / 숫자 높이 — (높이, 폭). `−`·`=`의 높이는 획 두께·줄 간격이라 폭만 본다.
-const _photoOperatorInk = <String, (double?, double)>{
-  '×': (0.89, 0.85),
-  '÷': (0.93, 0.93),
-  '+': (0.93, 0.89),
-  '−': (null, 0.91),
-  '=': (null, 0.93),
+/// 근접 사진의 연산 기호 잉크 크기 (px) — (높이, 폭). `−`·`=`의 높이는 획 두께·줄 간격이라 배율 계산에 넣지 않는다.
+const _photoOperatorInkPx = <String, (double?, double)>{
+  '×': (41, 39),
+  '÷': (43, 43),
+  '+': (43, 41),
+  '−': (null, 42),
+  '=': (null, 43),
 };
+
+/// 근접 사진의 윗변이 평평한 숫자(1·4·7) 높이 (px) — Saira '4'(평평한 윗변)와 짝짓는다
+const _photoFlatDigitPx = 45.0;
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
@@ -116,37 +119,39 @@ void main() {
   });
 
   group('실물 대조 (#225)', () {
-    test(
-      '연산 기호를 키운 잉크 크기가 숫자 대비 근접 사진과 7% 안이다 (Noto Sans Mono Medium × 배율)',
-      () {
-        final digit = readGlyphYBounds(saira, '4'.runes.single)!;
-        final digitHeight = digit.yMax - digit.yMin;
-        for (final MapEntry(key: ch, value: (photoHeight, photoWidth))
-            in _photoOperatorInk.entries) {
-          final y = readGlyphYBounds(monoMedium, ch.runes.single)!;
-          final x = readGlyphXBounds(monoMedium, ch.runes.single)!;
-          const s = CalcTheme.keyNumberOperatorLabelScale;
-          expect(
-            (x.xMax - x.xMin) * s / digitHeight,
-            closeTo(photoWidth, 0.07),
-            reason: '$ch 폭',
-          );
-          if (photoHeight != null) {
-            expect(
-              (y.yMax - y.yMin) * s / digitHeight,
-              closeTo(photoHeight, 0.07),
-              reason: '$ch 높이',
-            );
-          }
-          // 키우기 전에는 사진보다 25% 이상 작았다 — 배율이 실제로 필요한 값인지 함께 본다
-          expect(
-            (x.xMax - x.xMin) / digitHeight,
-            lessThan(photoWidth * 0.75),
-            reason: ch,
-          );
+    test('연산 기호 배율은 근접 사진 / Noto Sans Mono Medium의 기호·숫자 비 여섯 값의 평균이고, 글리프마다 5% 안이다', () {
+      // 숫자는 같은 모양끼리 짝짓는다 — 사진의 평평한 숫자(45px)와 Saira '4'(0.688em)
+      final digit = readGlyphYBounds(saira, '4'.runes.single)!;
+      final digitHeight = digit.yMax - digit.yMin;
+      final ratios = <String, double>{};
+      for (final MapEntry(key: ch, value: (photoHeight, photoWidth))
+          in _photoOperatorInkPx.entries) {
+        final y = readGlyphYBounds(monoMedium, ch.runes.single)!;
+        final x = readGlyphXBounds(monoMedium, ch.runes.single)!;
+        ratios['$ch 폭'] =
+            photoWidth / _photoFlatDigitPx / ((x.xMax - x.xMin) / digitHeight);
+        if (photoHeight != null) {
+          ratios['$ch 높이'] =
+              photoHeight /
+              _photoFlatDigitPx /
+              ((y.yMax - y.yMin) / digitHeight);
         }
-      },
-    );
+      }
+      expect(ratios, hasLength(8));
+      final mean = ratios.values.reduce((a, b) => a + b) / ratios.length;
+      expect(
+        CalcTheme.keyNumberOperatorLabelScale,
+        closeTo(mean, 0.01),
+        reason: '$ratios',
+      );
+      for (final MapEntry(:key, :value) in ratios.entries) {
+        expect(
+          value / CalcTheme.keyNumberOperatorLabelScale,
+          closeTo(1.0, 0.05),
+          reason: key,
+        );
+      }
+    });
 
     test('실물 크기 키패드(480×640)의 숫자 글자를 올림한 값이 숫자 상한이다 (함수부 상한 16.5와 같은 기준)', () {
       final m = KeypadMetrics.compute(
@@ -279,11 +284,14 @@ void main() {
                   reason: reason,
                 );
                 final cap = tester.getRect(_keycap(def.id));
+                // 연산 기호는 내려 그린 뒤의 위치(Transform 아래 글자 — 2차원 각인 ×10ˣ는 각인 위젯)로 본다
                 final label = tester.getRect(
                   find
                       .descendant(
                         of: fitted,
-                        matching: find.byWidgetPredicate((w) => true),
+                        matching: find.byWidgetPredicate(
+                          (w) => w is RichText || w is KeyLegendView,
+                        ),
                       )
                       .first,
                 );

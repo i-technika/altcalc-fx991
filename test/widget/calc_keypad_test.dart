@@ -371,6 +371,22 @@ void main() {
           effective.scale(m.mainLabelFontSize),
           lessThan(cell - legendHeight),
         );
+        // 숫자부 세 크기(숫자·글자 각인·연산 기호, #225)의 줄 상자도 숫자부 키캡 안쪽 높이 안이다
+        final numberCapInner =
+            m.numberCapHeight -
+            CalcTheme.keyPressedOffset -
+            2 * CalcTheme.keyBorderWidth;
+        for (final size in [
+          m.numberMainLabelFontSize,
+          m.numberWordLabelFontSize,
+          m.numberOperatorLabelFontSize,
+        ]) {
+          expect(
+            effective.scale(size).ceilToDouble(),
+            lessThanOrEqualTo(numberCapInner),
+            reason: '$size',
+          );
+        }
       });
     }
 
