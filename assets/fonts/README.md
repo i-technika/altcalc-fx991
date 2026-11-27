@@ -56,7 +56,8 @@ Noto Serif의 OFL 전문은 <https://github.com/notofonts/latin-greek-cyrillic> 
   폭 100에서 고정 인스턴스로 만든다(Flutter는 가변 글꼴의 굵기 축을 `fontWeight`로 자동 조절하지 않는다).
 - 서브셋은 ASCII에서 `+`·`=`를 뺀 글자뿐이다. 연산 기호(`+`·`=`·`−`·`×`·`÷`)·입력 칸(`◼`·`◻`)·방향 화살표(`▲` 등)·`°`는 대체
   글꼴 Noto Sans Mono에서 찾는다(`CalcTheme.keyFontFallback`) — Saira의 연산 기호는 x높이 안의 작은 기호라 Mono가 실물에 더
-  가깝다(Mono의 `×`도 실물보다 숫자 대비 조금 작다). `∑`·`∫`는 지금처럼 Noto Sans Math다. `⇔`도 Noto Sans Math로 그린다
+  가깝다(Mono의 기호도 실물보다 숫자 대비 작아, 숫자부 연산 기호 키 `×`·`÷`·`+`·`−`·`=`는 Noto Sans Mono Medium을 숫자의
+  1.37배로 그린다 — `CalcTheme.keyNumberOperatorLabelScale`, #225). `∑`·`∫`는 지금처럼 Noto Sans Math다. `⇔`도 Noto Sans Math로 그린다
   (`CalcTheme.isKeyMathSymbol`, #156 R2) — Mono의 `⇔`는 x높이보다 낮은 작은 화살표에 좌우 여백이 커서 `S ⇔ D`처럼 벌어졌다.
 - 줄 상자(strut)는 Noto Sans Mono의 것을 그대로 쓴다(`CalcTheme.keyStrutFontFamily`). Saira는 위아래 여백(ascent 1.135·
   descent 0.439em)이 커서 그대로 쓰면 2차원 각인 배치·키패드 글자 크기 계산(#155·#169·#186)이 모두 달라진다.

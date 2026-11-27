@@ -35,6 +35,19 @@ enum KeypadArrangement {
   wide,
 }
 
+/// 숫자부 메인 각인의 종류 (#225) — 종류마다 글자 크기가 다르다([KeypadMetrics.numberLabelKindOf],
+/// [CalcTheme] "숫자부 메인 각인 크기 (#225)" 절).
+enum NumberLabelKind {
+  /// 숫자 0~9·소수점 — [KeypadMetrics.numberMainLabelFontSize]
+  digit,
+
+  /// 글자 각인 DEL·AC·Ans·×10ˣ — 숫자의 [CalcTheme.keyNumberWordLabelScale]배
+  word,
+
+  /// 연산 기호 × ÷ + − = — 숫자의 [CalcTheme.keyNumberOperatorLabelScale]배
+  operator,
+}
+
 /// 키패드 크기에서 산출한 배치·글자 치수. 화면 크기와 시스템 글자 배율, 라벨 글자 폭, 구역 배열로 정해진다.
 ///
 /// 세로 배치 (행 높이 단위, 숫자부 행은 [CalcTheme.keypadNumberRowHeightRatio]배 — [KeypadArrangement.standard]):
@@ -80,12 +93,22 @@ class KeypadMetrics {
   /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
   final double mainLabelFontSize;
 
-  /// 숫자부(숫자·사칙연산·`=`·DEL·AC 등)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp, #156).
+  /// 숫자부 숫자(0~9·소수점) 메인 라벨 글자 크기 (배율 반영 전, dp, #156·#225).
   ///
-  /// 실물 숫자부 각인은 함수부보다 훨씬 크다(근접 사진: 숫자 키캡 높이의 약 0.69가 숫자 높이, 함수 키는 약 0.55가 대문자
-  /// 높이 — 키도 더 크다). [mainLabelFontSize]의 [CalcTheme.keyNumberMainLabelScale]배를 목표로 하고, 숫자부 키캡 높이와
-  /// 숫자부 라벨 폭에 들어가는 크기까지 줄이되 [mainLabelFontSize] 아래로는 내리지 않는다.
+  /// 실물 숫자부 각인은 함수부보다 훨씬 크다. 숫자부 키캡 높이 × [CalcTheme.keyNumberMainLabelFontRatio]를 목표로 하고
+  /// ([CalcTheme] "숫자부 메인 각인 크기 (#225)" 절), 숫자부 키캡 높이·숫자 폭에 들어가는 크기까지 줄이되 [mainLabelFontSize]
+  /// 아래로는 내리지 않는다. 숫자부의 글자 각인·연산 기호는 이 크기의 배수로 따로 정한다([numberWordLabelFontSize]·
+  /// [numberOperatorLabelFontSize]). 키마다 쓸 크기는 [mainLabelFontSizeOf]다.
   final double numberMainLabelFontSize;
+
+  /// 숫자부 글자 각인(DEL·AC·Ans·×10ˣ) 글자 크기 (배율 반영 전, dp, #225) — [numberMainLabelFontSize] ×
+  /// [CalcTheme.keyNumberWordLabelScale]를 목표로 키캡 높이·폭에 들어가게 줄이되 [mainLabelFontSize] 아래로는 내리지 않는다.
+  final double numberWordLabelFontSize;
+
+  /// 숫자부 연산 기호(× ÷ + − =) 글자 크기 (배율 반영 전, dp, #225) — [numberMainLabelFontSize] ×
+  /// [CalcTheme.keyNumberOperatorLabelScale]를 목표로 키캡 높이·폭에 들어가게 줄이되 [numberMainLabelFontSize] 아래로는
+  /// 내리지 않는다. [CalcTheme.keyNumberOperatorLabelStyle]로 그린다.
+  final double numberOperatorLabelFontSize;
 
   /// 함수부·상단 조작부 키의 터치 영역을 각인 띠까지 넓힐지 여부
   final bool extendFunctionHitArea;
@@ -105,6 +128,8 @@ class KeypadMetrics {
     required this.legendFontSize,
     required this.mainLabelFontSize,
     required this.numberMainLabelFontSize,
+    required this.numberWordLabelFontSize,
+    required this.numberOperatorLabelFontSize,
     required this.extendFunctionHitArea,
     required this.extendNumberHitArea,
   });
@@ -141,7 +166,14 @@ class KeypadMetrics {
   /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
   /// 폭은 [metrics]에서 읽는다 — 셀 너비만 따로 받으면 그린 키캡 폭(#220)을 빠뜨려 제품과 다른 규칙을 잴 수 있다(#220 R1).
   @visibleForTesting
-  static ({double main, double numberMain, double legend}) debugWidthLimits(
+  static ({
+    double main,
+    double numberMain,
+    double numberWord,
+    double numberOperator,
+    double legend,
+  })
+  debugWidthLimits(
     KeypadMetrics metrics, {
     bool Function(CalcKeyDef def)? where,
   }) {
@@ -155,6 +187,8 @@ class KeypadMetrics {
     return (
       main: limits.main,
       numberMain: limits.numberMain,
+      numberWord: limits.numberWord,
+      numberOperator: limits.numberOperator,
       legend: limits.legend,
     );
   }
@@ -207,6 +241,30 @@ class KeypadMetrics {
     for (final row in numberRows)
       for (final def in row) def.id,
   };
+
+  /// 숫자부 키 [def]의 메인 각인 종류 (#225) — 숫자부가 아니면 `null`.
+  /// - [NumberLabelKind.operator]: 연산 기호 한 글자([CalcTheme.isKeyOperatorLegend]) — × ÷ + − =
+  /// - [NumberLabelKind.word]: 두 글자 이상(한 줄 표기 기준) — DEL·AC·Ans·×10ˣ
+  /// - [NumberLabelKind.digit]: 나머지 한 글자 — 0~9·소수점
+  static NumberLabelKind? numberLabelKindOf(CalcKeyDef def) {
+    if (!isNumberKey(def.id)) return null;
+    if (CalcTheme.isKeyOperatorLegend(def.mainLegend)) {
+      return NumberLabelKind.operator;
+    }
+    return def.mainLegend.plainText.runes.length > 1
+        ? NumberLabelKind.word
+        : NumberLabelKind.digit;
+  }
+
+  /// 키 [def]에 주입할 메인 라벨 글자 크기 (배율 반영 전, dp) — 상단 조작부·함수부는 [mainLabelFontSize], 숫자부는 각인
+  /// 종류([numberLabelKindOf])별 크기다(#156·#225).
+  double mainLabelFontSizeOf(CalcKeyDef def) =>
+      switch (numberLabelKindOf(def)) {
+        null => mainLabelFontSize,
+        NumberLabelKind.digit => numberMainLabelFontSize,
+        NumberLabelKind.word => numberWordLabelFontSize,
+        NumberLabelKind.operator => numberOperatorLabelFontSize,
+      };
 
   /// [id] 키캡의 가로/세로 비 상한 (#220) — 숫자부는 [CalcTheme.keyCapNumberMaxAspectRatio], 나머지는
   /// [CalcTheme.keyCapMaxAspectRatio]. 키패드가 키에 주는 값과 글자 크기 계산이 같은 값을 쓴다.
@@ -392,9 +450,10 @@ class KeypadMetrics {
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
-  /// 4. **숫자부 메인 라벨** (#156): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 키는 그 크기의
-  ///    [CalcTheme.keyNumberMainLabelScale]배를 목표로 숫자부 키캡 높이·숫자부 라벨 폭에 들어가게 줄이고(함수부 크기
-  ///    아래로는 내리지 않는다), [numberMainLabelFontSize]로 따로 주입한다.
+  /// 4. **숫자부 메인 라벨** (#156·#225): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 숫자는 숫자부
+  ///    키캡 높이 × [CalcTheme.keyNumberMainLabelFontRatio]를 목표로 키캡 높이·숫자 폭에 들어가게 줄이고(함수부 크기
+  ///    아래로는 내리지 않는다), 글자 각인·연산 기호는 그 숫자 크기의 배수를 목표로 각각 키캡 높이·자기 폭에 맞춘다
+  ///    ([numberMainLabelFontSize]·[numberWordLabelFontSize]·[numberOperatorLabelFontSize]).
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(
@@ -495,32 +554,54 @@ class KeypadMetrics {
 
     final mainLabelFontSize = unify(mainByHeight, widths.main);
 
-    // 4. 숫자부 메인 라벨 (#156) — 함수부 크기의 배수를 목표로, 숫자부 키캡 높이·폭에 들어가게 줄인다(함수부보다 작아지지 않는다).
+    // 4. 숫자부 메인 라벨 (#156·#225) — 숫자는 숫자부 키캡 높이의 비율을 목표로, 글자 각인·연산 기호는 숫자 크기의 배수를
+    //    목표로 각각 키캡 높이·자기 폭에 들어가게 줄인다. 숫자·글자 각인은 함수부보다, 연산 기호는 숫자보다 작아지지 않는다.
     final numberCapHeight = capHeightOf(numberRowHeight);
     final numberCapInnerHeight =
         numberCapHeight -
         math.min(CalcTheme.keyPressedOffset, numberCapHeight) -
         2 * CalcTheme.keyBorderWidth;
-    final numberByHeight = _fitToHeight(
-      math.max(
-        minFittedFontSize,
-        math.min(
-          mainLabelFontSize * CalcTheme.keyNumberMainLabelScale,
-          CalcTheme.keyNumberMainLabelMaxFontSize,
+    double fitNumber(
+      double target, {
+      required double floor,
+      required double maxScaledByWidth,
+      required TextStyle style,
+      List<KeyLegendEmMetrics> tallLegends = const [],
+    }) => math.max(
+      floor,
+      fitFontSize(
+        _fitToHeight(
+          math.max(minFittedFontSize, target),
+          maxHeight: numberCapInnerHeight,
+          textScaler: scaler,
+          style: style,
+          tallLegends: tallLegends,
         ),
+        textScaler: scaler,
+        fits: (scaled) => scaled <= maxScaledByWidth,
       ),
-      maxHeight: numberCapInnerHeight,
-      textScaler: scaler,
+    );
+    final numberMainLabelFontSize = fitNumber(
+      math.min(
+        numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
+        CalcTheme.keyNumberMainLabelMaxFontSize,
+      ),
+      floor: mainLabelFontSize,
+      maxScaledByWidth: widths.numberMain,
+      style: CalcTheme.keyMainLabelStyle,
+    );
+    final numberWordLabelFontSize = fitNumber(
+      numberMainLabelFontSize * CalcTheme.keyNumberWordLabelScale,
+      floor: mainLabelFontSize,
+      maxScaledByWidth: widths.numberWord,
       style: CalcTheme.keyMainLabelStyle,
       tallLegends: limits.tallNumberMains,
     );
-    final numberMainLabelFontSize = math.max(
-      mainLabelFontSize,
-      fitFontSize(
-        numberByHeight,
-        textScaler: scaler,
-        fits: (scaled) => scaled <= widths.numberMain,
-      ),
+    final numberOperatorLabelFontSize = fitNumber(
+      numberMainLabelFontSize * CalcTheme.keyNumberOperatorLabelScale,
+      floor: numberMainLabelFontSize,
+      maxScaledByWidth: widths.numberOperator,
+      style: CalcTheme.keyNumberOperatorLabelStyle,
     );
 
     return KeypadMetrics._(
@@ -535,6 +616,8 @@ class KeypadMetrics {
       legendFontSize: unify(legendByHeight, widths.legend),
       mainLabelFontSize: mainLabelFontSize,
       numberMainLabelFontSize: numberMainLabelFontSize,
+      numberWordLabelFontSize: numberWordLabelFontSize,
+      numberOperatorLabelFontSize: numberOperatorLabelFontSize,
       extendFunctionHitArea: capHeight < CalcTheme.keyMinTouchTargetHeight,
       extendNumberHitArea:
           capHeightOf(numberRowHeight) < CalcTheme.keyMinTouchTargetHeight,
@@ -551,8 +634,14 @@ class _LabelLimits {
   /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp) — 숫자부를 뺀 키
   final double main;
 
-  /// 숫자부 메인 라벨 최대 글자 크기 (배율 반영 후, dp, #156)
+  /// 숫자부 숫자(0~9·소수점) 최대 글자 크기 (배율 반영 후, dp, #156·#225)
   final double numberMain;
+
+  /// 숫자부 글자 각인(DEL·AC·Ans·×10ˣ) 최대 글자 크기 (배율 반영 후, dp, #225)
+  final double numberWord;
+
+  /// 숫자부 연산 기호(× ÷ + − =) 최대 글자 크기 (배율 반영 후, dp, #225)
+  final double numberOperator;
 
   /// 각인 최대 글자 크기 (배율 반영 후, dp)
   final double legend;
@@ -560,7 +649,7 @@ class _LabelLimits {
   /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155) — 숫자부를 뺀 키
   final List<KeyLegendEmMetrics> tallMains;
 
-  /// 숫자부 2차원 메인 각인(`×10ˣ`)의 em 치수 (#156)
+  /// 숫자부 2차원 메인 각인(`×10ˣ` — 글자 각인)의 em 치수 (#156)
   final List<KeyLegendEmMetrics> tallNumberMains;
 
   /// 2차원 SHIFT·ALPHA 각인의 em 치수
@@ -569,6 +658,8 @@ class _LabelLimits {
   const _LabelLimits(
     this.main,
     this.numberMain,
+    this.numberWord,
+    this.numberOperator,
     this.legend,
     this.tallMains,
     this.tallNumberMains,
@@ -590,6 +681,8 @@ class _LabelLimits {
   }) {
     var main = double.infinity;
     var numberMain = double.infinity;
+    var numberWord = double.infinity;
+    var numberOperator = double.infinity;
     var legend = double.infinity;
     final tallMains = <KeyLegendEmMetrics>[];
     final tallNumberMains = <KeyLegendEmMetrics>[];
@@ -631,11 +724,19 @@ class _LabelLimits {
           2 * CalcTheme.keyBorderWidth;
       final mainLimit =
           math.max(0.0, capInner) /
-          _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle);
-      if (number) {
-        numberMain = math.min(numberMain, mainLimit);
-      } else {
-        main = math.min(main, mainLimit);
+          _emWidth(
+            def.mainLegend,
+            CalcTheme.keyMainLabelStyleFor(def.mainLegend),
+          );
+      switch (KeypadMetrics.numberLabelKindOf(def)) {
+        case null:
+          main = math.min(main, mainLimit);
+        case NumberLabelKind.digit:
+          numberMain = math.min(numberMain, mainLimit);
+        case NumberLabelKind.word:
+          numberWord = math.min(numberWord, mainLimit);
+        case NumberLabelKind.operator:
+          numberOperator = math.min(numberOperator, mainLimit);
       }
       if (!def.mainLegend.isPlain) {
         (number ? tallNumberMains : tallMains).add(
@@ -684,6 +785,8 @@ class _LabelLimits {
     return _LabelLimits(
       main,
       numberMain,
+      numberWord,
+      numberOperator,
       legend,
       tallMains,
       tallNumberMains,
@@ -873,10 +976,8 @@ class _KeypadBody extends StatelessWidget {
       showLegendBand: showLegendBand,
       extendHitAreaToLegend: showLegendBand && extendHitArea,
       legendFontSize: metrics.legendFontSize,
-      // 숫자부 키는 메인 라벨을 [KeypadMetrics.numberMainLabelFontSize]로 그린다 (#156)
-      mainLabelFontSize: KeypadMetrics.isNumberKey(def.id)
-          ? metrics.numberMainLabelFontSize
-          : metrics.mainLabelFontSize,
+      // 숫자부 키는 각인 종류별 크기로 그린다 (#156·#225)
+      mainLabelFontSize: metrics.mainLabelFontSizeOf(def),
       // 모든 구역이 함수부와 같은 각인 띠, 구역별 키캡 가로/세로 비 상한 (#220)
       legendHeight: metrics.legendBandHeight,
       keycapMaxAspectRatio: KeypadMetrics.keycapMaxAspectRatioOf(def.id),

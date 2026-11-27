@@ -1041,14 +1041,26 @@ class _Keycap extends StatelessWidget {
                 child: TweenAnimationBuilder<Color?>(
                   tween: ColorTween(end: labelColor),
                   duration: duration,
-                  builder: (context, color, _) => _legendLabel(
-                    keyDef.mainLegend,
-                    CalcTheme.keyMainLabelStyle.copyWith(
-                      fontSize: fontSize,
-                      color: color,
-                    ),
-                    textScaler,
-                  ),
+                  builder: (context, color, _) {
+                    final label = _legendLabel(
+                      keyDef.mainLegend,
+                      CalcTheme.keyMainLabelStyleFor(keyDef.mainLegend)
+                          .copyWith(fontSize: fontSize, color: color),
+                      textScaler,
+                    );
+                    // 숫자부 연산 기호는 키운 만큼 내려 잉크 가운데를 숫자와 맞춘다 (#225). 그리기만 옮긴다(배치·터치 영역은 그대로).
+                    if (!CalcTheme.isKeyOperatorLegend(keyDef.mainLegend)) {
+                      return label;
+                    }
+                    return Transform.translate(
+                      offset: Offset(
+                        0,
+                        textScaler.scale(fontSize) *
+                            CalcTheme.keyNumberOperatorLabelDrop,
+                      ),
+                      child: label,
+                    );
+                  },
                 ),
               ),
             ),
