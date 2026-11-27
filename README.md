@@ -175,16 +175,20 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
   - 실제 분할 화면은 접힘선을 창 경계에 둔다(가로 화면은 좌우, 세로 화면은 위아래). 접힘선을 지나는 창은 자유 형식 창(위 항목)을
     `shell am task resize`로 접힘선에 걸쳐 만든다.
 - `7.6in Foldable`·`6.7in Foldable`: 화면이 하나뿐이라 커버 화면이 없다(`emu fold`가 화면을 바꾸지 않는다).
-  **접은 자세(`emu posture 2`·`1`)에서만** 접힘 정보(폭 1px `hinge`)를 보고하고, 반 접힘 자세(`2`)에서도 상태가 `postureFlat`로 온다.
-  완전히 펼치면(`posture 3`) 보고하지 않는다 — `display_features`를 덮어써도 같다.
+  **접은 자세(`emu posture 2`·`1`)에서만** 접힘 정보(폭 1px `hinge`)를 보고한다. 상태는 반 접힘 자세(`2`)에서 `postureFlat`,
+  닫힘 자세(`1`)에서 `postureHalfOpened`로 온다(7.6"에서 확인). 완전히 펼치면(`posture 3`) 보고하지 않는다 — `display_features`를 덮어써도 같다.
   - 7.6"는 가로로 돌린 뒤 좌우 분할하면 가로 접힘선을 지나는 실제 분할 창(약 416×674)이 생긴다(Galaxy Z Fold 분할 창 크기).
-  - 완전히 펼친 Flip은 Pixel Fold에 크기·접힘선을 덮어써 흉내 낸다(#144의 방법). 먼저 원래 값을 적어 둔다:
-    `shell settings get global display_features`(Flip AVD는 처음에 `null`이었다), `shell wm size`, `shell wm density`.
-    그 뒤 `shell wm size 1080x2636`·`shell wm density 480`·`shell settings put global display_features "'fold-[0,1318,1080,1318]'"`로 바꾸고
-    앱을 다시 시작한다. 되돌릴 때는 `shell wm size reset`·`shell wm density reset`, 적어 둔 값이 `null`이면
-    `shell settings delete global display_features`, 아니면 그 값을 다시 넣는다.
-  - Flip AVD는 `display_features`의 원래 값이 `null`인데도, 덮어쓴 뒤 `delete`로 지우자 반 접힘에서도 접힘 정보가 오지 않았다.
-    `hinge-[0,1318,1080,1319]`(그 AVD가 보고하던 값)을 넣어 되돌렸다 — 지우지 말고 이 값으로 되돌린다.
+  - 완전히 펼친 Flip은 Pixel Fold에 크기·접힘선을 덮어써 흉내 낸다(#144의 방법):
+    `shell wm size 1080x2636`·`shell wm density 480`·`shell settings put global display_features "'fold-[0,1318,1080,1318]'"` 뒤 앱을 다시 시작한다.
+    - **덮어쓰기는 이번 확인용으로 새로 만든 AVD나 `-read-only`로 띄운 AVD에서만 한다.** 이 값들은 AVD 데이터에 남고, 되돌리는 방법이
+      기기마다 달라 공유 AVD(`AltCalc_Pixel_Fold_API36` 등)를 망가뜨릴 수 있다. `-read-only`로 띄웠으면 에뮬레이터를 끄는 것으로 되돌아간다.
+    - 실측한 되돌리기: #140에서 새로 만든 Pixel Fold AVD는 `shell wm size reset`·`shell wm density reset`·
+      `shell settings delete global display_features` 뒤 앱을 다시 시작하자 원래 접힘선(x=1104px, `fold`)을 다시 보고했다.
+      덮어쓰기 전 원래 값(`settings get`)은 적어 두지 않아 확인하지 못했다.
+    - Flip AVD는 처음에 `settings get global display_features`가 `null`이었는데, 덮어쓴 뒤 `delete`하자 반 접힘에서도 접힘 정보가 오지 않았다.
+      그 AVD가 보고하던 값 `hinge-[0,1318,1080,1319]`을 넣자 다시 보고했다 — 원래 상태(`null`)로 돌아간 것은 아니다. 그래서 Flip AVD에는
+      덮어쓰지 않는다.
+  - 회전에 쓴 `accelerometer_rotation`은 끝나면 `shell settings put system accelerometer_rotation 1`로 되돌린다.
 - TalkBack 쓸어 넘기기는 `shell uinput -` 가상 터치(위 TalkBack 항목)로 넣는다. 가상 터치 좌표는 화면 기본 방향 기준이라,
   돌린 화면(`user_rotation 1`)에서는 원시 좌표의 y축으로 쓸어야 다음 항목으로 간다(+y가 다음).
   초점 테두리 색은 LCD 위에서 더 밝은 초록으로 보이므로 색 판정을 넉넉히 둔다.

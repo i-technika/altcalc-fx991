@@ -34,8 +34,8 @@ import '../support/touch_metrics.dart';
 //   펼침·반 접힘 모두 폭 0 `fold`를 보고한다.
 //
 // 키 크기: [_Case.keyNodePx]는 에뮬레이터 `uiautomator dump`의 가장 낮은 키 노드 높이(px 정수)다. 위젯이 그린 함수 키 터치
-// 높이 × 밀도와 1px 안에서 맞아야 한다. 스크린리더 읽기 순서는 모든 경우에 검사하지만, TalkBack 쓸어 넘기기로 실제로 확인한
-// 것은 [_Case.talkBackChecked]인 경우뿐이다.
+// 높이 × 밀도와 1px 안에서 맞아야 한다. 스크린리더 읽기 순서는 모든 경우에 검사하지만(활성 LCD → 기록 → 함수부 쪽 키 전부 →
+// 숫자부 키 전부), TalkBack 쓸어 넘기기로 실제로 확인한 것은 [_Case.talkBack]이 있는 경우와 그 범위뿐이다.
 
 /// 에뮬레이터 한 경우 — 값은 모두 기기 px이고, [density]로 나눠 dp로 넣는다
 class _Case {
@@ -69,8 +69,8 @@ class _Case {
   /// 에뮬레이터 uiautomator의 가장 낮은 키 노드 높이 (px). 재지 않은 경우(회전 중 한 프레임)는 `null`.
   final int? keyNodePx;
 
-  /// TalkBack 쓸어 넘기기로 읽기 순서를 실제로 확인했는지 (테스트 이름에만 쓴다)
-  final bool talkBackChecked;
+  /// TalkBack 쓸어 넘기기로 실제로 확인한 읽기 순서 범위 (테스트 이름에만 쓴다). 확인하지 않았으면 `null`.
+  final String? talkBack;
 
   const _Case(
     this.name, {
@@ -86,7 +86,7 @@ class _Case {
     required this.hasHistory,
     required this.functionKeyTouch,
     required this.keyNodePx,
-    this.talkBackChecked = false,
+    this.talkBack,
   });
 
   Size get window => windowPx / density;
@@ -155,7 +155,9 @@ final _cases = <_Case>[
         hasHistory: true,
         functionKeyTouch: 37.56,
         keyNodePx: 98,
-        talkBackChecked: h == Handedness.right && state == _flat,
+        talkBack: h == Handedness.right && state == _flat
+            ? 'LCD→기록→함수부→숫자부'
+            : null,
       ),
   // ── Pixel Fold 세로로 돌림 (가로 접힘선, 넓은 배열, 기록 없음) — TalkBack: 두 손잡이 펼침 ──
   for (final h in Handedness.values)
@@ -179,7 +181,7 @@ final _cases = <_Case>[
         hasHistory: false,
         functionKeyTouch: 37.68,
         keyNodePx: 99,
-        talkBackChecked: state == _flat,
+        talkBack: state == _flat ? 'LCD→함수부→숫자부' : null,
       ),
   // ── 회전 중 한 프레임: 접힘 정보가 창 크기보다 먼저 새 방향으로 왔다 (화면 캡처에는 나오지 않았다) ──
   const _Case(
@@ -253,23 +255,28 @@ final _cases = <_Case>[
     functionKeyTouch: 27.26,
     keyNodePx: 71,
   ),
-  // ── 7.6" Foldable (Galaxy Z Fold형, 반 접힘 자세 — 접힘 정보는 postureFlat로 온다) ──
-  const _Case(
-    '7.6" Foldable 책 자세',
-    density: _pf,
-    windowPx: Size(1768, 2208),
-    topPx: 63,
-    bottomPx: 84,
-    gesturePx: _f76Gestures,
-    featuresPx: [(_hinge, _flat, Rect.fromLTRB(884, 0, 885, 2208))],
-    insetsLine: '창 673.52x841.14, 밀도 2.625, $_f76Insets',
-    line:
-        'hingeSplit — 창 673.5x841.1, 키패드 345.14,373.97-665.52,801.14, '
-        '화면 특징 [hinge postureFlat 336.8,0-337.1,841.1], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: true,
-    functionKeyTouch: 36.31,
-    keyNodePx: 95,
-  ),
+  // ── 7.6" Foldable (Galaxy Z Fold형) — 접힘 정보는 반 접힘 자세(posture 2)에서 postureFlat,
+  // 닫힘 자세(1)에서 postureHalfOpened로 온다 ──
+  for (final (state, stateName, posture) in [
+    (_flat, 'postureFlat', '반 접힘 자세'),
+    (_half, 'postureHalfOpened', '닫힘 자세'),
+  ])
+    _Case(
+      '7.6" Foldable 책 자세 ($posture)',
+      density: _pf,
+      windowPx: const Size(1768, 2208),
+      topPx: 63,
+      bottomPx: 84,
+      gesturePx: _f76Gestures,
+      featuresPx: [(_hinge, state, const Rect.fromLTRB(884, 0, 885, 2208))],
+      insetsLine: '창 673.52x841.14, 밀도 2.625, $_f76Insets',
+      line:
+          'hingeSplit — 창 673.5x841.1, 키패드 345.14,373.97-665.52,801.14, '
+          '화면 특징 [hinge $stateName 336.8,0-337.1,841.1], 가로지르는 접힘선 1, 폴더블=true',
+      hasHistory: true,
+      functionKeyTouch: 36.31,
+      keyNodePx: 95,
+    ),
   const _Case(
     '7.6" Foldable 가로로 돌림 (넓은 배열 + 기록)',
     density: _pf,
@@ -285,26 +292,30 @@ final _cases = <_Case>[
     hasHistory: true,
     functionKeyTouch: 45.40,
     keyNodePx: 119,
-    talkBackChecked: true,
+    talkBack: 'LCD→기록→함수부→숫자부',
   ),
-  const _Case(
-    '7.6" Foldable 가로 화면의 좌우 분할 창 (오른쪽, 약 416×674)',
-    density: _pf,
-    windowPx: Size(1091, 1768),
-    topPx: 63,
-    bottomPx: 84,
-    gesturePx: EdgeInsets.fromLTRB(0, 63, 78, 84),
-    featuresPx: [(_hinge, _flat, Rect.fromLTRB(0, 883, 1091, 884))],
-    insetsLine:
-        '창 415.62x673.52, 밀도 2.625, 인셋 0/24/0/32, 시스템 바 0/24/0/32, '
-        '제스처 영역 0/24/29.71/32',
-    line:
-        'hingeStacked — 창 415.6x673.5, 키패드 8,344.76-407.62,633.52, '
-        '화면 특징 [hinge postureFlat 0,336.4-415.6,336.8], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: false,
-    functionKeyTouch: 24.55,
-    keyNodePx: 64,
-  ),
+  for (final (state, stateName, posture) in [
+    (_flat, 'postureFlat', '반 접힘 자세'),
+    (_half, 'postureHalfOpened', '닫힘 자세'),
+  ])
+    _Case(
+      '7.6" Foldable 가로 화면의 좌우 분할 창 (오른쪽, 약 416×674, $posture)',
+      density: _pf,
+      windowPx: const Size(1091, 1768),
+      topPx: 63,
+      bottomPx: 84,
+      gesturePx: const EdgeInsets.fromLTRB(0, 63, 78, 84),
+      featuresPx: [(_hinge, state, const Rect.fromLTRB(0, 883, 1091, 884))],
+      insetsLine:
+          '창 415.62x673.52, 밀도 2.625, 인셋 0/24/0/32, 시스템 바 0/24/0/32, '
+          '제스처 영역 0/24/29.71/32',
+      line:
+          'hingeStacked — 창 415.6x673.5, 키패드 8,344.76-407.62,633.52, '
+          '화면 특징 [hinge $stateName 0,336.4-415.6,336.8], 가로지르는 접힘선 1, 폴더블=true',
+      hasHistory: false,
+      functionKeyTouch: 24.55,
+      keyNodePx: 64,
+    ),
   // ── 6.7" Flip 에뮬레이터 ──
   const _Case(
     'Flip 반 접힘 (폭 1px 힌지)',
@@ -322,7 +333,7 @@ final _cases = <_Case>[
     hasHistory: true,
     functionKeyTouch: 33.91,
     keyNodePx: 101,
-    talkBackChecked: true,
+    talkBack: 'LCD→기록→함수부, 숫자부까지는 쓸지 않음',
   ),
   const _Case(
     'Flip 완전히 펼침 (에뮬레이터는 접힘 정보 없음)',
@@ -365,11 +376,12 @@ final _cases = <_Case>[
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
-/// 함수부 쪽 키(상단 조작부·함수부, 커서 패드 제외)와 숫자부 키
+/// 함수부 쪽 키(상단 조작부 — 설정 키 ON 포함 —, 커서 패드, 함수부)와 숫자부 키
 final _functionSideKeys = [
   for (final rows in [controlLeftRows, controlRightRows, functionRows])
     for (final row in rows)
       for (final def in row) def.id,
+  for (final def in cursorPad.all) def.id,
 ];
 final _numberKeys = [
   for (final row in numberRows)
@@ -387,7 +399,7 @@ List<String> _linesOf(List<String> log, String kind) => [
 
 void main() {
   for (final c in _cases) {
-    final tb = c.talkBackChecked ? ' (TalkBack 확인)' : '';
+    final tb = c.talkBack == null ? '' : ' (TalkBack 확인: ${c.talkBack})';
     testWidgets('${c.name}: 에뮬레이터 로그와 같은 배치$tb', (tester) async {
       final printed = <String>[];
       LayoutLog.enable(sink: printed.add, frameTimings: false);
@@ -452,27 +464,87 @@ void main() {
           find.byKey(const ValueKey('calc-keypad')),
         );
 
-        // 접힘선 기준 배치: LCD·기록·키패드가 접힘선 양쪽 간격 띠에 걸치지 않는다
-        final hinge = FormFactor.hingeOf(size, c.features);
-        if (c.line.startsWith('hinge') && hinge != null) {
-          final b = hinge.bounds;
+        final historyRect = c.hasHistory ? tester.getRect(history) : null;
+        final regions = <String, Rect>{
+          'LCD': lcdRect,
+          '키패드': keypadRect,
+          '기록': ?historyRect,
+        };
+
+        // LCD·기록·키패드는 서로 겹치지 않는다
+        final names = regions.keys.toList();
+        for (var i = 0; i < names.length; i++) {
+          for (var j = i + 1; j < names.length; j++) {
+            final a = regions[names[i]]!;
+            final b = regions[names[j]]!;
+            final o = a.intersect(b);
+            expect(
+              o.width <= 0.01 || o.height <= 0.01,
+              isTrue,
+              reason: '${names[i]} $a ↔ ${names[j]} $b',
+            );
+          }
+        }
+
+        final keypad = tester.widget<CalcKeypad>(find.byType(CalcKeypad));
+        final sin = tester.getRect(_keycap(CalcKeyId.sin));
+        final seven = tester.getRect(_keycap(CalcKeyId.num7));
+
+        // 접힘선 기준 배치: 세 영역이 접힘선 양쪽 간격 띠에 걸치지 않고, 패널 배정이 기록대로다
+        if (c.line.startsWith('hinge')) {
+          final hinge = FormFactor.hingeOf(size, c.features);
+          expect(hinge, isNotNull);
+          final b = hinge!.bounds;
           final vertical = FormFactor.isVerticalHinge(b);
           const m = CalcTheme.screenHingeMargin - 0.01;
-          bool clear(Rect r) => vertical
-              ? r.right <= b.left - m || r.left >= b.right + m
-              : r.bottom <= b.top - m || r.top >= b.bottom + m;
-          expect(clear(lcdRect), isTrue, reason: 'LCD $lcdRect');
-          expect(clear(keypadRect), isTrue, reason: '키패드 $keypadRect');
-          if (c.hasHistory) {
-            final h = tester.getRect(history);
-            expect(clear(h), isTrue, reason: '기록 $h');
+          bool before(Rect r) =>
+              vertical ? r.right <= b.left - m : r.bottom <= b.top - m;
+          bool after(Rect r) =>
+              vertical ? r.left >= b.right + m : r.top >= b.bottom + m;
+          for (final e in regions.entries) {
+            expect(
+              before(e.value) || after(e.value),
+              isTrue,
+              reason: '${e.key} ${e.value}',
+            );
+          }
+          if (vertical) {
+            // 책 자세: 키패드는 손 쪽 패널, 기록은 반대쪽 패널. 손 쪽 패널이 짧으면 활성 LCD도 반대쪽 패널이다.
+            final keypadOnRight = after(keypadRect);
+            expect(keypadOnRight, c.handedness == Handedness.right);
+            if (historyRect != null) {
+              expect(after(historyRect), !keypadOnRight);
+            }
+            final lcdBeside = c.line.contains('(LCD 옆 패널)');
+            expect(after(lcdRect), lcdBeside ? !keypadOnRight : keypadOnRight);
+          } else {
+            // 가로 접힘선: 키패드는 아래 패널, 활성 LCD·기록은 위 패널
+            expect(after(keypadRect), isTrue);
+            expect(before(lcdRect), isTrue);
+            if (historyRect != null) {
+              expect(before(historyRect), isTrue);
+              if (keypad.arrangement == KeypadArrangement.wide) {
+                // 넓은 배열: 기록은 함수부 위, 활성 LCD는 숫자부 위
+                double dx(Rect a, Rect b) => (a.center.dx - b.center.dx).abs();
+                expect(
+                  dx(historyRect, sin) < dx(historyRect, seven),
+                  isTrue,
+                  reason: '기록 $historyRect',
+                );
+                expect(
+                  dx(lcdRect, seven) < dx(lcdRect, sin),
+                  isTrue,
+                  reason: 'LCD $lcdRect',
+                );
+              } else {
+                // 실물 배열: 활성 LCD 아래에 기록
+                expect(historyRect.top, greaterThan(lcdRect.bottom));
+              }
+            }
           }
         }
 
         // 숫자부 위치: 넓은 배열은 손잡이 쪽(실물 배열은 함수부 아래)
-        final keypad = tester.widget<CalcKeypad>(find.byType(CalcKeypad));
-        final sin = tester.getRect(_keycap(CalcKeyId.sin));
-        final seven = tester.getRect(_keycap(CalcKeyId.num7));
         if (keypad.arrangement == KeypadArrangement.wide) {
           expect(
             seven.center.dx < sin.center.dx,

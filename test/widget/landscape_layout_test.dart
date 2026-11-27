@@ -17,9 +17,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/bundled_fonts.dart';
-import '../support/semantics_order.dart';
 import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
+import '../support/semantics_order.dart';
 
 /// 가로형 배치 (#142) — 아래 넓은 키패드 배열, 위 띠에 활성 LCD(숫자부 위)와 계산 기록(함수부 위).
 /// 규칙은 `CalcTheme` "가로형 배치" 절, 배치 계산은 [CalcLandscapeLayout].
