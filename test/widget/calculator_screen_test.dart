@@ -18,8 +18,10 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_reader_announcer.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,6 +47,13 @@ Future<ProviderContainer> _pumpScreen(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        // 앱([AltCalcApp])처럼 스크린리더 알림 노드를 루트 Navigator 위에 둔다 (#207). 알림 방법은 이 노드가 보는
+        // MediaQuery로 정해지므로 같은 값을 준다.
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(supportsAnnounce: supportsAnnounce),
+          child: ScreenReaderAnnouncerLayer(child: child!),
+        ),
         home: MediaQuery(
           data: MediaQueryData(
             size: size,
@@ -2032,6 +2041,84 @@ void main() {
         }
         expect(heard, ['7', '7', '시프트 켜짐', '아크사인', '시프트 켜짐', '아크사인']);
         expect(tester.takeAnnouncements(), isEmpty);
+        handle.dispose();
+      });
+
+      testWidgets(
+        '알린 뒤 clearDelay가 지나면 라벨을 비운다 — 지난 알림이 초점 자리로 남지 않는다 (#207)',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          useKoreanLocale(tester);
+          await _pumpScreen(tester);
+          expect(rawLabel(tester), isEmpty);
+          const delay = ScreenReaderAnnouncer.clearDelay;
+          const tick = Duration(milliseconds: 1);
+
+          await press(tester, CalcKeyId.shift);
+          expect(rawLabel(tester), '시프트 켜짐');
+          await tester.pump(delay - tick);
+          expect(rawLabel(tester), '시프트 켜짐');
+          await tester.pump(tick);
+          expect(rawLabel(tester), isEmpty);
+
+          // 새 알림은 비우기를 처음부터 다시 잰다 — 이어진 알림이 앞 알림의 타이머에 지워지지 않는다.
+          await press(tester, CalcKeyId.num7);
+          await tester.pump(delay ~/ 2);
+          await press(tester, CalcKeyId.num8);
+          expect(
+            rawLabel(tester).replaceAll(ScreenReaderAnnouncer.repeatMarker, ''),
+            '8',
+          );
+          await tester.pump(delay - tick);
+          expect(
+            rawLabel(tester).replaceAll(ScreenReaderAnnouncer.repeatMarker, ''),
+            '8',
+          );
+          await tester.pump(tick);
+          expect(rawLabel(tester), isEmpty);
+          handle.dispose();
+        },
+      );
+
+      testWidgets('SHIFT 대기 중 설정 키로 대화상자가 열려도 "꺼짐" 알림 노드가 의미 트리에 남는다 (#207)', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester);
+        await press(tester, CalcKeyId.shift);
+        await tester.tap(_keycap(settingsKey));
+        await tester.pump(); // 대화상자 경로가 들어온 첫 프레임 — 장벽이 아래 경로의 의미 노드를 막는다
+
+        /// 지금 의미 트리에 있는 liveRegion 노드의 라벨 (반복 구분 글자 제거)
+        List<String> liveLabels() {
+          final labels = <String>[];
+          bool visit(SemanticsNode node) {
+            if (node.flagsCollection.isLiveRegion) {
+              labels.add(
+                node.label.replaceAll(ScreenReaderAnnouncer.repeatMarker, ''),
+              );
+            }
+            node.visitChildren(visit);
+            return true;
+          }
+
+          visit(
+            tester
+                .binding
+                .renderViews
+                .first
+                .owner!
+                .semanticsOwner!
+                .rootSemanticsNode!,
+          );
+          return labels;
+        }
+
+        expect(find.byType(HandednessDialog), findsOneWidget);
+        expect(liveLabels(), contains('시프트 꺼짐'));
+        await tester.pumpAndSettle();
+        expect(liveLabels(), contains('시프트 꺼짐'));
         handle.dispose();
       });
 

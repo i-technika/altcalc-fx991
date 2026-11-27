@@ -16,6 +16,7 @@ import 'presentation/l10n/device_locale_scope.dart';
 import 'presentation/providers/device_provider.dart';
 import 'presentation/providers/settings_provider.dart';
 import 'presentation/screens/calculator_screen.dart';
+import 'presentation/widgets/screen_reader_announcer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -494,9 +495,12 @@ class AltCalcApp extends StatelessWidget {
             final screen = _ScreenTheme(
               child: child ?? const SizedBox.shrink(),
             );
-            // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
+            // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20).
+            // 상태 변화 알림 노드는 루트 Navigator 바깥(위)에 둔다 — 설정 대화상자가 열려도 막히지 않게 (#207).
             return DeviceLocaleScope(
-              child: frameBuilder?.call(context, screen) ?? screen,
+              child: ScreenReaderAnnouncerLayer(
+                child: frameBuilder?.call(context, screen) ?? screen,
+              ),
             );
           },
           home: home,
