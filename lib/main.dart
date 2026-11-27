@@ -63,7 +63,7 @@ Future<void> main() async {
 ///   (iPhone은 Info.plist에서도 세로만 허용해 실행 첫 프레임부터 세로로 뜬다.)
 /// - 태블릿: 가로 — LCD와 키패드를 좌우로 나눠 보여 준다. 단 Android 16 이상·iPad에서는 지켜지지 않는다
 ///   ([FormFactor] 참조). 그래서 화면 배치는 방향이 아니라 창 크기로 정한다(`CalculatorScreen`).
-/// - 폴더블 내부 화면: 네 방향 모두 — 배치가 접힘선 방향을 따른다.
+/// - 폴더블 내부 화면·펼친 트라이폴드(#144): 네 방향 모두 — 배치가 접힘선 방향(트라이폴드는 창 모양)을 따른다.
 ///
 /// 폴더블은 시작 시 판정한다([FormFactor.queryFoldableDevice]). 시작 시 판정이 놓친 폴더블과
 /// 접기·펼치기(물리 화면이 커버 ↔ 내부로 바뀜)에 대비해, 화면 정보가 바뀔 때(`didChangeMetrics`, 접히는
@@ -80,6 +80,15 @@ Future<void> main() async {
 /// 접힘 정보가 오기 전 몇 프레임 동안 태블릿(가로)으로 요청해 화면이 돌았다가 돌아오거나, 가로형으로 그렸다가
 /// 위아래로 바뀌는 깜빡임을 막는다. 화면 정보 변화를 받은 그 프레임 안에 바뀐다(앞 방향 요청을 기다리지 않는다).
 /// 앱을 다시 켜면 시작 시 판정부터 다시 한다 — 저장하지 않는 것은 Android 자동 백업이 설정을 다른 기기로 옮기기 때문이다.
+///
+/// ## 트라이폴드 방향 기억 (#144 R1)
+/// 펼친 트라이폴드는 화면 크기와 상관없이 네 방향을 허용한다([FormFactor.orientationPolicyOf]의 `multipleHinges`). 그런데
+/// 회전 직후 몇 프레임은 접힘 정보가 이전 방향 값이라 창을 가로지르지 않는다. 그때 크기 규칙으로 돌아가면, 짧은 변이
+/// 600dp 미만인 화면(화면 크기 설정을 키운 트라이폴드)에서 세로 고정을 한 번 요청했다가 다시 네 방향으로 푼다 —
+/// 에뮬레이터(720×528dp로 흉내 냄)에서 회전할 때마다 그랬다. 그래서 접힘선 2개를 본 창 크기를 기억해, 같은 크기의 창
+/// (돌린 것 포함)인 동안은 접힘 정보가 잠깐 맞지 않아도 네 방향으로 둔다. 창이 다른 크기(접은 커버 화면, 분할 화면,
+/// 화면 크기 설정 변경)가 되면 기억은 쓰이지 않는다. 물리 화면 크기가 아니라 창 크기로 기억하는 것은, 접을 때 물리 화면
+/// 크기가 창·접힘 정보보다 먼저 바뀌는 순간(위젯 테스트에서 재현)에 커버 화면 크기를 기억하지 않게 하려는 것이다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -91,6 +100,10 @@ class DeviceOrientationLock with WidgetsBindingObserver {
 
   /// 마지막으로 본 실제 물리 화면 크기 (dp, 플랫폼이 알려 주지 않으면 갱신하지 않는다) — [FormFactor.isOtherScreen] 비교용
   Size? _lastDisplay;
+
+  /// 창을 가로지르는 접힘선이 둘 이상이었던 창 크기 (dp, 펼친 트라이폴드 — 아래 "트라이폴드 방향 기억", #144).
+  /// 없으면 `null`.
+  Size? _multiHingeWindow;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -126,6 +139,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _applied = null;
     _foldableDevice.value = false;
     _lastDisplay = null;
+    _multiHingeWindow = null;
     _pending = null;
   }
 
@@ -149,12 +163,31 @@ class DeviceOrientationLock with WidgetsBindingObserver {
       view.displayFeatures,
       foldableDevice: _foldableDevice.value,
     );
+    // 접힘 정보 좌표는 창 기준이다 — 창 크기로 센다 (트라이폴드, #144)
+    final window = view.physicalSize / view.devicePixelRatio;
+    final multipleHinges = FormFactor.crossesMultipleHinges(
+      window,
+      view.displayFeatures,
+    );
+    if (multipleHinges) _multiHingeWindow = window;
+    final remembered = _multiHingeWindow;
     return (
-      policy: FormFactor.orientationPolicyOf(kind, displaySize),
+      policy: FormFactor.orientationPolicyOf(
+        kind,
+        displaySize,
+        multipleHinges:
+            multipleHinges ||
+            (remembered != null && _sameSize(remembered, window)),
+      ),
       kind: kind,
       display: displaySize,
     );
   }
+
+  /// [a]와 [b]가 돌린 것까지 같은 크기인지 (1dp 허용)
+  static bool _sameSize(Size a, Size b) =>
+      (a.shortestSide - b.shortestSide).abs() <= 1 &&
+      (a.longestSide - b.longestSide).abs() <= 1;
 
   /// 접힘 정보를 기다리는 최대 시간 (#158). Flutter 엔진도 같은 출처(Jetpack WindowManager)를 따로 구독해 화면 정보로
   /// 보낸다. 두 구독 중 어느 쪽이 먼저 붙는지는 보장되지 않는다. Pixel Fold 에뮬레이터에서는 Dart가 판정 답을 받은 뒤

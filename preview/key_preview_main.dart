@@ -127,6 +127,10 @@ class PreviewDevice {
     final allowed = switch (FormFactor.orientationPolicyOf(
       DeviceKind.foldable,
       base.size,
+      multipleHinges: FormFactor.crossesMultipleHinges(
+        base.size,
+        base.displayFeatures,
+      ),
     )) {
       OrientationPolicy.portrait => const [PreviewOrientation.portrait],
       OrientationPolicy.landscape => const [PreviewOrientation.landscape],
@@ -265,19 +269,22 @@ const DisplayFeature previewFlipInnerFold = DisplayFeature(
   state: DisplayFeatureState.postureFlat,
 );
 
-/// 펼친 트라이폴드 화면(960×704, 가로가 기본 방향)의 두 세로 접힘선 근사값 (#144) — 왼쪽(x=320)·오른쪽(x=640).
+/// 펼친 트라이폴드 화면(823×603, 가로가 기본 방향)의 두 세로 접힘선 근사값 (#144) — 왼쪽(x=274.5)·오른쪽(x=548.5).
 ///
-/// 이슈 #144의 가정 값이다: 세 장이 같은 폭이라 보고 화면을 셋으로 나눈 자리에 폭 0인 접힘선(`fold`·`postureFlat`)이
-/// 위에서 아래까지 가로지른다. 화면 크기·접힘선 개수·위치 모두 실기기 미확인이다(`FormFactor.arrangementOf` "트라이폴드").
+/// Galaxy Z TriFold 메인 화면 2160×1584 px(Samsung 공개 사양)를 밀도 2.625(420dpi, 다른 프리셋과 같은 가정)로 dp로
+/// 바꾸면 822.86×603.43이다. 세 장이 같은 폭이라 보고 셋으로 나눈 자리(274.3·548.6)에 폭 0 접힘선(`fold`·`postureFlat`)이
+/// 위에서 아래까지 가로지른다고 가정했다 — 프리셋 크기를 정수로 반올림하고 접힘선은 돌려도 값이 정확한 274.5·548.5로
+/// 맞췄다. 이슈 #144가 처음 가정한 크기는 960×704였다. 밀도·접힘선 개수·위치 모두 실기기 미확인이다
+/// (`FormFactor.arrangementOf` "트라이폴드"). 짧은 변이 600dp에 가까워, 화면 크기 설정(확대)에 따라 600 아래로 내려갈 수 있다.
 const DisplayFeature previewTriFoldLeftFold = DisplayFeature(
-  bounds: Rect.fromLTWH(320, 0, 0, 704),
+  bounds: Rect.fromLTWH(274.5, 0, 0, 603),
   type: DisplayFeatureType.fold,
   state: DisplayFeatureState.postureFlat,
 );
 
-/// [previewTriFoldLeftFold]의 오른쪽 짝 (x=640)
+/// [previewTriFoldLeftFold]의 오른쪽 짝 (x=548.5)
 const DisplayFeature previewTriFoldRightFold = DisplayFeature(
-  bounds: Rect.fromLTWH(640, 0, 0, 704),
+  bounds: Rect.fromLTWH(548.5, 0, 0, 603),
   type: DisplayFeatureType.fold,
   state: DisplayFeatureState.postureFlat,
 );
@@ -352,12 +359,12 @@ const List<PreviewDevice> previewDevices = [
     displayFeatures: [previewFlipInnerFold],
     foldable: true,
   ),
-  // 펼친 트라이폴드 (#144, Galaxy Z TriFold 가정 — 크기·접힘선은 실기기 미확인). 접힘선이 2개라 앱이 접힘선을 무시하고
+  // 펼친 트라이폴드 (#144, Galaxy Z TriFold 공개 사양 근사 — 밀도·접힘선은 실기기 미확인). 접힘선이 2개라 앱이 접힘선을 무시하고
   // 태블릿처럼 그린다: 가로로 들면 가로형, 세로로 돌리면 세로형. 두 접힘선이 LCD·키 열 위를 지나가는 것을 여기서 본다.
   // 자세(반 접힘)를 골라도 배치는 같다. 인셋은 폴더블 내부와 같게 근사했다.
   PreviewDevice(
     '트라이폴드',
-    Size(960, 704),
+    Size(823, 603),
     padding: EdgeInsets.only(top: 24, bottom: 24),
     systemGestureInsets: _gestureNavInsets,
     displayFeatures: [previewTriFoldLeftFold, previewTriFoldRightFold],

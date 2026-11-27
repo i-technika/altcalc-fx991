@@ -1,5 +1,5 @@
-import 'dart:math' as math;
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart';
@@ -241,52 +241,52 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
     hinges: const [Rect.fromLTRB(0, 503, 411, 503)],
     caption: ' · 접힘선(점선) 가로 y=503 반 접힘',
   ),
-  // 펼친 트라이폴드 (가로가 기본 방향 960×704, 접힘선 x=320·640, #144) — 접힘선이 2개라 자세와 상관없이 접힘선을
+  // 펼친 트라이폴드 (가로가 기본 방향 823×603, 접힘선 x=274.5·548.5, #144) — 접힘선이 2개라 자세와 상관없이 접힘선을
   // 무시하고 태블릿처럼 가로면 가로형, 세로로 돌리면 세로형이다.
   ('트라이폴드', PreviewFoldPosture.flat, PreviewOrientation.landscape): (
     arrangement: ScreenArrangement.landscape,
     usesHinge: false,
-    size: const Size(960, 704),
+    size: const Size(823, 603),
     hinges: const [
-      Rect.fromLTRB(320, 0, 320, 704),
-      Rect.fromLTRB(640, 0, 640, 704),
+      Rect.fromLTRB(274.5, 0, 274.5, 603),
+      Rect.fromLTRB(548.5, 0, 548.5, 603),
     ],
-    caption: ' · 접힘선(점선) 세로 x=320 (배치에 안 씀), 세로 x=640 (배치에 안 씀)',
+    caption: ' · 접힘선(점선) 세로 x=274.5 (배치에 안 씀), 세로 x=548.5 (배치에 안 씀)',
   ),
   ('트라이폴드', PreviewFoldPosture.halfOpened, PreviewOrientation.landscape): (
     arrangement: ScreenArrangement.landscape,
     usesHinge: false,
-    size: const Size(960, 704),
+    size: const Size(823, 603),
     hinges: const [
-      Rect.fromLTRB(320, 0, 320, 704),
-      Rect.fromLTRB(640, 0, 640, 704),
+      Rect.fromLTRB(274.5, 0, 274.5, 603),
+      Rect.fromLTRB(548.5, 0, 548.5, 603),
     ],
     caption:
-        ' · 접힘선(점선) 세로 x=320 반 접힘 (배치에 안 씀), '
-        '세로 x=640 반 접힘 (배치에 안 씀)',
+        ' · 접힘선(점선) 세로 x=274.5 반 접힘 (배치에 안 씀), '
+        '세로 x=548.5 반 접힘 (배치에 안 씀)',
   ),
-  // 반시계 방향으로 돌리면 기본 방향의 왼쪽 접힘선(x=320)이 아래(y=640)로 간다
+  // 반시계 방향으로 돌리면 기본 방향의 왼쪽 접힘선(x=274.5)이 아래(y=548.5)로 간다
   ('트라이폴드', PreviewFoldPosture.flat, PreviewOrientation.portrait): (
     arrangement: ScreenArrangement.stacked,
     usesHinge: false,
-    size: const Size(704, 960),
+    size: const Size(603, 823),
     hinges: const [
-      Rect.fromLTRB(0, 640, 704, 640),
-      Rect.fromLTRB(0, 320, 704, 320),
+      Rect.fromLTRB(0, 548.5, 603, 548.5),
+      Rect.fromLTRB(0, 274.5, 603, 274.5),
     ],
-    caption: ' · 접힘선(점선) 가로 y=640 (배치에 안 씀), 가로 y=320 (배치에 안 씀)',
+    caption: ' · 접힘선(점선) 가로 y=548.5 (배치에 안 씀), 가로 y=274.5 (배치에 안 씀)',
   ),
   ('트라이폴드', PreviewFoldPosture.halfOpened, PreviewOrientation.portrait): (
     arrangement: ScreenArrangement.stacked,
     usesHinge: false,
-    size: const Size(704, 960),
+    size: const Size(603, 823),
     hinges: const [
-      Rect.fromLTRB(0, 640, 704, 640),
-      Rect.fromLTRB(0, 320, 704, 320),
+      Rect.fromLTRB(0, 548.5, 603, 548.5),
+      Rect.fromLTRB(0, 274.5, 603, 274.5),
     ],
     caption:
-        ' · 접힘선(점선) 가로 y=640 반 접힘 (배치에 안 씀), '
-        '가로 y=320 반 접힘 (배치에 안 씀)',
+        ' · 접힘선(점선) 가로 y=548.5 반 접힘 (배치에 안 씀), '
+        '가로 y=274.5 반 접힘 (배치에 안 씀)',
   ),
 };
 

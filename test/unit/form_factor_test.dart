@@ -491,6 +491,52 @@ void main() {
         ]),
         hasLength(1),
       );
+      // 장 폭이 [hingeMinPanelExtent] 미만이면(공개 사양 근사 823×603의 두 장 약 548.5×603) 접힘선 1개 규칙에서도
+      // 나누지 않는다 — 가장자리 접힘선을 빼도 배치는 위아래다(짧은 변 600 미만이 아니므로 화면도 비교하지 않는다).
+      const specTwoPanels = Size(548.5, 603);
+      final specFolds = [
+        feature(const Rect.fromLTWH(274.5, 0, 0, 603)),
+        feature(const Rect.fromLTWH(548.5, 0, 0, 603)),
+      ];
+      expect(FormFactor.crossingHingesOf(specTwoPanels, specFolds), [
+        specFolds.first,
+      ]);
+      expect(
+        FormFactor.arrangementOf(
+          specTwoPanels,
+          specFolds,
+          foldableDevice: true,
+        ),
+        ScreenArrangement.stacked,
+      );
+    });
+
+    test('같은 자리에 두 번 보고된 접힘선은 하나로 센다 (접힘선 1개 기기가 접힘선을 잃지 않는다)', () {
+      final fold = feature(const Rect.fromLTWH(336.5, 0, 0, 841));
+      for (final again in [
+        fold,
+        feature(const Rect.fromLTWH(336.5, 0, 0, 841)),
+        feature(const Rect.fromLTWH(337, 0, 0, 840.5)), // 허용 오차(1dp) 안
+        feature(
+          const Rect.fromLTWH(336.5, 0, 0, 841),
+          type: DisplayFeatureType.hinge,
+        ),
+      ]) {
+        expect(FormFactor.crossingHingesOf(window, [fold, again]), [fold]);
+        expect(FormFactor.hingeOf(window, [fold, again]), same(fold));
+        expect(
+          FormFactor.crossesMultipleHinges(window, [fold, again]),
+          isFalse,
+        );
+      }
+      // 허용 오차보다 떨어지면 다른 접힘선이다
+      expect(
+        FormFactor.crossesMultipleHinges(window, [
+          fold,
+          feature(const Rect.fromLTWH(338, 0, 0, 841)),
+        ]),
+        isTrue,
+      );
     });
 
     test('화면을 실제로 나누는 접힘선: 폭이 있는 힌지 또는 반 접힘 (isSeparating과 같은 기준)', () {
@@ -872,6 +918,63 @@ void main() {
           landscape,
         ),
         OrientationPolicy.any,
+      );
+    });
+
+    test('짧은 변이 600dp 미만인 트라이폴드(공개 사양 근사 823×603을 확대)도 접힘선이 2개면 네 방향이다', () {
+      // Galaxy Z TriFold 공개 해상도 2160×1584 px를 밀도 2.625로 바꾸면 약 823×603dp — 화면 크기 설정을 키우면
+      // 짧은 변이 600 아래로 내려간다.
+      for (final display in const [
+        Size(823, 603),
+        Size(768, 563),
+        Size(563, 768),
+      ]) {
+        final folds = [
+          for (final f in [1 / 3, 2 / 3])
+            DisplayFeature(
+              bounds: display.width > display.height
+                  ? Rect.fromLTWH(display.width * f, 0, 0, display.height)
+                  : Rect.fromLTWH(0, display.height * f, display.width, 0),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        final multiple = FormFactor.crossesMultipleHinges(display, folds);
+        expect(multiple, isTrue, reason: '$display');
+        expect(
+          FormFactor.orientationPolicyOf(
+            DeviceKind.foldable,
+            display,
+            multipleHinges: multiple,
+          ),
+          OrientationPolicy.any,
+          reason: '$display',
+        );
+        // 가로면 가로형, 세로면 위아래 배치
+        expect(
+          FormFactor.arrangementOf(display, folds, foldableDevice: true),
+          display.width > display.height
+              ? ScreenArrangement.landscape
+              : ScreenArrangement.stacked,
+          reason: '$display',
+        );
+      }
+      // 접힘선이 2개가 아니면 예전처럼 크기로 정한다(접은 커버 화면·Flip 내부는 세로)
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.foldable,
+          const Size(768, 563),
+        ),
+        OrientationPolicy.portrait,
+      );
+      // 폰·태블릿은 접힘선 개수와 상관없다
+      expect(
+        FormFactor.orientationPolicyOf(
+          DeviceKind.phone,
+          const Size(390, 844),
+          multipleHinges: true,
+        ),
+        OrientationPolicy.portrait,
       );
     });
   });

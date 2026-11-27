@@ -181,9 +181,10 @@ void main() {
     );
     expect(lines, [
       'AltCalc 배치: hingeSplit — 창 841x701.5, '
-          '화면 특징 [fold postureFlat 420,0-420,701.5], 폴더블=true @0.0ms',
+          '화면 특징 [fold postureFlat 420,0-420,701.5], 가로지르는 접힘선 1, '
+          '폴더블=true @0.0ms',
       'AltCalc 배치: stacked (고른 배치 hingeSplit) 안내 — 창 841x701.5, '
-          '화면 특징 [], 폴더블=false @60.0ms',
+          '화면 특징 [], 가로지르는 접힘선 0, 폴더블=false @60.0ms',
     ]);
   });
 

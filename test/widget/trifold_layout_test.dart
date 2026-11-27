@@ -17,9 +17,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/screen_arrangement.dart';
 
 /// 접힘선 2개(펼친 트라이폴드) 화면은 접힘선을 무시하고 태블릿과 같은 배치로 그린다 (#144).
-/// 규칙은 `FormFactor.arrangementOf` "트라이폴드" 절. 화면 크기·접힘선 위치는 이슈의 가정 값(실기기 미확인)이다.
+/// 규칙은 `FormFactor.arrangementOf` "트라이폴드" 절. 화면 크기·접힘선 위치는 가정 값(실기기 미확인)이다 — 이슈가
+/// 처음 가정한 960×704dp와, Galaxy Z TriFold 공개 해상도를 밀도 2.625로 바꾼 823×603dp(미리보기 프리셋, 아래 마지막 묶음).
 
-/// 펼친 트라이폴드 가로 화면 (가정: 960×704dp)
+/// 펼친 트라이폴드 가로 화면 (이슈 가정: 960×704dp)
 const _landscape = Size(960, 704);
 
 /// 세로로 돌린 화면
@@ -162,6 +163,9 @@ void main() {
             );
             expect(tester.takeException(), isNull);
             expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
+            // 펼침(postureFlat) 조합은 접힘선을 무시하지 않던 예전 규칙(첫 접힘선만 씀)으로도 위아래 배치가 된다 —
+            // 펼친 폭 0 가로 접힘선은 나누지 않기 때문이다. 이 테스트가 #144 회귀를 가르는 것은 반 접힘 조합(예전
+            // 규칙이면 테이블톱)이고, 펼침 조합의 판정은 `form_factor_test`가 `picksFormByKeySize`로 확인한다.
             expect(drawnArrangementOf(tester), DrawnArrangement.stacked);
             final r = _rects(tester);
             expect(r.lcd, free.lcd);
@@ -230,4 +234,43 @@ void main() {
       expect(r.lcd.right, lessThanOrEqualTo(320));
     },
   );
+
+  group('공개 사양 근사 823×603 (미리보기 프리셋, 접힘선 x=274.5·548.5)', () {
+    const landscape = Size(823, 603);
+    const portrait = Size(603, 823);
+    List<DisplayFeature> folds(Size size) => [
+      for (final at in [274.5, 548.5])
+        DisplayFeature(
+          bounds: size.width > size.height
+              ? Rect.fromLTWH(at, 0, 0, size.height)
+              : Rect.fromLTWH(0, at, size.width, 0),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureHalfOpened,
+        ),
+    ];
+
+    for (final (size, expected) in [
+      (landscape, DrawnArrangement.landscape),
+      (portrait, DrawnArrangement.stacked),
+    ]) {
+      testWidgets(
+        '${size.width}×${size.height}: $expected — 접힘선 없는 같은 창과 위치가 같다',
+        (tester) async {
+          await _pump(tester, size: size, features: const []);
+          final free = _rects(tester);
+          await _pump(
+            tester,
+            size: size,
+            features: folds(size),
+            foldable: ValueNotifier(true),
+          );
+          expect(tester.takeException(), isNull);
+          expect(drawnArrangementOf(tester), expected);
+          final r = _rects(tester);
+          expect(r.lcd, free.lcd);
+          expect(r.keypad, free.keypad);
+        },
+      );
+    }
+  });
 }

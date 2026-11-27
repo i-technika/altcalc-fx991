@@ -186,6 +186,8 @@ abstract final class LayoutLog {
         '${drawn == chosen ? '' : ' (고른 배치 ${chosen.name})'}'
         '${tooSmall ? ' 안내' : ''}'
         ' — 창 ${_size(window)}, 화면 특징 [${features.map(_feature).join(', ')}], '
+        // 창을 가로지르는 접힘선 수 — 2 이상이면 접힘선을 무시한다(트라이폴드, #144)
+        '가로지르는 접힘선 ${FormFactor.crossingHingesOf(window, features).length}, '
         '폴더블=$foldableDevice';
     if (line == _lastLayout) return;
     _lastLayout = line;

@@ -225,16 +225,21 @@ abstract final class FormFactor {
   ///   달라(Galaxy Z Fold는 세로, Pixel Fold는 가로) 세로로 고정하면 Pixel Fold에서는 오히려 접힘선이 가로로
   ///   눕는다. 배치는 고정 대신 접힘선 방향을 따른다([arrangementOf]). Android 16 이상은 대화면에서 어차피
   ///   방향 고정을 무시하므로, 어떤 버전에서도 같은 동작이 된다.
-  ///   펼친 트라이폴드(#144)도 여기다 — 배치는 태블릿과 같지만(가로형·세로형), 세로로 돌려도 세로형으로 쓸 수 있게
-  ///   가로로 고정하지 않는다.
+  /// - 펼친 트라이폴드(창을 가로지르는 접힘선이 둘 이상 — [multipleHinges], [crossesMultipleHinges], #144): 화면 크기와
+  ///   상관없이 네 방향 모두. 배치는 태블릿과 같지만(가로형·세로형) 세로로 돌려도 세로형으로 쓸 수 있게 가로로 고정하지
+  ///   않는다. 크기로만 정하지 않는 것은 짧은 변이 600dp 경계에 가깝기 때문이다 — Galaxy Z TriFold 공개 해상도는 밀도
+  ///   2.625 가정으로 약 823×603dp라, 화면 크기 설정을 키우면 600 아래로 내려가 세로로 고정될 수 있다. [multipleHinges]는
+  ///   접힘 정보가 온 뒤에만 참이다 — 그 전(시작 직후)에는 크기 규칙을 따르지만, 앱 시작은 접힘 정보가 올 때까지 첫 방향
+  ///   요청을 미룬다(#158, `main()`).
   static OrientationPolicy orientationPolicyOf(
     DeviceKind kind,
-    Size displaySize,
-  ) => switch (kind) {
+    Size displaySize, {
+    bool multipleHinges = false,
+  }) => switch (kind) {
     DeviceKind.phone => OrientationPolicy.portrait,
     DeviceKind.tablet => OrientationPolicy.landscape,
     DeviceKind.foldable =>
-      displaySize.shortestSide >= largeScreenMinShortestSide
+      multipleHinges || displaySize.shortestSide >= largeScreenMinShortestSide
           ? OrientationPolicy.any
           : OrientationPolicy.portrait,
   };
@@ -267,17 +272,32 @@ abstract final class FormFactor {
   static const double hingeMinPanelExtent = 280.0;
 
   /// 창([windowSize], dp)을 한 축으로 끝까지 가로지르는 접히는 부분(fold·hinge) 모두 (#144). 영역은 창 좌표이고,
-  /// 순서는 [features] 그대로다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
+  /// 순서는 [features] 그대로이고, 같은 자리(허용 오차 안)에 두 번 온 접힘선은 앞의 것 하나만 남긴다. 화면 구멍(cutout)과, 창 밖·창 가장자리에 있거나 창을 끝까지 가로지르지 않는 접힘 정보는
   /// 세지 않는다.
   ///
   /// 접힘 정보의 좌표는 그 정보를 담은 `MediaQuery`가 가리키는 화면(창)의 좌표다. 실제 앱에서는 창 = 화면이다.
   static List<DisplayFeature> crossingHingesOf(
     Size windowSize,
     Iterable<DisplayFeature> features,
-  ) => [
-    for (final f in features)
-      if (_crossesWindow(windowSize, f)) f,
-  ];
+  ) {
+    final crossing = <DisplayFeature>[];
+    for (final f in features) {
+      if (!_crossesWindow(windowSize, f)) continue;
+      // 같은 자리의 접힘선이 두 번 보고되어도 하나로 센다 — 개수가 2가 되면 접힘선 1개 기기가 접힘선을 잃는다(#144 R1)
+      final duplicate = crossing.any(
+        (c) => _sameRect(c.bounds, f.bounds, _hingeSpanTolerance),
+      );
+      if (!duplicate) crossing.add(f);
+    }
+    return crossing;
+  }
+
+  /// 두 영역의 네 변이 [tolerance] 안에서 같은지
+  static bool _sameRect(Rect a, Rect b, double tolerance) =>
+      (a.left - b.left).abs() <= tolerance &&
+      (a.top - b.top).abs() <= tolerance &&
+      (a.right - b.right).abs() <= tolerance &&
+      (a.bottom - b.bottom).abs() <= tolerance;
 
   /// [f]가 창([windowSize])을 한 축으로 끝까지 가로지르는 접히는 부분인지 ([crossingHingesOf])
   static bool _crossesWindow(Size windowSize, DisplayFeature f) {
@@ -304,8 +324,9 @@ abstract final class FormFactor {
     // 창보다 긴 접힘 정보는 받지 않는다 — 회전 직후 창 크기는 새 값인데 접힘 정보는 이전 방향 값으로
     // 몇 프레임 늦게 올 수 있다(#25 R2). 그동안은 접힘선이 없는 것으로 본다(폴더블이면 위아래 배치).
     // 창 가장자리의 접힘선은 세지 않는다 — 트라이폴드에서 두 장에 걸친 분할 화면 창은 둘째 접힘선이 창 경계에 오는데,
-    // 이것을 세면 접힘선 2개로 판정되어 창 가운데의 접힘선까지 무시하게 된다(#144). 배치도 어차피 나누지 않는다
-    // (한쪽 패널 길이 0 < [hingeMinPanelExtent]).
+    // 이것을 세면 접힘선 2개로 판정되어 창 가운데의 접힘선까지 무시하게 된다(#144). 그 창은 접힘선 1개 규칙을 탄다 —
+    // 장 폭이 [hingeMinPanelExtent] 이상이면 가운데 접힘선 기준 배치, 아니면(공개 사양 근사 약 274dp) 위아래 배치다.
+    // 가장자리 접힘선은 어차피 배치를 나누지 않는다(한쪽 패널 길이 0 < [hingeMinPanelExtent]).
     if (spansHeight && splitsX && insideY) return true;
     return spansWidth && splitsY && insideX;
   }
@@ -388,19 +409,24 @@ abstract final class FormFactor {
   /// - 시작 깜빡임 방지(2번)는 접힘 정보가 **오기 전**에만 위아래 배치로 둔다. 트라이폴드는 접힘 정보가 오면 이 3번이
   ///   되므로 가로형을 막지 않는다. 앱 시작 때는 Android가 창 배치 첫 값에 접히는 부분이 있다고 알리면 `main()`이 접힘
   ///   정보가 올 때까지 첫 화면을 미루므로(#158) 첫 프레임부터 가로형이다.
-  /// - 회전 직후 몇 프레임은 접힘 정보가 이전 방향 값이라 창을 가로지르지 않는다([crossingHingesOf]) — 그동안은 2번(위아래
-  ///   배치)이다. 폴더블의 회전과 같다.
-  /// - 방향 정책은 폴더블 대화면([orientationPolicyOf] — 네 방향)이다.
+  /// - 회전 직후 몇 프레임은 접힘 정보가 이전 방향 값이라 창을 가로지르지 않을 수 있다([crossingHingesOf]) — 그동안은
+  ///   2번(위아래 배치)이다. 폴더블의 회전과 같다(아래 에뮬레이터 기록에서는 보이지 않았다).
+  /// - 방향 정책은 화면 크기와 상관없이 네 방향이다([orientationPolicyOf]의 `multipleHinges`).
   /// - **가정 (미확인)**: 펼친 트라이폴드가 Jetpack WindowManager로 접히는 부분(`FoldingFeature`) 2개를 보고한다는 것과
-  ///   펼친 화면 크기(미리보기 프리셋 960×704dp, 세로 접힘선 x=320·640)는 실기기로 확인하지 못했다(트라이폴드 에뮬레이터
-  ///   기기 정의가 없다). 실기기 확인은 출시 QA(M8)에서 한다.
-  /// - 에뮬레이터 기록 (#144, Pixel Fold 에뮬레이터 Android 16 릴리스 빌드 — 흉내 낸 값이라 실기기 보고 값은 아니다):
-  ///   `adb shell wm size 2520x1848`(밀도 420 → 960×704dp)과 `adb shell settings put global display_features
-  ///   'fold-[840,0,840,1848];fold-[1680,0,1680,1848]'`(Jetpack 확장이 읽는 접힘 정보 덮어쓰기)로 접힘선 2개를 주자 Flutter
-  ///   화면 특징에 폭 0 `fold`·`postureFlat` 2개(x=320·640)가 왔다. 시작 판정 첫 값이 "접힘"이라 첫 프레임부터 가로형이었고,
-  ///   세로로 돌리자(704×960, 가로 접힘선 y=640·320) 중간 배치 없이 세로형이 되었다. 원래 크기(841×701dp)에 접힘선 2개를
-  ///   준 경우도 가로형이었다. 7.6" Fold-in 에뮬레이터(Android 14)는 원래 설정(힌지 1개)에서도 접힘 정보를 보고하지 않아
-  ///   쓸 수 없었다.
+  ///   펼친 화면 dp 크기·접힘선 위치는 실기기로 확인하지 못했다(트라이폴드 에뮬레이터 기기 정의가 없다). 미리보기 프리셋은
+  ///   Galaxy Z TriFold 공개 해상도 2160×1584 px를 밀도 2.625로 바꾼 823×603dp에 세 장 같은 폭(접힘선 x≈274·549)을
+  ///   가정했다(이슈가 처음 가정한 크기는 960×704dp). 실기기 확인은 출시 QA(M8, #200)에서 한다.
+  /// - 에뮬레이터 기록 (#144, Pixel Fold 에뮬레이터 Android 16 진단 릴리스 빌드 — 흉내 낸 값이라 실기기 보고 값은 아니다):
+  ///   `adb shell wm size`로 화면 크기를 바꾸고 `adb shell settings put global display_features 'fold-[…];fold-[…]'`(Jetpack
+  ///   확장이 읽는 접힘 정보 덮어쓰기)로 접힘선 2개를 주었다. 세 크기 모두 Flutter 화면 특징에 폭 0 `fold`·`postureFlat`
+  ///   2개가 왔다. 시작 판정 첫 값이 "접힘"이라 첫 프레임부터 가로형이었고, 방향 요청은 네 방향이었다.
+  ///   - 2160×1584 px(밀도 420 → 822.9×603.4dp, 접힘선 x=274.3·548.6): 가로형, 세로로 돌리면 세로형, 다시 돌리면 가로형.
+  ///   - 같은 화면을 밀도 480으로 확대(720×528dp): 가로형·세로형은 같다. 회전할 때 접힘 정보가 늦게 와 창을 가로지르지
+  ///     않는 순간에 세로 고정을 한 번 요청했다가 푸는 것이 보여, 창 크기를 기억해 막았다(`DeviceOrientationLock`
+  ///     "트라이폴드 방향 기억"). 고친 뒤에는 네 번 돌려도 방향 요청이 다시 나가지 않았다. 세로→가로에서 창이 아직
+  ///     세로인 프레임(약 0.5초)은 위아래 배치였다 — 회전 중 창 크기 그대로다.
+  ///   - 2520×1848 px(960×704dp, 이슈의 처음 가정)과 원래 크기(841×701dp)에 접힘선 2개: 가로형.
+  ///   - 7.6" Fold-in 에뮬레이터(Android 14)는 원래 설정(힌지 1개)에서도 접힘 정보를 보고하지 않아 쓸 수 없었다.
   ///
   /// 2번에서 위아래 배치를 돌려받은 창이라도 짧은 변이 [largeScreenMinShortestSide] 미만이면(폴더블 커버 화면의 분할 화면
   /// 등) 화면이 본체 크기로 가로형과 비교해 키가 더 큰 쪽으로 그린다 (짧은 창, #38). 접힘선 기준 배치를 쓸 수 없을 때
