@@ -99,9 +99,26 @@ import 'handedness_dialog.dart';
 /// x=782 → 370.5, 왼쪽 절반). #218 전에는 연 시점의 ON 키 쪽 절반에 남았다. 회전(반 접은 Fold의 세로 책 자세 ↔ 가로
 /// 테이블톱)도 같다.
 /// 접힘 정보가 바뀌면 경로는 나뉨 여부를 같은 프레임에 바꾸지만(경로의 MediaQuery를 직접 본다), ON 키는 그 프레임의
-/// 배치가 끝난 뒤에 재므로 그 프레임은 이전 기준점으로 절반을 고르고 다음 프레임에 옮겨 간다. 앱만 나누는 펼친 폭 0
-/// 접힘선으로 바뀔 때는 그 프레임에 앱 기준 나눔이 아직 이전 배치 값을 보므로 화면 전체에 떠 접힘선을 가로지르고, 다음
-/// 프레임에 절반으로 옮겨 간다(#218 R2 — 823×603 펼친 접힘선 2개 → 1개, 펼친 Fold 회전. #218 전부터 같다).
+/// 배치가 끝난 뒤에 재므로 그 프레임은 이전 기준점으로 절반을 고르고 다음 프레임에 옮겨 간다.
+/// 앱만 나누는 펼친 폭 0 접힘선이 있는 화면으로 바뀌는 프레임도 그렇다(#226). 그 프레임의 배치 값(그린 배치 등)은
+/// 이전 화면(창 크기·접힘선)으로 정한 값이라 지금 화면을 앱이 나눌지 알 수 없다 — 접힘선이 새로 생기거나 옮겨 가거나
+/// 방향이 바뀔 때(회전)뿐 아니라, 같은 접힘선에서 창 크기만 바뀌어도 키패드가 패널에 들어가는지가 달라진다
+/// (Pixel Fold 내부 2:1 분할 창 560×701 → 전체 화면 841×701, 접힘선 x=420.5: 위아래 배치 → 책 자세, #226 R2).
+/// 그래서 배치 값이 경로의 화면(크기, 배치가 쓰는 접힘선)을 따라오기 전에는 이렇게 고른다.
+/// - 이전 배치 값으로 고른 자리가 절반이면 그 절반이다.
+/// - 화면 전체이면, 화면 전체 가운데에 놓일 카드가 그 접힘선을 가로지를 때만 그 접힘선으로 나눈다 — 반 접힘·물리
+///   힌지처럼 이전 기준점 쪽 절반에 떴다가 다음 프레임에 지금 ON 키 쪽 절반으로 옮겨 간다. 카드 크기는 대화상자의 고유
+///   크기(이전 프레임에 그린 대화상자)와 지금 화면으로 구한다([_fullScreenCardCrosses]).
+/// - 가로지르지 않으면 화면 전체 그대로다. 그래서 창 크기를 바꾸는 동안(분할 화면 구분선 끌기 등) 화면 전체에 떠
+///   있던 대화상자가 절반으로 튀지 않는다(#226 R1 — 841×701, 접힘선 x=654의 #129 화면에서 카드 x=177.5~615.5).
+/// 남는 한계: 앱이 끝내 나누지 않는 화면(위아래 배치로 대체, 위 1·2·4)으로 바뀌는데 화면 전체 카드가 접힘선을 가로지르면
+/// 그 프레임은 절반이고 다음 프레임에 화면 전체가 된다(접힘선을 가로지르는 한 프레임 대신 택한 것이다). 그런 화면에서
+/// 창 크기가 매 프레임 바뀌면 그동안 절반에 머문다 — 접힘선이 카드 폭(약 440dp) 안에 들 만큼 가운데 가까우면서 앱이
+/// 나누지 않는 화면은 드물다(비대칭 접힘선의 좁은 패널·작은 창).
+/// #226 전에는 그런 프레임에 이전 배치 값대로 화면 전체에 떠 카드가 접힘선을 가로질렀다(#218 R2 실측 —
+/// 823×603 펼친 접힘선 2개(x=274.5·548.5) → 1개(x=411.5)에서 x=192.5~630.5, 펼친 Fold 673×841을 가로로 돌리면
+/// y=196.5~484.5). 따라왔는지 가릴 수 있게 배치 값에 그 값을 정한 때의 경로 화면을 함께 적어 둔다. 배치 값을 정하는
+/// 화면 기하([geometry])는 그대로인데 경로의 화면만 바뀌어도 경로가 갱신을 다시 청해 다음 프레임에 따라온다.
 /// 손잡이만 바꾸면 ON 키가 옮겨 가도 다시 재지 않는다 — 아래 "대화상자가 열린 채 손잡이를 바꾸면". 그 뒤에 화면 기하가
 /// 바뀌면 그때의 ON 키 쪽 절반으로 옮겨 간다(배치가 다시 정해지는 전환이라 연 자리를 지킬 근거가 없다).
 ///
@@ -309,19 +326,24 @@ class SettingsLauncher extends StatefulWidget {
   State<SettingsLauncher> createState() => _SettingsLauncherState();
 }
 
+/// 대화상자 경로가 보는 화면 — 화면 크기와 배치가 쓰는 접힘선의 영역(경로 좌표, 자세는 빼고, 없으면 `null`).
+/// 배치 값([_DialogLayout])이 이 화면으로 정해졌는지 가릴 때 쓴다 (#226).
+typedef _RouteScreen = ({Size size, Rect? hinge});
+
 /// 열린 대화상자가 보는 화면 상태 — 배치, 손잡이 적용 여부, 손잡이를 바꿔도 배치가 같은지, ON 키 중심(Navigator
-/// 좌표, 나눌 절반을 고르는 기준)
+/// 좌표, 나눌 절반을 고르는 기준), 이 값들을 정한 때의 경로 화면([_RouteScreen], 모르면 `null`)
 typedef _DialogLayout = ({
   ScreenArrangement arrangement,
   bool handednessApplies,
   bool handednessKeepsArrangement,
   Offset? anchor,
+  _RouteScreen? routeScreen,
 });
 
 class _SettingsLauncherState extends State<SettingsLauncher> {
   /// 열린 대화상자가 보는 화면 상태 ([SettingsLauncher]의 값을 한 프레임 늦게 따른다)
   late final ValueNotifier<_DialogLayout> _layout = ValueNotifier(
-    _layoutOf(null),
+    _layoutOf(null, null),
   );
 
   /// 마지막으로 설정을 연 ON 키의 context — 화면 기하([SettingsLauncher.geometry])가 바뀐 뒤 ON 키 중심을 다시 잴 때
@@ -332,12 +354,13 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   bool _refreshScheduled = false;
   bool _remeasurePending = false;
 
-  /// 지금 [widget] 값과 [anchor]로 만든 대화상자 화면 상태
-  _DialogLayout _layoutOf(Offset? anchor) => (
+  /// 지금 [widget] 값과 [anchor]·[routeScreen]으로 만든 대화상자 화면 상태
+  _DialogLayout _layoutOf(Offset? anchor, _RouteScreen? routeScreen) => (
     arrangement: widget.arrangement,
     handednessApplies: widget.handednessApplies,
     handednessKeepsArrangement: widget.handednessKeepsArrangement,
     anchor: anchor,
+    routeScreen: routeScreen,
   );
 
   @override
@@ -373,8 +396,96 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
       if (remeasure && key != null && key.mounted && navigator != null) {
         anchor = _anchorIn(key, navigator) ?? anchor;
       }
-      _layout.value = _layoutOf(anchor);
+      _layout.value = _layoutOf(
+        anchor,
+        navigator == null
+            ? _layout.value.routeScreen
+            : _routeScreenIn(navigator),
+      );
     });
+  }
+
+  /// 대화상자 경로가 배치 값이 따라오지 못한 화면을 보았다 — 프레임이 끝난 뒤 지금 배치 값을 다시 알린다 (#226).
+  /// 화면이 바뀌면 보통 [didUpdateWidget]이 이미 예약해 두었으므로(화면 기하가 바뀐다) 한 번만 돈다. 배치 값을 정하는
+  /// 화면 기하([SettingsLauncher.geometry])가 그대로인 채 경로의 화면만 바뀐 경우에도 다음 프레임에 배치 값을 따른다 —
+  /// 청하지 않으면 대화상자가 그 접힘선의 절반에 계속 남을 수 있다. 경로를 빌드하는 중에 불러도 된다 — 프레임 끝 콜백만
+  /// 예약한다.
+  void _refreshForRoute() {
+    if (mounted) _scheduleRefresh(remeasure: true);
+  }
+
+  /// 대화상자 경로의 MediaQuery [media]에서 본 화면 — 경로처럼 배치가 쓰는 접힘선만 남겨 본다
+  /// ([SettingsLauncher.dialogRouteMediaOf] — 이미 걸렀어도 같은 값이다).
+  static _RouteScreen _routeScreenOf(MediaQueryData media) {
+    media = SettingsLauncher.dialogRouteMediaOf(media);
+    return (
+      size: media.size,
+      hinge: FormFactor.hingeOf(media.size, media.displayFeatures)?.bounds,
+    );
+  }
+
+  /// [navigator]에 뜬 경로가 보는 화면 — 경로는 그 Navigator 위의 MediaQuery를 본다. 빌드 밖에서 읽으므로
+  /// 의존을 걸지 않는다.
+  static _RouteScreen? _routeScreenIn(NavigatorState navigator) {
+    final media = navigator.context
+        .getInheritedWidgetOfExactType<MediaQuery>()
+        ?.data;
+    return media == null ? null : _routeScreenOf(media);
+  }
+
+  /// 같은 화면인지 — 크기가 같고, 접힘선이 둘 다 없거나 네 변이 모두 [_sameHingeTolerance] 안이다. 같은 접힘선이
+  /// 조금 다른 자리로 번갈아 보고되어도 같은 화면으로 본다(#226 R1).
+  static bool _sameScreen(_RouteScreen a, _RouteScreen b) {
+    if (a.size != b.size) return false;
+    final (ha, hb) = (a.hinge, b.hinge);
+    if (ha == null || hb == null) return ha == hb;
+    bool near(double x, double y) => (x - y).abs() <= _sameHingeTolerance;
+    return near(ha.left, hb.left) &&
+        near(ha.top, hb.top) &&
+        near(ha.right, hb.right) &&
+        near(ha.bottom, hb.bottom);
+  }
+
+  /// [_sameScreen]의 접힘선 자리 허용 오차 (dp) — `FormFactor`가 같은 접힘선으로 묶는 간격(1dp)과 같다
+  static const double _sameHingeTolerance = 1.0;
+
+  /// 지금 화면([media] — 대화상자 경로의 MediaQuery, 앱만 나누는 접힘선이 있다)에서 화면 전체에 띄우면 카드가 그
+  /// 접힘선을 가로지르는지 (#226 R2). 배치 값이 따라오기 전 프레임에 이전 값이 화면 전체를 고를 때 나눌지 정한다.
+  ///
+  /// [dialog]는 대화상자([HandednessDialog])의 render box다 — 이 프레임의 배치 전이라 이전 프레임에 그린 것이다.
+  /// Material `Dialog`는 바깥 여백([insetPadding] + 키보드 인셋) 안에서 카드를 가운데에 두고, 카드 폭은 고유 폭
+  /// (최소·최대 폭 제약 포함)과 남는 폭 중 작은 쪽, 높이는 그 폭의 고유 높이와 남는 높이 중 작은 쪽이다. 대화상자
+  /// render box의 고유 크기는 여백 + 카드이므로 여기서 카드 크기를 구한다. 고유 크기는 화면 크기와 무관하다(글자 배율·
+  /// 내용만 따른다). 모르면(그리기 전) 가로지른다고 본다 — 나누면 접힘선을 가로지르지 않는다.
+  static bool _fullScreenCardCrosses(
+    RenderObject? dialog,
+    MediaQueryData media,
+    EdgeInsets insetPadding,
+  ) {
+    final hinge = _appOnlyHingeOf(media)?.bounds;
+    if (hinge == null) return false;
+    if (dialog is! RenderBox) return true;
+    // 대화상자는 SafeArea(시스템 인셋) 안이고, `Dialog`가 그 안에서 바깥 여백과 키보드 인셋을 뺀다.
+    final outer = insetPadding + media.viewInsets;
+    final inner = outer.deflateRect(
+      media.padding.deflateRect(Offset.zero & media.size),
+    );
+    if (inner.width <= 0 || inner.height <= 0) return true;
+    final width = math.min(
+      dialog.getMaxIntrinsicWidth(double.infinity) - outer.horizontal,
+      inner.width,
+    );
+    final height = math.min(
+      dialog.getMinIntrinsicHeight(width + outer.horizontal) - outer.vertical,
+      inner.height,
+    );
+    final card = Rect.fromCenter(
+      center: inner.center,
+      width: math.max(width, 0),
+      height: math.max(height, 0),
+    );
+    // 폭 0 접힘선도 판정된다 — `overlaps`는 접힘선이 카드 안쪽을 지날 때만 참이다(가장자리에 닿기만 하면 거짓).
+    return card.overlaps(hinge);
   }
 
   @override
@@ -408,33 +519,34 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   /// - 손잡이를 바꿔도 배치가 그대로일 때([_DialogLayout.handednessKeepsArrangement])만 나눈다.
   /// - 기준점은 [SettingsLauncher.dialogAnchorPointOf]로 고른다. ON 키 쪽 절반이면 그 절반이 인셋을 빼고
   ///   [SettingsLauncher.dialogMinHalfExtent] 이상일 때만 나눈다.
+  /// - [stale]이면 앞의 두 조건을 보지 않고 그 접힘선으로 나눈다 — 배치 값이 [media]의 화면을 아직 따라오지 못했고
+  ///   이전 값대로면 화면 전체 카드가 접힘선을 가로지르는 프레임에 쓴다(#226, [SettingsLauncher] "대화상자가 열린 동안
+  ///   배치가 바뀌면"). 기준점은 이전 ON 키 중심으로 고르고, ON 키 쪽 절반이 하한에 못 미치면 하한을 넘는 반대쪽 절반
+  ///   가운데다. 두 절반 모두 못 미치면 화면 전체다 — 그 화면은 배치 값이 따라온 다음 프레임에도 화면 전체다(위 하한).
   ///
   /// [media]는 대화상자 경로의 MediaQuery다(경로의 SafeArea를 껐으므로 시스템·키보드 인셋이 그대로 있다).
   static ({List<DisplayFeature> features, Offset anchorPoint})? _splitLikeApp(
     MediaQueryData media,
     _DialogLayout layout,
-    Size minRegion,
-  ) {
+    Size minRegion, {
+    required bool stale,
+  }) {
     final anchor = layout.anchor;
-    final bool vertical;
-    switch (layout.arrangement) {
-      case ScreenArrangement.hingeSplit:
-        vertical = true;
-      case ScreenArrangement.hingeStacked:
-        vertical = false;
-      case ScreenArrangement.stacked || ScreenArrangement.landscape:
-        return null;
+    final hinge = _appOnlyHingeOf(media);
+    if (anchor == null || hinge == null) return null;
+    final b = hinge.bounds;
+    final vertical = FormFactor.isVerticalHinge(b);
+    if (!stale) {
+      final splits = switch (layout.arrangement) {
+        ScreenArrangement.hingeSplit => vertical,
+        ScreenArrangement.hingeStacked => !vertical,
+        ScreenArrangement.stacked || ScreenArrangement.landscape => false,
+      };
+      if (!splits || !layout.handednessKeepsArrangement) return null;
     }
-    if (!layout.handednessKeepsArrangement || anchor == null) return null;
-    bool splitByAppOnly(DisplayFeature f) =>
-        !FormFactor.separates(f) &&
-        FormFactor.hingeOf(media.size, [f]) != null &&
-        FormFactor.isVerticalHinge(f.bounds) == vertical;
-    final hinge = media.displayFeatures.where(splitByAppOnly).firstOrNull;
-    if (hinge == null) return null;
     final features = [
       for (final f in media.displayFeatures)
-        splitByAppOnly(f)
+        identical(f, hinge)
             ? DisplayFeature(
                 bounds: f.bounds,
                 type: f.type,
@@ -452,26 +564,45 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
     if (anchorPoint != anchor) {
       return (features: features, anchorPoint: anchorPoint);
     }
-    // ON 키 쪽 절반의 길이 (접힘선에 수직인 방향, 그쪽 인셋 제외 — `dialogAnchorPointOf`처럼 시스템·키보드 인셋을 함께
-    // 뺀다). 하한보다 좁으면 카드가 읽기 어려워 화면 전체에 띄운다.
+    // 절반의 길이 (접힘선에 수직인 방향, 그쪽 인셋 제외 — `dialogAnchorPointOf`처럼 시스템·키보드 인셋을 함께 뺀다).
+    // ON 키 쪽 절반이 하한보다 좁으면 카드가 읽기 어려워 화면 전체에 띄운다.
     final inset = media.padding + media.viewInsets;
-    final b = hinge.bounds;
-    final half = vertical
-        ? (anchor.dx < b.center.dx
-              ? b.left - inset.left
-              : media.size.width - b.right - inset.right)
-        : (anchor.dy < b.center.dy
-              ? b.top - inset.top
-              : media.size.height - b.bottom - inset.bottom);
-    if (half < SettingsLauncher.dialogMinHalfExtent) return null;
-    return (features: features, anchorPoint: anchor);
+    final size = media.size;
+    double extent({required bool before}) => vertical
+        ? (before ? b.left - inset.left : size.width - b.right - inset.right)
+        : (before ? b.top - inset.top : size.height - b.bottom - inset.bottom);
+    final anchorBefore = vertical
+        ? anchor.dx < b.center.dx
+        : anchor.dy < b.center.dy;
+    if (extent(before: anchorBefore) >= SettingsLauncher.dialogMinHalfExtent) {
+      return (features: features, anchorPoint: anchor);
+    }
+    if (!stale ||
+        extent(before: !anchorBefore) < SettingsLauncher.dialogMinHalfExtent) {
+      return null;
+    }
+    final other = switch ((vertical, anchorBefore)) {
+      (true, true) => Rect.fromLTRB(b.right, 0, size.width, size.height),
+      (true, false) => Rect.fromLTRB(0, 0, b.left, size.height),
+      (false, true) => Rect.fromLTRB(0, b.bottom, size.width, size.height),
+      (false, false) => Rect.fromLTRB(0, 0, size.width, b.top),
+    };
+    return (features: features, anchorPoint: other.center);
+  }
+
+  /// 앱이 화면을 나누는데 Flutter는 나누지 않는 접힘선(펼친 폭 0 접힘선) — [media](대화상자 경로의 MediaQuery)에서
+  /// 창을 가로지르는 접힘선이 그것 하나일 때 그것, 아니면 `null`. Flutter가 나눈 하위 화면 안의 MediaQuery는 접힘선이
+  /// 빠져 있어 `null`이다.
+  static DisplayFeature? _appOnlyHingeOf(MediaQueryData media) {
+    final hinge = FormFactor.hingeOf(media.size, media.displayFeatures);
+    return hinge == null || FormFactor.separates(hinge) ? null : hinge;
   }
 
   void _open(BuildContext key) {
     final navigator = Navigator.of(context, rootNavigator: true);
     _anchorContext = key;
     final anchor = _anchorIn(key, navigator);
-    _layout.value = _layoutOf(anchor);
+    _layout.value = _layoutOf(anchor, _routeScreenIn(navigator));
     // 나뉨 여부가 바뀌어 감싸는 위젯이 달라져도 대화상자 element(포커스·스크롤)를 옮겨 유지한다.
     final dialogKey = GlobalKey(debugLabel: 'handedness-dialog');
     final minRegion = SettingsLauncher.dialogMinRegionOf(
@@ -505,11 +636,33 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
               ),
             );
             final media = MediaQuery.of(dialogContext);
-            final split = _splitLikeApp(
-              media,
-              layout,
-              SettingsLauncher.dialogMinRegionOf(DialogTheme.of(dialogContext)),
-            );
+            final dialogTheme = DialogTheme.of(dialogContext);
+            final minRegion = SettingsLauncher.dialogMinRegionOf(dialogTheme);
+            var split = _splitLikeApp(media, layout, minRegion, stale: false);
+            // 배치 값은 프레임이 끝난 뒤에 따라오므로(한 프레임 늦다) 화면(크기·접힘선)이 바뀐 프레임에는 이전 화면으로
+            // 정한 값이다. 앱만 나누는 접힘선이 있는 화면에서만 가린다 — Flutter가 나눈 하위 화면 안은 접힘선이 빠져
+            // 경로와 비교할 수 없고, 앱이 나눌 접힘선이 없으면 이전 값이어도 고를 것이 없다. 이전 값이 화면 전체를
+            // 고르고 그 카드가 접힘선을 가로지를 때만 접힘선으로 나눈다 (#226, R1·R2).
+            final recorded = layout.routeScreen;
+            final stale =
+                recorded != null &&
+                _appOnlyHingeOf(media) != null &&
+                !_sameScreen(recorded, _routeScreenOf(media));
+            if (stale) {
+              _refreshForRoute();
+              if (split == null &&
+                  _fullScreenCardCrosses(
+                    dialogKey.currentContext?.findRenderObject(),
+                    media,
+                    dialogTheme.insetPadding ??
+                        const EdgeInsets.symmetric(
+                          horizontal: 40,
+                          vertical: 24,
+                        ),
+                  )) {
+                split = _splitLikeApp(media, layout, minRegion, stale: true);
+              }
+            }
             if (split == null) return dialog;
             // 바깥 `DisplayFeatureSubScreen`이 나누지 않아 화면 전체(경로 좌표 = 이 좌표)를 받았으므로,
             // 고른 기준점(ON 키 중심, ON 키 쪽이 좁으면 넓은 반대쪽 절반 가운데)으로 앱 기준 절반을 고른다.

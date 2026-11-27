@@ -298,34 +298,61 @@ void main() {
   });
 
   group('글자 크기 통일', () {
-    testWidgets('모든 키에 같은 각인 글자 크기가, 메인 글자 크기는 구역(함수부·숫자부)마다 하나씩 주입된다 (#156)', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_host(const CalcKeypad()));
-      final buttons = _buttons(tester);
-      final numberIds = {
-        for (final row in numberRows)
-          for (final def in row) def.id,
-      };
-      expect(buttons.map((b) => b.legendFontSize).toSet(), hasLength(1));
-      expect(buttons.first.legendFontSize, isNotNull);
-      final function = {
-        for (final b in buttons)
-          if (!numberIds.contains(b.keyDef.id)) b.mainLabelFontSize,
-      };
-      final number = {
-        for (final b in buttons)
-          if (numberIds.contains(b.keyDef.id)) b.mainLabelFontSize,
-      };
-      final m = KeypadMetrics.compute(
-        const Size(360, 420),
-        TextScaler.noScaling,
-      );
-      expect(function, {m.mainLabelFontSize});
-      expect(number, {m.numberMainLabelFontSize});
-      // 실물처럼 숫자부 글자가 더 크다 (#156)
-      expect(m.numberMainLabelFontSize, greaterThan(m.mainLabelFontSize));
-    });
+    testWidgets(
+      '모든 키에 같은 각인 글자 크기가, 메인 글자 크기는 함수부 하나·숫자부 각인 종류마다 하나씩 주입된다 (#156·#225)',
+      (tester) async {
+        await tester.pumpWidget(_host(const CalcKeypad()));
+        final buttons = _buttons(tester);
+        final numberIds = {
+          for (final row in numberRows)
+            for (final def in row) def.id,
+        };
+        expect(buttons.map((b) => b.legendFontSize).toSet(), hasLength(1));
+        expect(buttons.first.legendFontSize, isNotNull);
+        final function = {
+          for (final b in buttons)
+            if (!numberIds.contains(b.keyDef.id)) b.mainLabelFontSize,
+        };
+        final m = KeypadMetrics.compute(
+          const Size(360, 420),
+          TextScaler.noScaling,
+        );
+        Set<double?> numberOf(NumberLabelKind kind) => {
+          for (final b in buttons)
+            if (KeypadMetrics.numberLabelKindOf(b.keyDef) == kind)
+              b.mainLabelFontSize,
+        };
+        expect(function, {m.mainLabelFontSize});
+        expect(numberOf(NumberLabelKind.digit), {m.numberMainLabelFontSize});
+        expect(numberOf(NumberLabelKind.word), {m.numberWordLabelFontSize});
+        expect(numberOf(NumberLabelKind.operator), {
+          m.numberOperatorLabelFontSize,
+        });
+        for (final b in buttons) {
+          expect(
+            b.mainLabelFontSize,
+            m.mainLabelFontSizeOf(b.keyDef),
+            reason: b.keyDef.id.name,
+          );
+        }
+        // 숫자부 키는 모두 종류가 있고, 숫자부 밖의 키는 없다
+        for (final def in allKeys) {
+          expect(
+            KeypadMetrics.numberLabelKindOf(def) != null,
+            numberIds.contains(def.id),
+            reason: def.id.name,
+          );
+        }
+        // 실물처럼 숫자부 글자가 더 크고(#156), 글자 각인은 숫자보다 작고 연산 기호는 크다(#225)
+        expect(m.numberMainLabelFontSize, greaterThan(m.mainLabelFontSize));
+        expect(m.numberWordLabelFontSize, greaterThan(m.mainLabelFontSize));
+        expect(m.numberWordLabelFontSize, lessThan(m.numberMainLabelFontSize));
+        expect(
+          m.numberOperatorLabelFontSize,
+          greaterThan(m.numberMainLabelFontSize),
+        );
+      },
+    );
 
     for (final scale in [1.0, 1.3, 2.0]) {
       test('글자 배율 $scale: 배율을 반영한 글자가 각인 띠·키캡 높이를 넘지 않는다', () {
@@ -344,40 +371,61 @@ void main() {
           effective.scale(m.mainLabelFontSize),
           lessThan(cell - legendHeight),
         );
+        // 숫자부 세 크기(숫자·글자 각인·연산 기호, #225)의 줄 상자도 숫자부 키캡 안쪽 높이 안이다
+        final numberCapInner =
+            m.numberCapHeight -
+            CalcTheme.keyPressedOffset -
+            2 * CalcTheme.keyBorderWidth;
+        for (final size in [
+          m.numberMainLabelFontSize,
+          m.numberWordLabelFontSize,
+          m.numberOperatorLabelFontSize,
+        ]) {
+          expect(
+            effective.scale(size).ceilToDouble(),
+            lessThanOrEqualTo(numberCapInner),
+            reason: '$size',
+          );
+        }
       });
     }
 
     for (final scale in [1.0, 1.3]) {
-      testWidgets('글자 배율 $scale: 한 글자 메인 라벨은 구역마다 모두 같은 크기로, 축소 없이 그려진다', (
-        tester,
-      ) async {
-        await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
-        final cursorIds = cursorPad.all.map((d) => d.id).toSet();
-        final numberIds = {
-          for (final row in numberRows)
-            for (final def in row) def.id,
-        };
-        final heights = <bool, Set<double>>{true: {}, false: {}};
-        for (final def in allKeys) {
-          if (cursorIds.contains(def.id)) continue;
-          if (def.face == KeyFace.roundButton) continue;
-          if (def.mainLabel.runes.length != 1) continue;
-          final text = find.descendant(
-            of: _keycap(def.id),
-            matching: find.byType(Text),
-          );
-          // FittedBox가 줄이면 화면상 높이(getRect)가 레이아웃 높이(getSize)보다 작아진다.
-          final rendered = tester.getRect(text).height;
-          expect(
-            rendered,
-            moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
-            reason: def.id.name,
-          );
-          heights[numberIds.contains(def.id)]!.add(rendered.roundToDouble());
-        }
-        expect(heights[true], hasLength(1));
-        expect(heights[false], hasLength(1));
-      });
+      testWidgets(
+        '글자 배율 $scale: 한 글자 메인 라벨은 구역(숫자부는 숫자·연산 기호)마다 모두 같은 크기로, 축소 없이 그려진다',
+        (tester) async {
+          await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
+          final cursorIds = cursorPad.all.map((d) => d.id).toSet();
+          // 함수부(null)·숫자(digit)·연산 기호(operator, #225)
+          final heights = <NumberLabelKind?, Set<double>>{
+            null: {},
+            NumberLabelKind.digit: {},
+            NumberLabelKind.operator: {},
+          };
+          for (final def in allKeys) {
+            if (cursorIds.contains(def.id)) continue;
+            if (def.face == KeyFace.roundButton) continue;
+            if (def.mainLabel.runes.length != 1) continue;
+            final text = find.descendant(
+              of: _keycap(def.id),
+              matching: find.byType(Text),
+            );
+            // FittedBox가 줄이면 화면상 높이(getRect)가 레이아웃 높이(getSize)보다 작아진다.
+            final rendered = tester.getRect(text).height;
+            expect(
+              rendered,
+              moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+              reason: def.id.name,
+            );
+            heights[KeypadMetrics.numberLabelKindOf(def)]!.add(
+              rendered.roundToDouble(),
+            );
+          }
+          for (final entry in heights.entries) {
+            expect(entry.value, hasLength(1), reason: '${entry.key}');
+          }
+        },
+      );
     }
 
     test('폭 기준: 통일 크기는 높이 기준 크기의 하한 비율 이상, 높이 기준 이하다', () {
