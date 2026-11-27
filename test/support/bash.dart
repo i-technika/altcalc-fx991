@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// 저장소의 셸 스크립트(`.github/scripts/*.sh`)를 테스트에서 실행하는 도구.
+/// 저장소의 셸 스크립트(`.github/scripts/*.sh`·`.claude/scripts/*.sh`)를 테스트에서 실행하는 도구.
 /// 경로는 패키지 루트(= `flutter test`의 작업 디렉터리) 기준이다.
 
 /// 스크립트를 실행할 bash (한 번만 찾는다).

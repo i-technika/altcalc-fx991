@@ -3,8 +3,9 @@
 # 사용법: bash .claude/scripts/set-project-status.sh <이슈|PR 번호> <Todo|"In Progress"|Done>
 # 항목이 프로젝트에 없으면 먼저 추가한 뒤 상태를 설정한다.
 #
-# 프로젝트 항목 전체(`gh project item-list`)를 읽지 않는다 (#250) — 항목이 수백 개라 그 조회 한 번이
-# GraphQL 시간당 한도(5,000점)의 상당 부분을 써서, 여러 세션이 함께 돌면 한도가 바닥났다.
+# 프로젝트 항목 전체(`gh project item-list`)를 읽지 않는다 (#250) — 그 조회는 항목 100개당 101점이라
+# 2026-11-27(항목 253개) 한 번에 약 300점, `/fix-issue` 1회(3~4번 호출)에 약 1,000점을 써서
+# 여러 세션이 함께 돌면 GraphQL 시간당 한도(5,000점)가 바닥났다. 지금 방식은 한 번에 2~3점이다.
 # 대신 그 이슈·PR 쪽에서 자기가 들어 있는 프로젝트 항목을 찾는다(조회 1번 + 변경 1~2번).
 # 테스트용 환경 변수: SET_PROJECT_STATUS_GH(가짜 gh 경로) — test/unit/set_project_status_script_test.dart
 set -euo pipefail

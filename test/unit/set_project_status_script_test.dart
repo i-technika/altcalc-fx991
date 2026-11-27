@@ -45,8 +45,9 @@ if [ -n "${!json_var:-}" ]; then
   filter=""; prev=""
   for a in "$@"; do [ "$prev" = "--jq" ] && filter=$a; prev=$a; done
   [ -n "$filter" ] || { echo "가짜 gh: --jq 없이 JSON 응답을 요청함" >&2; exit 98; }
-  printf '%s' "${!json_var}" | jq -r "$filter"
-  exit $?
+  # Windows용 jq.exe는 줄 끝을 CRLF로 낸다 — 실제 gh(gojq)처럼 LF만 남긴다. 종료 코드는 jq의 것을 낸다
+  printf '%s' "${!json_var}" | jq -r "$filter" | tr -d '\r'
+  exit "${PIPESTATUS[1]}"
 fi
 printf '%b' "${!out_var:-}"
 ''';
@@ -137,7 +138,10 @@ String _addJson(String itemId) =>
 
 /// jq가 있는지 (가짜 gh의 JSON 모드에 필요). 없으면 로컬에서는 건너뛰고 CI에서는 실패한다.
 final bool _hasJq =
-    runBashScript('-c', ['command -v jq >/dev/null']).exitCode == 0;
+    Process.runSync(bashPath, ['-c', 'command -v jq']).exitCode == 0;
+
+/// CI(GitHub Actions) 안인지 — Actions는 모든 step에 `GITHUB_ACTIONS=true`를 넣는다
+final bool _inCi = Platform.environment['GITHUB_ACTIONS'] != null;
 
 void main() {
   setUp(() {
@@ -332,15 +336,13 @@ void main() {
   });
 
   group('실제 응답 모양에 --jq 필터를 실제 jq로 적용한다 (#250 R1)', () {
-    final skip = !_hasJq && Platform.environment['GITHUB_ACTIONS'] == null
-        ? 'jq가 없다 — CI(Ubuntu 러너)에서 돈다'
-        : null;
+    final skip = !_inCi && !_hasJq ? 'jq가 없다 — CI(Ubuntu 러너)에서 돈다' : null;
 
-    test('CI에는 jq가 있다 (아래 검사가 건너뛰어지지 않는다는 전제)', () {
-      if (Platform.environment['GITHUB_ACTIONS'] != null) {
-        expect(_hasJq, isTrue, reason: 'CI 러너에 jq가 없으면 필터 검사가 사라진다');
-      }
-    });
+    test(
+      'CI에는 jq가 있다 (아래 검사가 건너뛰어지지 않는다는 전제)',
+      () => expect(_hasJq, isTrue, reason: 'CI 러너에 jq가 없으면 필터 검사가 사라진다'),
+      skip: _inCi ? null : 'CI에서만 검사한다',
+    );
 
     test('이슈: 다른 프로젝트 항목 사이에서 이 프로젝트의 항목을 고른다', () {
       final run = _run(
@@ -380,7 +382,9 @@ void main() {
     }, skip: skip);
   });
 
-  test('GraphQL 문서는 스키마의 이름·타입을 쓴다 (2026-11-27 스키마 조회로 확인)', () {
+  // 문서를 공백만 빼고 고정한다(바꾸면 알려 주는 검사). 스키마와의 대조는 기계 검증이 아니라
+  // 2026-11-27 introspection으로 사람이 확인한 것이다 — 문서를 바꿀 때는 introspection으로 다시 확인하고 여기를 고친다.
+  test('GraphQL 문서 고정 (스키마 대조는 2026-11-27 introspection으로 수동 확인)', () {
     final run = _run(
       ['251', 'Done'],
       lookupOut: _lookup(_contentId, {}),
@@ -389,6 +393,7 @@ void main() {
     expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
     // 공백을 빼고 비교한다 — 줄바꿈·들여쓰기는 바꿔도 된다
     String flat(String s) => s.replaceAll(RegExp(r'\s+'), '');
+    expect(run.calls, hasLength(3));
     final [lookup, add, update] = run.calls.map((c) => flat(c.query)).toList();
     // 조회: number는 Int!(-F로 넘김), Issue·PullRequest 모두 projectItems(includeArchived 기본 true)
     expect(lookup, contains(r'$number:Int!'));
