@@ -267,6 +267,12 @@ void main() {
       display: const Size(800, 1280),
       error: 'boom',
     );
+    LayoutLog.orientationRequest(
+      OrientationPolicy.any,
+      kind: DeviceKind.foldable,
+      display: const Size(720, 528),
+      reason: '접힘선 2개 기억',
+    );
     expect(lines, [
       'AltCalc 시작 판정 받음: 폴더블=true, 접힘=있음',
       'AltCalc 시작 판정 받음: 폴더블=true, 접힘=없음',
@@ -277,6 +283,7 @@ void main() {
       'AltCalc 폴더블 기억: 물리 화면 변경 (360x860 → 841.4x701)',
       'AltCalc 방향 요청: portrait (기기 phone, 화면 360x860)',
       'AltCalc 방향 요청: landscape (기기 tablet, 화면 800x1280) 실패: boom',
+      'AltCalc 방향 요청: any (기기 foldable, 화면 720x528, 접힘선 2개 기억)',
     ]);
   });
 
@@ -292,9 +299,10 @@ void main() {
     );
     expect(lines, [
       'AltCalc 배치: hingeSplit — 창 841x701.5, '
-          '화면 특징 [fold postureFlat 420,0-420,701.5], 폴더블=true @0.0ms',
+          '화면 특징 [fold postureFlat 420,0-420,701.5], 가로지르는 접힘선 1, '
+          '폴더블=true @0.0ms',
       'AltCalc 배치: stacked (고른 배치 hingeSplit) 안내 — 창 841x701.5, '
-          '화면 특징 [], 폴더블=false @60.0ms',
+          '화면 특징 [], 가로지르는 접힘선 0, 폴더블=false @60.0ms',
     ]);
   });
 
