@@ -13,6 +13,7 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
       disp: true,
       historyUp: true,
       historyDown: true,
+      keepScreenOn: true,
     ),
     for (final u in AngleUnit.values) LcdStatus(angleUnit: u),
     for (final f in NumberDisplayFormat.values) LcdStatus(numberFormat: f),
@@ -27,7 +28,8 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
 /// 상태줄 세그먼트 스프라이트 (#58).
 /// 출처: CasioEmu models/fx991cnx/model.lua의 rsd_* 사각형(LCD 왼쪽 x=47 기준으로 뺀 값)과,
 /// interface.png(RGBA)를 흰 배경에 알파 합성하고 회색(PIL `L`)으로 바꾼 뒤, y=603~610에서 회색값 < 200인
-/// 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶·☀도 적어 둔다.
+/// 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶도 적어 둔다. ☀ 자리는 앱 고유 화면 켜짐 유지 슬롯(`👁`, #233)이다.
+/// 슬롯 대표 문자가 실물 세그먼트와 다른 슬롯은 [_spriteOf]로 이름을 바꿔 찾는다.
 const _sprites = <String, (int, int, int, int)>{
   // 이름: (x, 폭, 잉크 lo, 잉크 hi)
   'S': (0, 8, 0, 7),
@@ -52,6 +54,15 @@ const _sprites = <String, (int, int, int, int)>{
   '☀': (183, 9, 184, 190),
 };
 
+/// 슬롯 → 그 자리 스프라이트 이름. 대표 문자가 실물 세그먼트와 다른 슬롯만 적는다.
+const _spriteOf = <LcdIndicatorSlot, String>{
+  // 실물 ☀(태양광) 자리에 앱 고유 화면 켜짐 유지 표시기를 둔다(#233).
+  LcdIndicatorSlot.keepScreenOn: '☀',
+};
+
+/// [slot] 자리의 스프라이트 이름
+String _spriteName(LcdIndicatorSlot slot) => _spriteOf[slot] ?? slot.template;
+
 /// 스프라이트 잉크 가운데 (도트)
 double _spriteCenter(String name) {
   final (_, _, lo, hi) = _sprites[name]!;
@@ -62,7 +73,7 @@ void main() {
   group('LcdIndicatorSlot 불변식', () {
     test('슬롯 순서는 fx-991EX 실물 LCD 세그먼트 순서를 따른다 (#58)', () {
       // 출처: LcdIndicatorSlot 문서 주석 — 실물 사진·ClassWiz 세그먼트 좌표 대조.
-      // ⇩·◀·▶·☀는 앱에 해당 상태가 없어 슬롯이 없다(자리만 비워 둔다).
+      // ⇩·◀·▶는 가이드 표시기 표에 없어 슬롯이 없다(자리만 비워 둔다). 맨 끝 ☀ 자리는 앱 고유 화면 켜짐 유지(👁, #233).
       expect(LcdIndicatorSlot.values.map((s) => s.template), [
         'S',
         'A',
@@ -80,6 +91,7 @@ void main() {
         '▼',
         '▲',
         '‖',
+        '👁',
       ]);
     });
 
@@ -99,20 +111,29 @@ void main() {
       }
       expect(next, LcdIndicatorSlot.dotColumns);
       for (final slot in LcdIndicatorSlot.values) {
-        final (_, _, lo, hi) = _sprites[slot.template]!;
+        final (_, _, lo, hi) = _sprites[_spriteName(slot)]!;
         expect(slot.dotCenter, (lo + hi) / 2, reason: slot.name);
       }
       // 슬롯 순서는 스프라이트 순서에서 슬롯이 없는 세그먼트를 뺀 것과 같다.
       expect(
-        LcdIndicatorSlot.values.map((s) => s.template),
-        _sprites.keys.where((k) => !{'⇩', '◀', '▶', '☀'}.contains(k)),
+        LcdIndicatorSlot.values.map(_spriteName),
+        _sprites.keys.where((k) => !{'⇩', '◀', '▶'}.contains(k)),
       );
+      // 자리를 바꿔 찾는 슬롯의 대표 문자는 실물 세그먼트 이름과 겹치지 않는다(다른 세그먼트로 읽히지 않게).
+      for (final slot in _spriteOf.keys) {
+        expect(
+          _sprites.keys,
+          isNot(contains(slot.template)),
+          reason: slot.name,
+        );
+      }
     });
 
     test('사진 대조: 켜진 표시기의 실측 위치와 1도트 안쪽으로 맞는다', () {
       // 사진(Wikimedia Commons "Casio fx-991EX Scientific Calculator.jpg", 1920×2560)의 상태줄(y 540~560)에서
       // 켜진 표시기의 가로 범위를 재고, D와 ☀의 가운데를 위 표의 값(60.5, 187)에 맞춰 사진 x를 도트로 바꿨다
-      // (1도트 ≈ 4.27px, 회색값 < 95인 열). 그 환산으로 잰 나머지 표시기 위치다. ☀는 슬롯이 없어 환산 기준으로만 쓴다.
+      // (1도트 ≈ 4.27px, 회색값 < 95인 열). 그 환산으로 잰 나머지 표시기 위치다. ☀는 환산 기준으로만 쓴다
+      // (그 자리 화면 켜짐 유지 슬롯의 가운데가 같은 187도트다 — 위 테스트).
       for (final (slot, measured) in [
         (LcdIndicatorSlot.math, 46.8),
         (LcdIndicatorSlot.historyUp, 158.8),
@@ -127,7 +148,7 @@ void main() {
       // 있어 (528, 416)–(1500, 432) 선을 따라 세로 8px 평균 밝기를 재고, 좌우 ±25px 최댓값의 65% 미만인 열을
       // 잉크로 보아 6px 이하 틈은 이었다. D·R·G는 붙어 한 덩어리(D 왼쪽 ~ G 오른쪽)로 잡혔다.
       // 사진 x를 직선 하나(최소제곱)로 도트에 맞추면 모든 세그먼트가 1도트 안쪽으로 맞는다(약 5.44px/도트).
-      // 슬롯이 없는 ⇩·◀·▶·☀는 스프라이트 잉크 가운데를 쓴다([_sprites]).
+      // 슬롯이 없는 ⇩·◀·▶는 스프라이트 잉크 가운데를 쓴다([_sprites]). ☀는 그 자리 화면 켜짐 유지 슬롯(#233)이다.
       final measured = <(String, double, double)>[
         // (이름, 도트 가운데, 사진 x 가운데)
         ('S', LcdIndicatorSlot.shift.dotCenter, 528.5),
@@ -153,7 +174,7 @@ void main() {
         ('▲', LcdIndicatorSlot.historyUp.dotCenter, 1376),
         ('▶', _spriteCenter('▶'), 1412),
         ('‖', LcdIndicatorSlot.disp.dotCenter, 1470),
-        ('☀', _spriteCenter('☀'), 1526),
+        ('☀', LcdIndicatorSlot.keepScreenOn.dotCenter, 1526),
       ];
       final n = measured.length;
       final sx = measured.fold(0.0, (a, e) => a + e.$2);
@@ -193,7 +214,8 @@ void main() {
       expect(up.dotCenter - down.dotCenter, greaterThan(5));
     });
 
-    test('가이드의 표시기를 모두 표시할 수 있다 (☀는 앱에 해당 상태가 없어 제외, RCL은 가이드 표에 없음)', () {
+    test('가이드의 표시기를 모두 표시할 수 있다 (☀ 태양광은 앱에 해당 상태가 없어 제외 — 그 자리는 화면 켜짐 유지 👁, '
+        'RCL은 가이드 표에 없음)', () {
       final all = _possibleIndicators().values.expand((e) => e).toSet();
       for (final required in [
         'S',
@@ -212,6 +234,7 @@ void main() {
         '▲',
         '▼',
         '‖',
+        '👁',
       ]) {
         expect(all, contains(required), reason: required);
       }
@@ -220,7 +243,7 @@ void main() {
       }
     });
 
-    test('아이콘으로 그리는 슬롯은 →x·√▭✎·‖ 셋이고 아이콘이 겹치지 않는다 (#57)', () {
+    test('아이콘으로 그리는 슬롯은 →x·√▭✎·‖·👁 넷이고 아이콘이 겹치지 않는다 (#57, #233)', () {
       final icons = {
         for (final slot in LcdIndicatorSlot.values)
           if (slot.icon != null) slot: slot.icon,
@@ -229,7 +252,9 @@ void main() {
         LcdIndicatorSlot.store: LcdIndicatorIcon.storeArrow,
         LcdIndicatorSlot.math: LcdIndicatorIcon.mathInput,
         LcdIndicatorSlot.disp: LcdIndicatorIcon.multiStatement,
+        LcdIndicatorSlot.keepScreenOn: LcdIndicatorIcon.keepScreenOn,
       });
+      expect(icons.values.toSet(), LcdIndicatorIcon.values.toSet());
       // 아이콘 슬롯은 켜지면 대표 문자 하나만 표시한다(값이 여러 개인 아이콘은 없다).
       for (final MapEntry(key: slot, value: labels)
           in _possibleIndicators().entries) {
@@ -237,10 +262,28 @@ void main() {
           expect(labels, {slot.template}, reason: slot.name);
         }
       }
-      // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸(잉크는 가운데 2.4칸, #217), ‖ 1칸
+      // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸(잉크는 가운데 2.4칸, #217), ‖ 1칸,
+      // 👁 2칸(잉크는 가운데 1.4칸 — ☀ 잉크 6도트쯤, #233)
       expect(LcdIndicatorSlot.store.columns, 2);
       expect(LcdIndicatorSlot.math.columns, 3);
       expect(LcdIndicatorSlot.disp.columns, 1);
+      expect(LcdIndicatorSlot.keepScreenOn.columns, 2);
+    });
+
+    test('화면 켜짐 유지(👁)는 실물 ☀ 자리의 맨 끝 슬롯이고 반전 상자가 아니다 (#233)', () {
+      const slot = LcdIndicatorSlot.keepScreenOn;
+      expect(LcdIndicatorSlot.values.last, slot);
+      expect(slot.dotCenter, _spriteCenter('☀'));
+      // 실물 좌표 정합성: ☀는 맨 오른쪽 세그먼트이고 그 잉크(184~190도트)는 앞 ‖ 잉크와 떨어져 있다.
+      // 앱 슬롯이 실제로 표시줄 안에 들고 이웃과 겹치지 않는지는 표시줄 배치 테스트(`lcd_display_test.dart`)가 본다.
+      final (x, w, lo, hi) = _sprites['☀']!;
+      final (_, _, _, dispInkEnd) = _sprites['‖']!;
+      expect(lo, greaterThan(dispInkEnd));
+      expect(hi, lessThanOrEqualTo(LcdIndicatorSlot.dotColumns));
+      expect(x + w, LcdIndicatorSlot.dotColumns, reason: '오른쪽 끝 세그먼트');
+      expect(slot.boxed, isFalse);
+      // 대표 문자는 태양(☀)이 아니다 — 앱에는 태양광 상태가 없다.
+      expect(slot.template, isNot('☀'));
     });
 
     test('반전 상자 글자 슬롯은 S·A·D·R·G 다섯이고, 글자 하나짜리 1칸 글자 슬롯이다 (#160)', () {
@@ -309,8 +352,19 @@ void main() {
   });
 
   group('LcdStatus', () {
-    test('초기 상태는 Deg·Norm·MathI/MathO로 D와 √◻만 켜진다', () {
+    test('초기 상태는 Deg·Norm·MathI/MathO로 D와 √◻만 켜진다 (화면 켜짐 유지는 꺼짐)', () {
       expect(LcdStatus.initial.activeIndicators, ['√◻', 'D']);
+      expect(LcdStatus.initial.keepScreenOn, isFalse);
+    });
+
+    test('화면 켜짐 유지는 자기 자리(👁) 하나만 켜고 맨 끝에 놓인다 (#233)', () {
+      const s = LcdStatus(keepScreenOn: true, disp: true);
+      expect(s.indicatorFor(LcdIndicatorSlot.keepScreenOn), '👁');
+      expect(s.activeIndicators, ['√◻', 'D', '‖', '👁']);
+      expect(
+        const LcdStatus().indicatorFor(LcdIndicatorSlot.keepScreenOn),
+        isNull,
+      );
     });
 
     test('각도 단위는 항상 켜져 있고, D/R/G 세 자리 중 그 단위의 자리 하나만 켜진다', () {
@@ -408,6 +462,7 @@ void main() {
         base.copyWith(disp: true),
         base.copyWith(historyUp: true),
         base.copyWith(historyDown: true),
+        base.copyWith(keepScreenOn: true),
       ];
       for (final v in variants) {
         expect(v, isNot(base), reason: '$v');

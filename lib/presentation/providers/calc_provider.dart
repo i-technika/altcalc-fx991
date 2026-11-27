@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/key_definitions.dart';
 import '../../domain/models/calc_state.dart';
 import '../../domain/models/lcd_status.dart';
+import 'settings_provider.dart';
 
 /// 계산기 전체 상태 provider.
 final calcProvider = NotifierProvider<CalcNotifier, CalcState>(
@@ -10,9 +11,12 @@ final calcProvider = NotifierProvider<CalcNotifier, CalcState>(
 );
 
 /// LCD 상태 표시줄 스냅샷. 모디파이어 등 표시와 관련된 값이 바뀔 때만 갱신된다.
-final lcdStatusProvider = Provider<LcdStatus>(
-  (ref) => ref.watch(calcProvider.select((s) => s.lcdStatus)),
-);
+/// 계산기 상태([CalcState.lcdStatus])에 앱 설정에서 오는 표시기(화면 켜짐 유지, [keepScreenOnProvider])를 더한다.
+final lcdStatusProvider = Provider<LcdStatus>((ref) {
+  final status = ref.watch(calcProvider.select((s) => s.lcdStatus));
+  // 앱 설정 값이 기준이다 — 계산기 상태 쪽 값(늘 꺼짐)을 덮어쓴다.
+  return status.copyWith(keepScreenOn: ref.watch(keepScreenOnProvider));
+});
 
 /// 키 입력을 상태 전이([CalcState.pressKey]/[CalcState.repeatKey])로 연결하는 notifier.
 ///

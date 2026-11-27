@@ -104,6 +104,7 @@ void main() {
             historyUp: true,
             historyDown: true,
             disp: true,
+            keepScreenOn: true,
           );
           for (final fontSize in [6.0, 8.0, 10.0, 14.0]) {
             await tester.pumpWidget(
