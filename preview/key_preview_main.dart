@@ -249,7 +249,7 @@ const EdgeInsets _gestureNavPhoneInsets = EdgeInsets.fromLTRB(
 ///
 /// 실측(#118, API 36 에뮬레이터): Pixel Tablet 1280×800(가로·세로 모두)과 Pixel Fold 내부 841×701 모두 아래 인셋 32,
 /// 아래 제스처 영역 32. 작업 표시줄을 항상 보이게 하면(작업 표시줄 길게 누르기 → 항상 표시) Pixel Tablet에서 인셋·제스처
-/// 영역 모두 56이다 — 미리보기는 기본값인 임시 표시만 둔다.
+/// 영역 모두 56이다(Pixel Fold 내부도 56 / 56) — 미리보기는 기본값인 임시 표시만 둔다.
 const double previewTransientTaskbarHeight = 32;
 
 /// 제스처 내비게이션 대화면의 시스템 인셋 근사 — 상태 표시줄 24, 임시 작업 표시줄
@@ -331,7 +331,9 @@ const List<PreviewDevice> previewDevices = [
     Size(430, 932),
     padding: EdgeInsets.only(top: 59, bottom: 34),
   ),
-  // Galaxy Z Fold5 커버, 제스처 내비게이션 (뒤로가기 영역 좌우 30dp, 홈 제스처는 인셋보다 8dp 깊다 — Pixel Fold 커버 실측, #118)
+  // Galaxy Z Fold5 커버, 제스처 내비게이션 (뒤로가기 영역 좌우 30dp, 홈 제스처는 인셋보다 8dp 깊다 — Pixel Fold 커버 실측을
+  // 빌린 값, #118). 위는 상태 표시줄과 같게 두었다 — Pixel Fold 커버는 카메라 구멍 때문에 인셋 41.9 / 제스처 54.1이었지만
+  // 위아래 배치의 위쪽에는 키가 없고(상단 띠뿐), Fold5 커버 값은 모른다(#172·#177).
   PreviewDevice(
     '폴더블 커버',
     Size(344, 882),
@@ -340,7 +342,8 @@ const List<PreviewDevice> previewDevices = [
   ),
   // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 LCD/키패드를 좌우로 나눈다(#25).
   // 자세·방향을 고를 수 있다(#93) — 가로로 돌려 반 접으면 테이블톱 배치, 펼친 채 돌리면 위아래 배치다.
-  // 인셋·제스처 영역은 Pixel 대화면의 임시 작업 표시줄 실측으로 근사했다(#118) — One UI 실기기 값은 #177.
+  // 인셋·제스처 영역은 Pixel 대화면의 임시 작업 표시줄 실측을 빌려 근사했다(#118 — Galaxy 기기에서 잰 값이 아니다).
+  // One UI의 작업 표시줄은 동작이 달라 아래 인셋이 다를 수 있다 — 실기기 값은 #177.
   PreviewDevice(
     '폴더블 내부',
     Size(690, 829),

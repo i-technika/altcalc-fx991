@@ -186,6 +186,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     super.didUpdateWidget(oldWidget);
     if (_pressed && (!_enabled || oldWidget.keyDef.id != widget.keyDef.id)) {
       // 누른 채 비활성이 되거나 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
+      _logKey(KeyInputEvent.releasedByWidget, key: oldWidget.keyDef.id);
       _release();
     } else if (widget.onRepeat == null) {
       _cancelRepeat();
@@ -202,6 +203,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   @override
   void dispose() {
+    if (_pressed) {
+      _logKey(KeyInputEvent.releasedByWidget, key: widget.keyDef.id);
+    }
     _cancelRepeat();
     super.dispose();
   }
@@ -257,6 +261,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   }
 
   /// 진단 로그 (#118) — 진단 빌드에서만 남는다([LayoutLog.keyInput]). [at]은 전역 좌표다.
+  /// 꺼져 있으면 좌표 변환도 하지 않는다.
   void _log(KeyInputEvent event, {required Offset at}) {
     if (!LayoutLog.enabled) return;
     LayoutLog.keyInput(
@@ -264,6 +269,12 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       key: widget.keyDef.id.name,
       at: ScreenCoordinateRoot.globalToScreen(context, at),
     );
+  }
+
+  /// 좌표 없는 진단 로그 — 위젯 쪽 사정으로 눌림이 끝날 때(dispose에서도 부르므로 context를 쓰지 않는다)
+  void _logKey(KeyInputEvent event, {required CalcKeyId key}) {
+    if (!LayoutLog.enabled) return;
+    LayoutLog.keyInput(event, key: key.name);
   }
 
   void _handlePointerDown(PointerDownEvent event) {
@@ -308,7 +319,12 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   void _handlePointerCancel(PointerCancelEvent event) {
     if (!mounted || event.pointer != _activePointer) return;
-    _log(KeyInputEvent.cancelled, at: event.position);
+    _log(
+      _deferred
+          ? KeyInputEvent.cancelledDeferred
+          : KeyInputEvent.cancelledAfterPress,
+      at: event.position,
+    );
     setState(_release);
   }
 

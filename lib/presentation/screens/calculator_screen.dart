@@ -830,20 +830,24 @@ class CalculatorScreen extends ConsumerWidget {
     )?.bounds.shift(-bodyOrigin);
     // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 본체 아래를 가리는 것(시스템 인셋·키보드)보다 화면 여백
     // 넘게 깊으면 그 초과분만큼 넓혀 본체가 영역에 닿지 않게 한다 (#63).
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final gestureInsets = MediaQuery.systemGestureInsetsOf(context);
     final bottomMargin = CalcTheme.screenBottomMargin(
       bottomInset: math.max(
-        MediaQuery.viewPaddingOf(context).bottom,
+        viewPadding.bottom,
         MediaQuery.viewInsetsOf(context).bottom,
       ),
-      bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
+      bottomGestureInset: gestureInsets.bottom,
     );
-    // 진단 로그 (#118) — 기기별 시스템 인셋·제스처 영역을 실기기 logcat으로 잰다
-    LayoutLog.systemInsets(
-      window: window,
-      padding: padding,
-      viewPadding: MediaQuery.viewPaddingOf(context),
-      gestures: MediaQuery.systemGestureInsetsOf(context),
-    );
+    // 진단 로그 (#118) — 기기별 시스템 인셋·제스처 영역을 실기기 logcat으로 잰다(진단 빌드에서만)
+    if (LayoutLog.enabled) {
+      LayoutLog.systemInsets(
+        window: window,
+        padding: padding,
+        viewPadding: viewPadding,
+        gestures: gestureInsets,
+      );
+    }
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).

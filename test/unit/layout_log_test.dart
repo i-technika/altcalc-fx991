@@ -154,14 +154,29 @@ void main() {
       for (final event in KeyInputEvent.values) {
         LayoutLog.keyInput(event, key: 'ac', at: const Offset(1262, 517.25));
       }
-      LayoutLog.keyInput(KeyInputEvent.pressed, key: 'num7');
+      LayoutLog.keyInput(KeyInputEvent.releasedByWidget, key: 'num7');
       expect(lines, [
-        'AltCalc 키 입력(누를 때): ac (1262,517.3) @0.0ms',
-        'AltCalc 키 보류(제스처 영역): ac (1262,517.3) @0.0ms',
-        'AltCalc 키 입력(뗄 때): ac (1262,517.3) @0.0ms',
-        'AltCalc 키 버림(벗어남): ac (1262,517.3) @0.0ms',
-        'AltCalc 키 취소: ac (1262,517.3) @0.0ms',
-        'AltCalc 키 입력(누를 때): num7 @0.0ms',
+        'AltCalc 키 입력(누를 때): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 보류(제스처 영역): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 입력(뗄 때): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 버림(벗어남): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 취소(보류 버림): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 취소(이미 입력): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 해제(키 변경·제거): ac (1262,517.25) @0.0ms',
+        'AltCalc 키 해제(키 변경·제거): num7 @0.0ms',
+      ]);
+    });
+
+    test('키 줄 좌표는 소수 둘째 자리까지 — 제스처 영역 경계 바로 안쪽이 경계 값으로 뭉개지지 않는다', () {
+      for (final x in [1250.0, 1250.04, 1250.5, 1249.996, 29.7]) {
+        LayoutLog.keyInput(KeyInputEvent.pressed, key: 'ac', at: Offset(x, 0));
+      }
+      expect(lines.map((l) => l.split(' (')[1].split(')')[0]), [
+        '1250,0',
+        '1250.04,0',
+        '1250.5,0',
+        '1250,0',
+        '29.7,0',
       ]);
     });
   });

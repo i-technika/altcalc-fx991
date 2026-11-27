@@ -455,7 +455,7 @@ void main() {
         '보류(제스처 영역): ac ${at(edge)}',
         '입력(뗄 때): ac ${at(edge)}',
         '보류(제스처 영역): ac ${at(edge)}',
-        '취소: ac ${at(edge)}',
+        '취소(보류 버림): ac ${at(edge)}',
         '보류(제스처 영역): ac ${at(edge)}',
         '버림(벗어남): ac ${at(inward)}',
         '입력(누를 때): ac ${at(middle)}',

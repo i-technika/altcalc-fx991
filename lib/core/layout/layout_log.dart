@@ -37,10 +37,13 @@ import 'form_factor.dart';
 /// ## 시스템 영역·키 입력 시점 (#118)
 /// 시스템 인셋·제스처 영역이 바뀔 때마다 "시스템 영역" 줄([systemInsets])을 남기고, 키 터치마다 누르는 순간 입력됐는지,
 /// 제스처 영역에서 시작해 손을 뗄 때로 미뤘는지, 미룬 누름이 시스템에 가로채여(취소) 버려졌는지([keyInput])를 남긴다.
+/// 누름 하나는 첫 줄(입력(누를 때) 또는 보류) 뒤에 끝 줄 하나로 끝난다 — 보류는 뗄 때 입력·버림·취소·해제 중 하나,
+/// 누를 때 입력은 취소·해제가 올 때만 끝 줄이 있다. 무시한 포인터(두 번째 손가락, 마우스 보조 버튼 등)는 남기지 않는다.
 /// 기기별 뒤로가기·작업 표시줄 영역과 가장자리 키 동작을 실기기 logcat으로 재려는 것이다(#177).
 ///
-/// 개인 정보는 없다(창·화면 크기, 접힘선 위치, 시스템 영역 크기, 판정 결과, 프레임 시각, 누른 키와 그 화면 좌표뿐 —
-/// 계산기 키 입력이라 계산 내용이 드러날 수 있지만 진단 빌드에서만 켜진다).
+/// 남는 것은 창·화면 크기, 접힘선 위치, 시스템 영역 크기, 판정 결과, 프레임 시각, 누른 키 이름과 그 화면 좌표다. 계정·기기
+/// 식별 정보는 없지만, 키 줄을 이어 읽으면 입력한 계산을 복원할 수 있다 — 진단 빌드는 측정에만 쓰고 개인 계산에 쓰지 않는다
+/// (원격 테스트 기기에 올린 경우도 같다).
 abstract final class LayoutLog {
   /// 로그 줄 머리말 — `flutter` 태그의 다른 로그와 구분한다.
   static const String prefix = 'AltCalc';
@@ -224,10 +227,12 @@ abstract final class LayoutLog {
     _write('$line @${_since(_clock())}');
   }
 
-  /// 키 터치 하나의 처리 ([KeyInputEvent]) — [key]는 키 이름, [at]은 누른 곳의 화면 좌표(dp)다.
+  /// 키 터치 하나의 처리 ([KeyInputEvent]) — [key]는 키 이름, [at]은 그 단계의 포인터 화면 좌표(dp)다.
+  /// 좌표는 소수 둘째 자리까지 적는다 — 제스처 영역 경계(예: 화면 폭 − 30)와 비교할 때 0.1dp 반올림으로 경계 안팎이
+  /// 뒤섞이지 않게 한다. 위젯 쪽 사정으로 끝난 단계([KeyInputEvent.releasedByWidget])는 좌표가 없다.
   static void keyInput(KeyInputEvent event, {required String key, Offset? at}) {
     if (!enabled) return;
-    final where = at == null ? '' : ' (${_n(at.dx)},${_n(at.dy)})';
+    final where = at == null ? '' : ' (${_n2(at.dx)},${_n2(at.dy)})';
     _write('키 ${event.label}: $key$where @${_since(_clock())}');
   }
 
@@ -279,6 +284,12 @@ abstract final class LayoutLog {
   static String _rect(Rect r) =>
       '${_n(r.left)},${_n(r.top)}-${_n(r.right)},${_n(r.bottom)}';
 
+  /// dp 값을 소수 둘째 자리까지 (끝의 0은 지운다 — 정수면 소수점 없이)
+  static String _n2(double v) {
+    final fixed = ((v * 100).round() / 100).toStringAsFixed(2);
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
   /// dp 값을 소수 첫째 자리까지 (정수면 소수점 없이)
   static String _n(double v) {
     final rounded = (v * 10).round() / 10;
@@ -302,8 +313,14 @@ enum KeyInputEvent {
   /// 미룬 누름이 키 밖으로 벗어나 버렸다
   discardedMovedOut('버림(벗어남)'),
 
-  /// 누름이 취소됐다 (시스템 제스처가 가로챈 경우 등 — 미룬 누름이면 입력하지 않는다)
-  cancelled('취소');
+  /// 미룬 누름이 취소됐다 — 시스템 제스처(뒤로가기 등)가 포인터를 가로챈 경우다. 입력하지 않았다.
+  cancelledDeferred('취소(보류 버림)'),
+
+  /// 이미 누를 때 입력한 누름이 취소됐다 (반복 입력만 멈춘다 — 입력은 되돌리지 않는다)
+  cancelledAfterPress('취소(이미 입력)'),
+
+  /// 누른 채 키가 비활성이 되거나 다른 키로 바뀌거나 사라져(배치 전환 등) 눌림을 해제했다. 미룬 누름이면 입력하지 않았다.
+  releasedByWidget('해제(키 변경·제거)');
 
   /// 로그 표기
   final String label;
