@@ -64,7 +64,7 @@ Future<SharedPreferences?> openSettingsStorage() async {
 ///
 /// M1에는 이 값을 바꾸는 설정 항목이 없어 늘 꺼짐이고, 개발용 미리보기(`preview/key_preview_main.dart`)만
 /// [KeepScreenOnNotifier.set]으로 켜 본다. 설정 항목·저장([HandednessNotifier]처럼 [sharedPreferencesProvider])·
-/// 실제 화면 꺼짐 방지는 #234(M6)에서 붙인다.
+/// 실제 화면 꺼짐 방지는 #234(M4 설정 팝업)에서 붙인다.
 final keepScreenOnProvider = NotifierProvider<KeepScreenOnNotifier, bool>(
   KeepScreenOnNotifier.new,
 );
