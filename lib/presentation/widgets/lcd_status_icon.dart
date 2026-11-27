@@ -429,7 +429,7 @@ class _LcdStatusIconPainter extends CustomPainter {
               ..lineTo(inkX(0.4), bl - half)
               ..lineTo(inkX(0.85), ct + half)
               ..lineTo(boxRight, ct + half),
-            // 뾰족한 V 꼭짓점은 miter 비율(2 이상, #217에서 가팔라져 약 2.4)이 한계 1.5를 넘어 잘린 모서리(bevel)로 그려진다 — 기준선 아래로
+            // 뾰족한 V 꼭짓점은 miter 비율(2 이상 — #160 약 2.2, #217에서 가팔라져 약 2.7)이 한계 1.5를 넘어 잘린 모서리(bevel)로 그려진다 — 기준선 아래로
             // 나가 띠 클립에 잘리지 않는다. 윗선 모서리(둔각)는 한계 안이라 각진 채로 남는다(#160 리뷰 R1·R2).
             stroke(StrokeJoin.miter)..strokeMiterLimit = 1.5,
           )

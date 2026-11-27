@@ -776,8 +776,9 @@ void main() {
           CalcTheme.lcdStatusCharWidthRatio /
           CalcTheme.lcdStatusCapHeightRatio;
       expect(storeCapRatio, lessThanOrEqualTo(8 / 7 * 1.15));
-      // √▭✎ 잉크(#217)는 3칸 슬롯 안에 들어가고, 대문자 높이 대비 폭이 실물(스프라이트 14도트 ÷ 대문자 높이 7도트 =
-      // 2.0배, #58 표)에서 5% 안이다. #160의 3칸 + 자간(약 2.52배)으로 되돌아가지 않게 한다.
+      // √▭✎ 잉크(#217)는 3칸 슬롯 안에 들어가고, 대문자 높이 대비 폭이 스프라이트(14도트 ÷ 대문자 높이 7도트 =
+      // 2.0배, #58 표)에서 5% 안이다. #160의 3칸 슬롯 전체(3칸만으로 2.52배, 자간 포함 10dp에서 약 2.66배)로
+      // 되돌아가지 않게 한다. 가이드 인쇄 아이콘·#183 영상은 약 1.7배로 더 좁다 — 2.0배를 택한 이유는 CalcTheme 문서.
       expect(CalcTheme.lcdStatusMathInkCells, greaterThan(0));
       expect(
         CalcTheme.lcdStatusMathInkCells,
