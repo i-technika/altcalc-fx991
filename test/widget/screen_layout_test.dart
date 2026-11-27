@@ -140,19 +140,20 @@ void main() {
     // 늘린다 — 늘린 몫은 키패드만 낸다(#141 R1·R2, [CalcTheme] "화면 배치" 절).
     const strip = CalcTheme.screenTopStripMinHeight;
     const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
-    const windows = [
+    final windows = [
       // 12.9인치 iPad 세로: 본체 1008×1306 (1366 − 24 − 20 − 화면 여백 8×2)
+      // LCD는 목표 비율((1306 − 띠) × 0.28 = 362.3)보다 낮은 줄 글자 상한 높이에서 멈춘다 (#189).
       (
         Size(1024, 1366),
         EdgeInsets.only(top: 24, bottom: 20),
-        (1306 - strip) * 0.28,
+        LcdFontSizes.heightAtMaxLineFont,
         fullRow,
       ),
-      // 10인치 Android 세로: 본체 784×1192 (1280 − 24 − 48 − 16)
+      // 10인치 Android 세로: 본체 784×1192 (1280 − 24 − 48 − 16) — 목표 330.4도 상한 높이에서 멈춘다.
       (
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
-        (1192 - strip) * 0.28,
+        LcdFontSizes.heightAtMaxLineFont,
         fullRow,
       ),
       // 정사각형 창: 본체 752×752 — 키패드가 640dp보다 낮아 띠는 최소 높이
@@ -2491,11 +2492,18 @@ void _hingeLayoutTests() {
           );
         }
       }
-      // 고정값: LCD–키패드 사이는 접힘선 34 + 간격 8×2 = 50dp
+      // 고정값: LCD–키패드 사이는 접힘선 34 + 간격 8×2 = 50dp. LCD 높이는 폭 기준 최대 높이(524 / 1.75 = 299.4)보다 낮은
+      // 줄 글자 상한 높이다(#189 — 524dp 폭이면 줄 글자가 상한 40dp에 닿는다).
       final r = CalcHingeSplitLayout.of(body, hinge, Handedness.right);
       expect(
         r.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 524, 524 / 1.75)),
+        rectMoreOrLessEquals(
+          Rect.fromLTWH(0, 0, 524, LcdFontSizes.heightAtMaxLineFont),
+        ),
+      );
+      expect(
+        LcdFontSizes.forSize(r.lcd.size, TextScaler.noScaling).input,
+        CalcTheme.lcdLineMaxFontSize,
       );
       expect(
         r.keypad,
@@ -2511,7 +2519,9 @@ void _hingeLayoutTests() {
       final l = CalcHingeSplitLayout.of(body, hinge, Handedness.left);
       expect(
         l.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(574, 0, 524, 524 / 1.75)),
+        rectMoreOrLessEquals(
+          Rect.fromLTWH(574, 0, 524, LcdFontSizes.heightAtMaxLineFont),
+        ),
       );
       expect(l.settingsButton.right, moreOrLessEquals(1098));
     });

@@ -984,38 +984,37 @@ void main() {
       expectSumsToBody(body, l);
     });
 
-    test(
-      '태블릿 세로 본체: 폭 상한이 없어 키패드 최대 높이에 닿지 않고, LCD는 목표 비율·키패드는 나머지 전부다 (#141)',
-      () {
-        // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 최대 1008 / 1.75 = 576.
-        // 키패드가 실물 크기(640)보다 높아 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다 — 늘린 몫은 키패드만 낸다
-        // (LCD는 최소 띠 기준 목표 비율 그대로, #141 R1·R2).
-        const fullRow =
-            CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
-        const body = Size(1008, 1306);
-        final l = CalcScreenLayout.of(body);
-        expect(l.lcdHeight, moreOrLessEquals((1306 - strip) * 0.28));
-        expect(
-          l.keypadHeight,
-          moreOrLessEquals(
-            1306 - fullRow - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
-          ),
-        );
-        expect(l.top, moreOrLessEquals(fullRow));
-        expectSumsToBody(body, l);
+    test('태블릿 세로 본체: 폭 상한이 없어 키패드 최대 높이에 닿지 않고, LCD는 줄 글자 상한 높이·키패드는 나머지 전부다 (#141, #189)', () {
+      // 12.9인치 iPad 세로 본체 1008×1306: 키패드 최대 1008 / 0.75 = 1344, LCD 폭 기준 최대 1008 / 1.75 = 576.
+      // LCD 목표(최소 띠 기준 × 0.28 = 362.3)가 줄 글자 상한 높이(약 273.5, #189)보다 높아 LCD는 그 높이에서 멈추고,
+      // 남는 높이는 키패드가 받는다. 키패드가 실물 크기(640)보다 높아 띠를 줄 전체 높이(본체 안 40dp)까지 늘린다 —
+      // 늘린 몫은 키패드만 낸다(#141 R1·R2).
+      const fullRow = CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding;
+      const body = Size(1008, 1306);
+      final l = CalcScreenLayout.of(body);
+      expect(l.lcdHeight, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+      expect((1306 - strip) * 0.28, greaterThan(l.lcdHeight));
+      expect(
+        l.keypadHeight,
+        moreOrLessEquals(
+          1306 - fullRow - CalcTheme.screenLcdKeypadGap - l.lcdHeight,
+        ),
+      );
+      expect(l.top, moreOrLessEquals(fullRow));
+      expectSumsToBody(body, l);
 
-        // 10인치 Android 세로 본체 784×1192: 설계 시안(2026-11-26 확정안)의 띠 44·LCD 330·키패드 838에 가깝다.
-        final android = CalcScreenLayout.of(const Size(784, 1192));
-        expect(android.lcdHeight, moreOrLessEquals(330.4, epsilon: 0.1));
-        expect(android.keypadHeight, moreOrLessEquals(813.6, epsilon: 0.1));
-        expect(android.top, moreOrLessEquals(fullRow));
+      // 10인치 Android 세로 본체 784×1192: #189 전에는 LCD 330.4·키패드 813.6(설계 시안 2026-11-26 확정안 띠 44·LCD 330·
+      // 키패드 838에 가까웠다). 줄 글자 상한으로 LCD가 273.5로 낮아지고 그만큼 키패드가 높아진다.
+      final android = CalcScreenLayout.of(const Size(784, 1192));
+      expect(android.lcdHeight, moreOrLessEquals(273.5, epsilon: 0.1));
+      expect(android.keypadHeight, moreOrLessEquals(870.5, epsilon: 0.1));
+      expect(android.top, moreOrLessEquals(fullRow));
 
-        // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 가로형으로 그린다(#38, #142).
-        final short = CalcScreenLayout.of(const Size(2000, 300));
-        expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
-        expectSumsToBody(const Size(2000, 300), short);
-      },
-    );
+      // 짧고 넓은 본체(가로 폰·분할 화면)도 높이 규칙은 같다 — 화면은 그런 창을 대개 가로형으로 그린다(#38, #142).
+      final short = CalcScreenLayout.of(const Size(2000, 300));
+      expect(short.lcdHeight, CalcTheme.screenLcdMinHeight);
+      expectSumsToBody(const Size(2000, 300), short);
+    });
 
     test(
       '큰 세로 창의 띠: 키패드를 실물 크기(640dp) 아래로 줄이지 않는 만큼만 줄 전체 높이까지 늘린다 (#141 R1)',

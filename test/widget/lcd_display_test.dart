@@ -914,7 +914,7 @@ void main() {
       );
     });
 
-    test('폰·태블릿 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준에 걸린다', () {
+    test('폰·태블릿 폭의 LCD 최대 높이(폭 / 최소 가로세로비)에서는 글자가 폭 기준 또는 상한(#189)에 걸린다', () {
       for (final width in [
         304.0,
         344.0,
@@ -937,6 +937,107 @@ void main() {
         );
         expect(atMax, unlimited, reason: '$width');
       }
+    });
+
+    group('줄 글자 상한 (#189)', () {
+      const cap = CalcTheme.lcdLineMaxFontSize;
+
+      test('상한 높이는 상태 표시줄 + 4행 + 분수 막대 2개를 상한 글자로 더한 값이다 (독립 계산값)', () {
+        // 40·0.42·1.4 + 4·(40·1.3 + 1) + 2·40·0.25 + 베젤·여백 2·(3 + 6) = 23.52 + 212 + 20 + 18
+        expect(LcdFontSizes.heightAtMaxLineFont, moreOrLessEquals(273.52));
+        expect(
+          LcdFontSizes.heightAtMaxLineFont,
+          moreOrLessEquals(usedHeight(cap) + chrome),
+        );
+      });
+
+      test('충분히 넓으면 상한 높이에서 줄 글자가 정확히 상한이고, 그보다 높여도 그대로, 낮추면 줄어든다', () {
+        final h = LcdFontSizes.heightAtMaxLineFont;
+        for (final width in [600.0, 963.1, 1008.0, 2144.0, 5000.0]) {
+          final at = LcdFontSizes.forSize(Size(width, h), TextScaler.noScaling);
+          expect(at.input, cap, reason: '$width');
+          expect(at.result, cap, reason: '$width');
+          expect(
+            at.status,
+            moreOrLessEquals(cap * CalcTheme.lcdStatusFontRatio),
+            reason: '$width',
+          );
+          for (final taller in [h + 0.5, h * 2, 1056.0, 10000.0]) {
+            expect(
+              LcdFontSizes.forSize(Size(width, taller), TextScaler.noScaling),
+              at,
+              reason: '$width×$taller',
+            );
+          }
+          expect(
+            LcdFontSizes.forSize(
+              Size(width, h - 0.5),
+              TextScaler.noScaling,
+            ).input,
+            lessThan(cap),
+            reason: '$width',
+          );
+        }
+      });
+
+      test('상한에 닿는 가장 좁은 LCD 폭은 실물 크기(480dp) 근처다 — 그보다 좁으면 폭에 묶인다', () {
+        // 폭 기준 글자가 상한이 되는 폭: 17·(40·0.6 + 1.2) + 2·40·0.54 + 베젤·여백 18 = 428.4 + 43.2 + 18
+        const widest = 489.6;
+        double at(double w) => LcdFontSizes.forSize(
+          Size(w, LcdFontSizes.heightAtMaxLineFont),
+          TextScaler.noScaling,
+        ).input;
+        expect(at(widest), moreOrLessEquals(cap, epsilon: 1e-3));
+        expect(at(widest - 1), lessThan(cap));
+        // 예전 LCD 최대 크기 480×274(#24·#92)는 39.1dp — 상한은 이 값을 올림했다(키 각인 상한 16.45 → 16.5와 같은 기준).
+        final realSize = LcdFontSizes.forSize(
+          const Size(480, 480 / CalcTheme.screenLcdMinAspectRatio),
+          TextScaler.noScaling,
+        ).input;
+        expect(realSize, moreOrLessEquals(39.1, epsilon: 0.05));
+        expect(cap, realSize.ceilToDouble());
+        // 키 메인 각인 상한 대비 — 폰의 줄 글자 / 키 각인 비(약 2.3배)와 비슷하게 2.5배 미만에서 멈춘다.
+        expect(
+          cap / CalcTheme.keyMainLabelMaxFontSize,
+          inInclusiveRange(2.2, 2.5),
+        );
+      });
+
+      test('배율을 바꿔도 배율 반영 후 줄 글자는 상한을 넘지 않는다 (아주 큰 LCD 포함)', () {
+        for (final size in const [
+          Size(963.1, 550.3), // #189 전 가로형 2000×1400 활성 LCD (82dp)
+          Size(1856.3, 858.5), // #189 전 4K 3840×2160 활성 LCD (133dp)
+          Size(2144, 1056.2), // #189 전 세로 창 2160×3800 LCD (164.5dp)
+          Size(10000, 10000),
+          Size(1008, 273.52),
+        ]) {
+          for (final scaler in const <TextScaler>[
+            TextScaler.noScaling,
+            TextScaler.linear(0.85),
+            TextScaler.linear(1.3),
+            _NonLinearScaler(),
+          ]) {
+            final f = LcdFontSizes.forSize(size, scaler);
+            expect(
+              scaler.scale(f.input),
+              lessThanOrEqualTo(cap + 1e-9),
+              reason: '$size $scaler',
+            );
+            expect(f.input, f.result, reason: '$size $scaler');
+          }
+          // 배율 1·축소 배율이면 상한에 닿는다 (줄 글자는 배율과 무관하게 같은 크기로 보인다).
+          for (final scaler in const <TextScaler>[
+            TextScaler.noScaling,
+            TextScaler.linear(0.85),
+          ]) {
+            expect(
+              scaler.scale(LcdFontSizes.forSize(size, scaler).input),
+              moreOrLessEquals(cap, epsilon: 1e-3),
+              reason: '$size $scaler',
+            );
+          }
+        }
+      });
     });
 
     test('LCD 최소 높이에서도 가장 좁은 폰 폭의 줄 글자는 14dp 이상이다', () {
