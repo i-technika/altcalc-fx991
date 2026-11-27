@@ -389,11 +389,14 @@ void _expectMathInk(
     isTrue,
     reason: '칸 안 (칸 왼쪽 변 ${inkX(1.1)}, 촉 ${inkX(1.7)})',
   );
+  // 윗선과 칸 윗변 사이: 대문자 E로 잰 높이는 글꼴 힌팅(플랫폼마다 다르다)에 따라 물리 1px 어긋나므로, 아이콘 잉크
+  // 위 끝(윗선)부터 칸 안까지 훑는다. 가로 범위가 칸 왼쪽 변 한가운데를 포함하므로 칸 안 줄은 밝지 않다 — 밝은 줄은
+  // 윗선과 칸 윗변 사이에만 있을 수 있다(근호는 0.85, 연필은 1.7보다 오른쪽이라 이 범위 밖이다).
   expect(
     shot.hasGapRow(
-      letter.top + stroke / 2,
-      boxTop + stroke / 2,
-      inkX(1.1),
+      ink.top,
+      ink.top + cap * 0.6,
+      inkX(1.1) + stroke / 2,
       inkX(1.5),
     ),
     isTrue,
