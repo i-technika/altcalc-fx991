@@ -324,6 +324,33 @@ void main() {
       ]);
     });
 
+    test('lcdStatusProvider는 화면 켜짐 유지 값을 계산기 상태와 합친다 (#233)', () {
+      // 기본은 꺼짐 — M1에는 이 값을 바꾸는 설정이 없다(설정은 #234).
+      expect(container.read(keepScreenOnProvider), isFalse);
+      expect(container.read(lcdStatusProvider), LcdStatus.initial);
+
+      container.read(keepScreenOnProvider.notifier).set(true);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(keepScreenOn: true),
+      );
+      // 계산기 상태가 바뀌어도 화면 켜짐 유지는 남는다.
+      container.read(calcProvider.notifier).pressKey(CalcKeyId.shift);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(shift: true, keepScreenOn: true),
+      );
+      // 계산기를 처음 상태로 되돌려도(초기화) 앱 설정에서 오는 값은 그대로다.
+      container.invalidate(calcProvider);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(keepScreenOn: true),
+      );
+
+      container.read(keepScreenOnProvider.notifier).set(false);
+      expect(container.read(lcdStatusProvider), LcdStatus.initial);
+    });
+
     test('무시된 반복은 상태 알림을 보내지 않는다', () {
       var notified = 0;
       container.listen(calcProvider, (_, _) => notified++);

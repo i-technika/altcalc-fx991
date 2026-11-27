@@ -54,6 +54,7 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   LcdIndicatorSlot.historyDown => [const LcdStatus(historyDown: true)],
   LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
   LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
+  LcdIndicatorSlot.keepScreenOn => [const LcdStatus(keepScreenOn: true)],
 };
 
 void main() {

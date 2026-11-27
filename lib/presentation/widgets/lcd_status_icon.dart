@@ -9,6 +9,7 @@ import '../../domain/models/lcd_status.dart';
 ///
 /// 글꼴 글자로는 실물 모양·크기가 맞지 않는 표시기(`→x`, `√▭✎`, `‖`)를 그린다. 모양은 실물 사진·ClassWiz LCD
 /// 스프라이트와 대조하고, User's Guide 표시기 표의 아이콘 구조를 따랐다(#160 — 근거는 `LcdIndicatorSlot` 문서).
+/// 실물에 없는 앱 고유 표시기(`◉` 화면 켜짐 유지, 실물 ☀ 자리 — #233)도 같은 문법으로 그린다.
 /// - 치수([LcdStatusIconMetrics])는 옆 슬롯 글자(`LcdStatusBar`가 `FittedBox` 가운데 정렬로 그림)와 같은
 ///   방식으로 정한다 — 글자를 이 상자에 맞춰 줄이고 가운데 놓았을 때의 기준선, 그 축소율, 글꼴의
 ///   대문자·x높이([CalcTheme.lcdStatusCapHeightRatio]·[CalcTheme.lcdStatusXHeightRatio] — 상태 표시 글꼴
@@ -343,6 +344,37 @@ class _LcdStatusIconPainter extends CustomPainter {
             ..addRect(bar(0.63)),
           fill,
         );
+      case LcdIndicatorIcon.keepScreenOn:
+        // ◉ — 뜬 눈 (화면 켜짐 유지, 앱 고유 — 모양을 고른 근거는 `LcdIndicatorSlot` 문서, #233).
+        // 눈꺼풀: 양 끝이 한 칸의 왼쪽·오른쪽 끝에서 뾰족하게 만나는 렌즈 모양 띠. 바깥 렌즈에서 안쪽 렌즈를 비운다
+        // (짝홀 채우기) — 선을 획으로 그리면 뾰족한 끝의 miter가 한 칸 밖으로 나간다. 위아래는 대문자 높이 띠
+        // 가운데에서 ±0.38(잉크 높이 0.76)이고, 가운데 두께는 선 굵기다. 안쪽 렌즈의 끝은 칸 폭의 0.08만큼
+        // 안쪽이라 끝으로 갈수록 가늘어진다.
+        // 눈동자: 가운데 원(반지름 대문자 높이의 0.18) — 안쪽 렌즈(가운데 반높이 0.24)에 닿지 않고 떠 있어, 흰자가
+        // 눈동자 둘레를 감싼다. 작은 크기(6dp·2x)에서는 흰자가 1물리 픽셀 안팎이라 "테 안의 점"으로 보인다.
+        final mid = (ct + bl) / 2;
+        final outer = cap * 0.38;
+        final inner = outer - sw;
+        final inset = 0.08;
+        Path lens(double left, double right, double halfHeight) {
+          // 2차 베지어의 꼭대기는 조절점 높이의 절반이다.
+          final cx = (left + right) / 2;
+          return Path()
+            ..moveTo(left, mid)
+            ..quadraticBezierTo(cx, mid - 2 * halfHeight, right, mid)
+            ..quadraticBezierTo(cx, mid + 2 * halfHeight, left, mid)
+            ..close();
+        }
+
+        canvas
+          ..drawPath(
+            Path()
+              ..fillType = PathFillType.evenOdd
+              ..addPath(lens(x(0, 0), x(0, 1), outer), Offset.zero)
+              ..addPath(lens(x(0, inset), x(0, 1 - inset), inner), Offset.zero),
+            fill,
+          )
+          ..drawCircle(Offset(x(0, 0.5), mid), cap * 0.18, fill);
       case LcdIndicatorIcon.storeArrow:
         // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 x 상자의 왼쪽 열린 곳으로 들어간다.
         // 가이드 실측(대문자 높이 대비): 몸통 굵기 0.26, 머리 높이 0.53·길이 0.27, 열린 곳 0.59 — 머리가 열린 곳보다

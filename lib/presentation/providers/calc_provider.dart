@@ -10,9 +10,30 @@ final calcProvider = NotifierProvider<CalcNotifier, CalcState>(
 );
 
 /// LCD 상태 표시줄 스냅샷. 모디파이어 등 표시와 관련된 값이 바뀔 때만 갱신된다.
-final lcdStatusProvider = Provider<LcdStatus>(
-  (ref) => ref.watch(calcProvider.select((s) => s.lcdStatus)),
+/// 계산기 상태([CalcState.lcdStatus])에 앱 설정에서 오는 표시기(화면 켜짐 유지, [keepScreenOnProvider])를 더한다.
+final lcdStatusProvider = Provider<LcdStatus>((ref) {
+  final status = ref.watch(calcProvider.select((s) => s.lcdStatus));
+  return ref.watch(keepScreenOnProvider)
+      ? status.copyWith(keepScreenOn: true)
+      : status;
+});
+
+/// 화면 켜짐 유지 모드가 켜져 있는지 — LCD 상태 표시줄의 ☀ 자리 표시기(#233)를 켠다.
+///
+/// M1에는 이 값을 바꾸는 앱 설정이 없어 기본 꺼짐이고, 개발용 미리보기(`preview/key_preview_main.dart`)만
+/// [KeepScreenOnNotifier.set]으로 켜 본다. 설정 항목·저장·실제 화면 꺼짐 방지는 #234(M6)에서 이 값에 묶는다.
+final keepScreenOnProvider = NotifierProvider<KeepScreenOnNotifier, bool>(
+  KeepScreenOnNotifier.new,
 );
+
+/// [keepScreenOnProvider]의 값 (기본 꺼짐)
+class KeepScreenOnNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  /// 화면 켜짐 유지 표시기를 켜거나 끈다.
+  void set(bool value) => state = value;
+}
 
 /// 키 입력을 상태 전이([CalcState.pressKey]/[CalcState.repeatKey])로 연결하는 notifier.
 ///

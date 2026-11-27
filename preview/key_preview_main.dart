@@ -636,6 +636,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
           orientation: _orientation,
           textScale: _textScale,
           highContrast: _highContrast,
+          keepScreenOn: ref.watch(keepScreenOnProvider),
           log: _log,
           inputTotal: _inputTotal,
           trimmed: _trimmed,
@@ -654,6 +655,8 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
           onOrientationChanged: (o) => setState(() => _orientation = o),
           onTextScaleChanged: (s) => setState(() => _textScale = s),
           onHighContrastChanged: (v) => setState(() => _highContrast = v),
+          onKeepScreenOnChanged: (v) =>
+              ref.read(keepScreenOnProvider.notifier).set(v),
           onReset: _reset,
         ),
       ),
@@ -1027,6 +1030,9 @@ class _ControlPanel extends StatelessWidget {
   final PreviewOrientation orientation;
   final double textScale;
   final bool highContrast;
+
+  /// 화면 켜짐 유지 표시기 (#233 — 앱 설정은 #234)
+  final bool keepScreenOn;
   final List<PreviewLogEntry> log;
   final int inputTotal;
   final bool trimmed;
@@ -1035,6 +1041,7 @@ class _ControlPanel extends StatelessWidget {
   final ValueChanged<PreviewOrientation> onOrientationChanged;
   final ValueChanged<double> onTextScaleChanged;
   final ValueChanged<bool> onHighContrastChanged;
+  final ValueChanged<bool> onKeepScreenOnChanged;
   final VoidCallback onReset;
 
   const _ControlPanel({
@@ -1043,6 +1050,7 @@ class _ControlPanel extends StatelessWidget {
     required this.orientation,
     required this.textScale,
     required this.highContrast,
+    required this.keepScreenOn,
     required this.log,
     required this.inputTotal,
     required this.trimmed,
@@ -1051,6 +1059,7 @@ class _ControlPanel extends StatelessWidget {
     required this.onOrientationChanged,
     required this.onTextScaleChanged,
     required this.onHighContrastChanged,
+    required this.onKeepScreenOnChanged,
     required this.onReset,
   });
 
@@ -1218,6 +1227,18 @@ class _ControlPanel extends StatelessWidget {
             key: const ValueKey('preview-high-contrast'),
             value: highContrast,
             onChanged: onHighContrastChanged,
+          ),
+        ],
+      ),
+      // LCD ☀ 자리의 화면 켜짐 유지 표시기 (#233). 앱에서는 설정(#234)이 켜고, 미리보기에서는 표시기만 켠다 —
+      // 화면 꺼짐 방지는 하지 않는다.
+      Row(
+        children: [
+          const Expanded(child: Text('화면 켜짐 유지 표시기 (LCD ☀ 자리)', style: _label)),
+          Switch(
+            key: const ValueKey('preview-keep-screen-on'),
+            value: keepScreenOn,
+            onChanged: onKeepScreenOnChanged,
           ),
         ],
       ),
