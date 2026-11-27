@@ -326,7 +326,7 @@ class _LcdStatusIconPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTRB(-size.width, ct, size.width * 2, bl));
     switch (icon) {
       case LcdIndicatorIcon.multiStatement:
-        // ‖ — 어두운 상자(한 칸 × 대문자 높이)에 밝은 세로 두 획을 비운다. 획은 칸의 37%·63%에 두고
+        // ‖ — 어두운 상자(한 칸 × 대문자 높이)에 밝은 세로 두 획을 비운다. 획은 칸의 37%·63%(7도트 상자의 열 가운데 0.357·0.643에 가깝게)에 두고
         // 위아래를 1/7씩 띄운다(가이드 표시기 표·스프라이트).
         final inset = cap / 7;
         Rect bar(double fraction) => Rect.fromLTRB(
@@ -344,27 +344,43 @@ class _LcdStatusIconPainter extends CustomPainter {
           fill,
         );
       case LcdIndicatorIcon.storeArrow:
-        // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 둘째 칸 상자의 왼쪽 열린 곳으로 들어간다.
+        // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 x 상자의 왼쪽 열린 곳으로 들어간다.
         // 가이드 실측(대문자 높이 대비): 몸통 굵기 0.26, 머리 높이 0.53·길이 0.27, 열린 곳 0.59 — 머리가 열린 곳보다
         // 작아 그 안으로 들어간다.
+        // 가로(#183): 잉크 전체는 [CalcTheme.lcdStatusStoreInkCells]칸(상자 한 칸 + 화살표)이고 2칸 슬롯
+        // 가운데에 놓는다 — 실물 잉크 가운데가 세그먼트 가운데([LcdIndicatorSlot.dotCenter])다. 머리
+        // ([CalcTheme.lcdStatusStoreHeadCells]) 끝은 상자 안 [CalcTheme.lcdStatusStoreTipDepthCells]칸까지 들어가고,
+        // 나머지(1.5칸이면 0.3칸)가 몸통이다.
+        // 칸 폭 단위 좌표: 다른 아이콘처럼 슬롯 왼쪽([x]의 0칸) 기준이다. 2칸 슬롯(폭 = 2 × 진행 폭)의 가운데는
+        // 진행 폭(글리프 + 자간)만큼 오른쪽이다 — `LcdStatusBar`가 주는 슬롯 폭을 전제한다(단독 사용도 슬롯 폭 상자에서).
+        final center = m.advance / m.cell;
+        const inkCells = CalcTheme.lcdStatusStoreInkCells;
+        final boxLeft = center + inkCells / 2 - 1;
         final mid = (ct + bl) / 2;
         final shaft = cap * 0.13;
         final head = cap * 0.265;
-        final neck = x(0, 0.8);
+        final start = x(0, center - inkCells / 2);
+        final tip = x(0, boxLeft + CalcTheme.lcdStatusStoreTipDepthCells);
+        final neck = x(
+          0,
+          boxLeft +
+              CalcTheme.lcdStatusStoreTipDepthCells -
+              CalcTheme.lcdStatusStoreHeadCells,
+        );
         canvas.drawPath(
           Path()
-            ..moveTo(x(0, 0.12), mid - shaft)
+            ..moveTo(start, mid - shaft)
             ..lineTo(neck, mid - shaft)
             ..lineTo(neck, mid - head)
-            ..lineTo(x(1, 0.12), mid)
+            ..lineTo(tip, mid)
             ..lineTo(neck, mid + head)
             ..lineTo(neck, mid + shaft)
-            ..lineTo(x(0, 0.12), mid + shaft)
+            ..lineTo(start, mid + shaft)
             ..close(),
           fill,
         );
-        // 둘째 칸: 왼쪽 변 가운데가 열린 상자(위아래 짧은 변만 남는다) 안의 x
-        final box = Rect.fromLTRB(x(1, 0), ct, x(1, 1), bl);
+        // 왼쪽 변 가운데가 열린 상자(위아래 짧은 변만 남는다, 한 칸 폭) 안의 x
+        final box = Rect.fromLTRB(x(0, boxLeft), ct, x(0, boxLeft + 1), bl);
         final inner = box.deflate(half);
         // 위아래 짧은 변: 바깥 테두리에서 대문자 높이의 0.2 (선 중심 기준으로 반 획 뺀다)
         final stub = cap * 0.2 - half;

@@ -24,6 +24,40 @@ Map<LcdIndicatorSlot, Set<String>> _possibleIndicators() {
   };
 }
 
+/// 상태줄 세그먼트 스프라이트 (#58).
+/// 출처: CasioEmu models/fx991cnx/model.lua의 rsd_* 사각형(LCD 왼쪽 x=47 기준으로 뺀 값)과,
+/// interface.png(RGBA)를 흰 배경에 알파 합성하고 회색(PIL `L`)으로 바꾼 뒤, y=603~610에서 회색값 < 200인
+/// 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶·☀도 적어 둔다.
+const _sprites = <String, (int, int, int, int)>{
+  // 이름: (x, 폭, 잉크 lo, 잉크 hi)
+  'S': (0, 8, 0, 7),
+  'A': (8, 8, 8, 15),
+  'M': (16, 10, 18, 23),
+  '→x': (26, 13, 28, 36),
+  '√◻': (39, 17, 40, 54),
+  'D': (56, 8, 57, 64),
+  'R': (64, 7, 64, 71),
+  'G': (71, 9, 71, 78),
+  'FIX': (80, 14, 81, 93),
+  'SCI': (94, 15, 95, 106),
+  'E': (109, 9, 110, 116),
+  'i': (118, 6, 119, 123),
+  '∠': (124, 7, 126, 131),
+  '⇩': (131, 11, 133, 138),
+  '◀': (142, 7, 143, 148),
+  '▼': (149, 7, 150, 155),
+  '▲': (156, 6, 157, 162),
+  '▶': (162, 9, 164, 169),
+  '‖': (171, 12, 173, 180),
+  '☀': (183, 9, 184, 190),
+};
+
+/// 스프라이트 잉크 가운데 (도트)
+double _spriteCenter(String name) {
+  final (_, _, lo, hi) = _sprites[name]!;
+  return (lo + hi) / 2;
+}
+
 void main() {
   group('LcdIndicatorSlot 불변식', () {
     test('슬롯 순서는 fx-991EX 실물 LCD 세그먼트 순서를 따른다 (#58)', () {
@@ -50,37 +84,12 @@ void main() {
     });
 
     test('세그먼트 가운데 위치는 출처 스프라이트의 잉크 범위 가운데다 (#58)', () {
-      // 출처: CasioEmu models/fx991cnx/model.lua의 rsd_* 사각형(LCD 왼쪽 x=47 기준으로 뺀 값)과,
-      // interface.png(RGBA)를 흰 배경에 알파 합성하고 회색(PIL `L`)으로 바꾼 뒤, y=603~610에서 회색값 < 200인
-      // 열의 범위 [lo, hi). 슬롯이 없는 ⇩·◀·▶·☀도 적어 둔다.
-      const sprites = <String, (int, int, int, int)>{
-        // 이름: (x, 폭, 잉크 lo, 잉크 hi)
-        'S': (0, 8, 0, 7),
-        'A': (8, 8, 8, 15),
-        'M': (16, 10, 18, 23),
-        '→x': (26, 13, 28, 36),
-        '√◻': (39, 17, 40, 54),
-        'D': (56, 8, 57, 64),
-        'R': (64, 7, 64, 71),
-        'G': (71, 9, 71, 78),
-        'FIX': (80, 14, 81, 93),
-        'SCI': (94, 15, 95, 106),
-        'E': (109, 9, 110, 116),
-        'i': (118, 6, 119, 123),
-        '∠': (124, 7, 126, 131),
-        '⇩': (131, 11, 133, 138),
-        '◀': (142, 7, 143, 148),
-        '▼': (149, 7, 150, 155),
-        '▲': (156, 6, 157, 162),
-        '▶': (162, 9, 164, 169),
-        '‖': (171, 12, 173, 180),
-        '☀': (183, 9, 184, 190),
-      };
+      // 출처: 파일 위 [_sprites] 문서.
       // 사각형은 192도트를 빈틈없이 덮고, 잉크는 자기 사각형 안에 있으며 이웃 잉크와 겹치지 않는다.
       var next = 0;
       var prevInkEnd = 0;
       for (final MapEntry(key: name, value: (x, w, lo, hi))
-          in sprites.entries) {
+          in _sprites.entries) {
         expect(x, next, reason: name);
         next = x + w;
         expect(lo, inInclusiveRange(x, hi), reason: name);
@@ -90,13 +99,13 @@ void main() {
       }
       expect(next, LcdIndicatorSlot.dotColumns);
       for (final slot in LcdIndicatorSlot.values) {
-        final (_, _, lo, hi) = sprites[slot.template]!;
+        final (_, _, lo, hi) = _sprites[slot.template]!;
         expect(slot.dotCenter, (lo + hi) / 2, reason: slot.name);
       }
       // 슬롯 순서는 스프라이트 순서에서 슬롯이 없는 세그먼트를 뺀 것과 같다.
       expect(
         LcdIndicatorSlot.values.map((s) => s.template),
-        sprites.keys.where((k) => !{'⇩', '◀', '▶', '☀'}.contains(k)),
+        _sprites.keys.where((k) => !{'⇩', '◀', '▶', '☀'}.contains(k)),
       );
     });
 
@@ -110,6 +119,57 @@ void main() {
       ]) {
         expect(slot.dotCenter, closeTo(measured, 1.0), reason: slot.name);
       }
+    });
+
+    test('영상 대조: 모든 세그먼트가 켜진 진단 화면에서 잰 위치가 1도트 안쪽으로 맞는다 (#183)', () {
+      // 출처: YouTube "Casio calculator fx-991EX hidden diagnostic test mode functions"(SergeiFrolovMuseum)
+      // 1:22 화면(사용자가 준 캡처, 2340×1080). 진단 모드라 상태줄 세그먼트가 모두 켜져 있다. 상태줄이 약 0.9° 기울어
+      // 있어 (528, 416)–(1500, 432) 선을 따라 세로 8px 평균 밝기를 재고, 좌우 ±25px 최댓값의 65% 미만인 열을
+      // 잉크로 보아 6px 이하 틈은 이었다. D·R·G는 붙어 한 덩어리(D 왼쪽 ~ G 오른쪽)로 잡혔다.
+      // 사진 x를 직선 하나(최소제곱)로 도트에 맞추면 모든 세그먼트가 1도트 안쪽으로 맞는다(약 5.44px/도트).
+      // 슬롯이 없는 ⇩·◀·▶·☀는 스프라이트 잉크 가운데를 쓴다([_sprites]).
+      final measured = <(String, double, double)>[
+        // (이름, 도트 가운데, 사진 x 가운데)
+        ('S', LcdIndicatorSlot.shift.dotCenter, 528.5),
+        ('A', LcdIndicatorSlot.alpha.dotCenter, 568.5),
+        ('M', LcdIndicatorSlot.memory.dotCenter, 624),
+        ('→x', LcdIndicatorSlot.store.dotCenter, 685.5),
+        ('√◻', LcdIndicatorSlot.math.dotCenter, 763),
+        (
+          'D~G',
+          (LcdIndicatorSlot.angleDegree.dotCenter +
+                  LcdIndicatorSlot.angleGradian.dotCenter) /
+              2,
+          877.5,
+        ),
+        ('FIX', LcdIndicatorSlot.fixFormat.dotCenter, 986),
+        ('SCI', LcdIndicatorSlot.sciFormat.dotCenter, 1060),
+        ('E', LcdIndicatorSlot.engineering.dotCenter, 1120),
+        ('i', LcdIndicatorSlot.complexRectangular.dotCenter, 1168),
+        ('∠', LcdIndicatorSlot.complexPolar.dotCenter, 1206),
+        ('⇩', _spriteCenter('⇩'), 1249.5),
+        ('◀', _spriteCenter('◀'), 1305.5),
+        ('▼', LcdIndicatorSlot.historyDown.dotCenter, 1340.5),
+        ('▲', LcdIndicatorSlot.historyUp.dotCenter, 1376),
+        ('▶', _spriteCenter('▶'), 1412),
+        ('‖', LcdIndicatorSlot.disp.dotCenter, 1470),
+        ('☀', _spriteCenter('☀'), 1526),
+      ];
+      final n = measured.length;
+      final sx = measured.fold(0.0, (a, e) => a + e.$2);
+      final sy = measured.fold(0.0, (a, e) => a + e.$3);
+      final sxx = measured.fold(0.0, (a, e) => a + e.$2 * e.$2);
+      final sxy = measured.fold(0.0, (a, e) => a + e.$2 * e.$3);
+      final scale = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+      final offset = (sy - scale * sx) / n;
+      expect(scale, closeTo(5.44, 0.05), reason: '사진 px/도트');
+      for (final (name, dot, x) in measured) {
+        expect((x - offset) / scale, closeTo(dot, 1.0), reason: name);
+      }
+      // 참고(검사하지 않는 자료): 같은 환산으로 잰 잉크 폭은 S 상자 511~546px ≈ 6.4, →x 666~705px ≈ 7.2,
+      // ‖ 상자 1450~1490px ≈ 7.4도트다. 스프라이트(7·8·7도트)와 각각 1도트 안쪽이지만, 이 흐림(약 2도트 번짐)으로는
+      // 7도트와 8도트를 가릴 수 없다(영상에서는 ‖가 →x보다 넓게 잡힌다). 폭의 근거는 스프라이트이고 영상은 그와
+      // 모순되지 않는다는 정도다.
     });
 
     test('세그먼트 위치는 선언 순서대로 커지고 표시줄 안에 있다', () {
@@ -177,7 +237,7 @@ void main() {
           expect(labels, {slot.template}, reason: slot.name);
         }
       }
-      // 실물 아이콘 폭: →x 2칸, √▭✎ 3칸, ‖ 1칸
+      // 아이콘 슬롯 폭: →x 2칸(잉크는 가운데 1.5칸, #183), √▭✎ 3칸, ‖ 1칸
       expect(LcdIndicatorSlot.store.columns, 2);
       expect(LcdIndicatorSlot.math.columns, 3);
       expect(LcdIndicatorSlot.disp.columns, 1);
