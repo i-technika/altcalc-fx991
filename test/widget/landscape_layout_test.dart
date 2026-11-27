@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -20,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/bundled_fonts.dart';
 import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
+import '../support/semantics_order.dart';
 
 /// 가로형 배치 (#142) — 아래 넓은 키패드 배열, 위 띠에 활성 LCD(숫자부 위)와 계산 기록(함수부 위).
 /// 규칙은 `CalcTheme` "가로형 배치" 절, 배치 계산은 [CalcLandscapeLayout].
@@ -301,36 +301,6 @@ void main() {
     handle.dispose();
   });
 
-  /// 의미 트리를 읽는 순서대로 훑은 노드 id 목록
-  List<int> traversalOrder(WidgetTester tester) {
-    final order = <int>[];
-    void visit(SemanticsNode node) {
-      order.add(node.id);
-      for (final child in node.debugListChildrenInOrder(
-        DebugSemanticsDumpOrder.traversalOrder,
-      )) {
-        visit(child);
-      }
-    }
-
-    visit(
-      tester
-          .binding
-          .renderViews
-          .first
-          .owner!
-          .semanticsOwner!
-          .rootSemanticsNode!,
-    );
-    return order;
-  }
-
-  int indexIn(WidgetTester tester, List<int> order, Finder f) {
-    final i = order.indexOf(tester.getSemantics(f).id);
-    expect(i, isNonNegative, reason: '$f');
-    return i;
-  }
-
   Finder keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
   for (final handedness in Handedness.values) {
@@ -343,13 +313,13 @@ void main() {
           size: const Size(1280, 800),
           handedness: handedness,
         );
-        final order = traversalOrder(tester);
-        final lcd = indexIn(tester, order, _lcd);
-        final history = indexIn(tester, order, _history);
-        final function = indexIn(tester, order, keycap(CalcKeyId.sin));
-        final number = indexIn(tester, order, keycap(CalcKeyId.num7));
+        final order = semanticsTraversalOrder(tester);
+        final lcd = semanticsIndexIn(tester, order, _lcd);
+        final history = semanticsIndexIn(tester, order, _history);
+        final function = semanticsIndexIn(tester, order, keycap(CalcKeyId.sin));
+        final number = semanticsIndexIn(tester, order, keycap(CalcKeyId.num7));
         // 설정 키(ON)는 키패드의 상단 조작부에 있어 함수부 구역과 함께 읽힌다 (#190).
-        final on = indexIn(tester, order, _settingsKey);
+        final on = semanticsIndexIn(tester, order, _settingsKey);
         expect(lcd, lessThan(history));
         expect(history, lessThan(on));
         expect(history, lessThan(function));
@@ -378,11 +348,11 @@ void main() {
     testWidgets('스크린리더 읽기 순서 ($name): LCD → 키패드(설정 키 포함)', (tester) async {
       final handle = tester.ensureSemantics();
       await _pump(tester, size: size, displayFeatures: features);
-      final order = traversalOrder(tester);
-      final lcd = indexIn(tester, order, _lcd);
-      final key = indexIn(tester, order, keycap(CalcKeyId.shift));
-      final on = indexIn(tester, order, _settingsKey);
-      final number = indexIn(tester, order, keycap(CalcKeyId.num7));
+      final order = semanticsTraversalOrder(tester);
+      final lcd = semanticsIndexIn(tester, order, _lcd);
+      final key = semanticsIndexIn(tester, order, keycap(CalcKeyId.shift));
+      final on = semanticsIndexIn(tester, order, _settingsKey);
+      final number = semanticsIndexIn(tester, order, keycap(CalcKeyId.num7));
       expect(lcd, lessThan(key));
       expect(key, lessThan(on));
       expect(on, lessThan(number));
