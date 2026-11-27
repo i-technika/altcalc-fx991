@@ -489,7 +489,7 @@ class _Builder {
   /// 0.005em)로 고정해, 선을 0.14em으로 굵게 하자 `∛◼`의 3·`◼√◻`의 지수 칸이 근호에 붙었다. 근접 사진의 SHIFT 각인은 지수와
   /// 머리 사이가 약 2~3px(각인 글자 크기 약 22px 대비 0.09~0.14em)이다. 지수 잉크 위끝이 가장 높은 SHIFT 각인 `d/dx◼`의
   /// 잉크 위끝(0.85em)보다 낮아야 작은 글자의 줄 상자 반올림에서도 `d/dx◼`가 SHIFT 각인 높이 맞춤을 정하므로(테스트로 고정),
-  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.82em).
+  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.837em — `d/dx◼` 0.8505em까지 여유 약 0.013em).
   static const double _radicalIndexClearance = 0.05;
 
   StrutStyle _strut(double fontSize) => StrutStyle.fromTextStyle(

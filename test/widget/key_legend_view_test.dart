@@ -487,16 +487,26 @@ void main() {
         (true, integral.mainLegend),
         (false, integral.shiftLegend!),
       ]) {
+        // 메인·SHIFT·ALPHA는 각인을 그리는 스타일로 나눈다(같은 const 각인이 두 자리에 쓰여도 섞이지 않게, #206 R2).
+        // SHIFT·ALPHA 스타일은 글꼴·굵기가 같아 기준 높이는 SHIFT 스타일로 잰다.
         final legends = [
-          for (final (k, legend, style) in _twoDimensional())
-            if (identical(legend, k.mainLegend) == isMain) (legend, style),
+          for (final (_, legend, style) in _twoDimensional())
+            if (identical(style, CalcTheme.keyMainLabelStyle) == isMain)
+              (legend, style),
         ];
+        final referenceStyle = isMain
+            ? CalcTheme.keyMainLabelStyle
+            : CalcTheme.keyShiftLabelStyle;
+        expect(
+          CalcTheme.keyAlphaLabelStyle.fontWeight,
+          CalcTheme.keyShiftLabelStyle.fontWeight,
+        );
         for (var f = 3.0; f <= 40; f += 0.1) {
+          final limit = KeyLegendView.layoutSize(
+            reference,
+            referenceStyle.copyWith(fontSize: f),
+          ).height;
           for (final (legend, style) in legends) {
-            final limit = KeyLegendView.layoutSize(
-              reference,
-              style.copyWith(fontSize: f),
-            ).height;
             expect(
               KeyLegendView.layoutSize(
                 legend,
@@ -690,7 +700,7 @@ void main() {
     });
 
     testWidgets(
-      '빈 칸 테두리는 모든 모양에서 칸 짧은 변의 1/4이고, 구멍이 칸의 절반이다 (#206 사진 0.24~0.29)',
+      '빈 칸 테두리는 모든 모양에서 칸 짧은 변의 1/4이고, 구멍이 칸의 절반이다 (#206 사진 0.24~0.31)',
       (tester) async {
         for (final shape in LegendBoxShape.values) {
           final ink = await inkPixels(
@@ -1208,7 +1218,7 @@ void main() {
     testWidgets('그린 분수 가로줄·근호 선은 최소 두께로 굵어져도 각인 상자 안에 있다', (tester) async {
       // 선은 글자 크기가 작으면 CalcTheme.keyLegendMinStroke로 굵게 칠한다(#155 R1 m8). 굵어진 선(반 두께 포함)이
       // 상자 밖에 그려지면 키캡·각인 띠 경계를 넘는다.
-      for (final fontSize in [4.0, 6.0, 9.0, 20.0]) {
+      for (final fontSize in [3.2, 3.5, 4.0, 6.0, 9.0, 20.0]) {
         for (final (k, legend, style) in _twoDimensional()) {
           await tester.pumpWidget(
             _host(

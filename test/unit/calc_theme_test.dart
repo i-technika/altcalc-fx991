@@ -880,16 +880,19 @@ void main() {
       expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
     });
 
-    test('최소 선 두께로 굵게 칠해도 각인 글자 4dp 이상에서 분수·근호 가로줄 옆 여백이 남는다 (#155 R2)', () {
+    test('최소 선 두께로 굵게 칠해도 분수·근호 가로줄 옆 여백이 남는다 — 작은 분수는 각인 4dp, 분수 키·근호는 3.2dp부터 (#155 R2, #206 R2)', () {
       // 배치는 비율 두께로 하고 칠은 최소 두께로 굵게 한다. 굵어진 만큼은 가로줄 옆 여백을 덮는다
       // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
-      // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
-      for (var f = 4.0; f <= 12; f += 0.1) {
+      // 평소 화면의 각인은 6dp 이상이다. 작은 분수(가로줄 0.06em)는 4dp(짧은 창 하한 각인 약 3.2dp보다 조금 큰 값)부터
+      // 여백이 남는다(#155 R2). 굵은 분수 키 가로줄(0.146em)·근호(0.14em)는 3.4~3.6dp 아래에서만 최소 두께가 걸리므로
+      // 짧은 창 하한 3.2dp부터 본다(#206 R2).
+      for (var f = 3.2; f <= 12; f += 0.1) {
         for (final (barRatio, gapRatio) in [
-          (
-            CalcTheme.keyLegendFractionBarThickness,
-            CalcTheme.keyLegendFractionGap,
-          ),
+          if (f >= 4 - 1e-9)
+            (
+              CalcTheme.keyLegendFractionBarThickness,
+              CalcTheme.keyLegendFractionGap,
+            ),
           (
             CalcTheme.keyLegendDisplayFractionBarThickness,
             CalcTheme.keyLegendDisplayFractionGap,
