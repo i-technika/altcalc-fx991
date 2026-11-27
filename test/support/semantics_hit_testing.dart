@@ -84,11 +84,10 @@ void expectCursorPadTouchExplorationMatchesSpec(
   for (var x = cell.left + 0.37; x < cell.right; x += 1.5) {
     for (var y = cell.top + 0.41; y < cell.bottom; y += 1.5) {
       final p = Offset(x, y);
-      final want = g.semanticSectorAt(
+      final want = g.screenSemanticSectorAt(
         p - pad.topLeft,
         bounds,
         pad0.gapInsets,
-        CursorPad.semanticMinSideWidth,
       );
       expect(want, isNotNull, reason: '$reason $p');
       seen.add(want!);
@@ -101,13 +100,9 @@ void expectCursorPadTouchExplorationMatchesSpec(
   // 셀 둘레 간격 몫 (#236)
   final touch = pad0.gapInsets.inflateRect(cell);
   Rect areaOf(CursorPadSector s) => CursorPad.inflateOnCellEdges(
-    CursorPad.semanticRect(
-      s,
-      pad.size,
-      bounds,
-      pad0.gapInsets,
-      CursorPad.semanticMinSideWidth,
-    ).shift(pad.topLeft - cell.topLeft),
+    g
+        .screenSemanticRect(s, bounds, pad0.gapInsets)
+        .shift(pad.topLeft - cell.topLeft),
     cell.size,
     pad0.gapInsets,
   ).shift(cell.topLeft);

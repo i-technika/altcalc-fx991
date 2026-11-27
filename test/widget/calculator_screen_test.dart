@@ -13,6 +13,7 @@ import 'package:itechnika_altcalc_fx991/core/theme/high_text_contrast.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/main.dart' as app show main;
+import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
@@ -1364,11 +1365,19 @@ void main() {
   });
 
   group('커서 패드 ◀·▶ 의미 노드 폭 (#259, Accessibility Scanner)', () {
-    // ◀·▶ 노드(셀 안 영역 + 셀 바깥 간격 몫)는 48dp를 목표로 허브 쪽 시작점을 가운데로 당긴다. 단 허브 반지름의 절반과
-    // 가운데 ▲·▼ 띠 폭 하한(28dp)의 절반보다 가운데로는 당기지 않는다 — 작은 폰은 그 하한에 걸려 48dp에 못 미친다.
-    // 값이 바뀌면 `CursorPadGeometry.semanticRect` 문서의 표와 함께 다시 잰다.
-    const cases = <(String, Size, EdgeInsets, double, bool)>[
+    // ◀·▶ 노드(셀 안 영역 + 셀 바깥 간격 몫)는 48dp(+0.25 여유)를 목표로 허브 쪽 시작점을 가운데로 당긴다. 단 허브 반지름의
+    // 절반과 가운데 ▲·▼ 띠 하한(28dp)의 절반보다 가운데로는 당기지 않는다 — 작은 폰은 그 하한에 걸려 48dp에 못 미친다.
+    // 값이 바뀌면 `CursorPadGeometry.semanticRect` 문서의 표와 함께 다시 잰다. [width]가 없으면 이미 넓어 허브 가장자리에서
+    // 시작하는 화면이다(그 폭은 이 이슈와 무관한 배치 값이라 48dp 이상인지만 본다).
+    const cases = <(String, Size, EdgeInsets, double?, bool)>[
       ('320×568', Size(320, 568), EdgeInsets.only(top: 20), 36.7, false),
+      (
+        '360×640',
+        Size(360, 640),
+        EdgeInsets.only(top: 24, bottom: 48),
+        43.3,
+        false,
+      ),
       (
         '360×800',
         Size(360, 800),
@@ -1380,62 +1389,115 @@ void main() {
         '390×844',
         Size(390, 844),
         EdgeInsets.only(top: 47, bottom: 34),
-        48.0,
+        48.25,
         true,
       ),
       (
         '411×914',
         Size(411.4, 914.3),
         EdgeInsets.only(top: 52.6, bottom: 24),
-        48.0,
+        48.25,
+        true,
+      ),
+      (
+        '411×914 (인셋 24/24)',
+        Size(411.4, 914.3),
+        EdgeInsets.only(top: 24, bottom: 24),
+        48.25,
         true,
       ),
       (
         '430×932',
         Size(430, 932),
         EdgeInsets.only(top: 59, bottom: 34),
-        48.0,
+        48.25,
         true,
       ),
       (
         'Fold 841×701',
         Size(841.1, 701),
         EdgeInsets.only(top: 28.2, bottom: 32),
-        48.0,
+        48.25,
         true,
       ),
       (
         '태블릿 800×1280',
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
-        89.1,
+        null,
         true,
       ),
       (
         '가로 915×412',
         Size(915, 412),
         EdgeInsets.only(top: 24, bottom: 24),
-        52.1,
+        null,
         true,
       ),
     ];
     for (final (name, size, padding, width, reaches48) in cases) {
-      testWidgets('$name: ◀·▶ 노드 폭 $width dp', (tester) async {
+      testWidgets('$name: ◀·▶ 노드 폭 ${width ?? '허브 가장자리 시작'}', (tester) async {
         final handle = tester.ensureSemantics();
         await _pumpScreen(tester, size: size, padding: padding);
-        final widths = <double>[
-          for (final label in ['Cursor left', 'Cursor right'])
-            find.semantics.byLabel(label).evaluate().single.rect.width,
-        ];
-        for (final w in widths) {
-          expect(w, moreOrLessEquals(width, epsilon: 0.05), reason: name);
+        for (final sector in [CursorPadSector.left, CursorPadSector.right]) {
+          final label = const EnSemanticStrings().keyButton(
+            CursorPad.defOf(sector).id,
+          );
+          final w = find.semantics.byLabel(label).evaluate().single.rect.width;
+          if (width != null) {
+            expect(w, moreOrLessEquals(width, epsilon: 0.05), reason: name);
+          }
           expect(
-            w >= CalcTheme.keyMinTouchTargetHeight - 0.01,
+            w >= CalcTheme.keyMinTouchTargetHeight,
             reaches48,
-            reason: name,
+            reason: '$name ${sector.name} $w',
           );
         }
         handle.dispose();
+      });
+    }
+
+    // 화면 모양의 정확도 (R1): 터치 방향과 읽히는 방향이 같은 비율(셀 안)과, 허브 고리에서 그림이 ▲·▼인 곳이 ◀·▶로
+    // 읽히는 비율. 측정 82.8~83.4%, 고리 0~3.05%(390×844) — 하한·상한은 여유를 조금 둔다.
+    for (final (name, size, padding) in const [
+      ('320×568', Size(320, 568), EdgeInsets.only(top: 20)),
+      ('360×800', Size(360, 800), EdgeInsets.only(top: 24, bottom: 24)),
+      ('390×844', Size(390, 844), EdgeInsets.only(top: 47, bottom: 34)),
+      ('411×914', Size(411.4, 914.3), EdgeInsets.only(top: 52.6, bottom: 24)),
+    ]) {
+      testWidgets('$name: 화면 모양의 읽기 정확도 — 일치율 82.5% 이상, 허브 고리 ▲·▼ 오독 3.5% 이하', (
+        tester,
+      ) async {
+        await _pumpScreen(tester, size: size, padding: padding);
+        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+        final cell = tester.getRect(find.byType(CursorPad));
+        final gap = tester.widget<CursorPad>(find.byType(CursorPad)).gapInsets;
+        final g = CursorPadGeometry(pad.size);
+        final bounds = cell.shift(-pad.topLeft);
+        var all = 0, same = 0, ring = 0, misread = 0;
+        for (var x = bounds.left + 0.25; x < bounds.right; x += 0.5) {
+          for (var y = bounds.top + 0.25; y < bounds.bottom; y += 0.5) {
+            final p = Offset(x, y);
+            final read = g.screenSemanticSectorAt(p, bounds, gap);
+            final hit = g.hitSectorAt(p, bounds);
+            if (hit != null) {
+              all++;
+              if (read == hit) same++;
+            }
+            final d = (p - g.center).distance;
+            final drawn = g.sectorAt(p);
+            if (d > g.deadZoneRadius &&
+                d <= g.hubRadius &&
+                (drawn == CursorPadSector.up ||
+                    drawn == CursorPadSector.down)) {
+              ring++;
+              if (read != drawn) misread++;
+            }
+          }
+        }
+        expect(same / all, greaterThanOrEqualTo(0.825), reason: name);
+        expect(ring, greaterThan(0));
+        expect(misread / ring, lessThanOrEqualTo(0.035), reason: name);
       });
     }
   });
@@ -1557,20 +1619,16 @@ void main() {
             // 스크린리더 시맨틱 영역(#166, #203): 그 방향만 읽히는 사각형의 짧은 변이 키 터치 높이 하한(28dp) 이상이다.
             // ◀·▶는 노드 영역 전체(가장 위에 놓인다), ▲·▼는 허브 폭(중심에서 가로 허브 반지름 안)의 세로 띠다 —
             // ▲·▼ 노드는 셀 반쪽 전체지만 옆은 ◀·▶ 노드가 덮는다.
-            // 측정 31.8~47.7dp — 가장 작은 곳은 Android 320×568(인셋 24/24)의 ▲·▼ 31.8dp다.
+            // 측정 28.0~48dp — #259부터 작은 폰(320·360dp 폭)의 ▲·▼ 띠는 ◀·▶ 노드 폭 목표가 하한(28dp)까지 당겨 정확히 28dp다
+            // (그 전에는 31.8~47.7dp, 가장 작은 곳 Android 320×568 인셋 24/24의 ▲·▼ 31.8dp).
             // #166의 겹치지 않는 사각형에서는 22.6~34.9dp였고, 그 인셋에서는 에뮬레이터 실측 21.3dp로 22dp 하한 아래였다(#173).
             // 세로 폰 화면만 본다 — 짧은 창·가로 창은 패드가 작아 더 낮다.
             // 화면과 같은 값(셀 둘레 간격 몫 #236, ◀·▶ 폭 목표 #259)으로 잰다. ▲·▼만 읽히는 띠는 ◀·▶ 노드 사이다.
             final gap = tester
                 .widget<CursorPad>(find.byType(CursorPad))
                 .gapInsets;
-            Rect semanticOf(CursorPadSector s) => CursorPad.semanticRect(
-              s,
-              pad.size,
-              bounds,
-              gap,
-              CursorPad.semanticMinSideWidth,
-            );
+            Rect semanticOf(CursorPadSector s) =>
+                g.screenSemanticRect(s, bounds, gap);
             final semantic = semanticOf(sector);
             final readable = vertical
                 ? Rect.fromLTRB(
@@ -1587,12 +1645,7 @@ void main() {
                   readable.top + 0.01 + (readable.height - 0.02) * j / 8,
                 );
                 expect(
-                  g.semanticSectorAt(
-                    p,
-                    bounds,
-                    gap,
-                    CursorPad.semanticMinSideWidth,
-                  ),
+                  g.screenSemanticSectorAt(p, bounds, gap),
                   sector,
                   reason: '${sector.name} $p',
                 );
@@ -1600,7 +1653,8 @@ void main() {
             }
             expect(
               readable.shortestSide,
-              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
+              // 작은 폰은 #259의 하한에 걸려 정확히 28dp다 — 부동소수 오차만 허용한다
+              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor - 1e-9),
               reason: '${sector.name} 시맨틱 영역 $readable',
             );
           }

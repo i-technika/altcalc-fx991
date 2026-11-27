@@ -743,7 +743,7 @@ void main() {
           CursorPadGeometry.semanticSideMinStart(g.hubRadius),
         );
         for (final s in [CursorPadSector.left, CursorPadSector.right]) {
-          final r = g.semanticRect(s, bounds, outer, 48);
+          final r = g.screenSemanticRect(s, bounds, outer);
           final start = s == CursorPadSector.left
               ? c.dx - r.right
               : r.left - c.dx;
@@ -763,7 +763,7 @@ void main() {
           if (start > minStart + 1e-9 && start < g.hubRadius - 1e-9) {
             expect(
               width,
-              moreOrLessEquals(48, epsilon: 1e-9),
+              moreOrLessEquals(CursorPad.semanticMinSideWidth, epsilon: 1e-9),
               reason: '$size $s',
             );
           }
@@ -776,8 +776,8 @@ void main() {
         }
         // ▲·▼만 읽히는 가운데 띠는 28dp 이상 남는다(허브가 그보다 좁은 패드는 허브 폭)
         final strip =
-            g.semanticRect(CursorPadSector.right, bounds, outer, 48).left -
-            g.semanticRect(CursorPadSector.left, bounds, outer, 48).right;
+            g.screenSemanticRect(CursorPadSector.right, bounds, outer).left -
+            g.screenSemanticRect(CursorPadSector.left, bounds, outer).right;
         expect(
           strip,
           greaterThanOrEqualTo(
@@ -1415,13 +1415,9 @@ void _cursorPadR2Tests() {
             );
             // 셀 변에 닿은 변만 간격 몫까지 늘린다 (셀 로컬 좌표로 계산)
             final expected = CursorPad.inflateOnCellEdges(
-              CursorPad.semanticRect(
-                sector,
-                pad.size,
-                bounds,
-                gap,
-                CursorPad.semanticMinSideWidth,
-              ).shift(pad.topLeft - cell.topLeft),
+              CursorPadGeometry(pad.size)
+                  .screenSemanticRect(sector, bounds, gap)
+                  .shift(pad.topLeft - cell.topLeft),
               cell.size,
               gap,
             ).shift(cell.topLeft);

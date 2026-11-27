@@ -1301,7 +1301,8 @@ class CursorPadGeometry {
   /// 엔진 코드상 Android(TalkBack)·iOS(VoiceOver) 브리지는 터치 탐색 때 겹친 노드 가운데 히트 테스트 순서
   /// (위에 그린 것부터)로 처음 닿는 노드를 고른다(Flutter 엔진 `AccessibilityBridge.java` `hitTest`,
   /// `SemanticsObject.mm` `search:`). [CursorPad]는 이 순서로 노드를 쌓는다.
-  /// - Android는 TalkBack 에뮬레이터에서 확인했다(#203, 411×914 격자 588점이 [semanticSectorAt]과 모두 일치).
+  /// - Android는 TalkBack 에뮬레이터에서 확인했다(#203, 411×914 격자 588점이 [semanticSectorAt]과 모두 일치 — #259 전 모양.
+  ///   쌓는 순서의 판정은 지금 모양([screenSemanticRect])에도 그대로다).
   /// - iOS는 엔진이 비공개 API `_accessibilityHitTest:`를 재정의해 이 순서를 쓴다. 재정의가 불리지 않으면
   ///   UIKit 기본 판정(iOS 16부터 왼쪽 위 요소 우선)이 되어 위쪽 반에서 ▲가 ◀·▶를 가린다.
   ///   실기기로만 확인할 수 있다(#181, M11 출시 QA).
@@ -1349,23 +1350,39 @@ class CursorPadGeometry {
   ///   - 홈 근처 5.1%: 사각형 모서리가 홈 양쪽으로 넘는 곳.
   ///
   /// ## ◀·▶ 폭 하한 (#259)
-  /// [minSideWidth]가 있으면 ◀·▶ 노드 폭(셀 안 폭 + 셀 바깥 간격 몫 [outerGap]의 옆쪽, 접근성 검사기가 재는 노드 폭)이
-  /// 그 값이 되도록 허브 쪽 시작점(중심에서 X)을 가운데로 당긴다. 단 [semanticSideMinStart]보다 가운데로는 당기지 않는다.
-  /// - 허브 반지름의 절반([semanticSideMinStartRatio]) — 작은 폰에서 읽히는 방향이 터치 방향과 크게 어긋나지 않게(사용자 결정).
-  /// - [CalcTheme.keyTouchHeightFloor]의 절반 — ◀·▶ 사이에서 ▲·▼만 읽히는 가운데 세로 띠(폭 2X)가 키 터치 높이 하한(28dp)
-  ///   이상으로 남게(#166·#203의 기존 하한, 화면 테스트 "세로 폰 화면의 키 크기 하한"이 본다). 폰에서는 이쪽이 더 크다.
-  /// 화면 [CursorPad]는 48dp([CursorPad.semanticMinSideWidth])를 준다. 터치 방향과 읽히는 방향이 같은 비율(셀 안, 0.5dp
-  /// 격자)과 ◀·▶ 노드 폭은 다음과 같다.
-  ///   390×844 83.4 → 82.9%(48dp) · 411×914·430×932·Fold 841×701 그대로(48dp) · 태블릿 800×1280·가로 915×412 그대로(이미 넓다)
-  ///   360×800 83.4 → 83.1%(43.3dp) · 320×568 83.1 → 83.4%(36.7dp) — 둘은 하한에 걸려 48dp에 못 미친다. 함수 키도 이
-  ///   폰들에서는 48dp 미만이라(#236 [CalcTheme.keyMinTouchTargetHeight]) 같은 기준으로 받아들인다.
+  /// 화면 커서 패드([screenSemanticRect])는 ◀·▶ 노드 폭(셀 안 폭 + 셀 바깥 간격 몫의 옆쪽, 접근성 검사기가 재는 노드 폭)이
+  /// 48dp(+0.25 여유, [CursorPad.semanticMinSideWidth])가 되도록 허브 쪽 시작점(중심에서 X)을 가운데로 당긴다.
+  /// 단 [semanticSideMinStart]보다 가운데로는 당기지 않는다(둘 다 사용자 결정).
+  /// - 허브 반지름의 절반([semanticSideMinStartRatio]) — 작은 폰에서 읽히는 방향이 터치 방향과 크게 어긋나지 않게.
+  /// - [CalcTheme.keyTouchHeightFloor]의 절반 — ◀·▶ 사이에서 ▲·▼만 읽히는 가운데 세로 띠(폭 2X)가 28dp 이상으로
+  ///   남게(#166에서 정한 하한 — #173 에뮬레이터에서 21dp일 때 ▲·▼를 짚기 어려웠다. 화면 테스트 "세로 폰 화면의 키 크기
+  ///   하한"이 본다). 폰에서는 이쪽이 더 크다.
+  /// 터치 방향과 읽히는 방향이 같은 비율(셀 안, 0.5dp 격자, #203 모양 → 화면 모양)과 화면 ◀·▶ 노드 폭:
+  ///   390×844 83.4 → 82.8% · 411×914 83.4 → 83.3% · 430×932·Fold 841×701 약 83.4%(네 화면 모두 48.25dp)
+  ///   태블릿 800×1280 83.3%·가로 915×412 83.4%(이미 넓어 허브 가장자리에서 시작 — 89.1·52.1dp)
+  ///   360×800 83.4 → 83.1%(43.3dp) · 320×568 83.1 → 83.4%(36.7dp) — 둘은 띠 하한에 걸려 48dp에 못 미친다.
+  ///   같은 폰의 함수 키 터치 높이(#236)는 360×800 45.9dp·320×568 37.5dp로 ◀·▶ 노드가 조금 좁다(360×640은 함수 키
+  ///   38.9dp, ◀·▶ 43.3dp로 넓다). 띠 하한을 지키는 대가로 받아들였다.
+  /// 허브 고리(데드존 밖 ~ 허브 둘레) 가운데 그림이 ▲·▼인 곳이 ◀·▶로 읽히는 비율: 390×844 3.0%, 360×800 0.7%, 320×568·
+  /// 411×914 0%(화면 모양). 일치율과 이 비율은 화면 테스트 "화면 모양의 읽기 정확도"가 고정한다. 아래 #203 내역(411×914 ▲·▼ 91.6% 등)은 #203 모양 기준이다.
   /// ▲·▼ 노드는 셀 반쪽 전체라 폭은 충분하고, 높이는 셀 반높이 + 간격 몫이다(폰 세로 약 37~51dp).
-  Rect semanticRect(
-    CursorPadSector sector, [
+  Rect semanticRect(CursorPadSector sector, [Rect? bounds]) =>
+      _semanticRect(sector, bounds, EdgeInsets.zero, 0);
+
+  /// 화면 커서 패드([CursorPad])가 쓰는 시맨틱 영역 — [semanticRect]에 셀 바깥 간격 몫 [outerGap](#236)과 ◀·▶ 폭 목표
+  /// [CursorPad.semanticMinSideWidth](#259)를 넣은 것. 화면과 같게 판정하려는 곳(테스트 포함)은 이것을 쓴다.
+  Rect screenSemanticRect(
+    CursorPadSector sector,
+    Rect bounds,
+    EdgeInsets outerGap,
+  ) => _semanticRect(sector, bounds, outerGap, CursorPad.semanticMinSideWidth);
+
+  Rect _semanticRect(
+    CursorPadSector sector,
     Rect? bounds,
-    EdgeInsets outerGap = EdgeInsets.zero,
-    double minSideWidth = 0,
-  ]) {
+    EdgeInsets outerGap,
+    double minSideWidth,
+  ) {
     if (_isEmpty) return Rect.zero;
     assert(bounds == null || _debugBoundsContainPad(bounds));
     final cell = bounds ?? Offset.zero & size;
@@ -1425,23 +1442,27 @@ class CursorPadGeometry {
   /// 터치 탐색으로 [localPosition](패드 로컬 좌표)을 짚으면 읽히는 방향 — [semanticRect] 영역을
   /// [semanticStackOrder]의 위(뒤)부터 찾아 처음 닿는 방향이다. 영역 판정은 엔진 브리지처럼 왼쪽·위 변은 넣고
   /// 오른쪽·아래 변은 뺀다. 셀 밖·유한하지 않은 좌표면 `null`이다.
-  /// [outerGap]·[minSideWidth]는 [semanticRect]와 같다 — 화면 [CursorPad]와 같게 판정하려면 같은 값을 준다.
-  CursorPadSector? semanticSectorAt(
-    Offset localPosition, [
-    Rect? bounds,
-    EdgeInsets outerGap = EdgeInsets.zero,
-    double minSideWidth = 0,
-  ]) {
+  /// #203 모양([semanticRect]) 기준이다. 화면 커서 패드와 같게 판정하려면 [screenSemanticSectorAt]을 쓴다.
+  CursorPadSector? semanticSectorAt(Offset localPosition, [Rect? bounds]) =>
+      _semanticSectorAt(localPosition, (s) => semanticRect(s, bounds));
+
+  /// 화면 커서 패드([CursorPad]) 모양([screenSemanticRect])으로 [semanticSectorAt]과 같이 판정한다 (#236·#259).
+  CursorPadSector? screenSemanticSectorAt(
+    Offset localPosition,
+    Rect bounds,
+    EdgeInsets outerGap,
+  ) => _semanticSectorAt(
+    localPosition,
+    (s) => screenSemanticRect(s, bounds, outerGap),
+  );
+
+  CursorPadSector? _semanticSectorAt(
+    Offset localPosition,
+    Rect Function(CursorPadSector sector) rectOf,
+  ) {
     if (_isEmpty || !localPosition.isFinite) return null;
     for (final sector in semanticStackOrder.reversed) {
-      if (semanticRect(
-        sector,
-        bounds,
-        outerGap,
-        minSideWidth,
-      ).contains(localPosition)) {
-        return sector;
-      }
+      if (rectOf(sector).contains(localPosition)) return sector;
     }
     return null;
   }
@@ -1605,7 +1626,8 @@ class CursorPadGeometry {
 ///   (#236 전에는 넓히지 않았다 — 그때는 다른 키도 셀 여백을 받지 않았다.)
 /// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
 /// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203). 셀 둘레 간격 몫(#236)은
-///   각 영역의 바깥쪽 변을 늘려 덮는다 — 셀 안의 나눔은 그대로다.
+///   각 영역의 바깥쪽 변을 늘려 덮는다. 셀 안의 ◀·▶ 시작점은 노드 폭 목표(#259, 간격 몫 포함)에 맞춰 허브 가장자리보다
+///   가운데로 당겨질 수 있다([CursorPadGeometry.screenSemanticRect]).
 /// - 패드 상자는 셀 **가운데**에 있다고 가정한다([hitPath]가 상자 크기만으로 셀·패드를 되돌린다).
 ///
 /// ## 허브 한가운데만 데드존이다 (#43)
@@ -1767,19 +1789,14 @@ class CursorPad extends StatelessWidget {
   ];
 
   /// [size] 패드 안에서 [sector]의 시맨틱 영역 ([CursorPadGeometry.semanticRect], [bounds]는 패드 로컬 좌표의 셀)
-  static Rect semanticRect(
-    CursorPadSector sector,
-    Size size, [
-    Rect? bounds,
-    EdgeInsets outerGap = EdgeInsets.zero,
-    double minSideWidth = 0,
-  ]) =>
-      CursorPadGeometry(size)
-          .semanticRect(sector, bounds, outerGap, minSideWidth);
+  static Rect semanticRect(CursorPadSector sector, Size size, [Rect? bounds]) =>
+      CursorPadGeometry(size).semanticRect(sector, bounds);
 
-  /// 화면 커서 패드의 ◀·▶ 의미 노드 폭 목표 (dp, #259) — 접근성 검사기 터치 대상 기준. 허브 쪽 하한에 걸리면 못 미친다
-  /// ([CursorPadGeometry.semanticRect] "◀·▶ 폭 하한").
-  static const double semanticMinSideWidth = CalcTheme.keyMinTouchTargetHeight;
+  /// 화면 커서 패드의 ◀·▶ 의미 노드 폭 목표 (dp, #259) — 접근성 검사기 터치 대상 기준(48dp)에 0.25dp 여유를 둔다.
+  /// 노드 경계는 px로 바뀌며 내림될 수 있어, 정확히 48dp면 부동소수 오차로 47.99…dp가 되어 지적받을 수 있다.
+  /// 허브 쪽 하한에 걸리면 못 미친다([CursorPadGeometry.semanticRect] "◀·▶ 폭 하한").
+  static const double semanticMinSideWidth =
+      CalcTheme.keyMinTouchTargetHeight + 0.25;
 
   /// 패드 셀([cell]) 안에 놓을 패드 상자 크기 — 가로/세로 비를
   /// [CalcTheme.cursorPadMinAspectRatio]~[CalcTheme.cursorPadMaxAspectRatio]로 제한한 가장 큰 크기.
@@ -1899,17 +1916,13 @@ class CursorPad extends StatelessWidget {
                 // 겹쳐 쌓은 시맨틱 영역 — 뒤에 쌓은 ◀·▶가 겹친 곳을 가진다 (자식이 없어 터치는 받지 않는다, #203)
                 for (final sector in CursorPadGeometry.semanticStackOrder)
                   Positioned.fromRect(
-                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 셀 안의 나눔은 그대로다. 간격 고리도
+                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 셀 안의 나눔은 화면 모양(#259) 그대로다. 간격 고리도
                     // 셀 안의 터치·시맨틱 불일치를 물려받는다: 옆 간격 띠의 위·아래 끝과 네 바깥 모서리는 탭하면 ◀·▶,
                     // 터치 탐색으로는 ▲·▼다(간격 고리의 약 7~14%, R2 실측). 두 번 탭은 읽힌 방향을 입력하므로 잘못 입력되지 않는다.
                     rect: inflateOnCellEdges(
-                      semanticRect(
-                        sector,
-                        size,
-                        bounds,
-                        gapInsets,
-                        semanticMinSideWidth,
-                      ).shift(padRect.topLeft),
+                      CursorPadGeometry(size)
+                          .screenSemanticRect(sector, bounds, gapInsets)
+                          .shift(padRect.topLeft),
                       cell,
                       gapInsets,
                     ),
