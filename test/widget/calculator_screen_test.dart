@@ -646,6 +646,93 @@ void main() {
     });
 
     testWidgets(
+      '트라이폴드(짧은 변 600dp 미만으로 확대): 접힘선 2개면 네 방향이고, 회전 직후 접힘 정보가 늦어도 세로 고정을 '
+      '요청하지 않으며, 접으면 세로다 (#144 R1)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // 공개 해상도 근사 823×603dp를 화면 크기 설정으로 키운 화면 (에뮬레이터에서 흉내 낸 720×528dp)
+        const landscape = Size(720, 528);
+        const portrait = Size(528, 720);
+        const cover = Size(360, 780);
+        List<DisplayFeature> folds(Size size) => [
+          for (final at in [240.0, 480.0])
+            DisplayFeature(
+              bounds: size.width > size.height
+                  ? Rect.fromLTWH(at, 0, 0, size.height)
+                  : Rect.fromLTWH(0, at, size.width, 0),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        setDevice(tester, landscape);
+        tester.view.displayFeatures = folds(landscape);
+        addTearDown(tester.view.resetDisplayFeatures);
+        mockFoldableDevice(tester, foldable: true);
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+
+        // 세로로 돈 직후: 창·화면은 새 방향인데 접힘 정보는 아직 가로 화면 값(창을 가로지르지 않음)
+        tester.view.display.size = portrait * 2;
+        tester.view.physicalSize = portrait * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        // 접힘 정보가 온다
+        tester.view.displayFeatures = folds(portrait);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(isStackedArrangement(tester), isTrue);
+
+        // 다시 가로로 (같은 순서)
+        tester.view.display.size = landscape * 2;
+        tester.view.physicalSize = landscape * 2;
+        await tester.pump();
+        tester.view.displayFeatures = folds(landscape);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+
+        // 화면 크기 설정을 줄였다 다시 키운다(같은 비율의 다른 dp 크기, R2): 접힘 정보가 늦게 오는 동안에도 세로 고정을
+        // 요청하지 않는다
+        const smaller = Size(823, 603);
+        tester.view.display.size = smaller * 2;
+        tester.view.physicalSize = smaller * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = [
+          for (final x in [274.5, 548.5])
+            DisplayFeature(
+              bounds: Rect.fromLTWH(x, 0, 0, smaller.height),
+              type: DisplayFeatureType.fold,
+              state: DisplayFeatureState.postureFlat,
+            ),
+        ];
+        await tester.pump();
+        tester.view.display.size = landscape * 2;
+        tester.view.physicalSize = landscape * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        tester.view.displayFeatures = folds(landscape);
+        await tester.pump();
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(printed.where((l) => l.contains('방향 요청')), [
+          'AltCalc 방향 요청: any (기기 foldable, 화면 720x528, 접힘선 2개)',
+        ]);
+
+        // 접는다: 커버 화면(비율이 다른 화면)이라 기억을 쓰지 않고 세로다
+        tester.view.display.size = cover * 2;
+        tester.view.physicalSize = cover * 2;
+        tester.view.displayFeatures = const [];
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+      },
+    );
+
+    testWidgets(
       '커버 화면에서 시작해 시작 시 판정이 놓친 폴더블: 펼치면 접힘 정보 전에도 폴더블로 판정한다 — 가로 요청·가로형 없음 (#70)',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
