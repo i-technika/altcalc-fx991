@@ -100,15 +100,18 @@ import 'handedness_dialog.dart';
 /// 테이블톱)도 같다.
 /// 접힘 정보가 바뀌면 경로는 나뉨 여부를 같은 프레임에 바꾸지만(경로의 MediaQuery를 직접 본다), ON 키는 그 프레임의
 /// 배치가 끝난 뒤에 재므로 그 프레임은 이전 기준점으로 절반을 고르고 다음 프레임에 옮겨 간다.
-/// 앱만 나누는 펼친 폭 0 접힘선으로 바뀌는 프레임도 그렇다(#226). 그 프레임의 배치 값(그린 배치 등)은 이전 화면의
-/// 값이라 이 화면을 앱이 나눌지 알 수 없다. 그래서 배치 값이 경로의 화면 기하(화면 크기, 배치가 쓰는 접힘선 위치)를
-/// 따라오기 전에는 그 접힘선으로 일단 나눈다 — 반 접힘·물리 힌지처럼 이전 기준점 쪽 절반에 떴다가 다음 프레임에
-/// 지금 ON 키 쪽 절반으로 옮겨 간다. 앱이 그 화면을 나누지 않는 것으로 드러나면(위아래 배치로 대체, 위 1·2·4)
-/// 다음 프레임에 화면 전체로 옮겨 간다.
-/// #226 전에는 그 프레임에 이전 배치 값대로 화면 전체에 떠 카드가 접힘선을 가로질렀다(#218 R2 실측 — 823×603 펼친
-/// 접힘선 2개(x=274.5·548.5) → 1개(x=411.5)에서 x=192.5~630.5, 펼친 Fold 673×841을 가로로 돌리면 y=196.5~484.5).
-/// 배치 값은 따라왔는지 가릴 수 있게 정한 때의 경로 화면 기하를 함께 적어 둔다. 배치 값을 정하는 화면 기하([geometry])는
-/// 그대로인데 경로 화면만 바뀌어도 경로가 갱신을 다시 청해 다음 프레임에 따라온다.
+/// 앱만 나누는 펼친 폭 0 접힘선으로 바뀌는 프레임(그 접힘선이 새로 생기거나, 옮겨 가거나, 방향이 바뀜 — 회전)도
+/// 그렇다(#226). 그 프레임의 배치 값(그린 배치 등)은 다른 접힘선으로 정한 값이라 이 접힘선으로 앱이 나눌지 알 수 없다.
+/// 그래서 배치 값이 경로의 접힘선을 따라오기 전에는 그 접힘선으로 일단 나눈다 — 반 접힘·물리 힌지처럼 이전 기준점 쪽
+/// 절반에 떴다가 다음 프레임에 지금 ON 키 쪽 절반으로 옮겨 간다. 앱이 그 화면을 나누지 않는 것으로 드러나면(위아래
+/// 배치로 대체, 위 1·2·4) 다음 프레임에 화면 전체로 옮겨 간다 — 그런 화면으로 바뀔 때는 한 프레임 절반에 보였다가
+/// 화면 전체가 된다(접힘선을 가로지르는 한 프레임 대신 택한 것이다).
+/// 접힘선은 그대로이고 창 크기만 바뀌면(분할 화면 구분선 끌기 등) 배치 값은 같은 접힘선으로 정한 값이라 그대로 쓴다 —
+/// 나뉨 여부를 잘못 보지 않고, 화면 전체에 떠 있던 대화상자가 크기를 바꾸는 동안 절반으로 튀지 않는다(#226 R1).
+/// #226 전에는 접힘선이 바뀐 프레임에 이전 배치 값대로 화면 전체에 떠 카드가 접힘선을 가로질렀다(#218 R2 실측 —
+/// 823×603 펼친 접힘선 2개(x=274.5·548.5) → 1개(x=411.5)에서 x=192.5~630.5, 펼친 Fold 673×841을 가로로 돌리면
+/// y=196.5~484.5). 따라왔는지 가릴 수 있게 배치 값에 그 값을 정한 때의 경로 접힘선을 함께 적어 둔다. 배치 값을 정하는
+/// 화면 기하([geometry])는 그대로인데 경로의 접힘선만 바뀌어도 경로가 갱신을 다시 청해 다음 프레임에 따라온다.
 /// 손잡이만 바꾸면 ON 키가 옮겨 가도 다시 재지 않는다 — 아래 "대화상자가 열린 채 손잡이를 바꾸면". 그 뒤에 화면 기하가
 /// 바뀌면 그때의 ON 키 쪽 절반으로 옮겨 간다(배치가 다시 정해지는 전환이라 연 자리를 지킬 근거가 없다).
 ///
@@ -316,18 +319,18 @@ class SettingsLauncher extends StatefulWidget {
   State<SettingsLauncher> createState() => _SettingsLauncherState();
 }
 
-/// 대화상자 경로가 보는 화면 기하 — 화면 크기와 배치가 쓰는 접힘선 위치(경로 좌표, 자세는 빼고, 없으면 `null`).
-/// 배치 값([_DialogLayout])이 이 화면을 따라왔는지 가릴 때 쓴다 (#226).
-typedef _RouteScreen = ({Size size, Rect? hinge});
+/// 대화상자 경로가 보는 접힘선 — 배치가 쓰는 접힘선의 영역(경로 좌표, 자세는 빼고)이고 접힘선이 없으면 `hinge`가
+/// `null`이다. 배치 값([_DialogLayout])이 이 접힘선으로 정해졌는지 가릴 때 쓴다 (#226).
+typedef _RouteHinge = ({Rect? hinge});
 
 /// 열린 대화상자가 보는 화면 상태 — 배치, 손잡이 적용 여부, 손잡이를 바꿔도 배치가 같은지, ON 키 중심(Navigator
-/// 좌표, 나눌 절반을 고르는 기준), 이 값들을 정한 때의 경로 화면 기하([_RouteScreen], 모르면 `null`)
+/// 좌표, 나눌 절반을 고르는 기준), 이 값들을 정한 때의 경로 접힘선([_RouteHinge], 모르면 `null`)
 typedef _DialogLayout = ({
   ScreenArrangement arrangement,
   bool handednessApplies,
   bool handednessKeepsArrangement,
   Offset? anchor,
-  _RouteScreen? screen,
+  _RouteHinge? routeHinge,
 });
 
 class _SettingsLauncherState extends State<SettingsLauncher> {
@@ -344,13 +347,13 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   bool _refreshScheduled = false;
   bool _remeasurePending = false;
 
-  /// 지금 [widget] 값과 [anchor]·[screen]으로 만든 대화상자 화면 상태
-  _DialogLayout _layoutOf(Offset? anchor, _RouteScreen? screen) => (
+  /// 지금 [widget] 값과 [anchor]·[routeHinge]로 만든 대화상자 화면 상태
+  _DialogLayout _layoutOf(Offset? anchor, _RouteHinge? routeHinge) => (
     arrangement: widget.arrangement,
     handednessApplies: widget.handednessApplies,
     handednessKeepsArrangement: widget.handednessKeepsArrangement,
     anchor: anchor,
-    screen: screen,
+    routeHinge: routeHinge,
   );
 
   @override
@@ -388,37 +391,52 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
       }
       _layout.value = _layoutOf(
         anchor,
-        navigator == null ? _layout.value.screen : _routeScreenIn(navigator),
+        navigator == null ? _layout.value.routeHinge : _routeHingeIn(navigator),
       );
     });
   }
 
-  /// 대화상자 경로가 배치 값이 따라오지 못한 화면을 보았다 — 프레임이 끝난 뒤 지금 배치 값을 다시 알린다 (#226).
-  /// 화면 기하가 바뀌면 보통 [didUpdateWidget]이 이미 예약해 두었으므로 한 번만 돈다. 배치 값을 정하는 화면 기하
-  /// ([SettingsLauncher.geometry])가 그대로인 채 경로 화면만 바뀐 경우에도 대화상자가 다음 프레임에 자리를 찾는다.
-  /// 경로를 빌드하는 중에 불러도 된다 — 프레임 끝 콜백만 예약한다.
+  /// 대화상자 경로가 배치 값이 따라오지 못한 접힘선을 보았다 — 프레임이 끝난 뒤 지금 배치 값을 다시 알린다 (#226).
+  /// 접힘선이 바뀌면 보통 [didUpdateWidget]이 이미 예약해 두었으므로(화면 기하가 바뀐다) 한 번만 돈다. 배치 값을 정하는
+  /// 화면 기하([SettingsLauncher.geometry])가 그대로인 채 경로의 접힘선만 바뀐 경우에도 다음 프레임에 배치 값을 따른다 —
+  /// 청하지 않으면 대화상자가 그 접힘선의 절반에 계속 남는다. 경로를 빌드하는 중에 불러도 된다 — 프레임 끝 콜백만 예약한다.
   void _refreshForRoute() {
     if (mounted) _scheduleRefresh(remeasure: true);
   }
 
-  /// 대화상자 경로가 보는 화면 기하 [media] — 접힘 정보는 경로처럼 배치가 쓰는 접힘선만 남겨 본다
+  /// 대화상자 경로의 MediaQuery [media]에서 배치가 쓰는 접힘선 — 경로처럼 배치가 쓰는 접힘선만 남겨 본다
   /// ([SettingsLauncher.dialogRouteMediaOf] — 이미 걸렀어도 같은 값이다).
-  static _RouteScreen _routeScreenOf(MediaQueryData media) {
+  static _RouteHinge _routeHingeOf(MediaQueryData media) {
     media = SettingsLauncher.dialogRouteMediaOf(media);
     return (
-      size: media.size,
       hinge: FormFactor.hingeOf(media.size, media.displayFeatures)?.bounds,
     );
   }
 
-  /// [navigator]에 뜬 경로가 보는 화면 기하 — 경로는 그 Navigator 위의 MediaQuery를 본다. 빌드 밖에서 읽으므로
+  /// [navigator]에 뜬 경로가 보는 접힘선 — 경로는 그 Navigator 위의 MediaQuery를 본다. 빌드 밖에서 읽으므로
   /// 의존을 걸지 않는다.
-  static _RouteScreen? _routeScreenIn(NavigatorState navigator) {
+  static _RouteHinge? _routeHingeIn(NavigatorState navigator) {
     final media = navigator.context
         .getInheritedWidgetOfExactType<MediaQuery>()
         ?.data;
-    return media == null ? null : _routeScreenOf(media);
+    return media == null ? null : _routeHingeOf(media);
   }
+
+  /// 같은 접힘선인지 — 둘 다 없거나, 방향이 같고 접힘선에 수직인 축의 자리가 [_sameHingeTolerance] 안이다. 창 크기만
+  /// 바뀌어 접힘선 길이가 달라진 것은 같은 접힘선이다(배치 값은 같은 접힘선으로 정해져 나눌지·방향을 잘못 보지 않는다,
+  /// #226 R1). 자리가 조금 다른 같은 접힘선이 번갈아 보고되어도 같다고 본다.
+  static bool _sameHinge(Rect? a, Rect? b) {
+    if (a == null || b == null) return a == b;
+    final vertical = FormFactor.isVerticalHinge(a);
+    if (vertical != FormFactor.isVerticalHinge(b)) return false;
+    bool near(double x, double y) => (x - y).abs() <= _sameHingeTolerance;
+    return vertical
+        ? near(a.left, b.left) && near(a.right, b.right)
+        : near(a.top, b.top) && near(a.bottom, b.bottom);
+  }
+
+  /// [_sameHinge]의 자리 허용 오차 (dp) — `FormFactor`가 같은 접힘선으로 묶는 간격(1dp)과 같다
+  static const double _sameHingeTolerance = 1.0;
 
   @override
   void dispose() {
@@ -451,7 +469,7 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   /// - 손잡이를 바꿔도 배치가 그대로일 때([_DialogLayout.handednessKeepsArrangement])만 나눈다.
   /// - 기준점은 [SettingsLauncher.dialogAnchorPointOf]로 고른다. ON 키 쪽 절반이면 그 절반이 인셋을 빼고
   ///   [SettingsLauncher.dialogMinHalfExtent] 이상일 때만 나눈다.
-  /// - [stale]이면(배치 값이 [media]의 화면 기하를 아직 따라오지 못한 프레임, #226) 앞의 두 조건을 보지 않고 그 접힘선으로
+  /// - [stale]이면(배치 값이 [media]의 접힘선을 아직 따라오지 못한 프레임, #226) 앞의 두 조건을 보지 않고 그 접힘선으로
   ///   나눈다 — 이전 배치 값으로는 이 화면을 나눌지 알 수 없고, 화면 전체에 띄우면 카드가 접힘선을 가로지른다. 기준점은
   ///   이전 ON 키 중심으로 고르고, ON 키 쪽 절반이 하한에 못 미치면 하한을 넘는 반대쪽 절반 가운데다. 두 절반 모두 못
   ///   미치면 화면 전체다 — 그 화면은 배치 값이 따라온 다음 프레임에도 화면 전체다(위 하한).
@@ -534,7 +552,7 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
     final navigator = Navigator.of(context, rootNavigator: true);
     _anchorContext = key;
     final anchor = _anchorIn(key, navigator);
-    _layout.value = _layoutOf(anchor, _routeScreenIn(navigator));
+    _layout.value = _layoutOf(anchor, _routeHingeIn(navigator));
     // 나뉨 여부가 바뀌어 감싸는 위젯이 달라져도 대화상자 element(포커스·스크롤)를 옮겨 유지한다.
     final dialogKey = GlobalKey(debugLabel: 'handedness-dialog');
     final minRegion = SettingsLauncher.dialogMinRegionOf(
@@ -568,14 +586,15 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
               ),
             );
             final media = MediaQuery.of(dialogContext);
-            // 배치 값은 프레임이 끝난 뒤에 따라오므로(한 프레임 늦다) 화면이 바뀐 프레임에는 이전 화면의 값이다. 앱만
-            // 나누는 접힘선이 있는 화면에서만 가린다 — Flutter가 나눈 하위 화면 안은 접힘선이 빠져 경로 화면과 비교할
-            // 수 없고, 앱이 나눌 접힘선이 없으면 이전 값이어도 고를 것이 없다 (#226).
-            final screen = layout.screen;
+            // 배치 값은 프레임이 끝난 뒤에 따라오므로(한 프레임 늦다) 접힘선이 바뀐 프레임(새로 생김·옮겨 감·방향이
+            // 바뀜)에는 다른 접힘선으로 정한 값이다. 앱만 나누는 접힘선이 있는 화면에서만 가린다 — Flutter가 나눈 하위
+            // 화면 안은 접힘선이 빠져 경로와 비교할 수 없고, 앱이 나눌 접힘선이 없으면 이전 값이어도 고를 것이 없다.
+            // 창 크기만 바뀌면 같은 접힘선으로 정한 값이라 그대로 쓴다 (#226, R1).
+            final recorded = layout.routeHinge;
             final stale =
-                screen != null &&
+                recorded != null &&
                 _appOnlyHingeOf(media) != null &&
-                screen != _routeScreenOf(media);
+                !_sameHinge(recorded.hinge, _routeHingeOf(media).hinge);
             if (stale) _refreshForRoute();
             final split = _splitLikeApp(
               media,

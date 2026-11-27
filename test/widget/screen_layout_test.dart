@@ -2483,20 +2483,68 @@ void _hingeLayoutTests() {
       expect(first.right, lessThanOrEqualTo(330 + 0.01), reason: '$first');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      // 자리 잡은 뒤는 그린 배치와 #129 규칙이 정한다 — 접힘선을 가로지르면 화면 전체 가운데다
+      // 자리 잡은 뒤는 #129 규칙 4대로 화면 전체 가운데다 — 설정 키 쪽 절반(250dp)이 하한 미만이다. 바뀐 프레임에
+      // 절반에 보였다가 화면 전체가 되는 한 번의 이동은 접힘선을 가로지르는 한 프레임 대신 택한 것이다.
       final settled = tester.getRect(_dialogSurface);
+      expect(tester.getRect(_settings).center.dx, greaterThan(330));
       expect(
-        clear(fold.bounds, settled) ||
-            (settled.center.dx - size.width / 2).abs() < 0.01,
-        isTrue,
+        settled.center.dx,
+        moreOrLessEquals(size.width / 2),
         reason: '$settled',
       );
     });
 
-    // 배치 값을 정하는 화면 기하는 그대로인데 경로(Navigator)가 보는 화면만 바뀌어도, 경로가 갱신을 청해 다음 프레임에는
-    // 배치 값을 따른다. 테스트 화면은 계산기 MediaQuery와 View(경로가 본다)를 따로 줄 수 있다 — 계산기는 접힘선이 없는
-    // 가로형 그대로라 자리 잡은 뒤는 화면 전체 가운데다. 갱신을 청하지 않으면 접힘선 쪽 절반에 남는다.
-    testWidgets('경로 화면만 바뀌어도 다음 프레임에 배치 값을 따른다', (tester) async {
+    // 접힘선은 그대로이고 창 크기만 바뀌면(분할 화면 구분선 끌기) 배치 값은 같은 접힘선으로 정한 값이라 그대로 쓴다 —
+    // 화면 전체에 떠 있던 대화상자가 바뀌는 프레임마다 절반으로 튀지 않는다(#226 R1 — 고치기 전 바뀐 각 프레임에
+    // x=108~546). #129의 비대칭 접힘선 화면: 오른손잡이는 위아래 배치라 화면 전체다.
+    testWidgets('접힘선은 그대로이고 창 크기만 바뀌면 화면 전체에 떠 있던 대화상자는 그대로다 (R1)', (
+      tester,
+    ) async {
+      const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
+      DisplayFeature foldOf(double height) =>
+          _foldAt(Rect.fromLTWH(654, 0, 0, height));
+      _setViewPadding(tester, padding);
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(841, 701),
+        padding: padding,
+        handedness: Handedness.right,
+        displayFeatures: [foldOf(701)],
+      );
+      expect(isStackedArrangement(tester), isTrue);
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final opened = tester.getRect(_dialogSurface);
+      // 화면 전체(오른쪽 인셋 48을 뺀 안전 영역) 가운데
+      expect(opened.center.dx, moreOrLessEquals((841 - 48) / 2));
+      for (final height in const [690.0, 680.0, 670.0]) {
+        await _pump(
+          tester,
+          size: Size(841, height),
+          padding: padding,
+          displayFeatures: [foldOf(height)],
+          container: container,
+        );
+        final dialog = tester.getRect(_dialogSurface);
+        expect(
+          dialog.center.dx,
+          moreOrLessEquals(opened.center.dx),
+          reason: '$height $dialog',
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(_dialogSurface).center.dx,
+        moreOrLessEquals(opened.center.dx),
+      );
+    });
+
+    // 배치 값을 정하는 화면 기하는 그대로인데 경로(Navigator)가 보는 접힘선만 바뀌어도, 경로가 갱신을 청해 자리 잡은
+    // 뒤에는 배치 값을 따른다. 실제 앱에서는 두 MediaQuery가 같아 이 구성이 생기지 않는다 — 갱신 요청이 빠지면
+    // 대화상자가 그 접힘선의 절반에 계속 남는 것을 보는 테스트다(테스트 화면은 계산기 MediaQuery와 View(경로가 본다)를
+    // 따로 줄 수 있다). 계산기는 접힘선이 없는 가로형 그대로라 자리 잡은 뒤는 화면 전체 가운데다.
+    testWidgets('경로의 접힘선만 바뀌어도 자리 잡은 뒤에는 배치 값을 따른다', (tester) async {
       const size = Size(841, 673);
       const fold = Rect.fromLTWH(0, 336.5, 841, 0);
       await _pump(tester, size: size, handedness: Handedness.right);
@@ -2506,9 +2554,6 @@ void _hingeLayoutTests() {
       expect(opened.center.dx, moreOrLessEquals(size.width / 2));
 
       tester.view.displayFeatures = [_foldAt(fold)];
-      await tester.pump();
-      final first = tester.getRect(_dialogSurface);
-      expect(clear(fold, first), isTrue, reason: '$first');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(tester.getRect(_dialogSurface), opened);
