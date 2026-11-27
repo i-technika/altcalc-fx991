@@ -40,49 +40,21 @@ Widget _host(
   );
 }
 
-/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 실물 배열 키패드 크기 — 실제 창에서 생기는 크기를 포함한다.
-/// 가로형(#142) 뒤 실제 창으로 다시 쟀다(#159). 넓은 배열의 가로형 창(2000×400 등)은 화면 테스트가 본다
-/// (`calculator_screen_test.dart` "넓은 키패드 셀의 커서 패드").
-const _wideCellAreas = <Size>[
-  Size(800, 300), // _areas의 가로 모드 폰 (화면은 가로형으로 그린다 — #142)
-  Size(396, 295.84), // 412×450 창의 위아래 배치 (셀 비 2.32)
-  Size(584, 411.04), // 600×610 창의 위아래 배치 (2.47)
-  Size(752, 524.8), // 768×768 정사각형 창의 위아래 배치 (2.49)
-  Size(1600, 300), // 극단 크기 (9.26)
+/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 실물 배열 키패드 크기와 그 크기의 ▲·▼ 넓이 비율 하한
+/// (함수 키 sin 셀 대비). 실제 창에서 생기는 크기를 포함한다. 가로형(#142) 뒤 실제 창으로 다시 쟀다(#159).
+/// 넓은 배열의 가로형 창(2000×400 등)은 화면 테스트가 본다(`calculator_screen_test.dart` "넓은 키패드 셀의 커서 패드").
+/// 하한은 #159 결정 ③("지금 값에서 더 나빠지지 않게")에 따라 측정값보다 약 0.02 아래로 둔다. 비율은 셀 비가 커질수록
+/// 계속 내려가므로(바닥 없음, [CalcTheme.cursorPadMaxAspectRatio] 문서) 크기마다 따로 둔다.
+const _wideCellAreas = <(Size, double)>[
+  (
+    Size(800, 300),
+    0.64,
+  ), // _areas의 가로 모드 폰, 셀 비 4.63, 측정 0.662 (화면은 가로형으로 그린다 — #142)
+  (Size(396, 295.84), 0.89), // 412×450 창의 위아래 배치, 2.32, 0.915
+  (Size(584, 411.04), 0.86), // 600×610 창의 위아래 배치, 2.47, 0.881
+  (Size(752, 524.8), 0.85), // 768×768 정사각형 창의 위아래 배치, 2.49, 0.874
+  (Size(1600, 300), 0.51), // 극단 크기, 9.26, 0.535
 ];
-
-/// 커서 패드 방향 키 터치 영역의 내접원 지름 하한 — 함수 키(sin) 터치 높이 대비 (#159).
-/// 손가락이 들어가는 크기는 셀 높이가 정한다. 그래서 셀이 넓어져도 이 비는 거의 그대로다.
-/// - ▲·▼: 보통 셀의 측정값이 0.947~0.980배이고, 가장 낮은 곳은 393×560·412×640이다. 넓은 셀은 0.970~0.980배다.
-///   하한은 보통 셀의 최솟값 아래로 둔다(내접원은 0.5dp 격자 근사다).
-/// - ◀·▶: 측정 1.07배 이상이다. 셀이 넓을수록 커진다.
-const _upDownInscribedMinRatio = 0.94;
-const _leftRightInscribedMinRatio = 1.0;
-
-/// [sector] 방향 키 터치 영역의 내접원 지름이 함수 키(sin) 터치 높이의 하한 비율 이상인지 확인한다 (#159).
-void _expectInscribedVersusFunctionKey(WidgetTester tester, String reason) {
-  final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-  final cell = tester.getRect(find.byType(CursorPad));
-  final sin = tester.widget<CalcKeyButton>(_button(CalcKeyId.sin));
-  final sinCell = tester.getSize(_button(CalcKeyId.sin));
-  final touch = sin.extendHitAreaToLegend
-      ? sinCell.height
-      : sinCell.height * (1 - CalcTheme.keyLegendHeightRatio);
-  final g = CursorPadGeometry(pad.size);
-  final bounds = cell.shift(-pad.topLeft);
-  for (final sector in CursorPadSector.values) {
-    final vertical =
-        sector == CursorPadSector.up || sector == CursorPadSector.down;
-    expect(
-      hitInscribedDiameter(g, sector, bounds),
-      greaterThanOrEqualTo(
-        touch *
-            (vertical ? _upDownInscribedMinRatio : _leftRightInscribedMinRatio),
-      ),
-      reason: '${sector.name} $reason (sin 터치 높이 $touch)',
-    );
-  }
-}
 
 /// 테스트 화면(기본 800×600)을 [size]로 넓힌다 — [_host]의 영역이 화면보다 크면 화면 크기로 잘리기 때문이다.
 void _setViewSize(WidgetTester tester, Size size) {
@@ -589,7 +561,7 @@ void main() {
   _cursorPadShapeTests();
   _cursorPadHitTests();
 
-  for (final area in _wideCellAreas) {
+  for (final (area, minUpDownAreaRatio) in _wideCellAreas) {
     testWidgets(
       '${area.width}×${area.height}: 키패드가 가로로 넓어져도 방향 키 터치 영역은 #141 전 폭보다 줄지 않고 '
       '손가락 크기는 보통 셀과 같은 기준이다',
@@ -623,16 +595,29 @@ void main() {
             reason: '${sector.name} $area (전 $before)',
           );
         }
-        // 손가락이 들어가는 크기(내접원)는 보통 셀과 같은 기준을 지킨다(#159).
-        _expectInscribedVersusFunctionKey(tester, '$area');
+        // 이 크기가 넓은 셀(셀 비 2.2 초과, 패드가 비율 상한에서 멈춤)이어야 검사가 뜻이 있다 — 배치가 바뀌어 크기가
+        // 낡으면 여기서 알린다.
+        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+        final cell = tester.getRect(find.byType(CursorPad));
+        expect(cell.width / cell.height, greaterThan(2.2));
+        expect(
+          pad.width / pad.height,
+          moreOrLessEquals(CalcTheme.cursorPadMaxAspectRatio, epsilon: 1e-6),
+        );
+        // 손가락이 들어가는 크기(내접원)는 #159 결정 ①의 넓은 셀 하한을 지킨다(보통 셀의 하한보다 높다).
+        expectCursorPadInscribedVersusFunctionKey(
+          tester,
+          upDownMinRatio: cursorPadWideUpDownInscribedMinRatio,
+          reason: '$area',
+        );
         // 함수 키 셀과 견준 ▲·▼ 넓이 비율은 보통 셀의 하한(0.9배)보다 낮아진다. 함수 키가 옆으로만 넓어지기 때문이다.
-        // #159에서 패드 모양을 그대로 두기로 정했다(CalcTheme.cursorPadMaxAspectRatio 문서). 대신 지금 값보다 나빠지지
-        // 않게 하한을 둔다. 측정: 412×450 창 0.92, 600×610 창 0.88, 768×768 창 0.87, 800×300 0.66, 1600×300 0.54배.
+        // #159에서 패드 모양을 그대로 두기로 정했다(CalcTheme.cursorPadMaxAspectRatio 문서). 대신 크기마다 지금 값보다
+        // 나빠지지 않게 하한을 둔다([_wideCellAreas]).
         final sin = tester.getSize(_button(CalcKeyId.sin));
         for (final sector in [CursorPadSector.up, CursorPadSector.down]) {
           expect(
             now[sector]! / (sin.width * sin.height),
-            greaterThanOrEqualTo(0.5),
+            greaterThanOrEqualTo(minUpDownAreaRatio),
             reason: '${sector.name} $area',
           );
         }
@@ -1962,14 +1947,18 @@ void _cursorPadShapeTests() {
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
           final cell = tester.getRect(find.byType(CursorPad));
-          // 내접원(손가락이 들어가는 크기)은 셀 모양과 관계없이 같은 기준이다(#159).
-          _expectInscribedVersusFunctionKey(tester, '$area');
+          // 내접원(손가락이 들어가는 크기)은 보통 셀의 하한을 지킨다(#159).
+          expectCursorPadInscribedVersusFunctionKey(
+            tester,
+            upDownMinRatio: cursorPadUpDownInscribedMinRatio,
+            reason: '$area',
+          );
           // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
           // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 아래 하한(0.9배) 밑으로 내려갈 수 있다
           // (CalcTheme.cursorPadMaxAspectRatio 문서 — #159에서 모양을 그대로 두기로 정했다). 그 크기([_wideCellAreas])는
           // 아래 "가로로 넓어져도" 테스트가 절대 넓이와 낮춘 하한으로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
           if (cell.width / cell.height > 2.2) {
-            expect(_wideCellAreas, contains(area));
+            expect(_wideCellAreas.map((e) => e.$1), contains(area));
             return;
           }
           final sin = tester.getSize(_button(CalcKeyId.sin));
