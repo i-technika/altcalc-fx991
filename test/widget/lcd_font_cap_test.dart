@@ -351,24 +351,58 @@ void main() {
       expect(_lineFontOf(wide.lcd.size), _cap);
     });
 
-    test('세로 접힘선 배치(책 자세): 줄 글자는 상한 이하이고 활성 LCD는 본체 윗변부터다 (#232)', () {
-      for (var width = 400.0; width <= 2400; width += 61) {
-        for (var height = 300.0; height <= 1600; height += 47) {
-          final body = Size(width, height);
-          final hinge = Rect.fromLTWH(width * 0.45, 0, 20, height);
-          for (final h in Handedness.values) {
-            final l = CalcHingeSplitLayout.of(body, hinge, h);
-            final reason = '$body $h $l';
-            expect(l.lcd.top, moreOrLessEquals(0), reason: reason);
-            expect(
-              _lineFontOf(l.lcd.size),
-              lessThanOrEqualTo(_cap),
-              reason: reason,
-            );
+    test(
+      '세로 접힘선 배치(책 자세): 줄 글자는 상한 이하이고, 활성 LCD는 본체 윗변부터 남는 높이를 모두 받는다 (#232)',
+      () {
+        var sawShortWithout = 0;
+        var sawShortWith = 0;
+        for (var width = 400.0; width <= 2400; width += 61) {
+          for (var height = 200.0; height <= 1600; height += 23) {
+            final body = Size(width, height);
+            final hinge = Rect.fromLTWH(width * 0.45, 0, 20, height);
+            for (final h in Handedness.values) {
+              final l = CalcHingeSplitLayout.of(body, hinge, h);
+              final reason = '$body $h $l';
+              expect(l.lcd.top, moreOrLessEquals(0), reason: reason);
+              expect(
+                _lineFontOf(l.lcd.size),
+                lessThanOrEqualTo(_cap),
+                reason: reason,
+              );
+              final history = l.history;
+              if (!l.shortHandPanel) {
+                // 손 쪽 패널의 세로형: LCD 아래 간격 바로 밑이 키패드다 — LCD 위·아래에 빈 곳이 없다.
+                expect(
+                  l.lcd.bottom + CalcTheme.screenLcdKeypadGap,
+                  moreOrLessEquals(l.keypad.top),
+                  reason: reason,
+                );
+              } else if (history == null) {
+                // 짧은 손 쪽 패널, 반대쪽 패널에 기록이 없으면 LCD가 반대쪽 패널 높이 전체다.
+                sawShortWithout++;
+                expect(l.lcd.bottom, moreOrLessEquals(height), reason: reason);
+              } else {
+                // 기록이 있으면 LCD는 상한 높이 이하이고 기록이 패널 끝까지 남는 높이를 쓴다.
+                sawShortWith++;
+                expect(
+                  l.lcd.height,
+                  lessThanOrEqualTo(_lcdHeightLimit + 1e-9),
+                  reason: reason,
+                );
+                expect(
+                  history.bottom,
+                  moreOrLessEquals(height),
+                  reason: reason,
+                );
+              }
+            }
           }
         }
-      }
-    });
+        // 스윕이 짧은 손 쪽 패널의 두 경우를 실제로 지나는지 확인한다.
+        expect(sawShortWithout, greaterThan(0));
+        expect(sawShortWith, greaterThan(0));
+      },
+    );
   });
 
   // 실제 번들 글꼴로 그린 화면의 줄 글자와 키 각인을 잰다. 글꼴 등록은 이후 테스트에도 남으므로 파일 맨 끝 그룹에 둔다.

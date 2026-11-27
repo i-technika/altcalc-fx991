@@ -488,7 +488,16 @@ void main() {
         // 291·315·600dp를 견준다.
         const width = 396.0;
         Future<
-          ({double font, Rect lcd, Rect input, Rect result, Rect i, Rect r})
+          ({
+            double font,
+            Rect lcd,
+            Rect input,
+            Rect result,
+            Rect i,
+            Rect r,
+            Rect ia,
+            Rect ra,
+          })
         >
         drawAt(double height) async {
           await _pump(
@@ -496,10 +505,15 @@ void main() {
             const LcdDisplay(
               input: Text('1'),
               result: Text('2'),
+              inputOverflow: LcdLineOverflow(left: true),
+              resultOverflow: LcdLineOverflow(left: true),
               fitFontsToSize: true,
             ),
             width: width,
             height: height,
+          );
+          Rect arrowIn(Finder line) => tester.getRect(
+            find.descendant(of: line, matching: find.text('◄')),
           );
           return (
             font: DefaultTextStyle.of(tester.element(find.text('1')))
@@ -510,6 +524,8 @@ void main() {
             result: tester.getRect(_resultLine),
             i: tester.getRect(find.text('1')),
             r: tester.getRect(find.text('2')),
+            ia: arrowIn(_inputLine),
+            ra: arrowIn(_resultLine),
           );
         }
 
@@ -541,9 +557,57 @@ void main() {
             moreOrLessEquals(base.lcd.bottom - base.r.bottom, epsilon: 1e-6),
             reason: reason,
           );
+          // ◄/►도 줄 내용과 같은 쪽에 붙어 식·답 곁에 남는다(R1 — 줄 높이 가운데에 두면 600dp LCD에서 식보다 약 160dp 아래로
+          // 떨어졌다).
+          expect(
+            tall.ia.center.dy - tall.lcd.top,
+            moreOrLessEquals(base.ia.center.dy - base.lcd.top, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.lcd.bottom - tall.ra.center.dy,
+            moreOrLessEquals(
+              base.lcd.bottom - base.ra.center.dy,
+              epsilon: 1e-6,
+            ),
+            reason: reason,
+          );
         }
+        // 화살표는 줄 내용 2행(분수 1단) 높이 안에 있다 — 입력 쪽은 첫 행 글자와 겹치는 높이에서 시작하고, 결과 쪽은 마지막
+        // 행 글자와 겹치는 높이에서 끝난다.
+        final tall = await drawAt(600);
+        final row = tall.i.height;
+        expect(tall.ia.top, lessThan(tall.input.top + 2 * row + 1));
+        expect(tall.ia.bottom, greaterThan(tall.i.top));
+        expect(tall.ra.bottom, greaterThan(tall.result.bottom - 2 * row - 1));
+        expect(tall.ra.top, lessThan(tall.r.bottom));
       },
     );
+
+    testWidgets('줄이 2행 높이에 맞는 LCD에서는 ◄/►가 줄 높이 가운데다 (#232 전과 같다)', (
+      tester,
+    ) async {
+      // 360×160 — 줄 글자가 높이에 묶여 줄 높이가 2행(분수 1단) 높이와 거의 같다.
+      await _pump(
+        tester,
+        const LcdDisplay(
+          input: Text('1'),
+          result: Text('2'),
+          inputOverflow: LcdLineOverflow(right: true),
+          resultOverflow: LcdLineOverflow(right: true),
+          fitFontsToSize: true,
+        ),
+      );
+      for (final line in [_inputLine, _resultLine]) {
+        final arrow = tester.getRect(
+          find.descendant(of: line, matching: find.text('►')),
+        );
+        expect(
+          arrow.center.dy,
+          moreOrLessEquals(tester.getRect(line).center.dy, epsilon: 1.0),
+        );
+      }
+    });
 
     testWidgets('상태 표시줄과 줄 내용은 모두 베젤 안쪽에 그려진다', (tester) async {
       await _pump(

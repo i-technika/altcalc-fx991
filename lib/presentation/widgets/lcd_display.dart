@@ -824,15 +824,25 @@ class _LcdLine extends StatelessWidget {
       letterSpacing: 0,
       height: 1.0,
     );
+    // ◄/►는 줄 내용과 같은 쪽(입력 줄은 위, 결과 줄은 아래)의 2행 높이(분수 1단 — `LcdFontSizes`의 줄 높이 기준과 같은 식) 안
+    // 가운데에 둔다. LCD가 줄 글자에 필요한 높이보다 높아도(#232) 화살표가 식·답에서 떨어지지 않는다. 줄이 그보다 낮으면 줄
+    // 높이의 가운데다(#232 전과 같다).
+    final scaledFont = textScaler.scale(style.fontSize!);
+    final arrowBandHeight =
+        CalcTheme.lcdInputLineFlex * (scaledFont * (style.height ?? 1.0) + 1) +
+        scaledFont * CalcTheme.lcdFractionBarRatio;
     // 스크린리더: 줄 이름("입력"/"결과")과 ◄/► 표시·줄 내용을 한 덩어리로 읽는다.
     // M2에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
     // 그것까지 흡수하므로 이 병합 방식을 다시 정한다.
     return MergeSemantics(
-      child: Semantics(label: semanticLabel, child: _buildRow(arrowStyle)),
+      child: Semantics(
+        label: semanticLabel,
+        child: _buildRow(arrowStyle, arrowBandHeight),
+      ),
     );
   }
 
-  Widget _buildRow(TextStyle arrowStyle) {
+  Widget _buildRow(TextStyle arrowStyle, double arrowBandHeight) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -841,6 +851,8 @@ class _LcdLine extends StatelessWidget {
           visible: overflow.left,
           style: arrowStyle,
           textScaler: textScaler,
+          verticalAlignment: alignment.y,
+          bandHeight: arrowBandHeight,
         ),
         Expanded(
           child: LayoutBuilder(
@@ -872,6 +884,8 @@ class _LcdLine extends StatelessWidget {
           visible: overflow.right,
           style: arrowStyle,
           textScaler: textScaler,
+          verticalAlignment: alignment.y,
+          bandHeight: arrowBandHeight,
         ),
       ],
     );
@@ -904,6 +918,12 @@ class _ScrollArrow extends StatelessWidget {
   final TextStyle style;
   final TextScaler textScaler;
 
+  /// 화살표를 둘 띠의 세로 위치 (줄 내용 정렬의 y — 입력 줄 -1 위, 결과 줄 1 아래)
+  final double verticalAlignment;
+
+  /// 화살표를 가운데에 둘 띠 높이 (dp) — 줄 내용 2행 높이. 줄이 이보다 낮으면 줄 높이다.
+  final double bandHeight;
+
   /// 화살표 글자. 한 칸 폭인 `◄`·`►`를 쓴다 (`◀`·`▶`는 두 칸 폭 — [CalcTheme.lcdScrollArrowWidthRatio]).
   static const String leftSymbol = '◄';
   static const String rightSymbol = '►';
@@ -913,6 +933,8 @@ class _ScrollArrow extends StatelessWidget {
     required this.visible,
     required this.style,
     required this.textScaler,
+    required this.verticalAlignment,
+    required this.bandHeight,
   });
 
   @override
@@ -922,17 +944,24 @@ class _ScrollArrow extends StatelessWidget {
     return SizedBox(
       width: width,
       child: visible
-          ? Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  isLeft ? leftSymbol : rightSymbol,
-                  style: style.copyWith(color: CalcTheme.lcdText),
-                  textScaler: textScaler,
-                  maxLines: 1,
-                  softWrap: false,
-                  semanticsLabel: CalcSemanticStrings.of(context)
-                      .scrollMore(left: isLeft),
+          ? Align(
+              alignment: Alignment(0, verticalAlignment),
+              // 줄이 띠보다 낮으면 SizedBox가 줄 높이로 줄어 줄 가운데가 된다.
+              child: SizedBox(
+                height: bandHeight,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isLeft ? leftSymbol : rightSymbol,
+                      style: style.copyWith(color: CalcTheme.lcdText),
+                      textScaler: textScaler,
+                      maxLines: 1,
+                      softWrap: false,
+                      semanticsLabel: CalcSemanticStrings.of(context)
+                          .scrollMore(left: isLeft),
+                    ),
+                  ),
                 ),
               ),
             )

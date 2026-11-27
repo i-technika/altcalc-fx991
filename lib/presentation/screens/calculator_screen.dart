@@ -231,8 +231,9 @@ class CalcLandscapeLayout {
 ///   [CalcTheme.screenLandscapeHistoryMinLcdFontRatio]배보다 작다. 그때 활성 LCD는 띠 전체다.
 /// - 활성 LCD가 그 폭의 최대 높이([_lcdMaxHeightOf] — 실물 비율 #142 R2, 줄 글자 상한 #189)보다 높으면 글자는 커지지 않고
 ///   입력·결과 줄만 높아진다. #232 전에는 활성 LCD를 그 최대 높이까지만 띠 아래쪽에 붙여 그 위가 비었다. 줄 글자 비교(위
-///   세 번째 조건)는 지금도 그 최대 높이의 LCD로 한다 — 높이를 띠 전체로 늘려도 줄 글자는 폭(또는 상한)에 묶여 같으므로
-///   기록 영역을 두는 창이 #232 전과 같다.
+///   세 번째 조건)는 실제로 그리는 크기로 한다 — 띠 높이가 그 최대 높이보다 높아도 줄 글자는 폭(또는 상한)에 묶여(배율 1
+///   기준) #232 전의 비교와 같은 값이므로 기록 영역을 두는 창이 #232 전과 같다. 기록 영역이 있는 창도 활성 LCD를 띠
+///   전체로 늘린 것은 2026-11-27 사용자 결정이다(#232 R1 — 기록 영역과 높이가 같고 활성 LCD 위에 빈 곳이 없다).
 /// [numbersOnLeft]면 숫자부(와 활성 LCD)가 왼쪽 블록이다.
 ({Rect lcd, Rect? history}) _splitBandOverWideKeypad(
   Rect band,
@@ -241,22 +242,17 @@ class CalcLandscapeLayout {
 }) {
   final width = band.width;
   final bandHeight = band.height;
-  double activeLcdHeightOf(double lcdWidth) => math.min(
-    bandHeight,
-    math.max(CalcTheme.screenLcdMinHeight, _lcdMaxHeightOf(lcdWidth)),
-  );
-  final blockLcdHeight = activeLcdHeightOf(block);
-  final fullLcdHeight = activeLcdHeightOf(width);
   // 기록 영역을 두면 활성 LCD 줄 글자가 띠 폭 전체일 때보다 많이 작아지지 않아야 한다 — 폭 방향 경계에서 글자가 절반으로
-  // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다. 비교 대상은
-  // 기록 영역이 없을 때 그릴 띠 폭 전체 LCD다 — `forSize`가 줄 글자 상한(#189)을 반영하므로 큰 창은 그 글자가 상한에 묶인다.
+  // 튀지 않게 한다(#142 R2: 본체 폭 626 → 626.5에서 49.5 → 23.6dp). 글자 크기는 배율 반영 전 기준으로 잰다. 두 쪽 모두 실제로
+  // 그릴 LCD(블록 폭 또는 띠 폭 × 띠 높이, #232)로 잰다 — `forSize`가 줄 글자 상한(#189)을 반영하므로 큰 창은 그 글자가 상한에
+  // 묶인다. (#232 전에는 활성 LCD를 폭의 최대 높이([_lcdMaxHeightOf])까지만 그려 그 높이로 쟀다 — 배율 1에서 판정 결과는 같다.)
   double lineFontOf(Size lcd) =>
       LcdFontSizes.forSize(lcd, TextScaler.noScaling).input;
   final withHistory =
       bandHeight >= CalcTheme.screenLandscapeHistoryMinHeight &&
       block >= CalcTheme.screenLandscapeHistoryMinLcdWidth &&
-      lineFontOf(Size(block, blockLcdHeight)) >=
-          lineFontOf(Size(width, fullLcdHeight)) *
+      lineFontOf(Size(block, bandHeight)) >=
+          lineFontOf(Size(width, bandHeight)) *
               CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
   // 활성 LCD는 띠 높이 전체를 쓴다(#232) — 키패드가 쓰지 못한 높이를 남김없이 받는다.
   if (!withHistory) return (lcd: band, history: null);

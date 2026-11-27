@@ -601,7 +601,9 @@ void main() {
           );
           final block = KeypadMetrics.wideBlockWidthOf(width);
           final band = l.band;
-          // 활성 LCD 높이 상한 — 블록 폭의 실물 비율 높이와 줄 글자 상한 높이(#189) 중 낮은 쪽(하한 LCD 최소 높이)
+          // 기대값은 #232 전의 판정이다 — 활성 LCD를 블록 폭의 실물 비율 높이와 줄 글자 상한 높이(#189) 중 낮은 쪽(하한 LCD 최소
+          // 높이)까지만 그리던 때의 줄 글자로 견줬다. 지금 구현은 실제로 그리는 크기(띠 높이 전체)로 견주므로, 기록 영역이 생기는
+          // 창이 #232 전과 같은지(배율 1) 확인한다.
           final cap = math.max(
             CalcTheme.screenLcdMinHeight,
             math.min(
@@ -619,6 +621,29 @@ void main() {
                       CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
           final reason = '$width×$height $l';
           expect(l.history != null, expected, reason: reason);
+          // 판정에 쓴 줄 글자 = 그린 줄 글자: 기록 영역이 있으면 그린 활성 LCD의 줄 글자가 띠 폭 전체 LCD 줄 글자의 문턱 배
+          // 이상이고, 없으면(위 띠·블록 조건은 만족하는데) 그 문턱 미만이다 (#232 R1).
+          final drawnBlockFont = font(Size(block, band.height));
+          final fullFont = font(Size(width, band.height));
+          if (l.history != null) {
+            expect(font(l.lcd.size), drawnBlockFont, reason: reason);
+            expect(
+              drawnBlockFont,
+              greaterThanOrEqualTo(
+                fullFont * CalcTheme.screenLandscapeHistoryMinLcdFontRatio,
+              ),
+              reason: reason,
+            );
+          } else if (band.height >= CalcTheme.screenLandscapeHistoryMinHeight &&
+              block >= CalcTheme.screenLandscapeHistoryMinLcdWidth) {
+            expect(
+              drawnBlockFont,
+              lessThan(
+                fullFont * CalcTheme.screenLandscapeHistoryMinLcdFontRatio,
+              ),
+              reason: reason,
+            );
+          }
           // 활성 LCD는 기록 영역 유무와 무관하게 위 띠 높이 전체다 — 위가 비지 않는다(#232).
           expect(l.lcd.top, moreOrLessEquals(band.top), reason: reason);
           expect(l.lcd.height, moreOrLessEquals(band.height), reason: reason);
