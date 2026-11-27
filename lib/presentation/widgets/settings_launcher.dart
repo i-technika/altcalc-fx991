@@ -87,17 +87,21 @@ import 'handedness_dialog.dart';
 /// 빌드되는 중에는 바꿀 수 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은
 /// [GlobalKey]로 옮겨 가므로 키보드 포커스·스크롤 위치가 유지된다.
 ///
-/// 화면 기하(창 크기·접힘 정보·시스템 인셋 — 이 위젯이 보는 MediaQuery)가 바뀌면 ON 키 중심도 다시 재어, 대화상자가
-/// **지금** ON 키가 있는 절반(좁은 절반 예외 포함)으로 옮겨 간다(#218). 앱만 나누는 펼친 폭 0 접힘선뿐 아니라 Flutter도
-/// 나누는 반 접힘·물리 힌지도 같다 — 경로는 Flutter `DisplayFeatureSubScreen`의 연 시점에 고정되는 `anchorPoint`를 쓰지
-/// 않고, 다시 잰 ON 키 중심으로 고른 기준점([dialogAnchorPointOf])으로 절반을 고른다([_SettingsDialogRoute]).
+/// 화면 기하([geometry] — 본체 크기, 접힘선 위치, 창 크기·접힘 정보로 고른 배치)가 바뀌면 ON 키 중심도 다시 재어,
+/// 대화상자가 **지금** ON 키가 있는 절반(좁은 절반 예외 포함)으로 옮겨 간다(#218). 앱만 나누는 펼친 폭 0 접힘선뿐 아니라
+/// Flutter도 나누는 반 접힘·물리 힌지도 같다 — 경로가 연 시점에 정해지는 `anchorPoint` 대신, 다시 잰 ON 키 중심으로 고른
+/// 기준점([dialogAnchorPointOf])으로 절반을 고른다([_SettingsDialogRoute]). 창 크기·회전·시스템 인셋·키보드는 본체
+/// 크기를, 접기·펴기는 접힘선 위치나 배치를 바꾼다. 같은 자리의 접힘선이 자세(펼침·반 접힘)만 바뀔 때는 배치가 같아
+/// (#143 — 각도와 무관하게 나눈다) 다시 재지 않는다 — 손잡이를 바꿔 연 자리에 남은 대화상자가 펴고 접을 때 접힘선 건너로
+/// 뛰지 않는다(#218 R1).
 /// 예: 823×603 창을 접힘선 2개(반 접힘 x=274.5·548.5)인 가로형 배치로 연 채 가운데 접힘선 1개(x=411.5) 화면이 되면,
 /// 접힘선 기준 배치로 바뀌어 오른손잡이의 ON 키는 x=367 → 782로 옮겨 가고 대화상자도 오른쪽 절반으로 간다(왼손잡이는
 /// x=782 → 370.5, 왼쪽 절반). #218 전에는 연 시점의 ON 키 쪽 절반에 남았다. 회전(반 접은 Fold의 세로 책 자세 ↔ 가로
 /// 테이블톱)도 같다.
 /// 접힘 정보가 바뀌면 경로는 나뉨 여부를 같은 프레임에 바꾸지만(경로의 MediaQuery를 직접 본다), ON 키는 그 프레임의
 /// 배치가 끝난 뒤에 재므로 그 프레임은 이전 기준점으로 절반을 고르고 다음 프레임에 옮겨 간다.
-/// 손잡이만 바꾸면 ON 키가 옮겨 가도 다시 재지 않는다 — 아래 "대화상자가 열린 채 손잡이를 바꾸면".
+/// 손잡이만 바꾸면 ON 키가 옮겨 가도 다시 재지 않는다 — 아래 "대화상자가 열린 채 손잡이를 바꾸면". 그 뒤에 화면 기하가
+/// 바뀌면 그때의 ON 키 쪽 절반으로 옮겨 간다(배치가 다시 정해지는 전환이라 연 자리를 지킬 근거가 없다).
 ///
 /// ## 대화상자가 열린 채 손잡이를 바꾸면 (#94)
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 키패드(와 ON 키)가 반대쪽 절반으로 옮겨 가도, 대화상자는 연
@@ -107,7 +111,7 @@ import 'handedness_dialog.dart';
 /// 반대쪽 넓은 절반이고, 거기 그대로 남는다). 다른 두 방식을 쓰지 않는 이유:
 /// - ON 키 쪽으로 따라가기: 키보드 화살표로 선택지를 옮기면 선택도 바뀌므로([HandednessDialog]) 화살표를 누를
 ///   때마다 대화상자가 접힘선 건너로 뛴다. 손가락·스크린리더 터치 탐색 위치에서도 대화상자가 사라진다.
-///   그래서 ON 키 중심은 화면 기하가 바뀔 때만 다시 잰다(위 절, #218) — 손잡이 변경은 MediaQuery를 바꾸지 않는다.
+///   그래서 ON 키 중심은 화면 기하([geometry])가 바뀔 때만 다시 잰다(위 절, #218) — 손잡이 변경은 그 값을 바꾸지 않는다.
 /// - 고르면 바로 닫기: 화살표 한 번에 설정이 바뀌고 대화상자가 닫힌다([HandednessDialog]).
 ///
 /// 다른 화면에서도 대화상자는 연 자리에 남는다.
@@ -137,6 +141,12 @@ class SettingsLauncher extends StatefulWidget {
   /// ("접힘선이 있을 때 대화상자 위치", #129). `CalculatorScreen`이 두 손잡이로 모두 판정해 넘긴다.
   final bool handednessKeepsArrangement;
 
+  /// 손잡이와 무관한 화면 기하 — 본체 크기(시스템 인셋·화면 여백 제외), 배치가 쓰는 접힘선(본체 좌표, 자세는 빼고
+  /// 위치만, 없으면 `null`), 창 크기·접힘 정보로 고른 배치(`FormFactor.arrangementOf` — 그린 배치 [arrangement]와 달리
+  /// 손잡이로 바뀌지 않는다). 바뀌면 열린 대화상자의 기준점(ON 키 중심)을 다시 잰다("대화상자가 열린 동안 배치가
+  /// 바뀌면", #218). 손잡이는 이 값을 바꾸지 않는다 — 그래야 손잡이만 바꿀 때 대화상자가 연 자리에 남는다(#94).
+  final ({Size body, Rect? hinge, ScreenArrangement chosen}) geometry;
+
   /// 설정 키(ON)가 든 화면 (키패드를 품은 계산기 본체)
   final Widget child;
 
@@ -145,6 +155,7 @@ class SettingsLauncher extends StatefulWidget {
     required this.arrangement,
     required this.handednessApplies,
     required this.handednessKeepsArrangement,
+    required this.geometry,
     required this.child,
   });
 
@@ -311,12 +322,9 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
     _layoutOf(null),
   );
 
-  /// 마지막으로 설정을 연 ON 키의 context — 배치가 바뀐 뒤 ON 키 중심을 다시 잴 때 쓴다. 키패드 element는 배치가
-  /// 바뀌어도 유지되므로(`CalculatorScreen`) 같은 context가 새 자리를 가리킨다.
+  /// 마지막으로 설정을 연 ON 키의 context — 화면 기하([SettingsLauncher.geometry])가 바뀐 뒤 ON 키 중심을 다시 잴 때
+  /// 쓴다. 키패드 element는 배치가 바뀌어도 유지되므로(`CalculatorScreen`) 같은 context가 새 자리를 가리킨다.
   BuildContext? _anchorContext;
-
-  /// 마지막으로 본 화면 기하 (창 크기·접힘 정보·시스템 인셋) — 바뀌면 ON 키 중심을 다시 잰다(#218)
-  ({Size size, List<DisplayFeature> features, EdgeInsets padding})? _geometry;
 
   /// 프레임 끝의 갱신([_scheduleRefresh])이 예약돼 있는지, 그때 ON 키 중심도 다시 잴지
   bool _refreshScheduled = false;
@@ -331,44 +339,17 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   );
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 손잡이 변경과 화면 기하 변경을 구별하는 기준 — 손잡이만 바뀌면 이 값들은 그대로다([SettingsLauncher]
-    // "대화상자가 열린 채 손잡이를 바꾸면", #94). 회전·접기·창 크기 변경은 이 중 하나 이상을 바꾼다.
-    final geometry = (
-      size: MediaQuery.sizeOf(context),
-      features: MediaQuery.displayFeaturesOf(context),
-      padding: MediaQuery.paddingOf(context),
-    );
-    final previous = _geometry;
-    _geometry = geometry;
-    if (previous != null &&
-        (previous.size != geometry.size ||
-            previous.padding != geometry.padding ||
-            !_sameFeatures(previous.features, geometry.features))) {
-      _scheduleRefresh(remeasure: true);
-    }
-  }
-
-  static bool _sameFeatures(List<DisplayFeature> a, List<DisplayFeature> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  @override
   void didUpdateWidget(SettingsLauncher oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.arrangement != oldWidget.arrangement ||
+    // ON 키 중심은 화면 기하가 바뀔 때만 다시 잰다 — 손잡이만 바꿔 배치가 바뀌는 화면(비대칭 접힘선)에서는 배치 값만
+    // 따르고 대화상자는 연 자리에 남는다([SettingsLauncher] "대화상자가 열린 채 손잡이를 바꾸면", #94).
+    final remeasure = widget.geometry != oldWidget.geometry;
+    if (remeasure ||
+        widget.arrangement != oldWidget.arrangement ||
         widget.handednessApplies != oldWidget.handednessApplies ||
         widget.handednessKeepsArrangement !=
             oldWidget.handednessKeepsArrangement) {
-      // 배치 값만 따른다 — 손잡이만 바꿔 배치가 바뀌는 화면(비대칭 접힘선)에서 대화상자가 따라 옮겨 가지 않게
-      // ON 키 중심은 화면 기하가 바뀔 때만 다시 잰다(위 [didChangeDependencies]).
-      _scheduleRefresh(remeasure: false);
+      _scheduleRefresh(remeasure: remeasure);
     }
   }
 
@@ -550,10 +531,12 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
 /// 설정 대화상자 경로 — `showDialog`가 만드는 [DialogRoute]이고, 경로가 나누는 접힘선을 배치와 맞춘다(창을 가로지르는
 /// 접힘선이 2개 이상인 화면은 나누지 않는다, [SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
 ///
-/// 하위 화면은 이 경로가 직접 고른다(#218). [DialogRoute]의 `anchorPoint`는 경로를 만들 때 정해져 열린 동안 바뀌지
-/// 않으므로 넘기지 않고, [layout]의 ON 키 중심(화면 기하가 바뀌면 다시 잰다)으로 [SettingsLauncher.dialogAnchorPointOf]의
-/// 기준점을 구해 바깥 `DisplayFeatureSubScreen`에 준다. 그 위젯이 고른 절반의 접힘 정보만 남기므로(접힘선은 절반
-/// 경계에 닿을 뿐 겹치지 않는다) [super.buildPage] 안쪽의 Flutter `DisplayFeatureSubScreen`은 더 나누지 않는다.
+/// 하위 화면을 고르는 기준점은 열린 동안 바뀐다(#218). Flutter `RawDialogRoute.buildPage`는 경로의 [anchorPoint]를 읽어
+/// 페이지의 `DisplayFeatureSubScreen`에 준다 — 보통은 경로를 만들 때 정한 값이다. 이 경로는 [anchorPoint]를 [layout]의
+/// ON 키 중심(화면 기하가 바뀌면 다시 잰다)으로 구한 [SettingsLauncher.dialogAnchorPointOf] 값으로 바꾸고, [layout]이
+/// 바뀔 때마다 페이지를 다시 만든다. 페이지 구조(경로 의미 노드 `Semantics(scopesRoute)` → `DisplayFeatureSubScreen`
+/// → 대화상자)는 `showDialog`와 같다 — 나눔을 페이지 바깥에 한 번 더 두면 경로 의미 노드가 절반 크기로 줄고, 안쪽
+/// 나눔이 더 나누지 않는 것을 Flutter 세부 동작에 기대게 된다(#218 R1).
 class _SettingsDialogRoute extends DialogRoute<void> {
   /// 열린 대화상자가 보는 화면 상태 — 기준점은 그 `anchor`(ON 키 중심)로 고른다
   final ValueNotifier<_DialogLayout> layout;
@@ -572,6 +555,12 @@ class _SettingsDialogRoute extends DialogRoute<void> {
     super.traversalEdgeBehavior,
   });
 
+  /// 지금 페이지가 하위 화면을 고르는 기준점 — [buildPage]가 페이지를 만들 때마다 구한다
+  Offset? _anchorPoint;
+
+  @override
+  Offset? get anchorPoint => _anchorPoint;
+
   @override
   Widget buildPage(
     BuildContext context,
@@ -580,16 +569,15 @@ class _SettingsDialogRoute extends DialogRoute<void> {
   ) => _LayoutHingesOnly(
     child: ValueListenableBuilder<_DialogLayout>(
       valueListenable: layout,
-      child: super.buildPage(context, animation, secondaryAnimation),
-      builder: (context, layout, page) => DisplayFeatureSubScreen(
-        // [_LayoutHingesOnly]가 배치가 쓰는 접힘선만 남긴 MediaQuery다.
-        anchorPoint: SettingsLauncher.dialogAnchorPointOf(
+      builder: (context, layout, _) {
+        // [_LayoutHingesOnly]가 배치가 쓰는 접힘선만 남긴 MediaQuery로 고른다. `super.buildPage`가 바로 이 값을 읽는다.
+        _anchorPoint = SettingsLauncher.dialogAnchorPointOf(
           MediaQuery.of(context),
           layout.anchor,
           minRegion,
-        ),
-        child: page!,
-      ),
+        );
+        return super.buildPage(context, animation, secondaryAnimation);
+      },
     ),
   );
 }
@@ -597,9 +585,9 @@ class _SettingsDialogRoute extends DialogRoute<void> {
 /// 경로 페이지([child] — 하위 화면을 고르는 `DisplayFeatureSubScreen`을 품는다)에 [SettingsLauncher.dialogRouteMediaOf]의
 /// MediaQuery를 준다 — 페이지는 배치가 쓰는 접힘선으로만 나누고, 접힘선이 2개 이상인 화면은 나누지 않는다.
 ///
-/// 페이지의 빌더가 아니라 이 위젯이 MediaQuery에 의존한다 — 접힘 정보가 바뀌면(열린 채 펴거나 접음) 같은 프레임에 이
-/// 위젯만 다시 그린다. 이 위젯은 어느 화면이든 같은 구조다(대화상자 element는 안쪽 나눔이 바뀌어도 [GlobalKey]로 옮겨
-/// 가 유지된다 — `_open`).
+/// 경로의 `buildPage`를 부르는 빌더가 아니라 이 위젯과 그 안의 기준점 빌더([_SettingsDialogRoute.buildPage])가
+/// MediaQuery에 의존한다 — 접힘 정보가 바뀌면(열린 채 펴거나 접음) 같은 프레임에 이 둘만 다시 그린다. 이 위젯은 어느
+/// 화면이든 같은 구조다(대화상자 element는 안쪽 나눔이 바뀌어도 [GlobalKey]로 옮겨 가 유지된다 — `_open`).
 class _LayoutHingesOnly extends StatelessWidget {
   final Widget child;
 
