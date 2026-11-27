@@ -1300,7 +1300,7 @@ class CursorPadGeometry {
   /// - Android는 TalkBack 에뮬레이터에서 확인했다(#203, 411×914 격자 588점이 [semanticSectorAt]과 모두 일치).
   /// - iOS는 엔진이 비공개 API `_accessibilityHitTest:`를 재정의해 이 순서를 쓴다. 재정의가 불리지 않으면
   ///   UIKit 기본 판정(iOS 16부터 왼쪽 위 요소 우선)이 되어 위쪽 반에서 ▲가 ◀·▶를 가린다.
-  ///   실기기로만 확인할 수 있다(#181, M8).
+  ///   실기기로만 확인할 수 있다(#181, M11 출시 QA).
   static const List<CursorPadSector> semanticStackOrder = [
     CursorPadSector.up,
     CursorPadSector.down,
