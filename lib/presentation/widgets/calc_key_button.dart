@@ -566,9 +566,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final shapePath = _shapePath.resolve(widget.shape, Size(width, height));
     // 원형 버튼은 그린 버튼이 작아 터치 영역을 늘 셀 전체로 둔다 (#190).
     final round = widget.keyDef.face == KeyFace.roundButton;
-    final extendToLegend =
-        !hitMode &&
-        (widget.extendHitAreaToLegend || (round && widget.showLegendBand));
+    // 셀 전체 터치 규칙은 위젯 쪽 판정([CalcKeyButton.hitsWholeCell])과 같게 쓴다 — 간격 몫(#236)을 줄지와 어긋나지 않게.
+    final extendToLegend = !hitMode && widget.hitsWholeCell;
     _hitSize = hitMode
         ? outer
         : extendToLegend

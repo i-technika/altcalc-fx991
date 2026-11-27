@@ -1287,6 +1287,21 @@ void main() {
         47.9,
         false,
       ),
+      // 경계 근처 (R2): 높이가 넉넉하면 폭 약 377dp, 폭이 넉넉하면 인셋을 뺀 높이 약 695dp에서 48dp를 넘는다
+      (
+        '380×800',
+        Size(380, 800),
+        EdgeInsets.only(top: 24, bottom: 24),
+        48.53,
+        true,
+      ),
+      (
+        '411×772',
+        Size(411.4, 772),
+        EdgeInsets.only(top: 24, bottom: 48),
+        48.45,
+        true,
+      ),
       (
         '390×844',
         Size(390, 844),

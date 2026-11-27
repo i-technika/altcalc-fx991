@@ -847,8 +847,6 @@ void main() {
             for (var y = touch.top + 0.41; y < touch.bottom; y += 1.5) {
               final p = Offset(x, y);
               if (cell.contains(p)) continue;
-              // 키패드 윗변 밖(간격 몫이 키패드 밖으로 나간 곳)은 이 호스트에서 짚을 수 없다
-              if (y < 0) continue;
               final clamped =
                   clampIntoBox(p - cell.topLeft, cell.size) +
                   cell.topLeft -
@@ -1122,7 +1120,7 @@ void _cursorPadR2Tests() {
       Offset at(double u, double v) =>
           pad.center + Offset(u * pad.width / 2, v * pad.height / 2);
 
-      // ◄ 구역, 가운데 허브(데드존), 셀 위쪽 밖(셀 둘레 간격 몫 너머 — 이웃 키의 몫, #236)
+      // ◄ 구역, 가운데 허브(데드존), 셀 위쪽 밖(셀 둘레 간격 몫 너머 — 키패드 밖, #236)
       for (final target in [
         at(-0.6, -0.1),
         at(0, 0),

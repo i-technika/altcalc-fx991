@@ -380,7 +380,8 @@ class KeypadMetrics {
   ///
   /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
   /// 넓힌 셀 높이, 아니면 키캡 높이. 셀 둘레 키 사이 간격 몫(#236 — 셀 전체를 터치하는 키가 더 받는 위아래 간격)은 빼고
-  /// 잰다. 배치 판정의 문턱(#38 등)이 이 값으로 정해져 있어서다 — 실제 터치 높이는 여기에 행 간격 몫을 더한 값이다. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
+  /// 잰다. 배치 판정의 문턱(#38 등)이 이 값으로 정해져 있어서다 — 실제 터치 높이는 여기에 행 간격 몫을 더한 값이다.
+  /// 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
   ///
   /// [arrangement]는 기본값 없이 받는다 — 빠뜨리면 넓은 배열 키패드를 실물 배열로 재어 배치 판정이 조용히 틀린다(#80 R1).
   static double minKeyTouchHeightOf(
@@ -1804,7 +1805,6 @@ class CursorPad extends StatelessWidget {
           if (!cell.isFinite || cell.isEmpty) return const SizedBox.shrink();
           final padRect = padRectIn(cell);
           final size = padRect.size;
-          // 패드 로컬 좌표의 시맨틱 영역 기준 — 셀과 그 둘레 간격 몫 (#236)
           // 패드 로컬 좌표의 셀 — 방향 나눔(터치·시맨틱)은 셀 기준 그대로다(#64·#203). 셀 둘레 간격 몫은 바깥 변에만 붙인다.
           final bounds = (Offset.zero & cell).shift(-padRect.topLeft);
           final press = onKeyPressed;
@@ -1853,8 +1853,9 @@ class CursorPad extends StatelessWidget {
                 // 겹쳐 쌓은 시맨틱 영역 — 뒤에 쌓은 ◀·▶가 겹친 곳을 가진다 (자식이 없어 터치는 받지 않는다, #203)
                 for (final sector in CursorPadGeometry.semanticStackOrder)
                   Positioned.fromRect(
-                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 터치(간격의 점을 셀 가장자리로 당겨
-                    // 판정)와 같은 쪽 방향이 간격을 받고, 셀 안의 나눔은 그대로다.
+                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 셀 안의 나눔은 그대로다. 간격 고리도
+                    // 셀 안의 터치·시맨틱 불일치를 물려받는다: 옆 간격 띠의 위·아래 끝과 네 바깥 모서리는 탭하면 ◀·▶,
+                    // 터치 탐색으로는 ▲·▼다(간격 고리의 약 7~14%, R2 실측). 두 번 탭은 읽힌 방향을 입력하므로 잘못 입력되지 않는다.
                     rect: inflateOnCellEdges(
                       semanticRect(sector, size, bounds).shift(padRect.topLeft),
                       cell,
