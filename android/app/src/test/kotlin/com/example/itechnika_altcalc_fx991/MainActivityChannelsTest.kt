@@ -1,6 +1,7 @@
 package com.example.itechnika_altcalc_fx991
 
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Looper
@@ -169,6 +170,39 @@ class MainActivityChannelsTest {
         shadowOf(activity).setInMultiWindowMode(false)
         activity.onMultiWindowModeChanged(false)
         assertEquals(portrait, activity.requestedOrientation)
+    }
+
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.O, LAST_LEGACY_SDK, FIRST_PUBLIC_API_SDK])
+    fun `API 26 이상 - 시스템이 부르는 두 인자 판도 한 인자 판을 거쳐 알리고 되돌린다 (#137 R2)`() {
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.onMultiWindowModeChanged(true, Configuration(activity.resources.configuration))
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        shadowOf(activity).setInMultiWindowMode(false)
+        activity.onMultiWindowModeChanged(false, Configuration(activity.resources.configuration))
+        assertEquals(
+            listOf(true, false),
+            messenger.sentMethodCalls(DEVICE_CHANNEL).map { it.arguments },
+        )
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.requestedOrientation)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `기억한 화면과 다른 화면으로 나오면(폴더블 접기·펴기) 되돌리지 않고 Dart를 기다린다 (#137 R2)`() {
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        shadowOf(activity).setInMultiWindowMode(true)
+        activity.onMultiWindowModeChanged(true)
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        // 분할 화면 중 펼쳤다 — 물리 화면의 짧은 변이 커버 화면과 다르다
+        @Suppress("DEPRECATION")
+        val display = shadowOf(activity.windowManager.defaultDisplay)
+        display.setRealWidth(1812)
+        display.setRealHeight(2176)
+        shadowOf(activity).setInMultiWindowMode(false)
+        activity.onMultiWindowModeChanged(false)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_FULL_USER, activity.requestedOrientation)
     }
 
     @Test

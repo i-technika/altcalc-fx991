@@ -1,5 +1,6 @@
 package com.example.itechnika_altcalc_fx991
 
+import android.graphics.Point
 import androidx.annotation.VisibleForTesting
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -37,22 +38,48 @@ class MainActivity : FlutterActivity() {
         super.onMultiWindowModeChanged(isInMultiWindowMode)
         // 전체 화면으로 돌아오면 Dart를 기다리지 않고 전체 화면에서 쓰던 방향 고정을 바로 되돌린다 (#137 R1) — Dart는 이
         // 알림을 받고 다시 묻고 요청하느라 메인 스레드를 두 번 오가는데, 그동안 가로로 든 폰에서는 전체 화면이 가로로
-        // 그려졌다(에뮬레이터에서 0.6~1.2초). Dart가 곧 같은 값을 다시 요청하고, 그 사이 정책이 바뀌었으면(분할 화면 중
-        // 접기·펴기 등) Dart 요청이 바로잡는다.
-        if (!isInMultiWindowMode) fullScreenOrientation?.let { super.setRequestedOrientation(it) }
+        // 그려졌다(에뮬레이터에서 0.6~1.2초). Dart가 곧 같은 값을 다시 요청한다.
+        // 기억한 화면과 다른 화면으로 나오면(분할 화면 중 폴더블을 접거나 폈다) 되돌리지 않고 Dart를 기다린다 (#137 R2) —
+        // 커버 화면의 세로 고정을 펼친 내부 화면에 걸면 한 번 돌았다가 Dart의 네 방향 요청으로 다시 돈다.
+        if (!isInMultiWindowMode) {
+            val orientation = fullScreenOrientation
+            if (orientation != null && fullScreenDisplay == displayShortSide()) {
+                super.setRequestedOrientation(orientation)
+            }
+        }
         deviceChannel?.invokeMethod(MULTI_WINDOW_MODE_CHANGED, isInMultiWindowMode)
     }
 
     /**
-     * 전체 화면에서 마지막으로 요청한 방향 (#137 R1, 없으면 `null`). Dart의 방향 요청(`SystemChrome`)은 Flutter가 이
-     * 메서드로 보낸다. 여러 창 모드에서 푼 요청(네 방향)은 기억하지 않는다.
+     * 전체 화면에서 마지막으로 요청한 방향 (#137 R1, 없으면 `null`). Dart의 방향 요청(`SystemChrome.setPreferredOrientations`)은
+     * Flutter 엔진의 `PlatformPlugin`이 이 메서드(`Activity.setRequestedOrientation`)로 보낸다 — 에뮬레이터에서 분할 화면
+     * 중 `dumpsys activity activities`의 `requestedOrientation`이 Dart 요청대로 바뀌는 것과, 이 값으로 되돌려 나올 때 가로
+     * 전체 화면 배치가 사라진 것으로 확인했다. 여러 창 모드에서 푼 요청(네 방향)은 기억하지 않는다.
      */
     @VisibleForTesting
     internal var fullScreenOrientation: Int? = null
         private set
 
+    /**
+     * [fullScreenOrientation]을 기억할 때의 물리 화면 (짧은 변 px — 폴더블 커버·내부 화면을 가른다, #137 R2). 창 크기에 따라
+     * 바뀌는 구성 값(`smallestScreenWidthDp`)은 쓰지 않는다 — 여러 창 모드에서 나오는 알림 때는 아직 분할 창의 값이라
+     * 에뮬레이터에서 늘 달라 되돌리지 못했다.
+     */
+    private var fullScreenDisplay: Int? = null
+
+    /** 이 액티비티가 놓인 물리 화면의 짧은 변 (px, 회전과 무관) */
+    @Suppress("DEPRECATION")
+    private fun displayShortSide(): Int {
+        val size = Point()
+        windowManager.defaultDisplay.getRealSize(size)
+        return minOf(size.x, size.y)
+    }
+
     override fun setRequestedOrientation(requestedOrientation: Int) {
-        if (!isInMultiWindowMode) fullScreenOrientation = requestedOrientation
+        if (!isInMultiWindowMode) {
+            fullScreenOrientation = requestedOrientation
+            fullScreenDisplay = displayShortSide()
+        }
         super.setRequestedOrientation(requestedOrientation)
     }
 

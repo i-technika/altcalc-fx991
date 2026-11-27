@@ -99,13 +99,16 @@ Future<void> main() async {
 /// 화면 정보가 바뀔 때와, Android가 여러 창 모드 변경을 알릴 때다(`onMultiWindowModeChanged` → 기기 채널
 /// [FormFactor.multiWindowModeChangedMethod], #137 R1) — 화면 정보가 바뀐 시점의 답은 아직 바뀌기 전일 수 있고, 창 크기가
 /// 그대로인 채 모드만 바뀔 수도 있다. 전체 화면으로 돌아오면 기기별 정책으로 다시 고정한다.
-/// 답을 모르면(조회 실패·시간 초과) 지난 값을 그대로 쓴다. 여러 창 모드에서 나왔다는 답(false)은 창이 물리 화면을 다
-/// 채울 때(전체 화면)나 Android가 나왔다고 알린 뒤에는 바로 믿고, 그 밖에 창이 아직 작으면
+/// 답을 모르면(조회 실패·시간 초과) Android가 마지막으로 알린 값, 그것도 없으면 지난 값을 쓴다. 여러 창 모드에서
+/// 나왔다는 답(false)은 창이 물리 화면을 다 채울 때(전체 화면 — 앱 창이 시스템 바 뒤까지 오는 Android 15 이상에서만
+/// 알아볼 수 있다. Android 14 이하는 앱 창이 시스템 바를 빼고 와 늘 물리 화면보다 작다)나 Android가 나왔다고 알린
+/// 뒤에는 바로 믿고, 그 밖에 창이 아직 작으면
 /// [multiWindowExitConfirmDelay] 뒤 한 번 더 확인한다 — 분할 화면에서 화면을 돌릴 때 7ms 동안 false가 왔다가 돌아온 적이
 /// 있다(Android 16 에뮬레이터, 5번 중 1번). 그대로 믿으면 그 사이 세로 고정을 보내 레터박스로 줄었다 돌아온다.
 /// 전체 화면에서 바로 믿는 것은, 가로로 든 폰에서 분할 화면을 끝낼 때 고정이 늦을수록 가로 화면이 오래 보이기 때문이다.
 /// 같은 이유로 Android `MainActivity`는 여러 창 모드에서 나올 때 전체 화면에서 쓰던 방향 고정을 Dart를 기다리지 않고 바로
-/// 되돌린다(이 클래스가 곧 같은 값을 다시 요청한다).
+/// 되돌린다(이 클래스가 곧 같은 값을 다시 요청한다). 되돌릴 값이 없으면(여러 창 모드에서 앱을 시작했거나 액티비티가 다시
+/// 만들어진 뒤) 이 클래스의 요청을 기다린다 — 그동안 가로로 든 폰에서는 전체 화면이 잠시 가로로 그려질 수 있다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -319,14 +322,18 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     final queued = _queued;
     if (queued != null) return queued;
     final previous = _pending;
+    // 세대 번호는 줄에 설 때 붙잡는다 — [stop] 전에 줄에 선 판정은 [stop] 뒤에 시작해도 버린다(#137 R2).
+    final generation = _generation;
     final Future<void> next;
     if (previous == null) {
-      next = _applyNow();
+      next = _guardedApply(generation);
     } else {
       late final Future<void> chained;
-      chained = previous.then((_) {
+      // 앞 판정이 예외로 끝나도(진단 로그 출력 실패 등) 이어 간다 — 이어 가지 않으면 [_queued]가 비지 않아 그 뒤 판정이
+      // 모두 멈춘다(#137 R2).
+      chained = previous.then<void>((_) {}, onError: (_) {}).then((_) {
         if (identical(_queued, chained)) _queued = null;
-        return _applyNow();
+        return _guardedApply(generation);
       });
       _queued = chained;
       next = chained;
@@ -338,12 +345,22 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     return next;
   }
 
-  Future<void> _applyNow() async {
-    final generation = _generation;
-    // 여러 창 모드인지 요청 직전에 묻는다 (#137) — 앞 요청이 끝난 뒤라 답과 요청 순서가 엇갈리지 않는다.
-    // 답을 모르면(조회 실패·시간 초과) 지난 값을 그대로 쓴다.
-    var multiWindow = await FormFactor.queryMultiWindowMode() ?? _multiWindow;
+  /// [_applyNow]의 예외를 기록만 하고 삼킨다 — 화면 정보 변화(`didChangeMetrics`)는 결과를 기다리지 않으므로 예외가 앱
+  /// 밖으로 새지 않게 하고, 다음 판정은 그대로 이어 간다(#137 R2).
+  Future<void> _guardedApply(int generation) =>
+      _applyNow(generation).catchError((Object error) {
+        debugPrint('화면 방향 판정 실패: $error');
+      });
+
+  Future<void> _applyNow(int generation) async {
     if (generation != _generation) return;
+    // 여러 창 모드인지 요청 직전에 묻는다 (#137) — 앞 요청이 끝난 뒤라 답과 요청 순서가 엇갈리지 않는다.
+    // 답을 모르면(조회 실패·시간 초과) Android가 마지막으로 알린 값, 그것도 없으면 지난 값을 쓴다(#137 R2).
+    final answer = await FormFactor.queryMultiWindowMode();
+    if (generation != _generation) return;
+    // 여러 창 모드라는 답을 받으면 그 전의 나옴 알림은 낡은 것이다(#137 R2) — 다음 false 답은 다시 재확인 대상이다.
+    if (answer == true) _notifiedMultiWindow = null;
+    var multiWindow = answer ?? _notifiedMultiWindow ?? _multiWindow;
     if (_multiWindow &&
         !multiWindow &&
         _notifiedMultiWindow != false &&
@@ -351,7 +368,10 @@ class DeviceOrientationLock with WidgetsBindingObserver {
       // 창이 아직 작은데 여러 창 모드에서 나왔다는 답은 잠시 뒤 한 번 더 확인한다(위 "여러 창 모드").
       await Future<void>.delayed(multiWindowExitConfirmDelay);
       if (generation != _generation) return;
-      multiWindow = await FormFactor.queryMultiWindowMode() ?? _multiWindow;
+      multiWindow =
+          await FormFactor.queryMultiWindowMode() ??
+          _notifiedMultiWindow ??
+          _multiWindow;
       if (generation != _generation) return;
       LayoutLog.multiWindowMode(
         '재확인 ${multiWindowExitConfirmDelay.inMilliseconds}ms 뒤 $multiWindow'
@@ -368,6 +388,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
       await SystemChrome.setPreferredOrientations(
         FormFactor.preferredOrientationsOf(policy),
       );
+      if (generation != _generation) return;
       _applied = policy;
       LayoutLog.orientationRequest(
         policy,

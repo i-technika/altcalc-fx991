@@ -124,7 +124,7 @@ abstract final class FormFactor {
     );
   }
 
-  /// 여러 창 모드 조회 응답 제한 시간 (#137). Android가 바로 답하는 값이라 짧게 둔다 — 넘기면 여러 창 모드 아님으로 본다.
+  /// 여러 창 모드 조회 응답 제한 시간 (#137). Android가 바로 답하는 값이라 짧게 둔다 — 넘기면 모름(`null`)이다.
   static const Duration multiWindowQueryTimeout = Duration(milliseconds: 500);
 
   /// 앱 창이 Android 여러 창 모드(분할 화면·자유 형식 창·팝업 창)인지 (#137, `Activity.isInMultiWindowMode`).

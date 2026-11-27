@@ -367,7 +367,7 @@ void main() {
     });
 
     /// 기기 채널: 폴더블 판정은 "폴더블 아님", 여러 창 모드 조회(#137)는 [multiWindow]()의 값이다. [fail]()이 참이면
-    /// 여러 창 모드 조회가 실패한다(Dart는 false로 읽는다). 받은 메서드 이름을 차례로 돌려준다.
+    /// 여러 창 모드 조회가 실패한다(Dart는 모름 — `null`로 읽는다). 받은 메서드 이름을 차례로 돌려준다.
     List<String> mockMultiWindow(
       WidgetTester tester,
       bool Function() multiWindow, {
@@ -943,7 +943,7 @@ void main() {
         expect(printed, contains(startsWith('AltCalc 여러 창 모드: 알림 true')));
         expect(printed, contains(startsWith('AltCalc 여러 창 모드: false → true')));
 
-        // 창 크기가 그대로인 채 여러 창 모드에서 나와도(자유 형식 창 최대화 등) 알림으로 다시 고정한다
+        // 창 크기가 그대로인 채 여러 창 모드에 들어가고 나와도(자유 형식 창 최대화 등) 알림으로 다시 판정한다
         multiWindow = false;
         tester.view.physicalSize = display * 2;
         await tester.pump();
@@ -1017,6 +1017,92 @@ void main() {
       },
     );
 
+    testWidgets(
+      '판정 체인: 예외 뒤에도 이어 가고, stop() 전에 줄에 선 판정은 버리며, 알림 값으로 조회 실패를 메우고, 낡은 나옴 알림은 재확인을 건너뛰게 하지 않는다 (#137 R2)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        setDevice(tester, const Size(411.43, 914.29));
+        var multiWindow = false;
+        var fail = false;
+        final methods = mockMultiWindow(
+          tester,
+          () => multiWindow,
+          fail: () => fail,
+        );
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        expect(orientationRequests(calls), [
+          ['DeviceOrientation.portraitUp'],
+        ]);
+
+        // ① 앞 판정이 예외로 끝나도(진단 로그 출력 실패) 줄에 선 판정과 그 뒤 판정이 이어진다
+        var throwOnce = true;
+        LayoutLog.enable(
+          sink: (line) {
+            if (throwOnce && line.contains('여러 창 모드: false → true')) {
+              throwOnce = false;
+              throw StateError('로그 실패');
+            }
+            printed.add(line);
+          },
+          frameTimings: false,
+        );
+        multiWindow = true;
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        tester.view.physicalSize = const Size(411.43, 300) * 2;
+        await tester.pump();
+        expect(throwOnce, isFalse);
+        expect(orientationRequests(calls).last, anyOrientation);
+        methods.clear();
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        expect(methods, contains(FormFactor.multiWindowModeMethod));
+
+        // ② 알림(true) 뒤의 조회가 실패하면 알린 값을 쓴다 — 지난 값(false)으로 세로 고정하지 않는다
+        multiWindow = false;
+        await notifyMultiWindow(tester, false);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        fail = true;
+        await notifyMultiWindow(tester, true);
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        fail = false;
+
+        // ③ 나옴 알림(false) 뒤 다시 들어가 조회로 true를 받았으면, 그 나옴 알림은 낡은 것이다 — 창이 작을 때의 일시
+        // false는 다시 재확인한다
+        multiWindow = false;
+        await notifyMultiWindow(tester, false);
+        await tester.pump();
+        expect(orientationRequests(calls).last, [
+          'DeviceOrientation.portraitUp',
+        ]);
+        multiWindow = true;
+        tester.view.physicalSize = const Size(411.43, 304.76) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+        final requests = orientationRequests(calls).length;
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        multiWindow = true;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(requests));
+
+        // ④ stop() 전에 줄에 섰지만 아직 시작하지 않은 판정은 stop() 뒤에 요청하지 않는다
+        multiWindow = false;
+        tester.view.physicalSize = const Size(411.43, 914.29) * 2;
+        tester.view.physicalSize = const Size(411.43, 900) * 2;
+        DeviceOrientationLock.instance.stop();
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(requests));
+        expect(DeviceOrientationLock.instance.appliedPolicy, isNull);
+      },
+    );
+
     testWidgets('태블릿: 여러 창 모드에서는 고정을 풀고, 전체 화면으로 돌아오면 가로로 고정한다 (#137 R1)', (
       tester,
     ) async {
@@ -1068,7 +1154,7 @@ void main() {
       // 처음 바뀐 판정 하나가 바로 시작하고, 나머지는 기다리는 판정 하나로 합쳐진다
       expect(
         methods.where((m) => m == FormFactor.multiWindowModeMethod),
-        hasLength(lessThanOrEqualTo(2)),
+        hasLength(2),
       );
     });
 
