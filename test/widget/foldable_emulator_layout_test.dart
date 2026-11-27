@@ -33,8 +33,10 @@ import '../support/touch_metrics.dart';
 // - Flip 크기를 Pixel Fold로 흉내 냄: `wm size 1080x2636`·`wm density 480`·`display_features fold-[0,1318,1080,1318]` —
 //   펼침·반 접힘 모두 폭 0 `fold`를 보고한다.
 //
-// 키 크기: [_Case.keyNodePx]는 에뮬레이터 `uiautomator dump`의 가장 낮은 키 노드 높이(px 정수)다. 위젯이 그린 함수 키 터치
-// 높이 × 밀도와 1px 안에서 맞아야 한다. 스크린리더 읽기 순서는 모든 경우에 검사하지만(활성 LCD → 기록 → 함수부 쪽 키 전부 →
+// 키 크기: [_Case.keyNodePx]는 #140 때 에뮬레이터 `uiautomator dump`로 잰 가장 낮은 키 노드 높이(px 정수)다. 그때는 키
+// 노드가 셀과 같았으므로, 위젯이 그린 함수 키 셀 기준 터치 높이([functionKeyTouchHeight]) × 밀도와 1px 안에서 맞아야 한다.
+// #236부터 셀 전체를 터치하는 키의 노드는 셀 둘레 키 사이 간격 몫까지 넓다 — 지금 다시 덤프하면 노드가 그만큼(행 간격) 높게
+// 나온다. 그 값은 `calculator_screen_test.dart` "폰 세로 화면의 터치 대상 높이"와 같은 규칙(셀 + 위아래 간격 몫)이다. 스크린리더 읽기 순서는 모든 경우에 검사하지만(활성 LCD → 기록 → 함수부 쪽 키 전부 →
 // 숫자부 키 전부), TalkBack 쓸어 넘기기로 실제로 확인한 것은 [_Case.talkBack]이 있는 경우와 그 범위뿐이다.
 
 /// 에뮬레이터 한 경우 — 값은 모두 기기 px이고, [density]로 나눠 dp로 넣는다
@@ -449,7 +451,8 @@ void main() {
         expect(_linesOf(printed, '시스템 영역'), [c.insetsLine]);
         expect(_linesOf(printed, '배치'), [c.line]);
 
-        // 키 크기 — 위젯이 그린 값, 그리고 에뮬레이터 노드 높이(px 정수)와 1px 안
+        // 키 크기 — 위젯이 그린 값, 그리고 에뮬레이터 노드 높이(px 정수)와 1px 안. 실측(#140) 때 키 노드는 셀과 같았다 —
+        // #236부터 키 노드는 셀 둘레 키 사이 간격 몫까지 넓으므로, 셀 기준 터치 높이([functionKeyTouchHeight])와 견준다.
         final touch = functionKeyTouchHeight(tester);
         expect(touch, moreOrLessEquals(c.functionKeyTouch, epsilon: 0.01));
         if (c.keyNodePx != null) {
