@@ -366,21 +366,67 @@ void main() {
       );
     });
 
-    test('제스처 영역 근사 규칙: 위·아래는 시스템 바와 같고, 좌우는 없거나 양쪽 모두 뒤로가기 폭이다', () {
+    test('제스처 영역 근사 규칙: 위는 상태 표시줄과 같고, 아래는 제스처 내비게이션 폰 크기 화면만 인셋보다 깊으며, '
+        '좌우는 없거나 양쪽 모두 뒤로가기 폭이다 (#118 실측)', () {
       // PreviewDevice.systemGestureInsets 문서의 근사 규칙. 제스처 영역이 없는 프리셋(iOS 가정)은 검사하지 않는다.
       for (final d in previewDevices) {
         final g = d.systemGestureInsets;
         if (g == EdgeInsets.zero) continue;
+        // 위는 상태 표시줄과 같다. 카메라 구멍 화면은 더 깊을 수 있다(Pixel Fold 커버 실측 41.9 / 54.1 — #172) —
+        // 그런 프리셋을 더할 때 그 프리셋만 이 단언에서 뺀다.
         expect(g.top, d.padding.top, reason: d.name);
-        expect(g.bottom, d.padding.bottom, reason: d.name);
         expect(g.left, g.right, reason: d.name);
         expect(
           [0.0, previewBackGestureWidth],
           contains(g.left),
           reason: d.name,
         );
+        final gestureNav = g.left > 0;
+        final phoneSized =
+            d.size.shortestSide < FormFactor.largeScreenMinShortestSide;
+        expect(
+          g.bottom,
+          d.padding.bottom +
+              (gestureNav && phoneSized ? previewPhoneHomeGestureExtra : 0),
+          reason: d.name,
+        );
+        // 실측한 구성은 모두 본체 아래 여백을 넓히지 않는다 (#63) — 미리보기도 그 범위 안에 둔다.
+        // #177 실기기에서 아래가 인셋보다 화면 여백 넘게 깊은 기기를 찾아 프리셋으로 더하면, 그 프리셋만 이 단언에서 뺀다.
+        expect(
+          CalcTheme.screenBottomMargin(
+            bottomInset: d.padding.bottom,
+            bottomGestureInset: g.bottom,
+          ),
+          CalcTheme.screenPadding,
+          reason: d.name,
+        );
       }
     });
+
+    test(
+      '제스처 내비게이션 실측값 (#118): 뒤로가기 폭 30dp, 폰 크기 홈 제스처 +8dp, 대화면 임시 작업 표시줄 32dp',
+      () {
+        expect(previewBackGestureWidth, 30);
+        expect(previewPhoneHomeGestureExtra, 8);
+        expect(previewTransientTaskbarHeight, 32);
+        final pixelFold = previewDevices.singleWhere(
+          (d) => d.name == '가로형 폴더블 내부',
+        );
+        expect(pixelFold.padding, const EdgeInsets.only(top: 28.2, bottom: 32));
+        expect(
+          pixelFold.systemGestureInsets,
+          const EdgeInsets.fromLTRB(30, 28.2, 30, 32),
+        );
+        final tablet = previewDevices.singleWhere(
+          (d) => d.name == '태블릿 가로 (제스처)',
+        );
+        expect(tablet.padding, const EdgeInsets.only(top: 24, bottom: 32));
+        expect(
+          tablet.systemGestureInsets,
+          const EdgeInsets.fromLTRB(30, 24, 30, 32),
+        );
+      },
+    );
 
     test('태블릿 가로 (제스처): 태블릿 가로와 같은 화면을 제스처 내비게이션으로 쓴 가로형 배치다 (#62)', () {
       final gesture = previewDevices.singleWhere(
@@ -494,7 +540,11 @@ void main() {
       expect(b.width, d.size.width);
       // 상태 표시줄 인셋과 위 제스처 영역(알림창 끌어내리기)은 같고, 제스처 내비게이션이라 좌우에 뒤로가기 영역이 있다.
       expect(d.systemGestureInsets.top, d.padding.top);
-      expect(d.systemGestureInsets.bottom, d.padding.bottom);
+      // 아래 홈 제스처 영역은 폰 크기 화면처럼 인셋보다 조금 깊다 (#118)
+      expect(
+        d.systemGestureInsets.bottom,
+        d.padding.bottom + previewPhoneHomeGestureExtra,
+      );
       expect(d.systemGestureInsets.left, previewBackGestureWidth);
       expect(d.systemGestureInsets.right, previewBackGestureWidth);
       // 앱이 세로로 고정하는 크기 (짧은 변 600dp 미만) — Fold 계열 내부 화면과 다르다.
