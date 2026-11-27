@@ -251,9 +251,10 @@ void main() {
 
   group('Fold 가로 접힘선: 위 패널 = 기록 | 활성 LCD, 아래 패널 = 넓은 배열 (#143 고정값)', () {
     // Galaxy Z Fold 내부 가로 841×673, 인셋 24/24: 본체 825 폭, 접힘선 336.5(본체 304.5) — 위 패널 296.5.
-    // 넓은 배열 블록 825 / 2.06 = 400.5. 활성 LCD는 숫자부 블록 위 400.5×228.8(블록 폭 / 1.75, 줄 글자 32.1dp)로
-    // 접힘선 쪽에 붙고, 기록 영역은 함수부 블록 위 400.5×296.5(위 패널 높이 전체)다. #143 전(테이블톱 폭 상한)에는
-    // LCD 480×273.5가 손 쪽 끝에 붙고 반대쪽은 빈 여백이었다. 펼침·반 접힘이 같은 배치다.
+    // 넓은 배열 블록 825 / 2.06 = 400.5. 활성 LCD는 숫자부 블록 위, 기록 영역은 함수부 블록 위이고 둘 다 400.5×296.5(위 패널
+    // 높이 전체, #232 — 그 전에는 활성 LCD가 400.5×228.8(블록 폭 / 1.75)로 접힘선 쪽에 붙고 그 위 67.7dp가 비었다). 줄 글자는
+    // 폭에 묶여 32.1dp 그대로다. #143 전(테이블톱 폭 상한)에는 LCD 480×273.5가 손 쪽 끝에 붙고 반대쪽은 빈 여백이었다.
+    // 펼침·반 접힘이 같은 배치다.
     for (final handedness in Handedness.values) {
       for (final state in const [
         DisplayFeatureState.postureHalfOpened,
@@ -287,10 +288,8 @@ void main() {
           );
           expect(_numbersOnLeft(tester), !handedness.keypadOnRight);
           const block = 825 / 2.06;
-          expect(
-            lcd.size,
-            sizeMoreOrLessEquals(const Size(block, block / 1.75)),
-          );
+          expect(lcd.size, sizeMoreOrLessEquals(const Size(block, 296.5)));
+          expect(lcd.top, moreOrLessEquals(32));
           expect(lcd.bottom, moreOrLessEquals(336.5 - 8));
           expect(history.size, sizeMoreOrLessEquals(const Size(block, 296.5)));
           expect(history.top, moreOrLessEquals(32));
@@ -955,7 +954,7 @@ void _hingeLayoutTests() {
                 rectMoreOrLessEquals(
                   Rect.fromLTWH(
                     hand.left,
-                    hand.top + portrait.top,
+                    hand.top,
                     hand.width,
                     portrait.lcdHeight,
                   ),
@@ -1003,7 +1002,7 @@ void _hingeLayoutTests() {
       tester,
     ) async {
       // 본체 657×801, 접힘선 x=336.5(본체 328.5): 손 쪽 패널 320.5×769. 키패드는 폭에 묶여 320.5×427.3(키 셀 36.3dp),
-      // LCD는 남는 높이를 줄 글자 상한 높이(273.5)까지 받고 그 위 약 60dp가 빈다(세로형과 같다).
+      // LCD는 남는 높이를 모두 받는다 — 769 − 8 − 427.3 = 333.7(세로형과 같다, #232 전에는 273.5로 그 위 약 60dp가 비었다).
       await _pump(
         tester,
         size: const Size(673, 841),
@@ -1023,8 +1022,10 @@ void _hingeLayoutTests() {
         moreOrLessEquals(36.3, epsilon: 0.05),
       );
       expect(
-        tester.getRect(_lcd).height,
-        moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+        tester.getRect(_lcd),
+        rectMoreOrLessEquals(
+          Rect.fromLTRB(344.5, 40, 665, 809 - 8 - 320.5 / 0.75),
+        ),
       );
       expect(
         tester.getRect(_history),
@@ -1459,11 +1460,12 @@ void _hingeLayoutTests() {
             tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
           );
           expect(touch, lessThan(CalcTheme.keyTouchHeightFloor));
-          // 위 패널(296.5)이 활성 LCD(404 / 1.75 = 230.9)와 기록 최소 높이를 함께 담지 못해 기록 없이 LCD가 상한 높이까지 쓴다.
+          // 위 패널(296.5)이 활성 LCD(404 / 1.75 = 230.9)와 기록 최소 높이를 함께 담지 못해 기록 없이 LCD가 위 패널 전체를
+          // 쓴다(#232 — 그 전에는 상한 높이 273.5까지만 써서 그 아래 23dp가 비었다).
           expect(_history, findsNothing);
           expect(
-            tester.getSize(_lcd).height,
-            moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
+            tester.getRect(_lcd),
+            rectMoreOrLessEquals(const Rect.fromLTRB(8, 32, 412, 328.5)),
           );
         },
       );
@@ -1687,7 +1689,8 @@ void _hingeLayoutTests() {
     testWidgets(
       '손 쪽 패널이 짧은 책 자세에서 반대쪽 패널이 LCD와 기록을 함께 담지 못하면 기록 없이 LCD만 둔다 (#143 R1)',
       (tester) async {
-        // 841×340(상태바 24): 반대쪽 패널 404.5×300 — LCD 404.5 / 1.75 = 231.1 + 8 + 기록 최소 112 > 300
+        // 841×340(상태바 24): 반대쪽 패널 404.5×300 — LCD 404.5 / 1.75 = 231.1 + 8 + 기록 최소 112 > 300. LCD는 반대쪽 패널
+        // 전체다(#232 — 그 전에는 상한 높이 273.5까지만 썼다).
         await _pump(
           tester,
           size: const Size(841, 340),
@@ -1698,7 +1701,7 @@ void _hingeLayoutTests() {
         expect(_history, findsNothing);
         expect(
           tester.getSize(_lcd),
-          sizeMoreOrLessEquals(Size(404.5, LcdFontSizes.heightAtMaxLineFont)),
+          sizeMoreOrLessEquals(const Size(404.5, 300)),
         );
       },
     );
@@ -3938,12 +3941,7 @@ void _hingeLayoutTests() {
           expect(
             l.lcd,
             rectMoreOrLessEquals(
-              Rect.fromLTWH(
-                hand.left,
-                portrait.top,
-                hand.width,
-                portrait.lcdHeight,
-              ),
+              Rect.fromLTWH(hand.left, 0, hand.width, portrait.lcdHeight),
             ),
             reason: reason,
           );
@@ -3952,7 +3950,7 @@ void _hingeLayoutTests() {
             rectMoreOrLessEquals(
               Rect.fromLTRB(
                 hand.left,
-                portrait.top + portrait.lcdHeight + portrait.gap,
+                portrait.lcdHeight + portrait.gap,
                 hand.right,
                 body.height,
               ),
@@ -4299,11 +4297,10 @@ void _hingeLayoutTests() {
           epsilon: 0.1,
         ),
       );
+      // 활성 LCD는 기록 영역처럼 위 패널 높이 전체다(#232).
       expect(
         r.lcd,
-        rectMoreOrLessEquals(
-          const Rect.fromLTRB(825 - block, 296.5 - block / 1.75, 825, 296.5),
-        ),
+        rectMoreOrLessEquals(const Rect.fromLTRB(825 - block, 0, 825, 296.5)),
       );
       expect(
         r.history,
@@ -4356,7 +4353,7 @@ void _hingeLayoutTests() {
       }
     });
 
-    test('가로 접힘선·실물 배열: 기록이 최소 높이에 못 미치면 기록 없이 활성 LCD가 위 패널을 상한 높이까지 쓴다', () {
+    test('가로 접힘선·실물 배열: 기록이 최소 높이에 못 미치면 기록 없이 활성 LCD가 위 패널 전체를 쓴다 (#232)', () {
       // 폭 404: 활성 LCD 404 / 1.75 = 230.9. 위 패널이 230.9 + 8 + 112 = 350.9 이상이어야 기록을 둔다.
       const width = 404.0;
       const lcdHeight = width / 1.75;
@@ -4379,13 +4376,12 @@ void _hingeLayoutTests() {
       expect(withHistory.lcd.height, moreOrLessEquals(lcdHeight));
       final without = at(threshold - 0.5);
       expect(without.history, isNull);
+      // #232 전에는 상한 높이 273.5까지만 써서 그 아래가 비었다.
       expect(
         without.lcd,
-        rectMoreOrLessEquals(
-          Rect.fromLTWH(0, 0, width, LcdFontSizes.heightAtMaxLineFont),
-        ),
+        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, width, threshold - 0.5)),
       );
-      // 위 패널이 상한 높이보다 낮으면 LCD는 위 패널 전체다
+      // 위 패널이 더 낮아도 LCD는 위 패널 전체다
       expect(
         at(200).lcd,
         rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, width, 200)),
