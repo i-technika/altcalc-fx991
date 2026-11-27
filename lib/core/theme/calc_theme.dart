@@ -641,7 +641,7 @@ abstract final class CalcTheme {
     height: 1.0,
   );
 
-  /// SHIFT 각인 (키캡 위 본체 영역 좌측, 금색) 텍스트 스타일.
+  /// SHIFT 각인 (키캡 위 본체 영역, 금색 — ALPHA 각인과 함께면 왼쪽, 혼자면 가운데, #265) 텍스트 스타일.
   static const TextStyle keyShiftLabelStyle = TextStyle(
     fontFamily: keyFontFamily,
     fontFamilyFallback: keyFontFallback,
@@ -652,7 +652,7 @@ abstract final class CalcTheme {
     height: 1.0,
   );
 
-  /// ALPHA 각인 (키캡 위 본체 영역 우측, 빨간색) 텍스트 스타일.
+  /// ALPHA 각인 (키캡 위 본체 영역, 빨간색 — SHIFT 각인과 함께면 오른쪽, 혼자면 가운데, #265) 텍스트 스타일.
   static const TextStyle keyAlphaLabelStyle = TextStyle(
     fontFamily: keyFontFamily,
     fontFamilyFallback: keyFontFallback,
@@ -777,6 +777,29 @@ abstract final class CalcTheme {
 
   /// SHIFT·ALPHA 각인 사이 간격 상한 (키 너비 대비) — 좁고 긴 셀에서 넘침 방지
   static const double keyLegendGapMaxWidthRatio = 0.05;
+
+  // ── 각인 띠 좌우 정렬 (#265) ──
+  // 키캡 위 각인의 가로 자리는 실물을 따른다. Quick Start Guide 1쪽 제품 사진(`…_page-0001.jpg`, 정면 렌더라 키캡과 인쇄 사이
+  // 시차가 없다)을 9배 확대해 원본 픽셀 눈금으로 쟀다(키캡 폭 약 55px, 읽기 오차 ±1px ≈ 키캡 폭의 ±2%). 실물 키패드 근접
+  // 사진으로 가운데 정렬을 다시 확인했다.
+  // - **각인이 하나면 키캡 가운데다**: `RECALL`(각인 가운데 131.7px · 키캡 가운데 131.7px), `Abs`(260.6 · 261.2), `QR`,
+  //   `CONST`·`CONV`·`RESET`, `nPr`·`nCr`·`Pol`·`Rec`·`Rnd`·`%`·`≈`, 대분수·`∛◼`·`∑◻◻◼`.
+  //   (`x³`·`◼√◻`·`10^◼`·`e^◼`는 실물에서 파란 Base-N 각인 `DEC`…과 짝이라 왼쪽에 있다. 파란 각인은 #266이 그리고, 짝이 없는
+  //   동안에는 각인 하나의 규칙대로 가운데다.)
+  // - **각인이 둘이면 SHIFT는 왼쪽·ALPHA는 오른쪽이고, 바깥 끝이 키캡 끝에서 조금 들어와 있다** — 키캡 폭에 대한 비율로
+  //   SHIFT 왼끝: `log` 0.12, `x!` 0.09, `sin⁻¹` 0.06, `cos⁻¹` 0.08, `tan⁻¹` 0.07, `M−` 0.08, `,` 0.14(가운데값 0.08).
+  //   ALPHA 오른끝: `x` 0.09, `y` 0.10, `M` 0.10, `e` 0.10. `A`~`F`는 글자를 둘러싼 파란 괄호의 오른끝이 0.05~0.09다
+  //   (글자 오른끝은 0.17~0.22 — 괄호는 #266). 그 자리는 키캡 윗변이 곧은 구간, 곧 둥근 모서리(반경 ≈ 키캡 폭의 0.11) 안쪽이다.
+  // - **둘이 길어 그 안에 들어가지 않으면 바깥으로 밀려 키캡 폭을 다 쓴다**: `FACT`(왼끝 0.04)·`a b/c⇔d/c`(0.01)·`SOLVE`(0.01)·
+  //   `Ran#`(0)·`UNDO`(오른끝 0.03). 어느 쪽이 먼저 밀리는지는 키마다 달라(실물은 키마다 손으로 놓았다) 양쪽을 똑같이 줄인다.
+  // 그래서 각인 둘의 바깥 끝은 [keyLegendSideInsetRatio]와 키캡 모서리 반경 가운데 큰 쪽만큼 들이고, 각인 둘의 자연 폭과 사이
+  // 간격이 그 안에 들어가지 않으면 들이는 거리부터 0까지 줄인다(`calc_key_button.dart`의 `keyLegendSideInset`·
+  // `keyLegendPairInset`). 각인이 줄어드는 조건과 통일 글자 크기 계산(`KeypadMetrics`의 폭 기준 — 키캡 폭 전체)은 #265 전과 같다.
+  // 원형 버튼 위 인쇄(`SHIFT`·`ALPHA`·`MENU`·`SETUP`)는 버튼 가운데다(#190).
+
+  /// 각인 둘(SHIFT·ALPHA)의 바깥 끝을 키캡 끝에서 들이는 거리 (그린 키캡 폭 대비, #265) — 실물 가운데값 0.08~0.10.
+  /// 키캡 모서리 반경이 이보다 크면 반경만큼 들인다(위 절).
+  static const double keyLegendSideInsetRatio = 0.09;
 
   /// 키 라벨에 반영하는 시스템 글자 크기 배율 상한 (넘침은 FittedBox가 추가로 막는다)
   static const double keyMaxTextScaleFactor = 1.3;
