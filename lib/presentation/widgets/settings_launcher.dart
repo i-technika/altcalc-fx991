@@ -51,9 +51,9 @@ import 'handedness_dialog.dart';
 /// ### 좁은 하위 화면 (#125)
 /// Flutter가 나누는 접힘선(반 접힘, 폭이 있는 물리 힌지 — `DisplayFeatureSubScreen.avoidBounds`)에서는 대화상자
 /// 경로가 앱의 배치와 무관하게 늘 화면을 나누고(접힘선이 2개 이상인 화면은 예외 — 아래 절), `anchorPoint`에 가장
-/// 가까운 하위 화면(나뉜 절반)에 대화상자를 가둔다. 접힘선이 한쪽에 치우친 창에서는 ON 키가 좁은 절반에 있을 수 있다 — 위아래 배치에서 세로 접힘선이 키패드
-/// 오른쪽을 지나면 오른쪽 위 ON 키가 좁은 절반에 들고, 테이블톱(가로 접힘선)의 ON 키는 키패드가 있는 아래 절반이라
-/// 그 절반이 낮을 수 있다.
+/// 가까운 하위 화면(나뉜 절반)에 대화상자를 가둔다. 접힘선이 한쪽에 치우친 창에서는 ON 키가 좁은 절반에 있을 수
+/// 있다 — 위아래 배치에서 세로 접힘선이 키패드 오른쪽을 지나면 오른쪽 위 ON 키가 좁은 절반에 들고, 테이블톱(가로
+/// 접힘선)의 ON 키는 키패드가 있는 아래 절반이라 그 절반이 낮을 수 있다.
 /// ON 키 쪽 하위 화면이 그 인셋을 빼고 대화상자 최소 크기([dialogMinRegionOf] — 카드 최소 폭·높이와 바깥 여백)에
 /// 못 미치면, 최소 크기를 넘는 하위 화면 중 ON 키에 가장 가까운 곳에 띄운다([dialogAnchorPointOf]). 넘는 곳이 없으면
 /// ON 키 쪽 그대로다(조금 더 넓을 뿐인 곳으로 ON 키와 멀어지지 않는다).
@@ -64,20 +64,19 @@ import 'handedness_dialog.dart';
 ///
 /// ### 접힘선이 2개 이상인 화면 (#198)
 /// 창을 가로지르는 접힘선이 2개 이상인 화면(펼친 트라이폴드, `FormFactor.crossesMultipleHinges`)은 배치가 접힘선을 모두
-/// 무시하므로(#144) 대화상자도 **화면 전체 가운데**에 뜬다 — 자세(펼침·반 접힘)와 상관없다. 한 칸에 가두지 않는
-/// 이유: Galaxy Z TriFold 공개 해상도 근사 823×603dp는 칸 폭이 약 274dp로 최소 크기(360dp)에 못 미쳐 카드가 약 194dp로
-/// 줄어든다. `showDialog` 경로는 반 접힘·폭 있는 힌지면 화면을 나누고, 접힘선이 둘 이상이면 Flutter
+/// 무시하므로(#144) 대화상자도 **화면 전체 가운데**에 뜬다 — 자세(펼침·반 접힘)와 힌지 폭에 상관없다. 한 칸에 가두지
+/// 않는 이유: Galaxy Z TriFold 공개 해상도 근사 823×603dp는 칸 폭이 약 274dp로 최소 크기(360dp)에 못 미쳐 카드가 약
+/// 194dp로 줄어든다. `showDialog` 경로는 반 접힘·폭 있는 힌지면 화면을 나누고, 접힘선이 둘 이상이면 Flutter
 /// `DisplayFeatureSubScreen.subScreensInBounds`가 다른 접힘선이 걸친 칸도 만든다(x=274.5·548.5: 0~548.5 칸 — 고치기 전
-/// 카드가 x=55~493으로 접힘선 하나를 가로질렀다, #190 R2 실측). 그래서 이 화면에서는 경로를 직접 띄워
-/// (`_SettingsDialogRoute`) 경로 안의 접힘 정보를 지우고 영역을 직접 정한다([multiHingeDialogRegionOf]).
+/// 카드가 x=55~493으로 접힘선 하나를 가로질렀다, #190 R2 실측). 그래서 경로를 직접 띄워(`_SettingsDialogRoute`) 이런
+/// 화면에서는 경로 안의 접힘 정보를 지운다([dialogRouteMediaOf]).
 ///
-/// 폭 있는 물리 힌지 2개는 그 틈의 내용이 보이지 않는다. 823×603에 폭 20dp 힌지 2개(x=264.5~284.5·538.5~558.5)를
-/// 두고 재면 화면 가운데 카드는 x=192.5~630.5(438dp)이고 선택지 글은 x=264.5~606.5라 두 틈에 걸친다. 그래도 화면
-/// 전체로 둔다 — 틈으로 나눈 칸(264.5·254·264.5dp)은 모두 카드 최소 폭(280dp)보다 좁아 어디에 두어도 틈을 가로지르고,
-/// 가운데 칸을 넓혀 글만 칸 안에 두는 방법도 칸 가장자리의 라디오 단추(카드 왼쪽 끝에서 16dp)가 틈에 걸친다. 배치의 키도
-/// 같은 틈에 걸친다(#144). 틈으로 나눈 칸이 최소 크기 이상인 화면(가상의 더 큰 기기)이면 ON 키에 가장 가까운 그 칸에
-/// 띄워 틈을 피한다. 폭 0 주름은 가로질러도 내용이 보이므로 칸을 나누지 않는다. 폭 있는 힌지 2개를 보고하는 실제
-/// 기기는 알려져 있지 않다.
+/// 폭 있는 물리 힌지 2개도 화면 전체다. 그 틈의 내용은 보이지 않는다 — 823×603에 폭 20dp 힌지 2개
+/// (x=264.5~284.5·538.5~558.5)를 두고 재면 카드는 x=192.5~630.5(438dp), 선택지 글은 x=264.5~606.5라 두 글의 앞 20dp가
+/// 왼쪽 틈에 가리고 오른쪽 틈도 글 위를 지난다. 다른 자리로 옮겨도 낫지 않다: 틈으로 나눈 칸(264.5·254·264.5dp)은 모두
+/// 카드 최소 폭(280dp)보다 좁고, 선택지 글 폭(약 342dp)이 가운데 칸보다 넓어 카드를 어디로 옮겨도 글이 틈에 걸친다.
+/// 배치의 키도 같은 틈에 걸친다(#144). 틈으로 나눈 칸이 넉넉한 화면이면 그 칸에 가둘 수 있지만, 폭 있는 힌지 2개를
+/// 보고하는 기기가 알려져 있지 않아 따로 두지 않는다(#198 R1 — 추측 분기는 폭 0 주름이 섞인 화면에서 주름을 가로지른다).
 ///
 /// ## 대화상자가 열린 동안 배치가 바뀌면
 /// 회전·접기·창 크기 변경으로 [arrangement]·[handednessApplies]·[handednessKeepsArrangement]가 바뀌면 다음 프레임에
@@ -85,9 +84,10 @@ import 'handedness_dialog.dart';
 /// 빌드되는 중에는 바꿀 수 없어 한 프레임 늦다. 나뉨 여부가 바뀌어 대화상자를 감싸는 위젯이 달라져도 대화상자는 같은
 /// [GlobalKey]로 옮겨 가므로 키보드 포커스·스크롤 위치가 유지된다.
 /// 다시 잰 기준 위치(ON 키 중심)는 앱만 나누는 펼친 폭 0 세로 접힘선에만 쓰인다. Flutter도 나누는 반 접힘·물리 힌지는
-/// 경로가 연 시점의 `anchorPoint`로 절반을 고르고, 그 값은 경로가 열린 동안 바뀌지 않는다(접힘선이 2개 이상인 화면의
-/// 칸도 연 시점의 ON 키 중심으로 고른다). 접힘 정보가 바뀌어 접힘선 2개 이상인 화면이 되거나 그 반대가 되면 경로도
-/// 다음 프레임에 영역을 다시 고른다.
+/// 경로가 연 시점의 `anchorPoint`로 절반을 고르고, 그 값은 경로가 열린 동안 바뀌지 않는다. 접힘선이 2개 이상인 화면에서
+/// 연 `anchorPoint`는 연 시점의 ON 키 중심 그대로다([dialogAnchorPointOf]). 접힘 정보가 바뀌어 접힘선 2개 이상인 화면이
+/// 되거나 그 반대가 되면 경로는 나뉨 여부를 같은 프레임에 바꾼다(경로의 MediaQuery를 직접 본다, 앱만 나누는 절반은 위처럼
+/// 한 프레임 늦다).
 ///
 /// ## 대화상자가 열린 채 손잡이를 바꾸면 (#94)
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 키패드(와 ON 키)가 반대쪽 절반으로 옮겨 가도, 대화상자는 연
@@ -108,8 +108,7 @@ import 'handedness_dialog.dart';
 /// - 가로 접힘선 기준 배치(테이블톱): ON 키는 늘 아래 절반(키패드)에 있고 손잡이를 바꾸면 같은 절반 안에서 좌우로만
 ///   옮겨 간다.
 /// - 가로형 배치(접힘선 없음, #142): 대화상자가 화면 가운데 한 자리다.
-/// - 접힘선이 2개 이상인 화면(펼친 트라이폴드, #144·#198): 대화상자가 화면 가운데 한 자리다(틈으로 나눈 칸이 넉넉한
-///   폭 있는 힌지 화면은 연 시점의 ON 키 쪽 칸 — 위 "접힘선이 2개 이상인 화면").
+/// - 접힘선이 2개 이상인 화면(펼친 트라이폴드, #144·#198): 대화상자가 화면 가운데 한 자리다.
 class SettingsLauncher extends StatefulWidget {
   /// 화면의 실제 배치 (`CalculatorScreen`이 그린 배치 — 접힘선 기준 배치를 쓸 수 없어 위아래 배치로 그렸으면
   /// [ScreenArrangement.stacked])
@@ -181,6 +180,10 @@ class SettingsLauncher extends StatefulWidget {
   /// 하위 화면을 나누고, ON 키에 가장 가까운 하위 화면이 인셋을 빼고 [minRegion] 이상이면 [anchor]를 그대로,
   /// 아니면 [minRegion] 이상인 하위 화면 중 ON 키에 가장 가까운 곳의 가운데를 돌려준다. 그런 곳이 없거나 화면이
   /// 나뉘지 않으면 [anchor] 그대로다.
+  ///
+  /// 창을 가로지르는 접힘선이 2개 이상인 화면도 [anchor] 그대로다 — 경로가 그 화면을 나누지 않고
+  /// ([dialogRouteMediaOf]), Flutter가 그 화면에서 만드는 겹치는 하위 화면(#198)으로 고른 값은 열린 채 접힘선 1개
+  /// 화면이 되었을 때 ON 키와 먼 절반을 고를 수 있다(#198 R1).
   @visibleForTesting
   static Offset? dialogAnchorPointOf(
     MediaQueryData? screen,
@@ -188,109 +191,64 @@ class SettingsLauncher extends StatefulWidget {
     Size minRegion,
   ) {
     if (screen == null || anchor == null) return anchor;
+    if (FormFactor.crossesMultipleHinges(screen.size, screen.displayFeatures)) {
+      return anchor;
+    }
     final whole = Offset.zero & screen.size;
     final subScreens = DisplayFeatureSubScreen.subScreensInBounds(
       whole,
       DisplayFeatureSubScreen.avoidBounds(screen),
     ).toList();
     if (subScreens.length < 2) return anchor;
-    bool fits(Rect sub) => _fitsDialog(screen, sub, minRegion);
-    if (fits(_closestTo(subScreens, anchor)!)) return anchor;
-    return _closestTo(subScreens.where(fits), anchor)?.center ?? anchor;
-  }
-
-  /// 창을 가로지르는 접힘선이 2개 이상인 화면(펼친 트라이폴드, [FormFactor.crossesMultipleHinges])에서 대화상자를
-  /// 둘 영역 (경로 좌표, [SettingsLauncher] "접힘선이 2개 이상인 화면", #198). 그런 화면이 아니면 `null`이다 — 그때는
-  /// `showDialog`와 같은 경로 나눔([dialogAnchorPointOf]로 고른 기준점)을 쓴다.
-  ///
-  /// [screen]·[anchor]·[minRegion]은 [dialogAnchorPointOf]와 같다.
-  /// - 기본은 화면 전체다 — 배치와 같은 기준이다(배치도 접힘선을 모두 무시한다, #144). 자세(펼침·반 접힘)와 상관없다.
-  /// - 폭 있는 접힘선(물리 힌지의 틈)이 있으면 그 틈으로만 화면을 나눈다(폭 0 주름은 가로질러도 내용이 보인다).
-  ///   나눈 칸 중 인셋을 빼고 [minRegion] 이상인 칸이 있으면 ON 키에 가장 가까운 그 칸이고, 없으면 화면 전체다.
-  ///   칸이 모두 좁으면 카드(최소 폭 280dp)가 어디에 놓여도 틈을 가로지르기 때문이다.
-  @visibleForTesting
-  static Rect? multiHingeDialogRegionOf(
-    MediaQueryData screen,
-    Offset? anchor,
-    Size minRegion,
-  ) {
-    final size = screen.size;
-    if (!FormFactor.crossesMultipleHinges(size, screen.displayFeatures)) {
-      return null;
+    // 인셋은 `MediaQueryData.removeDisplayFeatures`처럼 화면 가장자리에 닿은 쪽에만 남는다 = 안전 영역과의 교집합.
+    // 시스템 인셋(SafeArea)과 함께 Material `Dialog`가 바깥 여백에 더하는 키보드 인셋도 뺀다(키보드가 뜨면
+    // padding 아래쪽은 0이 되므로 합이 실제 남는 영역이다).
+    final safe = (screen.padding + screen.viewInsets).deflateRect(whole);
+    bool fits(Rect sub) {
+      final usable = sub.intersect(safe);
+      return usable.width >= minRegion.width &&
+          usable.height >= minRegion.height;
     }
-    final whole = Offset.zero & size;
-    // 같은 접힘선이 폭 0 접힘선과 함께 두 번 보고되어도(`FormFactor.crossingHingesOf`는 하나만 남긴다) 틈을 놓치지
-    // 않게, 창을 가로지르는 접힘 정보 하나하나를 본다.
-    final gaps = [
-      for (final f in screen.displayFeatures)
-        if (f.bounds.shortestSide > 0 &&
-            FormFactor.crossingHingesOf(size, [f]).isNotEmpty)
-          f.bounds,
-    ];
-    if (gaps.isEmpty) return whole;
-    // Flutter `DisplayFeatureSubScreen.subScreensInBounds`는 접힘선이 둘 이상이면 다른 접힘선이 걸친 칸도 만든다
-    // (823×603, x=274.5·548.5: 0~548.5) — 틈은 창을 끝까지 가로지르므로 칸마다 겹치는 틈의 양옆만 남겨 직접 나눈다.
-    var cells = [whole];
-    for (final gap in gaps) {
-      cells = [for (final c in cells) ..._cellsBeside(c, gap)];
-    }
-    return _closestTo(
-          cells.where((c) => _fitsDialog(screen, c, minRegion)),
-          anchor ?? whole.center,
-        ) ??
-        whole;
-  }
 
-  /// 창을 끝까지 가로지르는 틈 [gap]이 칸 [cell]을 나누고 남는 양옆 칸 (틈과 겹치지 않으면 [cell] 그대로)
-  static List<Rect> _cellsBeside(Rect cell, Rect gap) {
-    if (FormFactor.isVerticalHinge(gap)) {
-      if (gap.left >= cell.right || gap.right <= cell.left) return [cell];
-      return [
-        if (gap.left > cell.left)
-          Rect.fromLTRB(cell.left, cell.top, gap.left, cell.bottom),
-        if (gap.right < cell.right)
-          Rect.fromLTRB(gap.right, cell.top, cell.right, cell.bottom),
-      ];
-    }
-    if (gap.top >= cell.bottom || gap.bottom <= cell.top) return [cell];
-    return [
-      if (gap.top > cell.top)
-        Rect.fromLTRB(cell.left, cell.top, cell.right, gap.top),
-      if (gap.bottom < cell.bottom)
-        Rect.fromLTRB(cell.left, gap.bottom, cell.right, cell.bottom),
-    ];
-  }
-
-  /// 하위 화면 [sub]가 [screen]의 인셋을 빼고 [minRegion] 이상인지.
-  ///
-  /// 인셋은 `MediaQueryData.removeDisplayFeatures`처럼 화면 가장자리에 닿은 쪽에만 남는다 = 안전 영역과의 교집합.
-  /// 시스템 인셋(SafeArea)과 함께 Material `Dialog`가 바깥 여백에 더하는 키보드 인셋도 뺀다(키보드가 뜨면
-  /// padding 아래쪽은 0이 되므로 합이 실제 남는 영역이다).
-  static bool _fitsDialog(MediaQueryData screen, Rect sub, Size minRegion) {
-    final safe = (screen.padding + screen.viewInsets).deflateRect(
-      Offset.zero & screen.size,
-    );
-    final usable = sub.intersect(safe);
-    return usable.width >= minRegion.width && usable.height >= minRegion.height;
-  }
-
-  /// [rects] 중 [anchor]와의 거리가 가장 짧은 곳 — Flutter `DisplayFeatureSubScreen`과 같다 (같으면 앞의 것,
-  /// 비었으면 `null`).
-  static Rect? _closestTo(Iterable<Rect> rects, Offset anchor) {
-    Rect? best;
-    var bestDistance = double.infinity;
-    for (final r in rects) {
-      final nearest = Offset(
-        anchor.dx.clamp(r.left, r.right),
-        anchor.dy.clamp(r.top, r.bottom),
-      );
-      final d = (anchor - nearest).distance;
-      if (d < bestDistance) {
-        best = r;
-        bestDistance = d;
+    // Flutter `DisplayFeatureSubScreen`처럼 기준점과의 거리가 가장 짧은 곳 (같으면 앞의 것)
+    Rect? closest(Iterable<Rect> rects) {
+      Rect? best;
+      var bestDistance = double.infinity;
+      for (final r in rects) {
+        final nearest = Offset(
+          anchor.dx.clamp(r.left, r.right),
+          anchor.dy.clamp(r.top, r.bottom),
+        );
+        final d = (anchor - nearest).distance;
+        if (d < bestDistance) {
+          best = r;
+          bestDistance = d;
+        }
       }
+      return best;
     }
-    return best;
+
+    if (fits(closest(subScreens)!)) return anchor;
+    return closest(subScreens.where(fits))?.center ?? anchor;
+  }
+
+  /// 대화상자 경로 안에 줄 MediaQuery ([SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
+  ///
+  /// [route]는 경로가 그려지는 Navigator의 MediaQuery다. 창을 가로지르는 접힘선이 2개 이상인 화면
+  /// ([FormFactor.crossesMultipleHinges] — 펼친 트라이폴드)이면 접히는 부분(fold·hinge)을 모두 지운다 — 배치도 접힘선을
+  /// 모두 무시한다(#144). 경로의 Flutter `DisplayFeatureSubScreen`이 화면을 나누지 않아 대화상자가 화면 전체 가운데에
+  /// 뜬다. 화면 구멍(cutout)은 남긴다. 그런 화면이 아니면 [route] 그대로다.
+  @visibleForTesting
+  static MediaQueryData dialogRouteMediaOf(MediaQueryData route) {
+    if (!FormFactor.crossesMultipleHinges(route.size, route.displayFeatures)) {
+      return route;
+    }
+    return route.copyWith(
+      displayFeatures: [
+        for (final f in route.displayFeatures)
+          if (f.type == DisplayFeatureType.cutout) f,
+      ],
+    );
   }
 
   @override
@@ -437,6 +395,7 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
     );
     // `showDialog`와 같은 경로(테마 전달, 장벽 색, 포커스 순환)를 직접 띄운다 — 접힘선이 2개 이상인 화면에서 경로의
     // 하위 화면 나눔을 바꾸려면 경로를 직접 만들어야 한다([_SettingsDialogRoute], #198).
+    assert(debugCheckHasMaterialLocalizations(context));
     navigator.push(
       _SettingsDialogRoute(
         context: context,
@@ -446,8 +405,6 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
             Theme.of(context).dialogTheme.barrierColor ??
             Colors.black54,
         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-        anchor: anchor,
-        minRegion: minRegion,
         // ON 키 중심([_layout]의 anchor)은 앱만 나누는 펼친 폭 0 접힘선용으로 그대로 두고, Flutter가 나누는
         // 접힘선의 하위 화면 선택에만 좁은 하위 화면을 피한 기준점을 쓴다.
         anchorPoint: SettingsLauncher.dialogAnchorPointOf(
@@ -496,13 +453,11 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
 }
 
 /// 설정 대화상자 경로 — `showDialog`가 만드는 [DialogRoute]이고, 창을 가로지르는 접힘선이 2개 이상인 화면에서만
-/// 경로의 하위 화면 나눔을 바꾼다 ([SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
+/// 경로가 화면을 나누지 않게 한다 ([SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
 class _SettingsDialogRoute extends DialogRoute<void> {
   _SettingsDialogRoute({
     required super.context,
     required super.builder,
-    required this.anchor,
-    required this.minRegion,
     super.themes,
     super.barrierColor,
     super.useSafeArea,
@@ -510,73 +465,29 @@ class _SettingsDialogRoute extends DialogRoute<void> {
     super.traversalEdgeBehavior,
   });
 
-  /// 연 시점의 ON 키 중심 (경로 좌표). Flutter가 나누는 접힘선의 [anchorPoint]처럼 열린 동안 바뀌지 않는다.
-  final Offset? anchor;
-
-  /// 대화상자가 뜨는 영역이 인셋을 빼고 가져야 하는 크기 ([SettingsLauncher.dialogMinRegionOf])
-  final Size minRegion;
-
   @override
   Widget buildPage(
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) => _MultiHingeDialogRegion(
-    anchor: anchor,
-    minRegion: minRegion,
+  ) => _MultiHingeUnsplit(
     child: super.buildPage(context, animation, secondaryAnimation),
   );
 }
 
-/// 접힘선이 2개 이상인 화면에서 경로 페이지([child] — Flutter `DisplayFeatureSubScreen`을 품는다)를
-/// [SettingsLauncher.multiHingeDialogRegionOf]가 고른 영역에 두고, 그 안에서는 접힘선을 지운다 — Flutter가 다시
-/// 나누지 않는다. 그런 화면이 아니면 아무것도 바꾸지 않는다.
+/// 경로 페이지([child] — Flutter `DisplayFeatureSubScreen`을 품는다)에 [SettingsLauncher.dialogRouteMediaOf]의
+/// MediaQuery를 준다 — 접힘선이 2개 이상인 화면에서는 페이지가 화면을 나누지 않는다.
 ///
-/// 페이지의 빌더가 아니라 이 위젯이 MediaQuery에 의존한다 — 접힘 상태가 바뀌면(열린 채 펴거나 접음) 이 위젯만 다시
-/// 그려 영역을 고친다. 두 경우의 위젯 구조가 같아 바뀌어도 대화상자 element(포커스·스크롤)가 유지된다.
-class _MultiHingeDialogRegion extends StatelessWidget {
-  final Offset? anchor;
-  final Size minRegion;
+/// 페이지의 빌더가 아니라 이 위젯이 MediaQuery에 의존한다 — 접힘 정보가 바뀌면(열린 채 펴거나 접음) 같은 프레임에 이
+/// 위젯만 다시 그린다. 어느 화면이든 위젯 구조가 같아 바뀌어도 대화상자 element(포커스·스크롤)가 유지된다.
+class _MultiHingeUnsplit extends StatelessWidget {
   final Widget child;
 
-  const _MultiHingeDialogRegion({
-    required this.anchor,
-    required this.minRegion,
-    required this.child,
-  });
+  const _MultiHingeUnsplit({required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final size = media.size;
-    final region = SettingsLauncher.multiHingeDialogRegionOf(
-      media,
-      anchor,
-      minRegion,
-    );
-    return Padding(
-      padding: region == null
-          ? EdgeInsets.zero
-          : EdgeInsets.fromLTRB(
-              region.left,
-              region.top,
-              size.width - region.right,
-              size.height - region.bottom,
-            ),
-      child: MediaQuery(
-        data: region == null
-            ? media
-            // 접힘선(접히는 부분 모두 — 배치도 모두 무시한다)을 지우고, 영역 밖 인셋은 `DisplayFeatureSubScreen`처럼 뺀다.
-            : media
-                  .copyWith(
-                    displayFeatures: [
-                      for (final f in media.displayFeatures)
-                        if (f.type == DisplayFeatureType.cutout) f,
-                    ],
-                  )
-                  .removeDisplayFeatures(region),
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => MediaQuery(
+    data: SettingsLauncher.dialogRouteMediaOf(MediaQuery.of(context)),
+    child: child,
+  );
 }
