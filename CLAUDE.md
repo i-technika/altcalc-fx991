@@ -38,7 +38,7 @@
 
 ## 2. 디렉토리 구조 (`lib/`)
 - `core/constants/key_definitions.dart`: 50개 버튼 레이아웃 및 SHIFT/ALPHA 키 매핑 정의, `key_legend.dart` (각인 구조 — 글자·분수·첨자·위아래 끝(∑)·근호·직접 그리는 칸, 한 줄 표기 `plainText`)
-- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트(실물 사진 기준 — 흰 숫자부·파란 DEL/AC·검정 함수부·은색 커서, #156)·키캡 입체감 비율, LCD·키 각인 폰트 스타일(각인은 비례폭 Saira·변수 이탤릭), 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)와 짝인 Material 테마(대화상자·SnackBar·키보드 포커스 테두리)
+- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트(실물 사진 기준 — 흰 숫자부·파란 DEL/AC·검정 함수부·은색 커서, #156)·키캡 입체감 비율·키캡 크기(구역 공통 각인 띠, 가로/세로 비 상한, #220), LCD·키 각인 폰트 스타일(각인은 비례폭 Saira·변수 이탤릭), 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)와 짝인 Material 테마(대화상자·SnackBar·키보드 포커스 테두리)
 - `core/theme/font_licenses.dart`: 번들 글꼴 OFL 라이선스를 `LicenseRegistry`에 등록
 - `core/theme/high_text_contrast.dart`: Android 접근성 "고대비 텍스트" 켜짐 여부 수신(이벤트 채널, Android 쪽 `HighTextContrastStreamHandler.kt`)과 화면 전달 범위 — `CalcPalette.of`가 `MediaQuery.highContrast`와 함께 쓴다
 - `core/layout/form_factor.dart`: 기기 종류(폰·폴더블·태블릿) 판정·방향 고정 규칙, 창 크기·접힘선 기준 배치 판정

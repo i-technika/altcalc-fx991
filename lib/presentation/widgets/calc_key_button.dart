@@ -61,7 +61,8 @@ import 'screen_coordinate_root.dart';
 ///   [ScreenCoordinateRoot]가 원점을 알려준다. 키 위쪽에서 MediaQuery의 `size`·`systemGestureInsets`를
 ///   영역 기준으로 덮어쓰면 판정이 틀어지므로, 분할 배치 등에서도 View의 값을 그대로 물려준다.
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
-/// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
+/// - 터치 영역은 기본적으로 각인 띠 아래 키캡 줄의 셀 폭 전체다 — 그린 키캡이 셀보다 좁아도([keycapMaxAspectRatio], #220)
+///   키캡 옆 빈 곳까지 그 키다. [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
 ///   작아도 늘 셀 전체(각인 띠 포함)가 터치 영역이다(#190).
 ///   [hitShape]가 있으면 그림([shape])과 별도로 버튼 상자 ∩ [hitShape]가 터치 영역이다(커서 패드, #64).
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
@@ -112,6 +113,15 @@ class CalcKeyButton extends StatefulWidget {
   /// 메인 라벨 글자 크기 (dp). `null`이면 키캡 높이 비율로 계산.
   final double? mainLabelFontSize;
 
+  /// 각인 띠 높이 (dp). `null`이면 셀 높이 × [CalcTheme.keyLegendHeightRatio]이고, 셀보다 높으면 셀 높이에서 멈춘다.
+  /// 키패드는 모든 구역에 함수부 띠 높이(`KeypadMetrics.legendBandHeight`)를 준다 — 숫자부 셀이 높은 몫은 키캡이 받는다(#220).
+  final double? legendHeight;
+
+  /// 그린 키캡의 가로/세로 비 상한 (#220). 키캡이 이보다 납작하면 셀 가운데에 폭을 줄여 그린다
+  /// ([keyCapFaceWidth] — 셀 폭의 [CalcTheme.keyCapMinWidthRatio] 아래로는 줄이지 않는다). 터치 영역은 셀 폭 그대로다.
+  /// `null`이면 셀 폭 전체에 그린다. 원형 버튼과 모양([shape])이 있는 키에는 쓰지 않는다.
+  final double? keycapMaxAspectRatio;
+
   /// 키 모양 — 그림 상자 크기를 받아 그 좌표의 닫힌 경로를 돌려준다. `null`이면 사각형.
   ///
   /// 그리기를 이 경로 안으로 제한한다. [hitShape]가 없으면 누름 판정(히트 테스트)과 누른 채 이동할 때의
@@ -151,6 +161,8 @@ class CalcKeyButton extends StatefulWidget {
     this.extendHitAreaToLegend = false,
     this.legendFontSize,
     this.mainLabelFontSize,
+    this.legendHeight,
+    this.keycapMaxAspectRatio,
     this.shape,
     this.hitShape,
     this.hitOutset = EdgeInsets.zero,
@@ -169,6 +181,18 @@ class CalcKeyButton extends StatefulWidget {
 
   /// [id] 키의 키캡 위젯 식별용 키 (화면 테스트에서 특정 키캡을 찾을 때 사용)
   static Key keycapKeyOf(CalcKeyId id) => ValueKey(('calc_keycap', id));
+
+  /// 그림 상자 높이 [height]에서 이 키의 각인 띠 높이 (dp) — [showLegendBand]가 아니면 0, [legendHeight]가 없으면
+  /// [height] × [CalcTheme.keyLegendHeightRatio]이고, [height]를 넘지 않는다. 키캡(터치 영역을 띠까지 넓히지 않을 때의
+  /// 터치 높이)은 [height]에서 이 값을 뺀 높이다 — 테스트가 그린 키의 터치 높이를 같은 규칙으로 잰다.
+  double legendBandHeightFor(double height) {
+    if (!showLegendBand) return 0.0;
+    final h = math.max(0.0, height);
+    return math.min(
+      h,
+      math.max(0.0, legendHeight ?? h * CalcTheme.keyLegendHeightRatio),
+    );
+  }
 
   @override
   State<CalcKeyButton> createState() => _CalcKeyButtonState();
@@ -438,6 +462,15 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     );
   }
 
+  /// 키캡을 셀 가운데에 [faceWidth] 폭(#220 — 셀 폭 이하)으로 둔다. 셀 폭과 같아도 늘 같은 위젯으로 감싼다 — 창 크기가
+  /// 바뀌어 키캡 폭이 셀 폭 문턱을 넘나들 때 위젯 트리가 바뀌면 키캡의 애니메이션·포커스 상태가 다시 만들어진다(#220 R1).
+  static Widget _centerFace({
+    required double faceWidth,
+    required Widget child,
+  }) => Center(
+    child: SizedBox(width: faceWidth, child: child),
+  );
+
   Widget _wrapHitArea(Widget child) {
     return Listener(
       behavior: HitTestBehavior.opaque,
@@ -477,9 +510,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     final width = math.max(0.0, outer.width - outset.horizontal);
     final height = math.max(0.0, outer.height - outset.vertical);
 
-    final legendHeight = widget.showLegendBand
-        ? height * CalcTheme.keyLegendHeightRatio
-        : 0.0;
+    final legendHeight = widget.legendBandHeightFor(height);
     final capHeight = height - legendHeight;
     // 눌림 이동이 셀 밖으로 나가지 않도록 키캡 아래에 이동량만큼 여유를 둔다.
     final pressRoom = math.min(CalcTheme.keyPressedOffset, capHeight);
@@ -505,33 +536,45 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       widget.keyDef.category,
       capHeight - pressRoom,
     );
+    // 그린 키캡 폭 (#220) — 셀 가운데에 가로/세로 비 상한까지 좁힌다. 터치 영역은 아래 Listener가 셀 폭 전체로 받는다.
+    final aspect = widget.keycapMaxAspectRatio;
+    final faceWidth = aspect == null || round || widget.shape != null
+        ? width
+        : keyCapFaceWidth(
+            cellWidth: width,
+            faceHeight: capHeight - pressRoom,
+            maxAspectRatio: aspect,
+          );
     Widget keycap = Padding(
       padding: EdgeInsets.only(bottom: pressRoom),
-      child: _wrapFocus(
-        round
-            ? _RoundKeycap(
-                id: widget.keyDef.id,
-                pressed: _pressed,
-                enabled: _enabled,
-              )
-            : _Keycap(
-                keyDef: widget.keyDef,
-                pressed: _pressed,
-                enabled: _enabled,
-                cornerRadius: cornerRadius,
-                fontSize:
-                    widget.mainLabelFontSize ??
-                    math.min(
-                      capHeight * CalcTheme.keyMainLabelFontRatio,
-                      CalcTheme.keyMainLabelMaxFontSize,
-                    ),
-                horizontalPadding:
-                    width * CalcTheme.keyCapHorizontalPaddingRatio,
-                labelInsets: widget.labelInsets,
-                textScaler: textScaler,
-              ),
-        round: round,
-        cornerRadius: cornerRadius,
+      child: _centerFace(
+        faceWidth: faceWidth,
+        child: _wrapFocus(
+          round
+              ? _RoundKeycap(
+                  id: widget.keyDef.id,
+                  pressed: _pressed,
+                  enabled: _enabled,
+                )
+              : _Keycap(
+                  keyDef: widget.keyDef,
+                  pressed: _pressed,
+                  enabled: _enabled,
+                  cornerRadius: cornerRadius,
+                  fontSize:
+                      widget.mainLabelFontSize ??
+                      math.min(
+                        capHeight * CalcTheme.keyMainLabelFontRatio,
+                        CalcTheme.keyMainLabelMaxFontSize,
+                      ),
+                  horizontalPadding:
+                      faceWidth * CalcTheme.keyCapHorizontalPaddingRatio,
+                  labelInsets: widget.labelInsets,
+                  textScaler: textScaler,
+                ),
+          round: round,
+          cornerRadius: cornerRadius,
+        ),
       ),
     );
     if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
@@ -558,13 +601,19 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                     ),
                     textScaler: textScaler,
                   )
-                : _LegendRow(
-                    shiftLegend: widget.keyDef.shiftLegend,
-                    alphaLegend: widget.keyDef.alphaLegend,
-                    width: width,
-                    fontSize: legendFontSize,
-                    maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
-                    textScaler: textScaler,
+                // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭 안에 인쇄한다 (#220 R1)
+                : Center(
+                    child: SizedBox(
+                      width: faceWidth,
+                      child: _LegendRow(
+                        shiftLegend: widget.keyDef.shiftLegend,
+                        alphaLegend: widget.keyDef.alphaLegend,
+                        width: faceWidth,
+                        fontSize: legendFontSize,
+                        maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
+                        textScaler: textScaler,
+                      ),
+                    ),
                   ),
           ),
         SizedBox(height: capHeight, width: width, child: keycap),
@@ -789,6 +838,24 @@ double keyCapCornerRadius(KeyCategory category, double height) {
   return math.max(
     0.0,
     math.min(height * ratio, CalcTheme.keyCapMaxCornerRadius),
+  );
+}
+
+/// 그린 키캡 폭 (#220, [CalcTheme] "키캡 크기 (#220)" 절) — 셀 폭 [cellWidth]의 키캡을 그린 높이 [faceHeight]에서
+/// 가로/세로 비 [maxAspectRatio]를 넘지 않는 폭으로 줄이되, 셀 폭의 [CalcTheme.keyCapMinWidthRatio] 아래로는 줄이지 않는다.
+/// 키캡이 그보다 납작하지 않으면 셀 폭 그대로다. 키패드 글자 크기 계산(`KeypadMetrics`)이 라벨 폭을 잴 때도 쓴다.
+double keyCapFaceWidth({
+  required double cellWidth,
+  required double faceHeight,
+  required double maxAspectRatio,
+}) {
+  final cell = math.max(0.0, cellWidth);
+  return math.min(
+    cell,
+    math.max(
+      cell * CalcTheme.keyCapMinWidthRatio,
+      math.max(0.0, faceHeight) * maxAspectRatio,
+    ),
   );
 }
 

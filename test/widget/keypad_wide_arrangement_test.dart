@@ -323,16 +323,24 @@ void main() {
         final inside = keypad.inflate(0.01);
         var functionRight = double.negativeInfinity;
         var numberLeft = double.infinity;
+        // 블록 경계는 키 셀(버튼)로 잰다 — 그린 키캡은 셀 가운데에 좁혀 그릴 수 있다(#220)
         for (final def in allKeys) {
           final cap = tester.getRect(_keycap(def.id));
+          final cell = tester.getRect(_button(def.id));
           expect(inside.contains(cap.topLeft), isTrue, reason: def.id.name);
           expect(inside.contains(cap.bottomRight), isTrue, reason: def.id.name);
+          expect(
+            cell.inflate(0.01).contains(cap.topLeft) &&
+                cell.inflate(0.01).contains(cap.bottomRight),
+            isTrue,
+            reason: '${def.id.name} 키캡이 셀 안',
+          );
           if (_numberIds.contains(def.id)) {
-            numberLeft = numberLeft < cap.left ? numberLeft : cap.left;
+            numberLeft = numberLeft < cell.left ? numberLeft : cell.left;
           } else {
-            functionRight = functionRight > cap.right
+            functionRight = functionRight > cell.right
                 ? functionRight
-                : cap.right;
+                : cell.right;
           }
         }
         // 두 블록 사이 간격 = 구역 간격 + 양쪽 셀 여백(키 사이 가로 간격 절반씩)
@@ -341,9 +349,9 @@ void main() {
           moreOrLessEquals(m.sectionGap + m.horizontalGap, epsilon: 0.01),
         );
         // 각 블록 안의 키 배열은 실물 그대로다: 7은 숫자부 왼쪽 위, = 는 오른쪽 아래, SHIFT는 함수부 왼쪽 위
-        final seven = tester.getRect(_keycap(CalcKeyId.num7));
-        final equals = tester.getRect(_keycap(CalcKeyId.equals));
-        final shift = tester.getRect(_keycap(CalcKeyId.shift));
+        final seven = tester.getRect(_button(CalcKeyId.num7));
+        final equals = tester.getRect(_button(CalcKeyId.equals));
+        final shift = tester.getRect(_button(CalcKeyId.shift));
         expect(seven.left, moreOrLessEquals(numberLeft, epsilon: 0.01));
         expect(
           equals.right,
@@ -376,7 +384,7 @@ void main() {
         final cell = tester.getSize(find.byWidget(b));
         final touch = b.extendHitAreaToLegend
             ? cell.height
-            : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+            : cell.height - b.legendBandHeightFor(cell.height);
         if (touch < lowest) lowest = touch;
       }
       expect(

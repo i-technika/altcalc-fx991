@@ -1121,7 +1121,7 @@ void main() {
       () {
         // 통일 글자 크기는 가장 좁게 들어가는 라벨이 정한다(`KeypadMetrics.compute` 2단계 — 메인 SHIFT·ALPHA, 각인
         // Ran#·RanInt 쌍). 칸을 넓힌 각인(∫◻◻◼ 등)이 그 자리를 차지하면 키패드 전체 글자가 작아진다. 각인 한도는
-        // 셀 너비에 비례하고 메인 한도는 키캡 테두리(상수)만큼 어긋나지만, 2차원 메인 각인과 SHIFT·ALPHA가 모두 함수부
+        // 그린 키캡 폭(#220)에 비례하고 메인 한도는 키캡 테두리(상수)만큼 어긋나지만, 2차원 메인 각인과 SHIFT·ALPHA가 모두 함수부
         // 키라 비교에는 영향이 없다 — 배열마다 한 크기로 본다(함수부·숫자부 셀 너비 비가 배열마다 다르다).
         bool twoDimensionalMain(CalcKeyDef d) => !d.mainLegend.isPlain;
         bool twoDimensionalLegend(CalcKeyDef d) =>
@@ -1137,11 +1137,7 @@ void main() {
         ]) {
           ({double main, double numberMain, double legend}) limits([
             bool Function(CalcKeyDef)? where,
-          ]) => KeypadMetrics.debugWidthLimits(
-            functionKeyWidth: m.functionKeyWidth,
-            numberKeyWidth: m.numberKeyWidth,
-            where: where,
-          );
+          ]) => KeypadMetrics.debugWidthLimits(m, where: where);
           final all = limits();
           final mainOnly = limits(twoDimensionalMain);
           final legendOnly = limits(twoDimensionalLegend);

@@ -108,9 +108,10 @@ double functionKeyTouchHeight(WidgetTester tester) {
     (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
   );
   final cell = tester.getSize(finder);
-  return tester.widget<CalcKeyButton>(finder).extendHitAreaToLegend
+  final button = tester.widget<CalcKeyButton>(finder);
+  return button.extendHitAreaToLegend
       ? cell.height
-      : cell.height * (1 - CalcTheme.keyLegendHeightRatio);
+      : cell.height - button.legendBandHeightFor(cell.height);
 }
 
 /// 화면의 커서 패드 방향 키 터치 영역 내접원 지름이 함수 키(sin) 터치 높이 × 하한 이상인지 확인한다 (#159).
