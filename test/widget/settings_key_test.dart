@@ -123,19 +123,20 @@ void main() {
   });
 
   group('ON 키로 설정을 연다', () {
-    testWidgets('ON 키는 원형 버튼이고 각인 띠에 SETTING이 인쇄되어 있다', (tester) async {
+    testWidgets('ON 키는 원형 버튼이고 각인 띠에 SETUP이 인쇄되어 있다', (tester) async {
       await _pump(tester, size: phone, padding: phoneInsets);
       expect(
         find.descendant(of: _onKey, matching: find.byType(RoundKeyFace)),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _onButton, matching: find.text('SETTING')),
+        find.descendant(of: _onButton, matching: find.text('SETUP')),
         findsOneWidget,
       );
+      // 설정(SETUP)은 이 키 하나로만 들어간다 — MENU 위의 SHIFT 각인 SETUP도, AC 위의 OFF도 없다 (#253).
+      expect(find.text('SETUP'), findsOneWidget);
       expect(find.text('ON'), findsNothing);
-      // AC 위 OFF는 실물대로 인쇄한다(동작만 무시, #190).
-      expect(find.text('OFF'), findsOneWidget);
+      expect(find.text('OFF'), findsNothing);
     });
 
     testWidgets('ON 키를 누르면 설정이 열리고, LCD를 눌러도 열리지 않는다', (tester) async {
@@ -149,11 +150,9 @@ void main() {
       await _open(tester);
     });
 
-    testWidgets('ON 키의 SETTING 인쇄(각인 띠)를 눌러도 열린다 — 터치 영역은 셀 전체다', (
-      tester,
-    ) async {
+    testWidgets('ON 키의 SETUP 인쇄(각인 띠)를 눌러도 열린다 — 터치 영역은 셀 전체다', (tester) async {
       await _pump(tester, size: phone, padding: phoneInsets);
-      await tester.tap(find.text('SETTING'));
+      await tester.tap(find.text('SETUP'));
       await tester.pumpAndSettle();
       expect(_dialog, findsOneWidget);
     });
@@ -178,16 +177,29 @@ void main() {
       );
     });
 
-    testWidgets('SHIFT + AC(실물 OFF)는 아무것도 하지 않는다', (tester) async {
-      final container = await _pump(tester, size: phone, padding: phoneInsets);
-      await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.shift)));
-      await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.ac)));
-      await tester.pump();
-      final state = container.read(calcProvider);
-      expect(state.modifier, KeyModifier.none);
-      expect(state.inputCount, 0);
-      expect(_dialog, findsNothing);
-    });
+    for (final id in [CalcKeyId.menu, CalcKeyId.ac]) {
+      testWidgets(
+        'SHIFT + ${id.name}(실물 SHIFT 각인을 뺀 키)는 설정을 열지 않고 아무것도 입력하지 않으며 SHIFT만 푼다 (#253)',
+        (tester) async {
+          final container = await _pump(
+            tester,
+            size: phone,
+            padding: phoneInsets,
+          );
+          await tester.tap(
+            find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.shift)),
+          );
+          await tester.pump();
+          expect(container.read(calcProvider).modifier, KeyModifier.shift);
+          await tester.tap(find.byKey(CalcKeyButton.keycapKeyOf(id)));
+          await tester.pumpAndSettle();
+          final state = container.read(calcProvider);
+          expect(state.modifier, KeyModifier.none);
+          expect(state.inputCount, 0);
+          expect(_dialog, findsNothing);
+        },
+      );
+    }
 
     testWidgets('위아래 배치: 대화상자는 지금 화면에서 키패드 위치가 바뀌지 않는다고 안내한다', (tester) async {
       await _pump(tester, size: phone, padding: phoneInsets);
@@ -508,7 +520,7 @@ void main() {
   });
 
   group('스크린리더 (#190)', () {
-    testWidgets('ON 키는 "Settings" 버튼으로 읽히고, SETTING 인쇄·없어진 설정 버튼은 따로 읽히지 않는다', (
+    testWidgets('ON 키는 "Settings" 버튼으로 읽히고, SETUP 인쇄·없어진 설정 버튼은 따로 읽히지 않는다', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
@@ -518,7 +530,7 @@ void main() {
         isSemantics(label: 'Settings', isButton: true, hasTapAction: true),
       );
       expect(find.bySemanticsLabel('Settings'), findsOneWidget);
-      expect(find.bySemanticsLabel('SETTING'), findsNothing);
+      expect(find.bySemanticsLabel('SETUP'), findsNothing);
       expect(find.byTooltip('Settings'), findsNothing);
       handle.dispose();
     });

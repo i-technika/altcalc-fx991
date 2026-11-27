@@ -695,25 +695,14 @@ class _LabelLimits {
       final number = KeypadMetrics.isNumberKey(def.id);
       final width = number ? numberKeyWidth : functionKeyWidth;
 
-      // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인을 SHIFT·ALPHA 각인과 함께 각인 띠에 한 줄로 인쇄한다
-      // (CalcKeyButton의 `_BodyPrintRow`). 띠 폭에 그 줄이 들어가는 각인 크기까지 줄인다.
+      // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인만 각인 띠에 인쇄한다(CalcKeyButton의 `_BodyPrintLabel` —
+      // 원형 버튼에는 SHIFT·ALPHA 각인이 없다, #253). 띠 폭에 그 각인이 들어가는 각인 크기까지 줄인다.
       if (def.face == KeyFace.roundButton) {
-        final parts = [
-          (def.mainLegend, CalcTheme.keyBodyPrintStyle),
-          if (def.shiftLegend case final l?) (l, CalcTheme.keyShiftLabelStyle),
-          if (def.alphaLegend case final l?) (l, CalcTheme.keyAlphaLabelStyle),
-        ];
-        var em = 0.0;
-        for (final (l, style) in parts) {
-          em += _emWidth(l, style);
-          if (!l.isPlain) tallLegends.add(KeyLegendView.emMetrics(l, style));
+        const style = CalcTheme.keyBodyPrintStyle;
+        if (!def.mainLegend.isPlain) {
+          tallLegends.add(KeyLegendView.emMetrics(def.mainLegend, style));
         }
-        final usable = math.max(
-          0.0,
-          width -
-              (parts.length - 1) * width * CalcTheme.keyLegendGapMaxWidthRatio,
-        );
-        legend = math.min(legend, usable / em);
+        legend = math.min(legend, width / _emWidth(def.mainLegend, style));
         continue;
       }
 

@@ -186,6 +186,7 @@ enum KeyFace {
 
   /// 실물 SHIFT·ALPHA·MENU·ON처럼 작은 원형 은색 버튼 — 버튼 면에는 글자가 없고, 메인 각인은 버튼 위 본체에
   /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). #190에서 ON 키를, #156에서 SHIFT·ALPHA·MENU를 이 모양으로 바꿨다.
+  /// 원형 버튼에는 SHIFT·ALPHA 각인이 없다 — 실물 MENU의 SHIFT 각인 `SETUP`은 앱에서 뺐다(#253, `CalcKeyDef` 생성자 assert).
   roundButton,
 }
 
@@ -217,7 +218,11 @@ class CalcKeyDef {
     this.alphaLegend,
     required this.category,
     this.face = KeyFace.keycap,
-  });
+  }) : assert(
+         face != KeyFace.roundButton ||
+             (shiftLegend == null && alphaLegend == null),
+         '원형 버튼 위 각인 띠에는 메인 각인만 인쇄한다 (#253)',
+       );
 
   /// 메인 각인의 한 줄 표기 ([KeyLegend.plainText] — 화면 각인에는 쓰지 않는다)
   String get mainLabel => mainLegend.plainText;
@@ -434,18 +439,20 @@ const List<List<CalcKeyDef>> controlLeftRows = [
 /// 커서 패드 오른쪽 2×2 키 (1행: MENU, ON / 2행: ∫◻◻◼, x)
 const List<List<CalcKeyDef>> controlRightRows = [
   [
+    // 실물 MENU 버튼 위에는 `MENU`(흰색)와 SHIFT 각인 `SETUP`(금색)이 나란히 인쇄돼 있다. 앱은 설정(SETUP)을 설정 키
+    // ([settingsKey]) 하나로만 열므로 `SETUP`을 인쇄하지 않고, SHIFT + MENU는 SHIFT 각인 없는 키처럼 기능이 없다
+    // (앱 고유, #253 사용자 결정).
     CalcKeyDef(
       id: CalcKeyId.menu,
       mainLegend: LegendText('MENU'),
-      shiftLegend: LegendText('SETUP'),
       category: KeyCategory.menu,
       face: KeyFace.roundButton,
     ),
     // 실물은 버튼 위 본체에 흰 `ON`이 인쇄된 작은 원형 은색 버튼이다. 이 앱에는 전원이 없어 ON을 설정 키로 쓰고
-    // (#190, 사용자 결정), 같은 자리에 `SETTING`을 인쇄한다 — [settingsKey].
+    // (#190, 사용자 결정), 같은 자리에 `SETUP`을 인쇄한다(#253 — #190의 `SETTING`에서 바꿨다) — [settingsKey].
     CalcKeyDef(
       id: CalcKeyId.on,
-      mainLegend: LegendText('SETTING'),
+      mainLegend: LegendText('SETUP'),
       category: KeyCategory.on,
       face: KeyFace.roundButton,
     ),
@@ -683,12 +690,11 @@ const List<List<CalcKeyDef>> numberRows = [
       alphaLegend: LegendText('UNDO'),
       category: KeyCategory.del,
     ),
-    // SHIFT 각인 `OFF`(전원 끄기)는 실물대로 인쇄하지만, 이 앱에는 전원이 없어 SHIFT + AC는 아무것도 하지 않는다
-    // ([ignoredShiftFunctions], #190 — 이슈는 동작을 무시하라고 했고 바꾸라고 한 인쇄는 ON → SETTING뿐이다).
+    // 실물 AC 위의 SHIFT 각인 `OFF`(전원 끄기)는 인쇄하지 않는다 — 이 앱에는 전원이 없다. SHIFT + AC는 SHIFT 각인
+    // 없는 키처럼 기능이 없다(AC가 실행되지 않고 SHIFT 대기만 풀린다, 앱 고유, #253 사용자 결정).
     CalcKeyDef(
       id: CalcKeyId.ac,
       mainLegend: LegendText('AC'),
-      shiftLegend: LegendText('OFF'),
       category: KeyCategory.ac,
     ),
   ],
@@ -817,10 +823,6 @@ List<CalcKeyDef> _buildAllKeys() {
 /// 계산기 입력 대신 설정이 열린다(`CalculatorScreen`). 계산기 상태 머신은 이 키를 입력으로 받지 않는다
 /// (`CalcState.pressKey` — 모디파이어 대기만 푼다).
 const CalcKeyId settingsKey = CalcKeyId.on;
-
-/// 각인은 실물대로 있지만 이 앱에서 무시하는 SHIFT 기능을 가진 키. 지금은 SHIFT + AC(전원 끄기 `OFF`)뿐이다
-/// (#190 — 이 앱에는 전원이 없다). 계산기 상태 머신은 이 기능을 기능 없는 층처럼 다룬다(`CalcState.pressKey`).
-const Set<CalcKeyId> ignoredShiftFunctions = {CalcKeyId.ac};
 
 /// 길게 누르면 반복 입력되는 키 (커서 패드 4방향, DEL).
 const Set<CalcKeyId> autoRepeatKeys = {

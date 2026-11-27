@@ -31,7 +31,7 @@ import 'screen_coordinate_root.dart';
 /// 인쇄한다(SHIFT 금색·ALPHA 자홍색·나머지 흰색 — [CalcPalette.bodyPrintOf]):
 /// ```
 ///  ┌──────────────────────┐
-///  │       SETTING        │  ← 각인 띠: 메인 각인(흰색, 가운데)
+///  │        SETUP         │  ← 각인 띠: 메인 각인(흰색, 가운데)
 ///  │         (◉)          │  ← 원형 버튼 (터치 영역은 셀 전체)
 ///  └──────────────────────┘
 /// ```
@@ -592,13 +592,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             height: legendHeight,
             width: width,
             child: round
-                ? _BodyPrintRow(
+                ? _BodyPrintLabel(
                     keyDef: widget.keyDef,
                     fontSize: legendFontSize,
-                    gap: math.min(
-                      legendFontSize * CalcTheme.keyLegendGapRatio,
-                      width * CalcTheme.keyLegendGapMaxWidthRatio,
-                    ),
                     textScaler: textScaler,
                   )
                 // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭 안에 인쇄한다 (#220 R1)
@@ -859,61 +855,34 @@ double keyCapFaceWidth({
   );
 }
 
-/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에, SHIFT·ALPHA 각인이 있으면
-/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼, #156). 띠 폭을 넘으면 함께 줄인다.
+/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에 쓴다. 띠 폭을 넘으면 줄인다.
+/// 원형 버튼에는 SHIFT·ALPHA 각인이 없다(#253 — 실물 MENU 위 `MENU SETUP`의 `SETUP`은 앱에서 뺐다, `CalcKeyDef` assert).
 /// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
-/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
-class _BodyPrintRow extends StatelessWidget {
+/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 각인을 잰다.
+class _BodyPrintLabel extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;
-  final double gap;
   final TextScaler textScaler;
 
-  const _BodyPrintRow({
+  const _BodyPrintLabel({
     required this.keyDef,
     required this.fontSize,
-    required this.gap,
     required this.textScaler,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = CalcPalette.of(context);
-    final parts = [
-      (
-        keyDef.mainLegend,
-        CalcTheme.keyBodyPrintStyle.copyWith(
-          color: palette.bodyPrintOf(keyDef.category),
-        ),
-      ),
-      if (keyDef.shiftLegend case final shift?)
-        (
-          shift,
-          CalcTheme.keyShiftLabelStyle.copyWith(color: palette.shiftLabel),
-        ),
-      if (keyDef.alphaLegend case final alpha?)
-        (
-          alpha,
-          CalcTheme.keyAlphaLabelStyle.copyWith(color: palette.alphaLabel),
-        ),
-    ];
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.bottomCenter,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          for (final (i, (legend, style)) in parts.indexed) ...[
-            if (i > 0) SizedBox(width: gap),
-            _legendLabel(
-              legend,
-              style.copyWith(fontSize: fontSize),
-              textScaler,
-            ),
-          ],
-        ],
+      child: _legendLabel(
+        keyDef.mainLegend,
+        CalcTheme.keyBodyPrintStyle.copyWith(
+          color: palette.bodyPrintOf(keyDef.category),
+          fontSize: fontSize,
+        ),
+        textScaler,
       ),
     );
   }

@@ -16,7 +16,7 @@
 >   그 모드의 계산 기록과 메모리 내용을 함께 보여 준다 — 틀은 M5 Calculate에서 만든다(#145).
 > - 내장 데이터(과학 상수·단위 변환)는 M6 Calculate에 둔다(에픽 #4 "내장 데이터 방침").
 > - 설정(계산기 SETUP 항목 + 앱 설정)은 **ON 자리의 SETUP 키 하나**로 여는 팝업이다. LCD 안 번호 메뉴가 아니라 일반 앱 같은 팝업 UI다(M4, 에픽 #191).
->   SHIFT+MENU(SETUP)로는 열지 않고, MENU 키의 SHIFT 각인 `SETUP`도 없앤다(#253 — 키 인쇄는 #190의 `SETTING`에서 `SETUP`으로 바꾼다).
+>   SHIFT+MENU(SETUP)로는 열지 않는다. MENU 키의 SHIFT 각인 `SETUP`과 AC 키의 SHIFT 각인 `OFF`는 없앴다(#253 — 키 인쇄도 #190의 `SETTING`에서 `SETUP`으로 바꿨다).
 > - **QR 코드 기능(SHIFT+OPTN)은 넣지 않는다**(CASIO 서버 연동 기능). `QR` 각인을 어떻게 둘지만 M3에서 정한다.
 > - Android·iOS 실기기 확인은 v1.0 전 마일스톤(M1~M10)이면 M11 출시 QA(에픽 #6)로 넘기고, v1.0 뒤 마일스톤(M12~)이면 그 마일스톤에서 한다.
 >
