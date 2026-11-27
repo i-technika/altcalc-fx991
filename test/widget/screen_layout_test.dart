@@ -1988,6 +1988,345 @@ void _hingeLayoutTests() {
     });
   });
 
+  group('대화상자를 연 채 화면 기하가 바뀌면 지금 설정 키 쪽 절반으로 옮겨 간다 (#218)', () {
+    // 회전: 세로 접힘선(책 자세, 설정 키는 손 쪽 절반)을 돌리면 접힘선이 가로로 눕는다(테이블톱, 설정 키는 아래 절반).
+    // 반 접힘·물리 힌지는 Flutter도 나누는 접힘선이라 경로의 기준점이 다시 잰 설정 키를 따라가야 옮겨 가고, 펼친 폭 0
+    // 접힘선은 앱만 나누는 절반(`_splitLikeApp`)이 따라간다([SettingsLauncher] "대화상자가 열린 동안 배치가 바뀌면").
+    const padding = EdgeInsets.only(top: 32, bottom: 24);
+
+    /// [size] 화면을 가운데에서 나누는 접힘선 (세로 화면이면 세로 접힘선, 가로 화면이면 가로 접힘선)
+    DisplayFeature centerFold(
+      Size size, {
+      double width = 0,
+      DisplayFeatureType type = DisplayFeatureType.fold,
+      DisplayFeatureState state = DisplayFeatureState.postureHalfOpened,
+    }) => _foldAt(
+      size.width < size.height
+          ? Rect.fromLTWH((size.width - width) / 2, 0, width, size.height)
+          : Rect.fromLTWH(0, (size.height - width) / 2, size.width, width),
+      type: type,
+      state: state,
+    );
+
+    /// [r]이 [hinge]를 기준으로 [point]와 같은 쪽 절반 안에 있는지
+    bool sameHalf(Rect hinge, Offset point, Rect r) {
+      const e = 0.01;
+      if (hinge.height > hinge.width) {
+        return point.dx > hinge.center.dx
+            ? r.left >= hinge.right - e
+            : r.right <= hinge.left + e;
+      }
+      return point.dy > hinge.center.dy
+          ? r.top >= hinge.bottom - e
+          : r.bottom <= hinge.top + e;
+    }
+
+    for (final (name, portrait, featureOf)
+        in <(String, Size, DisplayFeature Function(Size))>[
+          ('반 접은 Fold 내부', const Size(673, 841), centerFold),
+          (
+            '펼친 Fold 내부(앱만 나눈다)',
+            const Size(673, 841),
+            (s) => centerFold(s, state: DisplayFeatureState.postureFlat),
+          ),
+          (
+            '폭 28dp 물리 힌지',
+            const Size(720, 1128),
+            (s) => centerFold(
+              s,
+              width: 28,
+              type: DisplayFeatureType.hinge,
+              state: DisplayFeatureState.postureFlat,
+            ),
+          ),
+        ]) {
+      final landscape = portrait.flipped;
+      for (final start in [portrait, landscape]) {
+        for (final h in Handedness.values) {
+          final end = start == portrait ? landscape : portrait;
+          testWidgets(
+            '$name ${start.width}×${start.height}에서 연 채 회전·${h.name}: 돌린 뒤와 되돌린 뒤 모두 설정 키 쪽 절반이다',
+            (tester) async {
+              _setViewPadding(tester, padding);
+              final (container, _) = await _pump(
+                tester,
+                size: start,
+                padding: padding,
+                handedness: h,
+                displayFeatures: [featureOf(start)],
+              );
+              final openedKey = tester.getRect(_settings).center;
+              await tester.tap(_settings);
+              await tester.pumpAndSettle();
+              final element = tester.element(find.byType(HandednessDialog));
+              expect(
+                sameHalf(
+                  featureOf(start).bounds,
+                  openedKey,
+                  tester.getRect(_dialogSurface),
+                ),
+                isTrue,
+              );
+
+              for (final size in [end, start]) {
+                await _pump(
+                  tester,
+                  size: size,
+                  padding: padding,
+                  displayFeatures: [featureOf(size)],
+                  container: container,
+                );
+                await tester.pumpAndSettle();
+                expect(tester.takeException(), isNull);
+                final key = tester.getRect(_settings).center;
+                final dialog = tester.getRect(_dialogSurface);
+                expect(
+                  sameHalf(featureOf(size).bounds, key, dialog),
+                  isTrue,
+                  reason: '$size $key $dialog',
+                );
+                expect(
+                  tester.element(find.byType(HandednessDialog)),
+                  same(element),
+                );
+                if (size == end) {
+                  // 이 조합이 #218을 가려내는지: 연 시점의 설정 키 중심(화면 안으로 잘라 낸 값 — #218 전의 고정
+                  // `anchorPoint`)이 돌린 뒤에는 지금 설정 키와 반대쪽 절반인지. 가로(테이블톱)에서 시작한 왼손잡이만
+                  // 그렇다 — 나머지는 연 시점의 값도 맞는 절반에 떨어져 회귀 방지용이다(#218 R2). 펼친 폭 0
+                  // 접힘선은 #218 전에도 앱만 나누는 절반이 다시 쟀다.
+                  final stale = Offset(
+                    openedKey.dx.clamp(0, size.width),
+                    openedKey.dy.clamp(0, size.height),
+                  );
+                  final hinge = featureOf(size).bounds;
+                  final staleDialog = Rect.fromCenter(
+                    center: stale,
+                    width: 0,
+                    height: 0,
+                  );
+                  expect(
+                    !sameHalf(hinge, key, staleDialog),
+                    start == landscape && h == Handedness.left,
+                    reason: '연 시점 $openedKey → $stale, 지금 $key',
+                  );
+                }
+              }
+            },
+          );
+        }
+      }
+    }
+
+    testWidgets('회전으로 옮겨 간 뒤에 손잡이를 바꾸면 대화상자는 그 자리에 남는다 (#94)', (tester) async {
+      const portrait = Size(673, 841);
+      final landscape = portrait.flipped;
+      _setViewPadding(tester, padding);
+      final (container, _) = await _pump(
+        tester,
+        size: landscape,
+        padding: padding,
+        handedness: Handedness.left,
+        displayFeatures: [centerFold(landscape)],
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      // 세로 책 자세로 돌린다 — 왼손잡이라 설정 키·대화상자는 왼쪽 절반
+      await _pump(
+        tester,
+        size: portrait,
+        padding: padding,
+        displayFeatures: [centerFold(portrait)],
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      final moved = tester.getRect(_dialogSurface);
+      expect(moved.right, lessThanOrEqualTo(portrait.width / 2 + 0.01));
+
+      await tester.tap(_option(Handedness.right));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(handednessProvider), Handedness.right);
+      expect(
+        tester.getRect(_settings).left,
+        greaterThanOrEqualTo(portrait.width / 2),
+      );
+      expect(tester.getRect(_dialogSurface), moved);
+    });
+
+    testWidgets('손잡이를 바꿔 연 자리에 남은 뒤 회전하면 그때의 설정 키 쪽 절반으로 옮겨 간다', (
+      tester,
+    ) async {
+      const portrait = Size(673, 841);
+      final landscape = portrait.flipped;
+      _setViewPadding(tester, padding);
+      final (container, _) = await _pump(
+        tester,
+        size: landscape,
+        padding: padding,
+        handedness: Handedness.right,
+        displayFeatures: [centerFold(landscape)],
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final opened = tester.getRect(_dialogSurface);
+      await tester.tap(_option(Handedness.left));
+      await tester.pumpAndSettle();
+      expect(container.read(handednessProvider), Handedness.left);
+      expect(tester.getRect(_dialogSurface), opened);
+
+      // 세로 책 자세로 돌린다 — 왼손잡이라 설정 키는 왼쪽 절반. 연 시점(오른손잡이)의 설정 키 중심은 화면 안으로
+      // 잘라 내면 오른쪽 절반이라, 손잡이를 바꾼 뒤에 다시 재지 않으면 오른쪽에 뜬다.
+      await _pump(
+        tester,
+        size: portrait,
+        padding: padding,
+        displayFeatures: [centerFold(portrait)],
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(_settings).right,
+        lessThanOrEqualTo(portrait.width / 2),
+      );
+      final dialog = tester.getRect(_dialogSurface);
+      expect(
+        dialog.right,
+        lessThanOrEqualTo(portrait.width / 2 + 0.01),
+        reason: '$dialog',
+      );
+    });
+
+    testWidgets(
+      '경로 페이지는 showDialog와 같은 구조다 — 하위 화면 나눔은 하나이고 경로 의미 노드는 화면 전체다 (#218 R1)',
+      (tester) async {
+        const size = Size(673, 841);
+        _setViewPadding(tester, padding);
+        await _pump(
+          tester,
+          size: size,
+          padding: padding,
+          handedness: Handedness.right,
+          displayFeatures: [centerFold(size)],
+        );
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        // 나뉘었다 (오른쪽 절반)
+        expect(
+          tester.getRect(_dialogSurface).left,
+          greaterThanOrEqualTo(size.width / 2 - 0.01),
+        );
+        final subScreen = find.byType(DisplayFeatureSubScreen);
+        expect(subScreen, findsOneWidget);
+        // 나눔을 감싸는 경로 의미 노드(`RawDialogRoute.buildPage`) — 대화상자 자신의 노드(AlertDialog)는 나눔 안쪽이다
+        final routeScope = find
+            .ancestor(
+              of: subScreen,
+              matching: find.byWidgetPredicate(
+                (w) => w is Semantics && w.properties.scopesRoute == true,
+              ),
+            )
+            .first;
+        expect(tester.getRect(routeScope), Offset.zero & size);
+      },
+    );
+
+    // 같은 자리의 접힘선이 자세만 바뀌면(펴기·반 접기) 배치가 같아(#143) 설정 키를 다시 재지 않는다 — 손잡이를 바꿔
+    // 연 자리에 남은 대화상자가 펴고 접을 때 접힘선 건너로 뛰지 않는다(#218 R1). 앱만 나누는 절반과 Flutter가 나누는
+    // 절반 사이를 오가도 같은 기준점이다.
+    for (final startState in const [
+      DisplayFeatureState.postureHalfOpened,
+      DisplayFeatureState.postureFlat,
+    ]) {
+      testWidgets(
+        '손잡이를 바꾼 뒤 자세만 바뀌면(${startState.name}에서 시작) 대화상자는 그 자리에 남는다',
+        (tester) async {
+          const size = Size(673, 841);
+          final other = startState == DisplayFeatureState.postureFlat
+              ? DisplayFeatureState.postureHalfOpened
+              : DisplayFeatureState.postureFlat;
+          _setViewPadding(tester, padding);
+          final (container, _) = await _pump(
+            tester,
+            size: size,
+            padding: padding,
+            handedness: Handedness.left,
+            displayFeatures: [centerFold(size, state: startState)],
+          );
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          final opened = tester.getRect(_dialogSurface);
+          expect(opened.right, lessThanOrEqualTo(size.width / 2 + 0.01));
+          await tester.tap(_option(Handedness.right));
+          await tester.pumpAndSettle();
+          expect(
+            tester.getRect(_settings).left,
+            greaterThanOrEqualTo(size.width / 2),
+          );
+          expect(tester.getRect(_dialogSurface), opened);
+
+          for (final state in [other, startState]) {
+            await _pump(
+              tester,
+              size: size,
+              padding: padding,
+              displayFeatures: [centerFold(size, state: state)],
+              container: container,
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expect(tester.getRect(_dialogSurface), opened, reason: '$state');
+          }
+        },
+      );
+    }
+
+    // 시스템 인셋만 바뀌어도 본체 크기가 바뀌어 다시 잰다 — 인셋으로 배치가 바뀌어 설정 키가 접힘선 건너로 옮겨 가는
+    // 화면 (#218 R1: 손잡이와 무관한 기하를 화면 MediaQuery 대신 본체 크기로 받는 이유 — 계산기 본체는 SafeArea 안이라
+    // 인셋이 늘 0으로 보인다). 두 절반 모두 대화상자 최소 크기에 못 미쳐 설정 키 쪽 절반 그대로다(#125).
+    testWidgets('인셋이 바뀌어 설정 키가 접힘선 건너로 옮겨 가면 대화상자도 옮겨 간다', (tester) async {
+      const size = Size(510, 320);
+      final fold = _halfOpenedAt(const Rect.fromLTWH(255, 0, 0, 320));
+      const insets = EdgeInsets.only(top: 24, right: 48);
+      final (container, _) = await _pump(
+        tester,
+        size: size,
+        handedness: Handedness.left,
+        displayFeatures: [fold],
+      );
+      final before = tester.getRect(_settings).center;
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      expect(
+        sameHalf(fold.bounds, before, tester.getRect(_dialogSurface)),
+        isTrue,
+      );
+
+      _setViewPadding(tester, insets);
+      await _pump(
+        tester,
+        size: size,
+        padding: insets,
+        displayFeatures: [fold],
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final after = tester.getRect(_settings).center;
+      expect(
+        before.dx > 255,
+        isNot(after.dx > 255),
+        reason: '설정 키가 접힘선 건너로 옮겨 가는 화면이어야 한다: $before → $after',
+      );
+      final dialog = tester.getRect(_dialogSurface);
+      expect(
+        sameHalf(fold.bounds, after, dialog),
+        isTrue,
+        reason: '$after $dialog',
+      );
+    });
+  });
+
   group('Flutter가 나누는 비대칭 접힘선의 좁은 하위 화면에 대화상자를 가두지 않는다 (#125)', () {
     // 대화상자 경로는 View의 MediaQuery를 본다 — 인셋·글자 배율을 View에도 넣어 실제 앱처럼 대화상자에 닿게 한다.
     void setView(WidgetTester tester, EdgeInsets padding, double textScale) {
@@ -2891,7 +3230,7 @@ void _hingeLayoutTests() {
     }
 
     testWidgets(
-      '열린 채 접힘선 1개 화면이 되면 연 시점의 설정 키 쪽 절반에 뜨고, 돌아오면 가운데다 — 대화상자 상태는 유지된다',
+      '열린 채 접힘선 1개 화면이 되면 지금 설정 키 쪽 절반으로 옮겨 가고, 돌아오면 가운데다 — 대화상자 상태는 유지된다 (#218)',
       (tester) async {
         // 접힘선 1개(반 접힘, 화면 가운데) — 접힘선 기준 배치다
         final single = [_halfOpenedAt(const Rect.fromLTWH(411.5, 0, 0, 603))];
@@ -2926,14 +3265,19 @@ void _hingeLayoutTests() {
           expect(tester.takeException(), isNull);
           expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
           final dialog = tester.getRect(_dialogSurface);
-          // 연 시점의 설정 키 중심(Flutter가 나누는 접힘선의 `anchorPoint`) 쪽 절반 — 겹치는 하위 화면으로 고친
-          // 기준점(왼손잡이 274.25)을 쓰면 왼손잡이도 왼쪽 절반에 뜬다(#198 R1). 연 시점의 값이라 접힘선 기준 배치로
-          // 옮겨 간 지금의 설정 키와는 반대쪽 절반일 수 있다(알려진 한계 — [SettingsLauncher] "대화상자가 열린 동안
-          // 배치가 바뀌면", 후속 이슈)
+          final keyNow = tester.getRect(_settings).center;
+          // 접힘선 기준 배치로 옮겨 간 지금의 설정 키 쪽 절반이다. 연 시점의 설정 키는 반대쪽 절반이었다 — 오른손잡이
+          // x=367.1 → 782.0, 왼손잡이 x=782.4 → 370.5(#198 R2 실측). #218 전에는 Flutter가 나누는 접힘선의 하위
+          // 화면을 연 시점의 `anchorPoint`로 골라 대화상자가 연 시점의 쪽에 남았다.
           expect(
-            key.dx > 411.5 ? dialog.left >= 411.5 : dialog.right <= 411.5,
+            key.dx > 411.5,
+            isNot(keyNow.dx > 411.5),
+            reason: '$h $key $keyNow',
+          );
+          expect(
+            keyNow.dx > 411.5 ? dialog.left >= 411.5 : dialog.right <= 411.5,
             isTrue,
-            reason: '$h $key $dialog',
+            reason: '$h $keyNow $dialog',
           );
           expect(tester.element(find.byType(HandednessDialog)), same(element));
 
