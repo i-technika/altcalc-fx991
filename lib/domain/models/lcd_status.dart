@@ -18,7 +18,7 @@ enum AngleUnit {
 }
 
 /// 수치 표시 형식의 **표시기 투영** (SETUP → Number Format). Norm이면 표시기가 꺼진다.
-/// 자릿수·Norm1/2를 담는 설정 모델은 M3 SETUP(#27)에서 따로 정의하고 이 값으로 매핑한다.
+/// 자릿수·Norm1/2를 담는 설정 모델은 M4 설정 팝업의 계산기 설정(#27)에서 따로 정의하고 이 값으로 매핑한다.
 enum NumberDisplayFormat {
   /// Norm 1/2 — 표시기 없음
   norm(null),
@@ -38,8 +38,8 @@ enum NumberDisplayFormat {
 /// 복소수 결과 형식 표시기 — SETUP → Complex Result 설정의 **표시기 투영**.
 ///
 /// User's Guide 인쇄 7쪽 Note: `i`는 a+bi, `∠`는 r∠θ 설정을 나타낸다. 결과 값이 복소수인지가 아니라
-/// **설정**을 따른다. [none]은 설정 값이 아니라 "표시하지 않음"이다 — 설정 모델은 M3 SETUP(#27)에서
-/// 따로 정의하고, 어느 앱에서 표시할지(예: Complex 앱 #5)와 함께 이 값으로 매핑한다.
+/// **설정**을 따른다. [none]은 설정 값이 아니라 "표시하지 않음"이다 — 설정 모델은 M4 설정 팝업(#27)에서
+/// 따로 정의하고, 어느 모드에서 표시할지(예: Complex 모드 M7, 에픽 #239)와 함께 이 값으로 매핑한다.
 enum ComplexResultIndicator {
   /// 표시하지 않음
   none(null),

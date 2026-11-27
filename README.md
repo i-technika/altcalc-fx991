@@ -115,7 +115,8 @@ flutter run            # 연결된 기기·에뮬레이터
 ### 에뮬레이터로 접근성 확인 (#185)
 
 TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인은 그 과제가 속한 마일스톤에서 하고,
-실기기가 있어야 하는 확인만 M8 출시 QA(에픽 #6)로 넘긴다([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙").
+실기기가 있어야 하는 확인만 M11 출시 QA(에픽 #6)로 넘긴다 — v1.0 전 마일스톤(M1~M10) 과제일 때이고, v1.0 뒤(M12~)는 그 마일스톤에서 한다
+([CLAUDE.md](CLAUDE.md) "브랜치/PR 규칙". 2026-11-27 재구성(#249) 전 문서의 "M8 출시 QA"가 지금의 M11이다).
 
 - **TalkBack**: 시스템 앱으로 들어 있다(설치 확인 2대). Play 이미지 36.1에서 켜서 커서 패드를 확인했다(#173, PR #204).
   - 켜기: `adb shell settings put secure enabled_accessibility_services com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`

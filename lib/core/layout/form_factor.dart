@@ -513,7 +513,7 @@ abstract final class FormFactor {
   /// - **가정 (미확인)**: 펼친 트라이폴드가 Jetpack WindowManager로 접히는 부분(`FoldingFeature`) 2개를 보고한다는 것과
   ///   펼친 화면 dp 크기·접힘선 위치는 실기기로 확인하지 못했다(트라이폴드 에뮬레이터 기기 정의가 없다). 미리보기 프리셋은
   ///   Galaxy Z TriFold 공개 해상도 2160×1584 px를 밀도 2.625로 바꾼 823×603dp에 세 장 같은 폭(접힘선 x≈274·549)을
-  ///   가정했다(이슈가 처음 가정한 크기는 960×704dp). 실기기 확인은 출시 QA(M8, #200)에서 한다.
+  ///   가정했다(이슈가 처음 가정한 크기는 960×704dp). 실기기 확인은 출시 QA(M11, #200)에서 한다.
   /// - 에뮬레이터 기록 (#144, Pixel Fold 에뮬레이터 Android 16 진단 릴리스 빌드 — 흉내 낸 값이라 실기기 보고 값은 아니다):
   ///   `adb shell wm size`로 화면 크기를 바꾸고 `adb shell settings put global display_features 'fold-[…];fold-[…]'`(Jetpack
   ///   확장이 읽는 접힘 정보 덮어쓰기)로 접힘선 2개를 주었다. 세 크기 모두 Flutter 화면 특징에 폭 0 `fold`·`postureFlat`
