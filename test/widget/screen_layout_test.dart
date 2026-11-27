@@ -831,9 +831,9 @@ void _expectTouchTargets(
     moreOrLessEquals(lowest, epsilon: 0.01),
   );
   final padRect = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-  final cell = tester.getRect(find.byType(CursorPad));
   final pad = CursorPadGeometry(padRect.size);
-  final bounds = cell.shift(-padRect.topLeft); // 패드 로컬 좌표의 셀
+  final bounds = cursorPadTouchCell(tester)
+      .shift(-padRect.topLeft); // 패드 로컬 좌표의 셀
   for (final sector in CursorPadSector.values) {
     final vertical =
         sector == CursorPadSector.up || sector == CursorPadSector.down;

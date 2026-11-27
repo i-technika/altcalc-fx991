@@ -449,7 +449,8 @@ void main() {
         expect(_linesOf(printed, '시스템 영역'), [c.insetsLine]);
         expect(_linesOf(printed, '배치'), [c.line]);
 
-        // 키 크기 — 위젯이 그린 값, 그리고 에뮬레이터 노드 높이(px 정수)와 1px 안
+        // 키 크기 — 위젯이 그린 값, 그리고 에뮬레이터 노드 높이(px 정수)와 1px 안. 실측(#140) 때 키 노드는 셀과 같았다 —
+        // #236부터 키 노드는 셀 둘레 키 사이 간격 몫까지 넓으므로, 셀 기준 터치 높이([functionKeyTouchHeight])와 견준다.
         final touch = functionKeyTouchHeight(tester);
         expect(touch, moreOrLessEquals(c.functionKeyTouch, epsilon: 0.01));
         if (c.keyNodePx != null) {

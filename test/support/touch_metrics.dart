@@ -102,7 +102,20 @@ const double cursorPadUpDownInscribedMinRatio = 0.95;
 /// 측정은 1.078배(360×300 창) 이상이고, 셀이 넓을수록 커진다.
 const double cursorPadLeftRightInscribedMinRatio = 1.0;
 
-/// 화면에 그려진 함수 키(sin)의 터치 높이 (dp) — 각인 띠까지 넓히면 셀 높이, 아니면 키캡 높이다.
+/// 화면의 커서 패드 터치·시맨틱 영역의 기준 사각형 — 셀(`CursorPad` 상자)에 둘레 키 사이 간격 몫(`CursorPad.gapInsets`)을
+/// 더한 것 (#236). 방향별 터치 경로([CursorPadGeometry.hitPolygon])·시맨틱 영역의 `bounds`로 쓴다.
+Rect cursorPadTouchCell(WidgetTester tester) {
+  final finder = find.byType(CursorPad);
+  return tester
+      .widget<CursorPad>(finder)
+      .gapInsets
+      .inflateRect(tester.getRect(finder));
+}
+
+/// 화면에 그려진 함수 키(sin)의 셀 기준 터치 높이 (dp) — 각인 띠까지 넓히면 셀 높이, 아니면 키캡 높이다.
+///
+/// 셀 둘레 키 사이 간격 몫(#236)은 **빼고** 잰다. 커서 패드 방향 키도 같은 간격 몫을 받으므로, 커서 패드 기준(#159 —
+/// 방향 키 내접원 ≥ 이 높이 × 하한)은 간격 몫을 뺀 값끼리 견준다. 실제 터치 높이는 [functionKeyHitHeight]다.
 double functionKeyTouchHeight(WidgetTester tester) {
   final finder = find.byWidgetPredicate(
     (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
@@ -114,6 +127,17 @@ double functionKeyTouchHeight(WidgetTester tester) {
       : cell.height - button.legendBandHeightFor(cell.height);
 }
 
+/// 화면에 그려진 함수 키(sin)의 실제 터치 높이 (dp) — [functionKeyTouchHeight]에 터치 영역이 받는 위아래 간격 몫(#236)을
+/// 더한다(셀 전체를 터치 영역으로 쓰는 키만 받는다, `CalcKeyButton.hitGapInsets`).
+double functionKeyHitHeight(WidgetTester tester) {
+  final button = tester.widget<CalcKeyButton>(
+    find.byWidgetPredicate(
+      (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+    ),
+  );
+  return functionKeyTouchHeight(tester) + button.hitGapInsets.vertical;
+}
+
 /// 화면의 커서 패드 방향 키 터치 영역 내접원 지름이 함수 키(sin) 터치 높이 × 하한 이상인지 확인한다 (#159).
 /// ▲·▼는 [cursorPadUpDownInscribedMinRatio], ◀·▶는 [cursorPadLeftRightInscribedMinRatio]를 쓴다.
 void expectCursorPadInscribedVersusFunctionKey(
@@ -121,7 +145,7 @@ void expectCursorPadInscribedVersusFunctionKey(
   required String reason,
 }) {
   final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-  final cell = tester.getRect(find.byType(CursorPad));
+  final cell = cursorPadTouchCell(tester);
   final touch = functionKeyTouchHeight(tester);
   final g = CursorPadGeometry(pad.size);
   final bounds = cell.shift(-pad.topLeft);

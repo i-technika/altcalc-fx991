@@ -643,6 +643,125 @@ void main() {
         expect(b.extendHitAreaToLegend, expected, reason: id.name);
       }
     });
+
+    /// [id] 키 바로 아래 행의 같은 열 키 (가운데 x가 [id] 셀 안인 키 중 가장 위)
+    CalcKeyId keyBelow(WidgetTester tester, CalcKeyId id) {
+      final r = tester.getRect(_button(id));
+      final below = [
+        for (final b in _buttons(tester))
+          if (tester.getRect(find.byWidget(b)) case final o
+              when o.top > r.bottom &&
+                  o.center.dx > r.left &&
+                  o.center.dx < r.right)
+            (b.keyDef.id, o.top),
+      ]..sort((a, b) => a.$2.compareTo(b.$2));
+      return below.first.$1;
+    }
+
+    testWidgets('셀 전체가 터치 영역인 키는 셀 둘레 키 사이 간격까지 눌리고, 간격은 이웃 키와 반씩 나눈다 (#236)', (
+      tester,
+    ) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false)),
+      );
+      final sinButton = tester.widget<CalcKeyButton>(_button(CalcKeyId.sin));
+      expect(sinButton.extendHitAreaToLegend, isTrue, reason: '전제: 셀 전체 터치');
+      final gap = sinButton.hitGapInsets;
+      expect(gap.vertical, greaterThan(4), reason: '간격 몫이 있어야 한다');
+      final r = tester.getRect(_button(CalcKeyId.sin));
+      final below = keyBelow(tester, CalcKeyId.sin);
+      final cos = tester.getRect(_button(CalcKeyId.cos));
+      // 키 사이 간격 = 위 키의 아래 몫 + 아래 키의 위 몫
+      final verticalGap = tester.getRect(_button(below)).top - r.bottom;
+      expect(verticalGap, moreOrLessEquals(gap.vertical, epsilon: 1e-6));
+      for (final (point, want) in [
+        (Offset(r.center.dx, r.bottom + verticalGap * 0.25), CalcKeyId.sin),
+        (Offset(r.center.dx, r.bottom + verticalGap * 0.75), below),
+        (
+          Offset(r.right + (cos.left - r.right) * 0.25, r.center.dy),
+          CalcKeyId.sin,
+        ),
+        (
+          Offset(r.right + (cos.left - r.right) * 0.75, r.center.dy),
+          CalcKeyId.cos,
+        ),
+      ]) {
+        pressed.clear();
+        await tester.tapAt(point);
+        await tester.pump();
+        expect(pressed, [want], reason: '$point');
+      }
+    });
+
+    testWidgets(
+      '셀 전체가 터치 영역인 키는 의미 노드(접근성 검사기의 터치 대상)도 간격 몫까지 넓고, 키캡만 터치하는 키는 셀 그대로다 (#236)',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+        // 480×640: 함수부는 셀 전체(각인 띠까지)를, 숫자부는 키캡만 터치한다 (위 '각인 띠까지 넓힌다' 검사)
+        const size = Size(480, 640);
+        _setViewSize(tester, size);
+        await tester.pumpWidget(_host(const CalcKeypad(), size: size));
+        final dpr = tester.view.devicePixelRatio;
+        for (final (id, extended) in [
+          (CalcKeyId.sin, true),
+          (CalcKeyId.shift, true), // 원형 버튼
+          (CalcKeyId.num7, false),
+        ]) {
+          final b = tester.widget<CalcKeyButton>(_button(id));
+          expect(b.hitsWholeCell, extended, reason: id.name);
+          final cell = tester.getRect(_button(id));
+          final node = _semanticsGlobalRect(
+            tester.getSemantics(_button(id)),
+            dpr,
+          );
+          final want = extended ? b.gapInsets.inflateRect(cell) : cell;
+          expect(
+            (node.topLeft - want.topLeft).distance +
+                (node.bottomRight - want.bottomRight).distance,
+            lessThan(1e-3),
+            reason: '${id.name}: $node ≠ $want',
+          );
+          expect(b.hitGapInsets, extended ? b.gapInsets : EdgeInsets.zero);
+        }
+        handle.dispose();
+      },
+    );
+
+    testWidgets('커서 패드도 셀 둘레 간격 몫까지 눌리고, 셀 변마다 그쪽 방향 키가 받는다 (#236)', (
+      tester,
+    ) async {
+      final pressed = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(CalcKeypad(onKeyPressed: pressed.add, enableHaptics: false)),
+      );
+      final cell = tester.getRect(find.byType(CursorPad));
+      final touch = cursorPadTouchCell(tester);
+      expect(touch.top, lessThan(cell.top - 1), reason: '간격 몫이 있어야 한다');
+      for (final (point, want) in [
+        (
+          Offset(cell.center.dx, (touch.top + cell.top) / 2),
+          CalcKeyId.cursorUp,
+        ),
+        (
+          Offset(cell.center.dx, (touch.bottom + cell.bottom) / 2),
+          CalcKeyId.cursorDown,
+        ),
+        (
+          Offset((touch.left + cell.left) / 2, cell.center.dy),
+          CalcKeyId.cursorLeft,
+        ),
+        (
+          Offset((touch.right + cell.right) / 2, cell.center.dy),
+          CalcKeyId.cursorRight,
+        ),
+      ]) {
+        pressed.clear();
+        await tester.tapAt(point);
+        await tester.pump();
+        expect(pressed, [want], reason: '$point');
+      }
+    });
   });
 
   _cursorPadShapeTests();
@@ -657,9 +776,8 @@ void main() {
         // ◀·▶가 받으므로, 어느 방향도 그때보다 좁아지지 않는다.
         Map<CursorPadSector, double> hitAreas() {
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-          final cell = tester.getRect(find.byType(CursorPad));
           final g = CursorPadGeometry(pad.size);
-          final bounds = cell.shift(-pad.topLeft);
+          final bounds = cursorPadTouchCell(tester).shift(-pad.topLeft);
           return {
             for (final sector in CursorPadSector.values)
               sector: g.hitArea(sector, bounds),
@@ -856,15 +974,14 @@ void _cursorPadR2Tests() {
         ),
       );
       final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-      final cell = tester.getRect(find.byType(CursorPad));
       Offset at(double u, double v) =>
           pad.center + Offset(u * pad.width / 2, v * pad.height / 2);
 
-      // ◄ 구역, 가운데 허브(데드존), 셀 위쪽 밖(이웃 키와의 간격)
+      // ◄ 구역, 가운데 허브(데드존), 셀 위쪽 밖(셀 둘레 간격 몫 너머 — 이웃 키의 몫, #236)
       for (final target in [
         at(-0.6, -0.1),
         at(0, 0),
-        Offset(pad.center.dx, cell.top - 1),
+        Offset(pad.center.dx, cursorPadTouchCell(tester).top - 1),
       ]) {
         repeats.clear();
         final g = await tester.startGesture(at(0, -0.6));
@@ -876,6 +993,35 @@ void _cursorPadR2Tests() {
         await g.up();
         await tester.pump();
       }
+    });
+
+    testWidgets('▲를 누른 채 셀 위 간격 몫(▲ 터치 영역, #236)으로 미끄러져도 ▲ 반복은 이어진다', (
+      tester,
+    ) async {
+      final repeats = <CalcKeyId>[];
+      await tester.pumpWidget(
+        _host(
+          CalcKeypad(
+            onKeyPressed: (_) {},
+            onKeyRepeat: repeats.add,
+            enableHaptics: false,
+          ),
+        ),
+      );
+      final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+      final cell = tester.getRect(find.byType(CursorPad));
+      final touch = cursorPadTouchCell(tester);
+      final g = await tester.startGesture(
+        pad.center + Offset(0, -0.6 * pad.height / 2),
+      );
+      await tester.pump(CalcKeyButton.defaultRepeatDelay);
+      expect(repeats, [CalcKeyId.cursorUp]);
+      await g.moveTo(Offset(pad.center.dx, (touch.top + cell.top) / 2));
+      await tester.pump(CalcKeyButton.defaultRepeatInterval * 3);
+      expect(repeats.length, greaterThan(1));
+      expect(repeats.toSet(), {CalcKeyId.cursorUp});
+      await g.up();
+      await tester.pump();
     });
 
     testWidgets('▲를 누른 채 외곽 밖(▲ 터치 영역)으로 미끄러져도 ▲ 반복은 이어진다', (tester) async {
@@ -890,7 +1036,6 @@ void _cursorPadR2Tests() {
         ),
       );
       final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-      final cell = tester.getRect(find.byType(CursorPad));
       final g = CursorPadGeometry(pad.size);
       Offset at(double u, double v) =>
           pad.center + Offset(u * pad.width / 2, v * pad.height / 2);
@@ -899,7 +1044,7 @@ void _cursorPadR2Tests() {
       final local = corner - pad.topLeft;
       expect(g.sectorAt(local), isNull);
       expect(
-        g.hitSectorAt(local, cell.shift(-pad.topLeft)),
+        g.hitSectorAt(local, cursorPadTouchCell(tester).shift(-pad.topLeft)),
         CursorPadSector.up,
       );
 
@@ -1004,14 +1149,20 @@ void _cursorPadR2Tests() {
 
     for (final area in const [Size(800, 300), Size(393, 560), Size(360, 420)]) {
       testWidgets(
-        '${area.width}×${area.height}: 시맨틱 노드는 계산한 영역(바깥 변은 셀 변)에 놓인다',
+        '${area.width}×${area.height}: 시맨틱 노드는 계산한 영역(바깥 변은 셀 둘레 간격 몫의 바깥 변, #236)에 놓인다',
         (tester) async {
           final handle = tester.ensureSemantics();
           useKoreanLocale(tester);
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-          final cell = tester.getRect(find.byType(CursorPad));
+          // 셀과 둘레 키 사이 간격 몫 (#236)
+          final cell = cursorPadTouchCell(tester);
           final bounds = cell.shift(-pad.topLeft);
+          expect(
+            cell.height,
+            greaterThan(tester.getSize(find.byType(CursorPad)).height),
+            reason: '간격 몫이 있어야 이 검사가 뜻이 있다',
+          );
           for (final sector in CursorPadSector.values) {
             final node = find.semantics
                 .byLabel(
@@ -1037,7 +1188,7 @@ void _cursorPadR2Tests() {
               lessThan(1e-3),
               reason: '$reason: $actual ≠ $expected',
             );
-            // 바깥쪽 변은 셀 변이다.
+            // 바깥쪽 변은 셀 둘레 간격 몫의 바깥 변이다.
             final (got, want) = switch (sector) {
               CursorPadSector.up => (actual.top, cell.top),
               CursorPadSector.down => (actual.bottom, cell.bottom),
@@ -1847,9 +1998,9 @@ void _cursorPadShapeTests() {
             ),
           );
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-          final cell = tester.getRect(find.byType(CursorPad));
           final g = CursorPadGeometry(pad.size);
-          final bounds = cell.shift(-pad.topLeft); // 패드 로컬 좌표의 셀
+          final bounds = cursorPadTouchCell(tester)
+              .shift(-pad.topLeft); // 패드 로컬 좌표의 셀
           final hit = <CursorPadSector?>{};
           var outsideOutline = 0;
           // 셀 테두리 바로 위는 빼고(버튼 상자 오른쪽·아래 변은 히트 테스트에서 빠진다) 한가운데를 지나는 격자
@@ -1916,7 +2067,7 @@ void _cursorPadShapeTests() {
 
     for (final area in const [Size(800, 300), Size(360, 900)]) {
       testWidgets(
-        '${area.width}×${area.height}: 패드 상자 밖 셀 여백은 가까운 방향 키, 셀 밖 간격은 아무 키도 입력하지 않는다',
+        '${area.width}×${area.height}: 패드 상자 밖 셀 여백과 셀 둘레 간격 몫은 가까운 방향 키, 그 너머는 방향 키가 아니다',
         (tester) async {
           final pressed = <CalcKeyId>[];
           await tester.pumpWidget(
@@ -1947,17 +2098,34 @@ void _cursorPadShapeTests() {
             await tester.pump();
             expect(pressed, [id], reason: '$p');
           }
-          // 셀 밖(이웃 키와의 간격)은 넓히지 않는다 — 다른 키 사이와 같은 간격이 남는다.
-          for (final p in [
-            Offset(cell.left - 0.5, cell.center.dy),
-            Offset(cell.right + 0.5, cell.center.dy),
-            Offset(cell.center.dx, cell.top - 0.5),
-            Offset(cell.center.dx, cell.bottom + 0.5),
+          // 셀 둘레 간격 몫(이웃 키와의 간격의 절반, #236)은 다른 키처럼 패드의 몫이다 — 그쪽 변의 방향 키가 받는다.
+          for (final (p, id) in [
+            (Offset(cell.left - 0.5, cell.center.dy), CalcKeyId.cursorLeft),
+            (Offset(cell.right + 0.5, cell.center.dy), CalcKeyId.cursorRight),
+            (Offset(cell.center.dx, cell.top - 0.5), CalcKeyId.cursorUp),
+            (Offset(cell.center.dx, cell.bottom + 0.5), CalcKeyId.cursorDown),
           ]) {
             pressed.clear();
             await tester.tapAt(p);
             await tester.pump();
-            expect(pressed, isEmpty, reason: '셀 밖 $p');
+            expect(pressed, [id], reason: '간격 몫 $p');
+          }
+          // 간격 몫 너머(이웃 키의 몫)는 방향 키가 아니다.
+          final touch = cursorPadTouchCell(tester);
+          final cursorIds = {for (final d in cursorPad.all) d.id};
+          for (final p in [
+            Offset(touch.left - 0.5, cell.center.dy),
+            Offset(touch.right + 0.5, cell.center.dy),
+            Offset(cell.center.dx, touch.bottom + 0.5),
+          ]) {
+            pressed.clear();
+            await tester.tapAt(p);
+            await tester.pump();
+            expect(
+              pressed.where(cursorIds.contains),
+              isEmpty,
+              reason: '간격 몫 너머 $p',
+            );
           }
         },
       );
@@ -2131,7 +2299,7 @@ void _cursorPadShapeTests() {
           }
           final sin = tester.getSize(_button(CalcKeyId.sin));
           final g = CursorPadGeometry(pad.size);
-          final bounds = cell.shift(-pad.topLeft);
+          final bounds = cursorPadTouchCell(tester).shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;

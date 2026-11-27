@@ -63,7 +63,8 @@ import 'screen_coordinate_root.dart';
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
 /// - 터치 영역은 기본적으로 각인 띠 아래 키캡 줄의 셀 폭 전체다 — 그린 키캡이 셀보다 좁아도([keycapMaxAspectRatio], #220)
 ///   키캡 옆 빈 곳까지 그 키다. [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
-///   작아도 늘 셀 전체(각인 띠 포함)가 터치 영역이다(#190).
+///   작아도 늘 셀 전체(각인 띠 포함)가 터치 영역이다(#190). 이렇게 셀 전체로 넓힌 키는 셀 바깥의 키 사이 간격 몫
+///   ([gapInsets])까지 터치·스크린리더 영역이다(#236).
 ///   [hitShape]가 있으면 그림([shape])과 별도로 버튼 상자 ∩ [hitShape]가 터치 영역이다(커서 패드, #64).
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
 ///   키패드는 스크롤 영역 밖에 배치한다.
@@ -149,6 +150,20 @@ class CalcKeyButton extends StatefulWidget {
   /// 키보드 포커스를 받을지 (위 "키보드" 절)
   final bool focusable;
 
+  /// 셀 바깥에서 이 키가 맡는 키 사이 간격 몫 (#236) — 키패드는 이웃 키와의 간격 절반씩을 셀 둘레 여백으로 두고 그 값을
+  /// 넘긴다. 버튼 상자(셀)와 그림은 그대로이고, 터치 영역을 셀 전체로 넓힌 키([extendHitAreaToLegend], 원형 버튼)만
+  /// 누름 판정과 스크린리더 영역(의미 노드 경계 — 접근성 검사기가 터치 대상 크기로 재는 상자)을 이만큼 바깥으로 넓힌다.
+  /// - 목적: 키캡이 48dp보다 낮아 셀 전체를 터치 영역으로 쓰는 작은 화면에서도 터치 높이를 늘린다. 셀은 48dp에 못 미쳐도
+  ///   키 사이 간격(약 6~8dp)을 더하면 390dp 폭 이상의 폰에서 48dp를 넘는다(Accessibility Scanner 지적, #236).
+  /// - 간격을 누르면 가장 가까운 키가 눌린다(예전에는 아무 키도 눌리지 않았다). 이웃 키의 몫과 겹치지 않는다 — 키패드가
+  ///   간격을 절반씩 나누기 때문이다.
+  /// - 셀 전체로 넓히지 않는 키(키캡이 [CalcTheme.keyMinTouchTargetHeight] 이상)는 키캡 줄만 터치 영역이다(이 값을 쓰지 않음).
+  /// - [hitShape]가 있는 키(커서 패드 방향 키)는 이 여백의 누름을 감싼 쪽(커서 패드의 [GapSemantics])이 버튼 상자 가장자리로 당겨
+  ///   넘긴다. 이 키는 누른 채 이동할 때의 이탈 판정만 같은 규칙(여백 안의 점은 상자 가장자리로 당겨 터치 경로로 판정)으로
+  ///   한다. 의미 노드는 넓히지 않는다(커서 패드가 방향별 노드를 따로 둔다).
+  /// 음수일 수 없다.
+  final EdgeInsets gapInsets;
+
   const CalcKeyButton({
     super.key,
     required this.keyDef,
@@ -168,7 +183,19 @@ class CalcKeyButton extends StatefulWidget {
     this.hitOutset = EdgeInsets.zero,
     this.labelInsets = EdgeInsets.zero,
     this.focusable = false,
+    this.gapInsets = EdgeInsets.zero,
   });
+
+  /// 셀 전체(각인 띠 포함)가 터치 영역인지 — [extendHitAreaToLegend]이거나 원형 버튼이고, 터치 모양([hitShape])이 없다.
+  /// 이때만 [gapInsets]까지 넓힌다.
+  bool get hitsWholeCell =>
+      hitShape == null &&
+      (extendHitAreaToLegend ||
+          (keyDef.face == KeyFace.roundButton && showLegendBand));
+
+  /// 터치·스크린리더 영역이 셀 밖으로 넓어지는 여백 — [hitsWholeCell]이면 [gapInsets], 아니면 없음.
+  /// 테스트가 그린 키의 터치 영역을 같은 규칙으로 잰다.
+  EdgeInsets get hitGapInsets => hitsWholeCell ? gapInsets : EdgeInsets.zero;
 
   /// 기본 반복 시작 지연
   static const Duration defaultRepeatDelay = Duration(milliseconds: 500);
@@ -210,6 +237,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// 터치 영역 크기 (Listener 로컬 좌표 기준, 레이아웃마다 갱신)
   Size _hitSize = Size.zero;
 
+  /// 터치 영역이 Listener 상자 밖으로 넓어지는 여백 (#236 — 키 사이 간격 몫, [CalcKeyButton.hitGapInsets])
+  EdgeInsets _hitGap = EdgeInsets.zero;
+
   /// 버튼 좌표에서 터치 영역(Listener)의 원점 (각인 띠를 빼면 띠 높이만큼 아래)
   Offset _hitOrigin = Offset.zero;
 
@@ -223,9 +253,12 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// Listener 로컬 좌표가 터치 영역 안인지 판정한다.
   /// [CalcKeyButton.hitShape]가 있으면 버튼 상자 ∩ 터치 모양, 없으면 터치 사각형 ∩ 키 모양이다.
   bool _hitAreaContains(Offset localPosition) {
-    if (!(Offset.zero & _hitSize).contains(localPosition)) return false;
+    if (!_hitGap.inflateRect(Offset.zero & _hitSize).contains(localPosition)) {
+      return false;
+    }
     final hit = _hitPath.path;
-    if (hit != null) return hit.contains(localPosition);
+    // 간격 몫(#236)의 점은 버튼 상자 가장자리로 당겨 터치 경로로 판정한다 (커서 패드의 [GapSemantics]가 누름을 넘기는 규칙과 같다).
+    if (hit != null) return hit.contains(clampIntoBox(localPosition, _hitSize));
     final path = _shapePath.path;
     return path == null || path.contains(localPosition + _hitOrigin);
   }
@@ -443,19 +476,24 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   Widget build(BuildContext context) {
     final strings = CalcSemanticStrings.of(context);
     final focusable = widget.focusable && _enabled;
-    return Semantics(
-      button: true,
-      enabled: _enabled,
-      // 키보드 포커스를 받는 키(설정 키, #190)는 포커스를 받을 수 있는지와 지금 포커스 상태를 알린다(스크린리더 포커스로
-      // 입력 포커스를 옮기는 동작 `onFocus`는 싣지 않는다 — 활성화는 탭 동작으로 한다).
-      focusable: focusable ? true : null,
-      focused: focusable ? _focused : null,
-      // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
-      // 메인 기능은 라벨, SHIFT·ALPHA 기능은 힌트로 나눠 키를 훑을 때 짧게 읽히게 한다.
-      label: strings.keyButton(widget.keyDef.id),
-      hint: strings.keyButtonHint(widget.keyDef.id),
-      onTap: _enabled ? _handleSemanticTap : null,
+    final gap = widget.hitGapInsets;
+    _hitGap = widget.hitShape != null ? widget.gapInsets : gap;
+    // 터치 영역을 셀 밖 간격 몫까지 넓히는 키는 누름 판정과 의미 노드 경계를 함께 넓힌다 (#236, [GapSemantics]).
+    return GapSemantics(
+      gap: gap,
       excludeSemantics: true,
+      properties: SemanticsProperties(
+        button: true,
+        enabled: _enabled,
+        // 키보드 포커스를 받는 키(설정 키, #190)는 포커스를 받을 수 있는지와 지금 포커스 상태를 알린다(스크린리더 포커스로
+        // 입력 포커스를 옮기는 동작 `onFocus`는 싣지 않는다 — 활성화는 탭 동작으로 한다).
+        focused: focusable ? _focused : null,
+        // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
+        // 메인 기능은 라벨, SHIFT·ALPHA 기능은 힌트로 나눠 키를 훑을 때 짧게 읽히게 한다.
+        label: strings.keyButton(widget.keyDef.id),
+        hint: strings.keyButtonHint(widget.keyDef.id),
+        onTap: _enabled ? _handleSemanticTap : null,
+      ),
       // 키 하나를 따로 그리는 층으로 둔다 (#156) — 키캡에 그림자·옆면·광택을 더해 그리기가 무거워졌으므로, 키를 누르고 뗄
       // 때 이 키만 다시 그리고 이웃 키·본체 바탕은 다시 그리지 않는다.
       child: RepaintBoundary(child: LayoutBuilder(builder: _buildLayout)),
@@ -672,6 +710,108 @@ class _PathCache {
     _source = null;
     _size = null;
   }
+}
+
+/// 누름 판정(히트 테스트)과 의미 노드 경계를 상자 밖으로 [gap]만큼 넓히는 [Semantics] (#236). 키 버튼과 커서 패드
+/// (방향별 노드를 묶는 노드 — Android 엔진의 터치 탐색은 부모 노드 경계 밖의 자식에 닿지 않는다)가 쓴다.
+///
+/// 레이아웃·그리기는 버튼 상자 그대로다. 넓힌 몫은 부모(키패드 셀의 여백 [Padding])가 차지한 키 사이 간격이고, 부모는
+/// 자기 상자 안의 점을 자식에게 넘기므로(셀 여백 안의 점도) 여기서 받아들일 수 있다. 받아들인 점은 버튼 상자 안쪽으로
+/// 당겨서 자식에게 묻는다 — 자식(셀 전체를 덮는 [Listener])이 그 누름을 받고, 이벤트 좌표는 실제 위치 그대로 간다.
+/// 의미 노드 경계([semanticBounds])도 넓히므로 스크린리더 터치 탐색과 접근성 검사기의 터치 대상이 같은 영역이다.
+class GapSemantics extends Semantics {
+  final EdgeInsets gap;
+
+  const GapSemantics({
+    super.key,
+    required this.gap,
+    required super.properties,
+    super.container,
+    super.explicitChildNodes,
+    super.excludeSemantics,
+    super.child,
+  }) : super.fromProperties();
+
+  @override
+  RenderSemanticsAnnotations createRenderObject(BuildContext context) =>
+      _RenderGapSemantics(
+        gap: gap,
+        container: container,
+        explicitChildNodes: explicitChildNodes,
+        excludeSemantics: excludeSemantics,
+        blockUserActions: blockUserActions,
+        properties: properties,
+        localeForSubtree: localeForSubtree,
+        // `Semantics`와 같은 규칙: 라벨이 있으면 주변 글자 방향 (업데이트는 상위 클래스가 같은 규칙으로 한다)
+        textDirection:
+            properties.textDirection ?? Directionality.maybeOf(context),
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderSemanticsAnnotations renderObject,
+  ) {
+    super.updateRenderObject(context, renderObject);
+    (renderObject as _RenderGapSemantics).gap = gap;
+  }
+}
+
+class _RenderGapSemantics extends RenderSemanticsAnnotations {
+  _RenderGapSemantics({
+    required this._gap,
+    required super.properties,
+    super.container,
+    super.explicitChildNodes,
+    super.excludeSemantics,
+    super.blockUserActions,
+    super.localeForSubtree,
+    super.textDirection,
+  });
+
+  EdgeInsets _gap;
+  EdgeInsets get gap => _gap;
+  set gap(EdgeInsets value) {
+    if (value == _gap) return;
+    _gap = value;
+    markNeedsSemanticsUpdate();
+  }
+
+  @override
+  Rect get semanticBounds => _gap.inflateRect(Offset.zero & size);
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) =>
+      _gap == EdgeInsets.zero
+      ? super.hitTest(result, position: position)
+      : _hitTestWithGap(this, _gap, result, position);
+}
+
+/// [point]를 [size] 상자 안쪽(가장자리 포함, 오른쪽·아래 변은 0.01dp 안쪽)으로 당긴다 — 키 사이 간격 몫(#236)의 점을
+/// 상자 가장자리의 점으로 바꿔 판정할 때 쓴다.
+@visibleForTesting
+Offset clampIntoBox(Offset point, Size size) => Offset(
+  point.dx.clamp(0.0, math.max(0.0, size.width - 0.01)),
+  point.dy.clamp(0.0, math.max(0.0, size.height - 0.01)),
+);
+
+/// [box] 상자를 [gap]만큼 넓힌 영역의 점을 받아들이고, 상자 가장자리로 당겨 자식에게 묻는 히트 테스트 (#236).
+/// 이벤트 좌표는 실제 위치 그대로 간다(히트 항목에 원래 위치를 넣는다).
+bool _hitTestWithGap(
+  RenderProxyBox box,
+  EdgeInsets gap,
+  BoxHitTestResult result,
+  Offset position,
+) {
+  if (!gap.inflateRect(Offset.zero & box.size).contains(position)) {
+    return false;
+  }
+  // 두 렌더 객체 모두 자기 자신은 맞지 않는다(`hitTestSelf`가 거짓) — 자식(셀을 덮는 Listener 등)만 묻는다.
+  if (box.hitTestChildren(result, position: clampIntoBox(position, box.size))) {
+    result.add(BoxHitTestEntry(box, position));
+    return true;
+  }
+  return false;
 }
 
 /// 히트 테스트만 [path] 안으로 제한한다 (그리기·레이아웃에는 영향 없음).

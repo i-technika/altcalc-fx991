@@ -229,8 +229,15 @@ void main() {
             settingsKey,
           ]) {
             final r = _keycap(tester, id);
-            final hit = await _topmostHit(tester, id, r.center.dx, keypad.top);
-            // 키패드 윗변(= 영역 아랫변, 위에서 단언)부터 찾으므로 반응 지점은 영역 밖이다 — 고정하는 것은 그 지점의 입력 단계다.
+            // 첫 행 키의 터치 영역은 키패드 윗변까지다(셀 위 간격 몫, #236). 윗변은 영역 아랫변과 같아(위에서 단언, 부동소수
+            // 오차 안) 그 경계 위의 점은 영역 안으로 보류될 수 있다 — 영역 바로 아래부터 찾는다.
+            final hit = await _topmostHit(
+              tester,
+              id,
+              r.center.dx,
+              topGesture + 0.01,
+            );
+            // 영역 밖에서 찾으므로 고정하는 것은 그 지점의 입력 단계다.
             expect(
               hit.line,
               startsWith('입력(누를 때): ${id.name} '),
