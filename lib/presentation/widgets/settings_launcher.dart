@@ -57,9 +57,10 @@ import 'handedness_dialog.dart';
 /// ON 키 쪽 하위 화면이 그 인셋을 빼고 대화상자 최소 크기([dialogMinRegionOf] — 카드 최소 폭·높이와 바깥 여백)에
 /// 못 미치면, 최소 크기를 넘는 하위 화면 중 ON 키에 가장 가까운 곳에 띄운다([dialogAnchorPointOf]). 넘는 곳이 없으면
 /// ON 키 쪽 그대로다(조금 더 넓을 뿐인 곳으로 ON 키와 멀어지지 않는다).
-/// 화면 전체에 띄우지 않는 이유: 물리 힌지는 가로지르면 내용이 힌지 틈에 가려지고, 반 접힘의 주름도 피한다(#25 —
-/// 접힘선 1개 화면은 배치도 접힘선으로 나눈다). ON 키와 다른 절반이지만 모달이라 대화상자만 다루면 된다. 그 결과 이런
-/// 화면에서는 손잡이와 무관하게 대화상자가 넓은 절반에 뜬다.
+/// 화면 전체에 띄우지 않는 이유: 물리 힌지는 가로지르면 내용이 힌지 틈에 가려지고, 반 접힘의 주름도 피한다(#25).
+/// 배치는 한쪽 패널이 좁으면 위아래 배치로 주름을 가로지르지만(키패드가 절반에 들어가지 못한다), 대화상자는 작아
+/// 한쪽 절반에 들어가므로 주름을 피하는 쪽을 택한 설계다. ON 키와 다른 절반이지만 모달이라 대화상자만 다루면 된다.
+/// 그 결과 이런 화면에서는 손잡이와 무관하게 대화상자가 넓은 절반에 뜬다.
 /// 펼친 폭 0 세로 접힘선은 Flutter가 나누지 않아, 앱이 나눌 때 바로 위 절의 순서 안에서 이 규칙을 쓴다 (#129).
 ///
 /// ### 접힘선이 2개 이상인 화면 (#198)
@@ -69,7 +70,8 @@ import 'handedness_dialog.dart';
 /// 194dp로 줄어든다. `showDialog` 경로는 반 접힘·폭 있는 힌지면 화면을 나누고, 접힘선이 둘 이상이면 Flutter
 /// `DisplayFeatureSubScreen.subScreensInBounds`가 다른 접힘선이 걸친 칸도 만든다(x=274.5·548.5: 0~548.5 칸 — 고치기 전
 /// 카드가 x=55~493으로 접힘선 하나를 가로질렀다, #190 R2 실측). 그래서 경로를 직접 띄워(`_SettingsDialogRoute`) 이런
-/// 화면에서는 경로 안의 접힘 정보를 지운다([dialogRouteMediaOf]).
+/// 화면에서는 경로 안의 접힘 정보를 지운다([dialogRouteMediaOf] — 다른 화면에서도 경로가 나누는 접힘선을 배치가 쓰는
+/// 접힘선 하나로 맞춘다).
 ///
 /// 폭 있는 물리 힌지 2개도 화면 전체다. 그 틈의 내용은 보이지 않는다 — 823×603에 폭 20dp 힌지 2개
 /// (x=264.5~284.5·538.5~558.5)를 두고 재면 카드는 x=192.5~630.5(438dp), 선택지 글은 x=264.5~606.5라 두 글의 앞 20dp가
@@ -87,7 +89,9 @@ import 'handedness_dialog.dart';
 /// 경로가 연 시점의 `anchorPoint`로 절반을 고르고, 그 값은 경로가 열린 동안 바뀌지 않는다. 접힘선이 2개 이상인 화면에서
 /// 연 `anchorPoint`는 연 시점의 ON 키 중심 그대로다([dialogAnchorPointOf]). 접힘 정보가 바뀌어 접힘선 2개 이상인 화면이
 /// 되거나 그 반대가 되면 경로는 나뉨 여부를 같은 프레임에 바꾼다(경로의 MediaQuery를 직접 본다, 앱만 나누는 절반은 위처럼
-/// 한 프레임 늦다).
+/// 한 프레임 늦다). 연 시점의 값이라, 가로형 배치(접힘선 2개)로 연 채 접힘선 1개 화면이 되면 대화상자는 연 시점의 ON 키
+/// 쪽 절반에 뜬다 — 접힘선 기준 배치에서는 ON 키가 반대쪽 절반으로 옮겨 가 있을 수 있다(회전 등 다른 전환과 같은 한계,
+/// 기준점을 따라가게 하는 일은 후속 이슈).
 ///
 /// ## 대화상자가 열린 채 손잡이를 바꾸면 (#94)
 /// 세로 접힘선 기준 배치는 그대로이고 손잡이만 바뀌어 키패드(와 ON 키)가 반대쪽 절반으로 옮겨 가도, 대화상자는 연
@@ -181,9 +185,9 @@ class SettingsLauncher extends StatefulWidget {
   /// 아니면 [minRegion] 이상인 하위 화면 중 ON 키에 가장 가까운 곳의 가운데를 돌려준다. 그런 곳이 없거나 화면이
   /// 나뉘지 않으면 [anchor] 그대로다.
   ///
-  /// 창을 가로지르는 접힘선이 2개 이상인 화면도 [anchor] 그대로다 — 경로가 그 화면을 나누지 않고
-  /// ([dialogRouteMediaOf]), Flutter가 그 화면에서 만드는 겹치는 하위 화면(#198)으로 고른 값은 열린 채 접힘선 1개
-  /// 화면이 되었을 때 ON 키와 먼 절반을 고를 수 있다(#198 R1).
+  /// 하위 화면은 경로와 같은 접힘 정보([dialogRouteMediaOf] — 배치가 쓰는 접힘선만)로 나눈다. 그래서 창을
+  /// 가로지르는 접힘선이 2개 이상인 화면은 나뉘지 않아 [anchor] 그대로다 — Flutter가 그런 화면에서 만드는 겹치는 하위
+  /// 화면(#198)으로 고르지 않는다(#198 R1·R2).
   @visibleForTesting
   static Offset? dialogAnchorPointOf(
     MediaQueryData? screen,
@@ -191,9 +195,7 @@ class SettingsLauncher extends StatefulWidget {
     Size minRegion,
   ) {
     if (screen == null || anchor == null) return anchor;
-    if (FormFactor.crossesMultipleHinges(screen.size, screen.displayFeatures)) {
-      return anchor;
-    }
+    screen = dialogRouteMediaOf(screen);
     final whole = Offset.zero & screen.size;
     final subScreens = DisplayFeatureSubScreen.subScreensInBounds(
       whole,
@@ -232,23 +234,49 @@ class SettingsLauncher extends StatefulWidget {
     return closest(subScreens.where(fits))?.center ?? anchor;
   }
 
-  /// 대화상자 경로 안에 줄 MediaQuery ([SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
+  /// 대화상자 경로 안에 줄 MediaQuery — 접히는 부분(fold·hinge)을 배치가 쓰는 접힘선만 남긴다 ([SettingsLauncher]
+  /// "접힘선이 2개 이상인 화면", #198).
   ///
-  /// [route]는 경로가 그려지는 Navigator의 MediaQuery다. 창을 가로지르는 접힘선이 2개 이상인 화면
-  /// ([FormFactor.crossesMultipleHinges] — 펼친 트라이폴드)이면 접히는 부분(fold·hinge)을 모두 지운다 — 배치도 접힘선을
-  /// 모두 무시한다(#144). 경로의 Flutter `DisplayFeatureSubScreen`이 화면을 나누지 않아 대화상자가 화면 전체 가운데에
-  /// 뜬다. 화면 구멍(cutout)은 남긴다. 그런 화면이 아니면 [route] 그대로다.
+  /// [route]는 경로가 그려지는 Navigator의 MediaQuery다. Flutter `DisplayFeatureSubScreen.subScreensInBounds`는 접히는
+  /// 부분이 둘 이상이면 다른 접힘선이 걸친 칸을 만들어(823×603, x=274.5·548.5: 0~548.5 칸) 대화상자가 접힘선을
+  /// 가로지르거나 보고 순서에 따라 다른 칸에 뜬다. 그래서 경로가 나누는 접힘선을 배치([FormFactor.hingeOf])와 맞춘다.
+  /// - 창을 가로지르는 접힘선이 2개 이상([FormFactor.crossesMultipleHinges] — 펼친 트라이폴드, 십자 힌지): 모두 지운다.
+  ///   배치도 접힘선을 모두 무시한다(#144). 경로가 화면을 나누지 않아 대화상자가 화면 전체 가운데에 뜬다.
+  /// - 1개: 그 접힘선 하나만 남긴다. 같은 접힘선이 두 번 보고되면(폭 있는 힌지와 그 안의 폭 0 접힘선) 폭이 가장 넓고,
+  ///   같으면 반 접힌 것 — Flutter가 나누는 쪽이다. 창 가장자리·창 밖·창보다 긴 접힘 정보는 지운다 — 트라이폴드에서 두
+  ///   장에 걸친 분할 창(548.5×603, 반 접힘 x=274.5와 창 끝 x=548.5)도 가운데 접힘선 하나로 나눈다(#198 R2).
+  /// - 0개: 모두 지운다(위와 같은 이유 — 배치도 접힘선이 없는 것으로 본다).
+  ///
+  /// 화면 구멍(cutout)은 남긴다. 바꿀 것이 없으면 [route] 그대로다.
   @visibleForTesting
   static MediaQueryData dialogRouteMediaOf(MediaQueryData route) {
-    if (!FormFactor.crossesMultipleHinges(route.size, route.displayFeatures)) {
-      return route;
-    }
-    return route.copyWith(
-      displayFeatures: [
-        for (final f in route.displayFeatures)
-          if (f.type == DisplayFeatureType.cutout) f,
-      ],
+    bool foldOrHinge(DisplayFeature f) =>
+        f.type == DisplayFeatureType.fold || f.type == DisplayFeatureType.hinge;
+    final crossing = FormFactor.crossingHingesOf(
+      route.size,
+      route.displayFeatures,
     );
+    DisplayFeature? kept;
+    if (crossing.length == 1) {
+      // 창을 가로지르는 접힘 정보는 모두 같은 접힘선이다(다르면 2개로 센다)
+      for (final f in route.displayFeatures) {
+        if (FormFactor.crossingHingesOf(route.size, [f]).isEmpty) continue;
+        final current = kept;
+        if (current == null ||
+            f.bounds.shortestSide > current.bounds.shortestSide ||
+            (f.bounds.shortestSide == current.bounds.shortestSide &&
+                f.state == DisplayFeatureState.postureHalfOpened &&
+                current.state != DisplayFeatureState.postureHalfOpened)) {
+          kept = f;
+        }
+      }
+    }
+    final features = [
+      for (final f in route.displayFeatures)
+        if (!foldOrHinge(f) || identical(f, kept)) f,
+    ];
+    if (features.length == route.displayFeatures.length) return route;
+    return route.copyWith(displayFeatures: features);
   }
 
   @override
@@ -452,8 +480,8 @@ class _SettingsLauncherState extends State<SettingsLauncher> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// 설정 대화상자 경로 — `showDialog`가 만드는 [DialogRoute]이고, 창을 가로지르는 접힘선이 2개 이상인 화면에서만
-/// 경로가 화면을 나누지 않게 한다 ([SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
+/// 설정 대화상자 경로 — `showDialog`가 만드는 [DialogRoute]이고, 경로가 나누는 접힘선을 배치와 맞춘다(창을 가로지르는
+/// 접힘선이 2개 이상인 화면은 나누지 않는다, [SettingsLauncher] "접힘선이 2개 이상인 화면", #198).
 class _SettingsDialogRoute extends DialogRoute<void> {
   _SettingsDialogRoute({
     required super.context,
@@ -470,20 +498,21 @@ class _SettingsDialogRoute extends DialogRoute<void> {
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) => _MultiHingeUnsplit(
+  ) => _LayoutHingesOnly(
     child: super.buildPage(context, animation, secondaryAnimation),
   );
 }
 
 /// 경로 페이지([child] — Flutter `DisplayFeatureSubScreen`을 품는다)에 [SettingsLauncher.dialogRouteMediaOf]의
-/// MediaQuery를 준다 — 접힘선이 2개 이상인 화면에서는 페이지가 화면을 나누지 않는다.
+/// MediaQuery를 준다 — 페이지는 배치가 쓰는 접힘선으로만 나누고, 접힘선이 2개 이상인 화면은 나누지 않는다.
 ///
 /// 페이지의 빌더가 아니라 이 위젯이 MediaQuery에 의존한다 — 접힘 정보가 바뀌면(열린 채 펴거나 접음) 같은 프레임에 이
-/// 위젯만 다시 그린다. 어느 화면이든 위젯 구조가 같아 바뀌어도 대화상자 element(포커스·스크롤)가 유지된다.
-class _MultiHingeUnsplit extends StatelessWidget {
+/// 위젯만 다시 그린다. 이 위젯은 어느 화면이든 같은 구조다(대화상자 element는 안쪽 나눔이 바뀌어도 [GlobalKey]로 옮겨
+/// 가 유지된다 — `_open`).
+class _LayoutHingesOnly extends StatelessWidget {
   final Widget child;
 
-  const _MultiHingeUnsplit({required this.child});
+  const _LayoutHingesOnly({required this.child});
 
   @override
   Widget build(BuildContext context) => MediaQuery(

@@ -2576,7 +2576,9 @@ void _hingeLayoutTests() {
           expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
           final dialog = tester.getRect(_dialogSurface);
           // 연 시점의 설정 키 중심(Flutter가 나누는 접힘선의 `anchorPoint`) 쪽 절반 — 겹치는 하위 화면으로 고친
-          // 기준점(왼손잡이 274.25)을 쓰면 왼손잡이도 왼쪽 절반에 뜬다(#198 R1)
+          // 기준점(왼손잡이 274.25)을 쓰면 왼손잡이도 왼쪽 절반에 뜬다(#198 R1). 연 시점의 값이라 접힘선 기준 배치로
+          // 옮겨 간 지금의 설정 키와는 반대쪽 절반일 수 있다(알려진 한계 — [SettingsLauncher] "대화상자가 열린 동안
+          // 배치가 바뀌면", 후속 이슈)
           expect(
             key.dx > 411.5 ? dialog.left >= 411.5 : dialog.right <= 411.5,
             isTrue,
@@ -2604,6 +2606,71 @@ void _hingeLayoutTests() {
         }
       },
     );
+
+    testWidgets(
+      '두 장에 걸친 분할 창(창 끝에 둘째 접힘선): 보고 순서와 무관하게 설정 키 쪽 절반에 뜬다 (#198 R2)',
+      (tester) async {
+        // 트라이폴드의 두 장에 걸친 분할 창 548.5×603 — 접힘선 1개 규칙(한쪽 274dp < 280dp라 위아래 배치)
+        const size = Size(548.5, 603);
+        final middle = _halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603));
+        final edge = _halfOpenedAt(const Rect.fromLTWH(548.5, 0, 0, 603));
+        Rect? first;
+        for (final features in [
+          [middle, edge],
+          [edge, middle],
+        ]) {
+          await pumpTriFold(
+            tester,
+            size: size,
+            features: features,
+            handedness: Handedness.right,
+          );
+          expect(isStackedArrangement(tester), isTrue);
+          final key = tester.getRect(_settings).center;
+          await tester.tap(_settings);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final dialog = tester.getRect(_dialogSurface);
+          // 두 절반 모두 최소 크기 미만 — 설정 키 쪽 절반 그대로(#125). 고치기 전에는 [middle, edge] 순서에서 Flutter의
+          // 겹치는 칸(0~548.5)에 떠 카드가 x=40~508.5로 주름을 가로질렀다.
+          expect(
+            key.dx > 274.5 ? dialog.left >= 274.5 : dialog.right <= 274.5,
+            isTrue,
+            reason: '$features $key $dialog',
+          );
+          expect(dialog, first ?? dialog, reason: '$features');
+          first = dialog;
+          await tester.tap(find.byKey(HandednessDialog.closeKey));
+          await tester.pumpAndSettle();
+        }
+      },
+    );
+
+    testWidgets('경로의 장벽 색은 showDialog처럼 대화상자 테마를 따른다', (tester) async {
+      tester.view.physicalSize =
+          const Size(390, 844) * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      const barrier = Color(0x80112233);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+          child: MaterialApp(
+            theme: ThemeData(
+              dialogTheme: const DialogThemeData(barrierColor: barrier),
+            ),
+            home: const CalculatorScreen(),
+          ),
+        ),
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final route =
+          ModalRoute.of(tester.element(find.byType(HandednessDialog)))!
+              as DialogRoute<void>;
+      expect(route.barrierColor, barrier);
+    });
 
     testWidgets('경로는 showDialog와 같다 — 장벽(색·닫기·라벨)과 포커스 순환', (tester) async {
       await _pump(tester, size: const Size(390, 844));
@@ -2641,21 +2708,80 @@ void _hingeLayoutTests() {
       MediaQueryData screenOf(List<DisplayFeature> features) =>
           MediaQueryData(size: landscape, displayFeatures: features);
 
-      test('창을 가로지르는 접힘선이 2개 미만이면 그대로다 (경로가 원래대로 나눈다)', () {
+      test('배치가 쓰는 접힘선 하나뿐이면 그대로다 (경로가 원래대로 나눈다)', () {
         for (final features in [
           <DisplayFeature>[],
           [cutout],
           [_halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603))],
-          // 둘째 접힘선이 창 가장자리 — 세지 않는다 (#144)
           [
-            _halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603)),
-            _halfOpenedAt(const Rect.fromLTWH(823, 0, 0, 603)),
+            cutout,
+            _foldAt(
+              const Rect.fromLTWH(400, 0, 20, 603),
+              type: DisplayFeatureType.hinge,
+            ),
           ],
         ]) {
           final screen = screenOf(features);
           expect(
             SettingsLauncher.dialogRouteMediaOf(screen),
             same(screen),
+            reason: '$features',
+          );
+        }
+      });
+
+      test(
+        '배치가 쓰지 않는 접힘 정보(창 가장자리·창 밖·창보다 긺)는 지우고 가로지르는 접힘선 하나만 남긴다 (#198 R2)',
+        () {
+          final middle = _halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603));
+          for (final other in [
+            _halfOpenedAt(const Rect.fromLTWH(823, 0, 0, 603)), // 창 가장자리
+            _halfOpenedAt(const Rect.fromLTWH(900, 0, 0, 603)), // 창 밖
+            _halfOpenedAt(const Rect.fromLTWH(600, 0, 0, 900)), // 창보다 긺(회전 직후)
+          ]) {
+            for (final features in [
+              [middle, other],
+              [other, middle],
+            ]) {
+              expect(
+                SettingsLauncher.dialogRouteMediaOf(
+                  screenOf([cutout, ...features]),
+                ).displayFeatures,
+                [cutout, middle],
+                reason: '$features',
+              );
+            }
+          }
+          // 가로지르는 접힘선이 없으면 접히는 부분이 모두 없어진다
+          expect(
+            SettingsLauncher.dialogRouteMediaOf(
+              screenOf([
+                _halfOpenedAt(const Rect.fromLTWH(823, 0, 0, 603)),
+                cutout,
+              ]),
+            ).displayFeatures,
+            [cutout],
+          );
+        },
+      );
+
+      test('같은 접힘선이 두 번 보고되면 폭이 넓은 쪽, 같으면 반 접힌 쪽을 남긴다', () {
+        final hinge = _foldAt(
+          const Rect.fromLTWH(400, 0, 20, 603),
+          type: DisplayFeatureType.hinge,
+        );
+        final crease = _halfOpenedAt(const Rect.fromLTWH(410, 0, 0, 603));
+        final flat = _foldAt(const Rect.fromLTWH(410, 0, 0, 603));
+        for (final (features, kept) in [
+          ([crease, hinge], hinge),
+          ([hinge, crease], hinge),
+          ([flat, crease], crease),
+          ([crease, flat], crease),
+        ]) {
+          expect(
+            SettingsLauncher.dialogRouteMediaOf(screenOf(features))
+                .displayFeatures,
+            [kept],
             reason: '$features',
           );
         }
