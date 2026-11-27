@@ -177,19 +177,9 @@ void main() {
                 final history = tester.getRect(_history);
                 expect(lcd.width, moreOrLessEquals(block));
                 expect(history.width, moreOrLessEquals(block));
-                // 기록 영역은 위 띠 전체, 활성 LCD는 그 아래쪽(키패드 바로 위)이고 실물 비율보다 높지 않다 (#142 R2).
+                // 기록 영역과 활성 LCD는 둘 다 위 띠 전체다 — 활성 LCD 위가 비지 않는다 (#232).
                 expect(history.bottom, moreOrLessEquals(lcd.bottom));
-                expect(history.top, lessThanOrEqualTo(lcd.top + 0.01));
-                expect(
-                  lcd.height,
-                  lessThanOrEqualTo(
-                    math.max(
-                          CalcTheme.screenLcdMinHeight,
-                          block / CalcTheme.screenLcdMinAspectRatio,
-                        ) +
-                        0.01,
-                  ),
-                );
+                expect(history.top, moreOrLessEquals(lcd.top));
                 expect(
                   history.height,
                   greaterThanOrEqualTo(
@@ -213,8 +203,14 @@ void main() {
                 );
               }
 
-              // 상단 띠가 없어(#190) 위 띠는 본체 윗변부터이고, 키패드가 남긴 높이를 모두 받는다.
+              // 상단 띠가 없어(#190) 위 띠는 본체 윗변부터이고, 키패드가 남긴 높이를 모두 받는다. 활성 LCD도 본체 윗변부터다
+              // — LCD 위에 빈 곳이 없다 (#232).
               expect(expected.band.top, moreOrLessEquals(0));
+              expect(lcd.top, moreOrLessEquals(body.top));
+              expect(
+                expected.lcd.height,
+                moreOrLessEquals(expected.band.height),
+              );
               expect(
                 expected.band.bottom + CalcTheme.screenLcdKeypadGap,
                 moreOrLessEquals(expected.keypad.top),
@@ -282,7 +278,7 @@ void main() {
     final history = tester.getRect(_history);
     final keypad = tester.getRect(_keypad);
     expect(history.top, moreOrLessEquals(body.top));
-    expect(lcd.top, greaterThanOrEqualTo(body.top - 0.01));
+    expect(lcd.top, moreOrLessEquals(body.top));
     expect(history.bottom, moreOrLessEquals(lcd.bottom));
     expect(
       keypad.top - lcd.bottom,
@@ -406,14 +402,13 @@ void main() {
       const block = 1264 / 2.06;
       const keypadHeight = block / 1.5; // 넓은 배열 세로 한계 409.1
       // 위 띠: 키패드가 세로 한계에 닿아 남는 높이 712 − 8 − 409.1 = 294.9를 모두 받는다(목표 199.4) — 상단 띠가 없어
-      // 본체 윗변부터다(#190). 활성 LCD는 블록 폭의 최대 높이(실물 비율 613.6 / 1.75 = 350.6과 줄 글자 상한 높이 약 273.5 중
-      // 낮은 쪽, #189)로 위 띠 아래(키패드 바로 위)에 붙고, 기록 영역은 위 띠 전체다.
+      // 본체 윗변부터다(#190). 활성 LCD와 기록 영역은 둘 다 위 띠 전체다(#232 — 전에는 활성 LCD가 줄 글자 상한 높이 약
+      // 273.5로 위 띠 아래에 붙고 그 위 21.4dp가 비었다).
       const lcdHeight = 712 - 8 - keypadHeight;
-      final active = LcdFontSizes.heightAtMaxLineFont;
       expect(
         l.lcd,
         rectMoreOrLessEquals(
-          Rect.fromLTWH(1264 - block, lcdHeight - active, block, active),
+          const Rect.fromLTWH(1264 - block, 0, block, lcdHeight),
         ),
       );
       expect(
@@ -588,7 +583,7 @@ void main() {
       }
     });
 
-    test('기록 영역 문턱: 위 띠 높이·블록 폭·글자 비율 조건을 모두 만족할 때만 기록이 있고, 그때 활성 LCD는 실물 비율·줄 글자 상한 높이 이하다', () {
+    test('기록 영역 문턱: 위 띠 높이·블록 폭·글자 비율 조건을 모두 만족할 때만 기록이 있고, 활성 LCD는 언제나 위 띠 전체다 (#232)', () {
       for (var height = 150.0; height <= 1400; height += 7) {
         for (final width in const [
           1984.0,
@@ -624,22 +619,13 @@ void main() {
                       CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
           final reason = '$width×$height $l';
           expect(l.history != null, expected, reason: reason);
+          // 활성 LCD는 기록 영역 유무와 무관하게 위 띠 높이 전체다 — 위가 비지 않는다(#232).
+          expect(l.lcd.top, moreOrLessEquals(band.top), reason: reason);
+          expect(l.lcd.height, moreOrLessEquals(band.height), reason: reason);
           if (l.history != null) {
-            expect(l.lcd.height, lessThanOrEqualTo(cap + 1e-6), reason: reason);
             expect(l.history!.height, moreOrLessEquals(band.height));
           } else {
             expect(l.lcd.width, moreOrLessEquals(width), reason: reason);
-            expect(
-              l.lcd.height,
-              lessThanOrEqualTo(
-                math.max(
-                      CalcTheme.screenLcdMinHeight,
-                      LcdFontSizes.heightAtMaxLineFont,
-                    ) +
-                    1e-6,
-              ),
-              reason: reason,
-            );
           }
           // 위 띠는 세로형과 같은 규칙을 본체 폭으로 쓴 높이다(기록 영역과 무관) — 키패드와 간격이 쓰지 않는 높이를
           // 모두 받는다(#190).
@@ -703,8 +689,8 @@ void main() {
           .widgetList<CalcKeyButton>(find.byType(CalcKeyButton))
           .first
           .mainLabelFontSize!;
-      // 활성 LCD 655×273.5(줄 글자 상한 높이 — 위 띠 479.1dp 중 아래쪽, #189. #189 전에는 블록 폭의 실물 비율 높이 655×374.5·
-      // 54.7dp) — 줄 글자는 상한 40dp. 키 메인 각인은 상한 16.5dp.
+      // 활성 LCD 655×519.1(위 띠 전체, #232. #232 전에는 줄 글자 상한 높이 655×273.5, #189 전에는 블록 폭의 실물 비율 높이
+      // 655×374.5·54.7dp) — 줄 글자는 상한 40dp. 키 메인 각인은 상한 16.5dp.
       expect(keyFont, moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize));
       expect(lineFont, greaterThan(keyFont));
       expect(

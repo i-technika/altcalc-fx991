@@ -481,6 +481,70 @@ void main() {
       }
     });
 
+    testWidgets(
+      '줄 글자에 필요한 높이보다 높은 LCD: 글자는 그대로이고 남는 높이를 입력·결과 줄이 똑같이 나눠, 식은 위·답은 아래 끝에 남는다 (#232)',
+      (tester) async {
+        // 폭 396(412dp 폰 — 줄 글자가 폭에 묶인다): 줄 글자(31.7dp)에 필요한 높이 약 221, 상한 높이 273.5, 키패드가 남긴 높이를 받은
+        // 291·315·600dp를 견준다.
+        const width = 396.0;
+        Future<
+          ({double font, Rect lcd, Rect input, Rect result, Rect i, Rect r})
+        >
+        drawAt(double height) async {
+          await _pump(
+            tester,
+            const LcdDisplay(
+              input: Text('1'),
+              result: Text('2'),
+              fitFontsToSize: true,
+            ),
+            width: width,
+            height: height,
+          );
+          return (
+            font: DefaultTextStyle.of(tester.element(find.text('1')))
+                .style
+                .fontSize!,
+            lcd: tester.getRect(find.byType(LcdDisplay)),
+            input: tester.getRect(_inputLine),
+            result: tester.getRect(_resultLine),
+            i: tester.getRect(find.text('1')),
+            r: tester.getRect(find.text('2')),
+          );
+        }
+
+        final base = await drawAt(LcdFontSizes.heightAtMaxLineFont);
+        for (final height in const [291.0, 315.0, 600.0]) {
+          final tall = await drawAt(height);
+          final reason = 'LCD 높이 $height';
+          final extra = height - LcdFontSizes.heightAtMaxLineFont;
+          expect(tall.font, base.font, reason: reason);
+          // 입력·결과 줄이 남는 높이를 2 : 2로 나눠 받는다.
+          expect(
+            tall.input.height - base.input.height,
+            moreOrLessEquals(extra / 2, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.result.height,
+            moreOrLessEquals(tall.input.height, epsilon: 1e-6),
+            reason: reason,
+          );
+          // 식은 LCD 윗변에서, 답은 LCD 아랫변에서 같은 거리다 — 둘 사이만 벌어진다.
+          expect(
+            tall.i.top - tall.lcd.top,
+            moreOrLessEquals(base.i.top - base.lcd.top, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.lcd.bottom - tall.r.bottom,
+            moreOrLessEquals(base.lcd.bottom - base.r.bottom, epsilon: 1e-6),
+            reason: reason,
+          );
+        }
+      },
+    );
+
     testWidgets('상태 표시줄과 줄 내용은 모두 베젤 안쪽에 그려진다', (tester) async {
       await _pump(
         tester,
