@@ -630,9 +630,10 @@ class _Builder {
               sub.inkBottom - basePiece.inkBottom,
             );
       // 기울어진 바탕(∫)은 아래첨자를 바탕 아래쪽 끝을 따라 왼쪽으로 당긴다(#186 사진 대조). 당기는 길이는 ∫ 기준
-      // 상수다(이 표시를 쓰는 바탕은 ∫뿐 — 테스트로 고정). 첨자가 조각 왼쪽 밖으로 나가지 않게 [x]를 넘지 않는다.
+      // 상수다(이 표시를 쓰는 바탕은 ∫뿐 — 테스트로 고정). 첨자가 조각 왼쪽 밖으로 나가거나 오른쪽으로 밀리지 않게
+      // 0~[x]로 묶는다(∫에서는 늘 [x]보다 작다 — ∫ 꼬리와 겹치지 않는지는 위젯 테스트가 그린 픽셀로 본다).
       final pull = subscriptFollowsSlant
-          ? math.min(fontSize * CalcTheme.keyLegendIntegralSubscriptShift, x)
+          ? (fontSize * CalcTheme.keyLegendIntegralSubscriptShift).clamp(0.0, x)
           : 0.0;
       ops.addAll(sub.shifted(x - pull, -drop));
       top = math.max(top, sub.inkTop - drop);
@@ -648,7 +649,7 @@ class _Builder {
   ///   × ∑ 잉크 범위)에 [CalcTheme.keyLegendSumBoxHeightRatio]를 곱한 높이. 끝 칸은 아래끝이 기준선이고 [_limits]가
   ///   ∑ 위·아래로 옮기며, 본문 칸은 세로 가운데가 분수 축 높이([CalcTheme.keyLegendFractionAxis] — 쌓은 ∑의 가운데)다.
   /// - [LegendBoxShape.logArgument]: 기준선에서 `l` 윗끝까지(근접 사진 — 진수 칸이 log 글자 높이만큼 선다).
-  /// - [LegendBoxShape.integralOperand]: [CalcTheme.keyLegendIntegralOperandHeight] — 사진의 ∫ 본문 칸 높이(R1 #186:
+  /// - [LegendBoxShape.integralOperand]: [CalcTheme.keyLegendIntegralOperandHeight] — 사진의 ∫ 본문 칸 높이(#186 R1:
   ///   글꼴 칸 높이면 ∫ 끝 칸보다 1.5배 높고 각인이 사진보다 24% 넓다).
   /// - 그 밖: 글꼴 `◼`·`◻`의 잉크 높이로 기준선에 앉는다.
   /// ∑ 칸 말고는 좌우에 글꼴 칸과 같은 여백([CalcTheme.keyLegendBoxSideBearing])을 두어, 비가 1이면 글꼴 칸과 같은

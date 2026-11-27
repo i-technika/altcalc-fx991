@@ -951,26 +951,25 @@ void main() {
       }
       // 글꼴 ◼의 좌우 여백 (0.6em 칸 − 잉크 0.482em의 절반 — 실제 글꼴 값은 위젯 테스트가 확인)
       expect(CalcTheme.keyLegendBoxSideBearing, moreOrLessEquals(0.059));
-      // ∫ 아래 끝 칸 당김: 사진 약 8px ÷ 메인 각인 글자 크기 약 33px ≈ 0.24em 이하(앱 끝 칸이 사진보다 작아 ∫ 꼬리와의
-      // 간격을 남기도록 줄인다 — 꼬리와 떨어져 있는지는 위젯 테스트가 그린 픽셀로 본다)
+      // ∫ 아래 끝 칸 당김: 사진 9px ÷ 메인 각인 글자 크기 약 33px ≈ 0.27em (∫ 꼬리와 떨어져 있는지는 위젯 테스트가 본다)
       expect(
         CalcTheme.keyLegendIntegralSubscriptShift,
-        inInclusiveRange(0.15, 0.24),
+        inInclusiveRange(0.2, 0.3),
       );
-      // ∫ 본문 칸 높이: 사진 12~13.5px ÷ 33px ≈ 0.36~0.41em, 글꼴 칸(0.482em)보다 낮다
+      // ∫ 본문 칸 높이: 사진 12px(비 25/12와 같은 경계) ÷ 33px ≈ 0.36em, 글꼴 칸(0.482em)보다 낮다
       expect(
         CalcTheme.keyLegendIntegralOperandHeight,
-        inInclusiveRange(0.36, 0.41),
+        inInclusiveRange(0.33, 0.40),
       );
-      // 분수 키 가로줄 나감: 칸 여백과 합쳐 가로줄/칸 잉크 ≈ 1.46 (그린 픽셀은 위젯 테스트)
-      const part = 0.482 * CalcTheme.keyLegendDisplayFractionScale * 25 / 14;
-      const bar =
-          part +
-          2 *
-              (CalcTheme.keyLegendBoxSideBearing *
-                      CalcTheme.keyLegendDisplayFractionScale +
-                  CalcTheme.keyLegendDisplayFractionOverhang);
-      expect(bar / part, moreOrLessEquals(1.46, epsilon: 0.03));
+      // 분수 키 가로줄 나감: 다른 분수보다 길다(가로줄/칸 ≈ 1.46은 위젯 테스트가 그린 픽셀로 본다)
+      expect(
+        CalcTheme.keyLegendDisplayFractionOverhang,
+        inInclusiveRange(0.1, 0.16),
+      );
+      expect(
+        CalcTheme.keyLegendDisplayFractionOverhang,
+        greaterThan(CalcTheme.keyLegendFractionOverhang),
+      );
     });
 
     test(

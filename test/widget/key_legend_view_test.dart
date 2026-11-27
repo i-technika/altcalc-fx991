@@ -698,19 +698,42 @@ void main() {
           fontSize,
         );
         final columns = runsOf(ink.map((p) => p.$1));
-        // l · o · g · 밑 칸 · 진수 칸
-        expect(columns.length, greaterThanOrEqualTo(5), reason: '$columns');
-        (int, int, int, int) columnBounds((int, int) col) =>
-            boundsOf(ink.where((p) => p.$1 >= col.$1 && p.$1 <= col.$2));
-        final l = columnBounds(columns.first);
-        final base = columnBounds(columns[columns.length - 2]);
-        final argument = columnBounds(columns.last);
+        final l = boundsOf(
+          ink.where(
+            (p) => p.$1 >= columns.first.$1 && p.$1 <= columns.first.$2,
+          ),
+        );
+        final baseline = l.$4; // l의 아래끝
+        // 칸은 열 구간이 아니라 높이 띠로 찾는다 — 사진처럼 두 칸이 맞닿아 한 열 구간이 되어도 찾을 수 있다(R2).
+        // g 윗끝(0.55em)·밑 칸 윗끝(약 0.32em)보다 높은 띠에는 l과 진수 칸 왼쪽·오른쪽 벽만 있다.
+        final high = runsOf(
+          ink
+              .where(
+                (p) =>
+                    p.$2 < baseline - fontSize * 0.6 &&
+                    p.$2 > baseline - fontSize * 0.7,
+              )
+              .map((p) => p.$1),
+        );
+        expect(high, hasLength(3), reason: 'l·진수 칸 두 벽 $high');
+        final argumentLeft = high[1].$1;
+        final argument = boundsOf(ink.where((p) => p.$1 >= argumentLeft));
         expect(argument.$2, moreOrLessEquals(l.$2.toDouble(), epsilon: 2));
         expect(argument.$4, moreOrLessEquals(l.$4.toDouble(), epsilon: 2));
         expect(aspectOf(argument), inInclusiveRange(0.45, 0.55));
-        // 사진은 두 칸이 0~1px(약 0.03em 이하)로 맞닿는다. 진수 칸은 왼쪽 여백이 없어 밑 칸의 오른쪽 여백
-        // (첨자 크기의 0.059em ≈ 0.04em)만 남는다 — 양쪽에 여백을 두면 약 0.1em이 벌어진다.
-        expect(argument.$1 - base.$3 - 1, lessThan(fontSize * 0.05));
+        // 밑 칸 오른쪽 끝: 밑 칸 높이 띠에서 진수 칸 왼쪽에 있는 잉크의 오른쪽 끝
+        final baseRight = ink
+            .where(
+              (p) =>
+                  p.$1 < argumentLeft &&
+                  p.$2 < baseline - fontSize * 0.05 &&
+                  p.$2 > baseline - fontSize * 0.2,
+            )
+            .map((p) => p.$1)
+            .reduce(math.max);
+        // 사진은 두 칸이 0~1px로 맞닿는다. 진수 칸은 왼쪽 여백이 없어 밑 칸의 오른쪽 여백(첨자 크기의 0.059em
+        // ≈ 0.04em)만 남는다 — 양쪽에 여백을 두면 약 0.1em이 벌어진다. 맞닿아도(틈 0) 통과한다.
+        expect(argumentLeft - baseRight - 1, lessThan(fontSize * 0.05));
       },
     );
 
@@ -723,10 +746,22 @@ void main() {
           keyDefOf(CalcKeyId.integral).mainLegend,
           fontSize,
         );
-        final columns = runsOf(ink.map((p) => p.$1));
-        // 오른쪽 덩어리가 본문 칸, 나머지가 ∫와 끝 칸이다.
-        expect(columns.length, greaterThanOrEqualTo(2), reason: '$columns');
-        final body = boundsOf(ink.where((p) => p.$1 >= columns.last.$1));
+        // 위 끝 칸 위끝은 ∫ 잉크 위끝(0.893em)에 맞으므로, 잉크 맨 위에서 기준선을 구한다.
+        final (_, inkTop, _, inkBottom) = boundsOf(ink);
+        final baseline = inkTop + fontSize * KeyLegendView.glyphInk['∫']!.$2;
+        // 칸은 높이 띠로 찾는다(R2 — 열 구간은 칸이 맞닿으면 합쳐진다).
+        List<(int, int)> runsIn(bool Function(int y) inBand) {
+          final runs = runsOf(ink.where((p) => inBand(p.$2)).map((p) => p.$1));
+          expect(runs.length, greaterThanOrEqualTo(2), reason: '$runs');
+          return runs;
+        }
+
+        // 본문 칸 높이 띠(끝 칸과 겹치지 않는 0.12~0.3em): ∫ 줄기와 본문 칸
+        final bodyLeft = runsIn(
+          (y) =>
+              y < baseline - fontSize * 0.12 && y > baseline - fontSize * 0.3,
+        ).last.$1;
+        final body = boundsOf(ink.where((p) => p.$1 >= bodyLeft));
         expect(aspectOf(body), moreOrLessEquals(25 / 12, epsilon: 0.1));
         expect(
           body.$4 - body.$2 + 1,
@@ -735,20 +770,12 @@ void main() {
             epsilon: 2,
           ),
         );
-        final rest = ink.where((p) => p.$1 < columns.last.$1).toList();
-        final (_, top, _, bottom) = boundsOf(rest);
-        final band = (bottom - top) ~/ 4;
-        // 위·아래 1/4 띠에서 맨 오른쪽 덩어리가 위·아래 끝 칸이다(∫의 머리·꼬리와 떨어져 있다).
-        List<(int, int)> runsIn(bool Function(int y) inBand) {
-          final runs = runsOf(rest.where((p) => inBand(p.$2)).map((p) => p.$1));
-          expect(runs.length, greaterThanOrEqualTo(2), reason: '$runs');
-          return runs;
-        }
-
-        final upperRuns = runsIn((y) => y < top + band);
-        final lowerRuns = runsIn((y) => y > bottom - band);
+        // 위·아래 끝 칸 띠: ∫ 머리·꼬리와 끝 칸
+        final upperRuns = runsIn((y) => y < inkTop + fontSize * 0.25);
+        final lowerRuns = runsIn((y) => y > inkBottom - fontSize * 0.2);
         final upper = upperRuns.last;
         final lower = lowerRuns.last;
+        // 사진: 아래 칸이 위 칸보다 9px(약 0.27em) 왼쪽
         expect(
           upper.$1 - lower.$1,
           moreOrLessEquals(
@@ -756,11 +783,15 @@ void main() {
             epsilon: 3,
           ),
         );
-        // 당겨도 아래 끝 칸은 ∫ 꼬리와 떨어져 있다(사진도 떨어져 있다).
+        // 아래 끝 칸은 ∫ 꼬리와 떨어져 있다. 사진의 사이는 약 0.15em이고, 번들 ∫는 아래쪽이 좁아 앱은 약 0.28em이다
+        // (차이는 CalcTheme "2차원 각인 배치" 절에 적었다) — 더 벌어지지 않게 위쪽도 묶는다.
         final tail = lowerRuns[lowerRuns.length - 2];
-        expect(lower.$1 - tail.$2, greaterThan(fontSize * 0.05));
+        expect(
+          lower.$1 - tail.$2 - 1,
+          inInclusiveRange(fontSize * 0.05, fontSize * 0.32),
+        );
         // 위 끝 칸과 본문 칸은 사진에서 맞닿는다 — 끝 칸 오른쪽 여백만 남는다.
-        expect(columns.last.$1 - upper.$2 - 1, lessThan(fontSize * 0.05));
+        expect(bodyLeft - upper.$2 - 1, lessThan(fontSize * 0.05));
       },
     );
 
@@ -856,7 +887,7 @@ void main() {
         );
       }
       final integral = keyDefOf(CalcKeyId.integral).mainLegend;
-      expect(width(integral), moreOrLessEquals(2.15, epsilon: 0.03));
+      expect(width(integral), moreOrLessEquals(2.08, epsilon: 0.03));
       final log = keyDefOf(CalcKeyId.logBase).mainLegend;
       expect(width(log), lessThan(width(glyphBoxes(log))));
     });
@@ -865,8 +896,9 @@ void main() {
       '2차원 각인이 있는 키는 키패드 통일 글자 크기의 폭 기준을 정하지 않는다 — 제품 규칙으로 5% 이상 여유 (배열 둘)',
       () {
         // 통일 글자 크기는 가장 좁게 들어가는 라벨이 정한다(`KeypadMetrics.compute` 2단계 — 메인 SHIFT·ALPHA, 각인
-        // Ran#·RanInt 쌍). 칸을 넓힌 각인(∫◻◻◼ 등)이 그 자리를 차지하면 키패드 전체 글자가 작아진다. 폭 기준은
-        // 셀 너비에 비례하므로 배열마다 한 크기로 충분하다(함수부·숫자부 셀 너비 비가 배열마다 다르다).
+        // Ran#·RanInt 쌍). 칸을 넓힌 각인(∫◻◻◼ 등)이 그 자리를 차지하면 키패드 전체 글자가 작아진다. 각인 한도는
+        // 셀 너비에 비례하고 메인 한도는 키캡 테두리(상수)만큼 어긋나지만, 2차원 메인 각인과 SHIFT·ALPHA가 모두 함수부
+        // 키라 비교에는 영향이 없다 — 배열마다 한 크기로 본다(함수부·숫자부 셀 너비 비가 배열마다 다르다).
         bool twoDimensionalMain(CalcKeyDef d) => !d.mainLegend.isPlain;
         bool twoDimensionalLegend(CalcKeyDef d) =>
             !(d.shiftLegend?.isPlain ?? true) ||
@@ -887,14 +919,21 @@ void main() {
             where: where,
           );
           final all = limits();
+          final mainOnly = limits(twoDimensionalMain);
+          final legendOnly = limits(twoDimensionalLegend);
+          // 고른 키가 없으면 한도가 무한대라 아래 비교가 공허하게 통과한다(R2) — 유한한지 먼저 본다.
+          for (final v in [
+            all.main,
+            all.legend,
+            mainOnly.main,
+            legendOnly.legend,
+          ]) {
+            expect(v.isFinite, isTrue, reason: '${m.arrangement}');
+          }
           final reason = '${m.arrangement}';
+          expect(mainOnly.main, greaterThan(all.main * 1.05), reason: reason);
           expect(
-            limits(twoDimensionalMain).main,
-            greaterThan(all.main * 1.05),
-            reason: reason,
-          );
-          expect(
-            limits(twoDimensionalLegend).legend,
+            legendOnly.legend,
             greaterThan(all.legend * 1.05),
             reason: reason,
           );

@@ -125,7 +125,7 @@ final class LegendScript extends KeyLegend {
   final bool subscriptOnBaseline;
 
   /// 아래첨자를 바탕 글자의 기울기만큼 왼쪽으로 당긴다. `∫`의 아래 끝 칸 — 실물은 ∫ 아래쪽 끝을 따라 위 끝 칸보다
-  /// 왼쪽에 있다(근접 사진에서 약 8px, 메인 각인 글자 크기 약 33px 대비, #186). 당기는 길이는 ∫ 기울기에 맞춘 상수
+  /// 왼쪽에 있다(근접 사진에서 9px, 메인 각인 글자 크기 약 33px 대비, #186). 당기는 길이는 ∫ 기울기에 맞춘 상수
   /// (`CalcTheme.keyLegendIntegralSubscriptShift`)라 ∫ 말고 다른 바탕에 쓰면 그 바탕에 맞는 길이를 따로 정해야 한다.
   final bool subscriptFollowsSlant;
 
