@@ -8,8 +8,13 @@ import '../support/bash.dart';
 ///
 /// 스크립트는 프로젝트 항목 전체(`gh project item-list`)를 읽지 않고, 이슈·PR 쪽의 `projectItems`에서 항목을 찾는다.
 /// 가짜 gh는 GraphQL 문서 안의 연산 이름(`issueOrPullRequest`·`addProjectV2ItemById`·`updateProjectV2ItemFieldValue`)으로
-/// 호출을 가려 정해 둔 출력(실제 gh가 `--jq`를 적용한 뒤의 출력)을 내고, 받은 인자를 기록한다.
-/// `--jq` 필터와 GraphQL 문서가 실제 API에서 맞는지는 PR #250에서 실제 이슈·PR로 돌려 확인했다.
+/// 호출을 가려 정해 둔 출력을 내고, 받은 인자를 기록한다. 출력은 두 가지다.
+/// - 필터를 적용한 뒤의 출력(`FAKE_<연산>_OUT`) — 분기·실패 경로 검사용. 어디서나 돈다.
+/// - 실제 API 응답 모양의 원본 JSON(`FAKE_<연산>_JSON`) — 가짜 gh가 받은 `--jq`를 실제 jq로 적용해 낸다.
+///   필터·응답 경로가 틀리면 여기서 깨진다(#250 R1). jq가 없으면 건너뛰되, CI(`GITHUB_ACTIONS`)에서는 없으면 실패한다
+///   (Ubuntu 러너에는 jq가 있다). gh의 `--jq`는 gojq지만 이 필터에 쓰는 문법(경로·`[]`·문자열 보간)은 같다.
+/// 원본 JSON 고정본은 이슈 #250·PR #255를 이 스크립트의 조회 문서로 실제 조회한 응답을 본떴다(2026-11-27).
+/// GraphQL 문서 자체(필드·입력 이름, 변수 타입)는 스키마 조회로 확인한 이름을 그대로 쓰는지 검사한다.
 /// 실패 경로 테스트도 기록을 확인한다 — gh가 아예 실행되지 않아도(예: 실행 권한 없음) 종료 코드만으로는 통과하기 때문이다.
 
 const _script = '.claude/scripts/set-project-status.sh';
@@ -22,6 +27,7 @@ const _itemId = 'PVTI_ours';
 /// 가짜 gh — 호출 하나를 한 줄로 기록하고(`CALL` 뒤에 인자마다 구분 문자 0x1F + 인자, 인자 안의 줄바꿈은 0x1E로 바꿈),
 /// 연산별 환경 변수의 출력·실패를 따른다.
 /// `FAKE_<연산>_OUT`의 `\n`·`\t`는 printf `%b`로 풀린다. `FAKE_<연산>_FAIL`이 있으면 그 메시지를 내고 1로 끝난다.
+/// `FAKE_<연산>_JSON`이 있으면 받은 `--jq` 필터를 jq로 그 JSON에 적용한 결과를 낸다(gh처럼 문자열은 따옴표 없이).
 const _fakeGh = r'''#!/usr/bin/env bash
 us=$'\037'; rs=$'\036'
 { printf 'CALL'; for a in "$@"; do printf '%s%s' "$us" "$a"; done; } | tr '\n' "$rs" >>"$FAKE_GH_LOG"
@@ -33,7 +39,15 @@ case "$*" in
   *) echo "가짜 gh: 예상하지 못한 호출: $*" >&2; exit 99 ;;
 esac
 fail_var="FAKE_${op}_FAIL"; out_var="FAKE_${op}_OUT"
+json_var="FAKE_${op}_JSON"
 if [ -n "${!fail_var:-}" ]; then echo "${!fail_var}" >&2; exit 1; fi
+if [ -n "${!json_var:-}" ]; then
+  filter=""; prev=""
+  for a in "$@"; do [ "$prev" = "--jq" ] && filter=$a; prev=$a; done
+  [ -n "$filter" ] || { echo "가짜 gh: --jq 없이 JSON 응답을 요청함" >&2; exit 98; }
+  printf '%s' "${!json_var}" | jq -r "$filter"
+  exit $?
+fi
 printf '%b' "${!out_var:-}"
 ''';
 
@@ -70,8 +84,10 @@ class _Call {
 ({ProcessResult result, List<_Call> calls}) _run(
   List<String> args, {
   String? lookupOut,
+  String? lookupJson,
   String? lookupFail,
   String? addOut,
+  String? addJson,
   String? addFail,
   String? updateFail,
 }) {
@@ -83,8 +99,10 @@ class _Call {
       'SET_PROJECT_STATUS_GH': _posix('${_tmp.path}/gh'),
       'FAKE_GH_LOG': _posix(log.path),
       'FAKE_LOOKUP_OUT': ?lookupOut,
+      'FAKE_LOOKUP_JSON': ?lookupJson,
       'FAKE_LOOKUP_FAIL': ?lookupFail,
       'FAKE_ADD_OUT': ?addOut,
+      'FAKE_ADD_JSON': ?addJson,
       'FAKE_ADD_FAIL': ?addFail,
       'FAKE_UPDATE_FAIL': ?updateFail,
     },
@@ -105,6 +123,21 @@ String _lookup(String contentId, Map<String, String> items) => [
   contentId,
   for (final e in items.entries) '${e.key}\t${e.value}',
 ].map((line) => '$line\n').join();
+
+/// 조회 응답 원본(실제 API 모양): `data.repository.issueOrPullRequest`에 노드 ID와 항목들
+String _lookupJson(String contentId, Map<String, String> items) =>
+    '{"data":{"repository":{"issueOrPullRequest":{"id":"$contentId",'
+    '"projectItems":{"nodes":['
+    '${items.entries.map((e) => '{"id":"${e.value}","project":{"id":"${e.key}"}}').join(',')}'
+    ']}}}}}';
+
+/// 추가 응답 원본(실제 API 모양)
+String _addJson(String itemId) =>
+    '{"data":{"addProjectV2ItemById":{"item":{"id":"$itemId"}}}}';
+
+/// jq가 있는지 (가짜 gh의 JSON 모드에 필요). 없으면 로컬에서는 건너뛰고 CI에서는 실패한다.
+final bool _hasJq =
+    runBashScript('-c', ['command -v jq >/dev/null']).exitCode == 0;
 
 void main() {
   setUp(() {
@@ -224,8 +257,20 @@ void main() {
       expect(run.calls, hasLength(1), reason: '추가·변경을 시도하지 않는다');
     });
 
-    test('이슈/PR이 없음 (노드 ID가 null)', () {
-      final run = _run(['999999', 'Done'], lookupOut: 'null\n');
+    test('이슈/PR이 없는 번호 — gh가 GraphQL 오류로 1을 낸다(실제 동작)', () {
+      final run = _run(
+        ['999999', 'Done'],
+        lookupFail: 'gh: Could not resolve to an issue or pull request with the number of 999999.',
+      );
+      expect(run.result.exitCode, 1);
+      expect(run.result.stderr, contains('#999999 조회 실패'));
+      // gh의 메시지가 그대로 보여야 원인(번호 없음·한도 초과)을 가릴 수 있다
+      expect(run.result.stderr, contains('Could not resolve'));
+      expect(run.calls, hasLength(1));
+    });
+
+    test('노드 ID가 null (방어용 분기 — 실제 gh는 위처럼 오류로 끝난다)', () {
+      final run = _run(['250', 'Done'], lookupOut: 'null\n');
       expect(run.result.exitCode, 1);
       expect(run.result.stderr, contains('찾지 못했다'));
       expect(run.calls, hasLength(1));
@@ -284,5 +329,91 @@ void main() {
       expect(run.result.exitCode, isNot(0), reason: '$args');
       expect(run.calls, isEmpty, reason: '$args');
     }
+  });
+
+  group('실제 응답 모양에 --jq 필터를 실제 jq로 적용한다 (#250 R1)', () {
+    final skip = !_hasJq && Platform.environment['GITHUB_ACTIONS'] == null
+        ? 'jq가 없다 — CI(Ubuntu 러너)에서 돈다'
+        : null;
+
+    test('CI에는 jq가 있다 (아래 검사가 건너뛰어지지 않는다는 전제)', () {
+      if (Platform.environment['GITHUB_ACTIONS'] != null) {
+        expect(_hasJq, isTrue, reason: 'CI 러너에 jq가 없으면 필터 검사가 사라진다');
+      }
+    });
+
+    test('이슈: 다른 프로젝트 항목 사이에서 이 프로젝트의 항목을 고른다', () {
+      final run = _run(
+        ['250', 'Done'],
+        lookupJson: _lookupJson('I_kwDOVzLZkM8AAAABjC9AqA', {
+          'PVT_other': 'PVTI_other',
+          _projectId: 'PVTI_lAHOBMwL0c4BsMzezhMZK84',
+        }),
+      );
+      expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+      expect(run.calls, hasLength(2));
+      expect(run.calls[1].field('item'), 'PVTI_lAHOBMwL0c4BsMzezhMZK84');
+    }, skip: skip);
+
+    test('PR: 같은 필터로 PR 노드도 읽는다', () {
+      final run = _run(
+        ['255', 'Done'],
+        lookupJson: _lookupJson('PR_kwDOVzLZkM8AAAABSXL2yg', {
+          _projectId: 'PVTI_lAHOBMwL0c4BsMzezhMZcJM',
+        }),
+      );
+      expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+      expect(run.calls[1].field('item'), 'PVTI_lAHOBMwL0c4BsMzezhMZcJM');
+    }, skip: skip);
+
+    test('항목이 없으면 원본 응답의 노드 ID로 추가하고, 추가 응답에서 항목 ID를 읽는다', () {
+      final run = _run(
+        ['251', 'Todo'],
+        lookupJson: _lookupJson('I_kwDOnew', {}),
+        addJson: _addJson('PVTI_added'),
+      );
+      expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+      expect(run.calls, hasLength(3));
+      expect(run.calls[1].field('content'), 'I_kwDOnew');
+      expect(run.calls[2].field('item'), 'PVTI_added');
+      expect(run.result.stdout, contains('(item: PVTI_added)'));
+    }, skip: skip);
+  });
+
+  test('GraphQL 문서는 스키마의 이름·타입을 쓴다 (2026-11-27 스키마 조회로 확인)', () {
+    final run = _run(
+      ['251', 'Done'],
+      lookupOut: _lookup(_contentId, {}),
+      addOut: 'PVTI_new\n',
+    );
+    expect(run.result.exitCode, 0, reason: '${run.result.stderr}');
+    // 공백을 빼고 비교한다 — 줄바꿈·들여쓰기는 바꿔도 된다
+    String flat(String s) => s.replaceAll(RegExp(r'\s+'), '');
+    final [lookup, add, update] = run.calls.map((c) => flat(c.query)).toList();
+    // 조회: number는 Int!(-F로 넘김), Issue·PullRequest 모두 projectItems(includeArchived 기본 true)
+    expect(lookup, contains(r'$number:Int!'));
+    expect(lookup, contains(r'issueOrPullRequest(number:$number)'));
+    for (final type in ['Issue', 'PullRequest']) {
+      expect(
+        lookup,
+        contains('...on$type{idprojectItems(first:20){nodes{idproject{id}}}}'),
+      );
+    }
+    // 추가: AddProjectV2ItemByIdInput { projectId: ID!, contentId: ID! }
+    expect(
+      add,
+      contains(
+        r'addProjectV2ItemById(input:{projectId:$project,contentId:$content}){item{id}}',
+      ),
+    );
+    // 변경: UpdateProjectV2ItemFieldValueInput { projectId, itemId, fieldId: ID!, value: ProjectV2FieldValue! },
+    // ProjectV2FieldValue.singleSelectOptionId: String
+    expect(update, contains(r'$option:String!'));
+    expect(
+      update,
+      contains(
+        r'updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}})',
+      ),
+    );
   });
 }

@@ -43,8 +43,10 @@ LOOKUP=$("$gh" api graphql \
 }' \
   -f owner="$OWNER" -f name="$REPO_NAME" -F number="$NUMBER" \
   --jq '.data.repository.issueOrPullRequest | .id, (.projectItems.nodes[] | "\(.project.id)\t\(.id)")') \
-  || { echo "#${NUMBER} 조회 실패 — 상태를 바꾸지 않았다" >&2; exit 1; }
+  || { echo "#${NUMBER} 조회 실패(번호가 없거나 API 오류 — 위 gh 메시지 참고) — 상태를 바꾸지 않았다" >&2; exit 1; }
 
+# 없는 번호는 gh가 GraphQL 오류("Could not resolve to an issue or pull request")로 1을 내 위에서 멈춘다.
+# 아래 null·빈 값 검사는 응답이 예상과 다를 때를 위한 방어다.
 CONTENT_ID=$(printf '%s\n' "$LOOKUP" | sed -n 1p)
 [ -n "$CONTENT_ID" ] && [ "$CONTENT_ID" != "null" ] \
   || { echo "#${NUMBER} 이슈/PR을 찾지 못했다 — 상태를 바꾸지 않았다" >&2; exit 1; }
