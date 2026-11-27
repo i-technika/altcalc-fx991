@@ -860,6 +860,9 @@ void main() {
         CalcTheme.keyLegendFractionBarThickness,
         CalcTheme.keyLegendFractionGap,
         CalcTheme.keyLegendFractionOverhang,
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        CalcTheme.keyLegendDisplayFractionGap,
+        CalcTheme.keyLegendBoxStrokeRatio,
         CalcTheme.keyLegendRadicalStroke,
         CalcTheme.keyLegendRadicalGap,
         CalcTheme.keyLegendRadicalSignWidth,
@@ -882,15 +885,26 @@ void main() {
       // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
       // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
       for (var f = 4.0; f <= 12; f += 0.1) {
-        final bar = f * CalcTheme.keyLegendFractionBarThickness;
-        final paintBar = bar > CalcTheme.keyLegendMinStroke
-            ? bar
-            : CalcTheme.keyLegendMinStroke;
-        expect(
-          f * CalcTheme.keyLegendFractionGap - (paintBar - bar) / 2,
-          greaterThan(0),
-          reason: '분수 $f',
-        );
+        for (final (barRatio, gapRatio) in [
+          (
+            CalcTheme.keyLegendFractionBarThickness,
+            CalcTheme.keyLegendFractionGap,
+          ),
+          (
+            CalcTheme.keyLegendDisplayFractionBarThickness,
+            CalcTheme.keyLegendDisplayFractionGap,
+          ),
+        ]) {
+          final bar = f * barRatio;
+          final paintBar = bar > CalcTheme.keyLegendMinStroke
+              ? bar
+              : CalcTheme.keyLegendMinStroke;
+          expect(
+            f * gapRatio - (paintBar - bar) / 2,
+            greaterThan(0),
+            reason: '분수 $f ($barRatio)',
+          );
+        }
         final stroke = f * CalcTheme.keyLegendRadicalStroke;
         final paintStroke = stroke > CalcTheme.keyLegendMinStroke
             ? stroke
@@ -918,7 +932,6 @@ void main() {
           greaterThan(CalcTheme.keyLegendSumBoxHeightRatio),
         ); // 본문 칸도 납작하다
         expect(CalcTheme.keyLegendLimitGap, inExclusiveRange(0, 0.1));
-        expect(CalcTheme.keyLegendBoxStroke, inExclusiveRange(0, 0.1));
         // ∑ 잉크 범위 0.954em (Noto Sans Math, KeyLegendView.glyphInk) — 쌓은 잉크 높이식
         const sigma = 0.954 * CalcTheme.keyLegendLimitBaseScale;
         const stack =
@@ -987,28 +1000,53 @@ void main() {
       );
     });
 
-    test(
-      '빈 칸 테두리는 최소 두께로 굵어져도 구멍이 칸의 절반 이상 남는다 — 짧은 창 하한 각인 3.2dp부터 (#169 R2)',
-      () {
-        const sigmaRatio = 0.954 * CalcTheme.keyLegendLimitBaseScale;
-        for (var f = 3.2; f <= 12; f += 0.1) {
-          final height = f * sigmaRatio * CalcTheme.keyLegendSumBoxHeightRatio;
-          final width = f * sigmaRatio * CalcTheme.keyLegendSumLimitWidthRatio;
-          final short = height < width ? height : width;
-          final raw = f * CalcTheme.keyLegendBoxStroke;
-          final painted = raw > CalcTheme.keyLegendMinStroke
-              ? raw
-              : CalcTheme.keyLegendMinStroke;
-          // key_legend_view.dart `_box`와 같은 상한: 짧은 변의 1/4
-          final stroke = painted < short / 4 ? painted : short / 4;
-          expect(
-            height - 2 * stroke,
-            greaterThanOrEqualTo(height / 2 - 1e-9),
-            reason: '$f',
-          );
-        }
-      },
-    );
+    test('빈 칸 테두리는 칸 짧은 변의 사진 비율이고, 구멍이 칸의 절반 이상 남는다 (#206, #169 R2)', () {
+      // 근접 사진의 빈 칸 테두리: 칸 짧은 변의 0.24~0.29 (분수 키 분모 0.26, ∫ 끝 칸 0.28~0.29, log 진수 칸 0.24).
+      expect(CalcTheme.keyLegendBoxStrokeRatio, inInclusiveRange(0.24, 0.29));
+      // 테두리는 칸 안쪽에 칠하므로 구멍 = 1 − 2 × 비율. 칸 크기에 비례하므로 글자 크기(짧은 창 하한 각인 약 3.2dp
+      // 포함)와 상관없이 구멍이 칸의 절반 이상이다 — 작은 각인에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2).
+      expect(
+        1 - 2 * CalcTheme.keyLegendBoxStrokeRatio,
+        greaterThanOrEqualTo(0.5 - 1e-9),
+      );
+    });
+
+    test('분수 키 가로줄·간격·칸은 사진 비율이고, 작은 분수보다 굵다 (#206)', () {
+      // 근접 사진(메인 각인 글자 크기 33.5px): 가로줄 4.9px, 간격 2.4~2.5px, 칸 높이 14px(분자 13.6·분모 14.4px)
+      expect(
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        moreOrLessEquals(4.9 / 33.5, epsilon: 0.01),
+      );
+      expect(
+        CalcTheme.keyLegendDisplayFractionGap,
+        moreOrLessEquals(2.45 / 33.5, epsilon: 0.01),
+      );
+      // 칸 높이 = 글꼴 ◼ 잉크 0.482em × 분수 키 배율
+      const box = 0.482 * CalcTheme.keyLegendDisplayFractionScale;
+      expect(box, moreOrLessEquals(14 / 33.5, epsilon: 0.01));
+      // 각인 높이 = 칸 둘 + 간격 둘 + 가로줄: 사진 37.9px ≈ 1.13em이고, 가장 높은 d/dx◼(약 1.141em)보다 낮다
+      // (그래서 키패드 통일 각인 크기가 그대로다 — 실제 배치는 위젯 테스트가 본다).
+      const height =
+          2 * box +
+          2 * CalcTheme.keyLegendDisplayFractionGap +
+          CalcTheme.keyLegendDisplayFractionBarThickness;
+      expect(height, moreOrLessEquals(37.9 / 33.5, epsilon: 0.02));
+      expect(height, lessThan(1.141));
+      // 작은 분수는 높이 예산 때문에 가늘게 둔다(CalcTheme "2차원 각인 배치" 절)
+      expect(
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        greaterThan(CalcTheme.keyLegendFractionBarThickness),
+      );
+      expect(
+        CalcTheme.keyLegendDisplayFractionGap,
+        greaterThan(CalcTheme.keyLegendFractionGap),
+      );
+      // 근호: 사진 가로줄 4.8px·비스듬한 획 약 4.6px
+      expect(
+        CalcTheme.keyLegendRadicalStroke,
+        moreOrLessEquals(4.7 / 33.5, epsilon: 0.01),
+      );
+    });
 
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));

@@ -383,6 +383,8 @@ class _LegendLayout {
             fontSize,
             partScale: CalcTheme.keyLegendDisplayFractionScale,
             overhangRatio: CalcTheme.keyLegendDisplayFractionOverhang,
+            barRatio: CalcTheme.keyLegendDisplayFractionBarThickness,
+            gapRatio: CalcTheme.keyLegendDisplayFractionGap,
           )
         : builder.layout(legend, fontSize);
     // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자).
@@ -708,12 +710,10 @@ class _Builder {
       op = _BarOp(rect);
     } else {
       // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다. 테두리는 칸 안쪽에 칠하므로
-      // 남는 구멍은 `칸 − 2 × 두께`다 — 최소 두께로 굵어져도 두께를 칸의 1/4 이하로 두어 구멍이 칸의 절반 이상 남게
-      // 한다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
-      final stroke = math.min(
-        _paintStroke(fontSize * CalcTheme.keyLegendBoxStroke),
-        math.min(width, height) / 4,
-      );
+      // 남는 구멍은 `칸 − 2 × 두께`다. 두께는 칸의 짧은 변에 비례해(사진 비율, #206) 글자 크기와 상관없이 구멍이 칸의
+      // 절반으로 남는다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
+      final stroke =
+          math.min(width, height) * CalcTheme.keyLegendBoxStrokeRatio;
       final r = rect.deflate(stroke / 2);
       op = _PathOp(
         [
@@ -771,13 +771,16 @@ class _Builder {
   }
 
   /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓고, 가로줄을 분자·분모 조각 폭보다 좌우로
-  /// 글자 크기 × [overhangRatio]만큼 더 긋는다.
+  /// 글자 크기 × [overhangRatio]만큼 더 긋는다. 가로줄 두께·분자·분모와의 간격은 글자 크기 × [barRatio]·[gapRatio]다
+  /// (분수 키 각인은 사진 두께, 작은 분수는 높이 예산 안의 두께 — #206).
   _Piece fraction(
     KeyLegend numerator,
     KeyLegend denominator,
     double fontSize, {
     required double partScale,
     double overhangRatio = CalcTheme.keyLegendFractionOverhang,
+    double barRatio = CalcTheme.keyLegendFractionBarThickness,
+    double gapRatio = CalcTheme.keyLegendFractionGap,
   }) {
     final partSize = fontSize * partScale;
     final num = layout(numerator, partSize);
@@ -785,9 +788,9 @@ class _Builder {
     final overhang = fontSize * overhangRatio;
     final width = math.max(num.width, den.width) + 2 * overhang;
     final axis = fontSize * CalcTheme.keyLegendFractionAxis;
-    final bar = fontSize * CalcTheme.keyLegendFractionBarThickness;
+    final bar = fontSize * barRatio;
     final paintBar = _paintStroke(bar);
-    final gap = fontSize * CalcTheme.keyLegendFractionGap;
+    final gap = fontSize * gapRatio;
     // 분자 잉크 아래끝·분모 잉크 위끝이 가로줄에서 [gap]만큼 떨어지게 한다.
     final numBaseline = axis + bar / 2 + gap - num.inkBottom;
     final denBaseline = axis - bar / 2 - gap - den.inkTop;
