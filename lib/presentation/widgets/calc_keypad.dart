@@ -387,8 +387,8 @@ class KeypadMetrics {
   ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다. 큰 키(태블릿)에서는 [CalcTheme.keyMainLabelMaxFontSize]·
   ///    [CalcTheme.keyLegendMaxFontSize]에서 멈춘다(#141). 폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는
   ///    이 높이 기준보다 커지지 않는다.
-  /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 모든 라벨이 자기 셀 폭에
-  ///    들어가는 크기까지 줄인다. 그래서 대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
+  /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 모든 라벨이 자기 키의 그린 키캡 폭
+  ///    (#220 — 원형 버튼의 각인 줄은 셀 폭)에 들어가는 크기까지 줄인다. 그래서 대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
@@ -542,7 +542,8 @@ class KeypadMetrics {
   }
 }
 
-/// 모든 라벨이 자기 셀 폭에 들어가는 (배율 반영) 최대 글자 크기와, 가장 높은 라벨의 높이.
+/// 모든 라벨이 자기 키의 그린 키캡 폭(#220 — 원형 버튼의 각인 줄은 셀 폭)에 들어가는 (배율 반영) 최대 글자 크기와,
+/// 가장 높은 라벨의 높이.
 ///
 /// 크기는 실제 글꼴로 그린 각인 크기([KeyLegendView.emSize] — 2차원 각인 포함, 글자 크기 1dp당 값)로 잰다.
 /// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 폭이 글자 크기에 비례하지 않는 일은 없다.)
@@ -578,7 +579,8 @@ class _LabelLimits {
       KeyLegendView.emSize(legend, style).width;
 
   /// [where]가 있으면 그 키만 잰다(테스트용 — [KeypadMetrics.debugWidthLimits]).
-  /// 메인 라벨은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220)에, 각인은 셀 너비에 맞춘다(각인 띠는 셀 폭이다).
+  /// 메인 라벨과 SHIFT·ALPHA 각인은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220 — 각인 띠 폭도 키캡 폭이다)에,
+  /// 원형 버튼의 각인 줄은 셀 너비([functionKeyWidth]·[numberKeyWidth])에 맞춘다.
   static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,

@@ -61,7 +61,8 @@ import 'screen_coordinate_root.dart';
 ///   [ScreenCoordinateRoot]가 원점을 알려준다. 키 위쪽에서 MediaQuery의 `size`·`systemGestureInsets`를
 ///   영역 기준으로 덮어쓰면 판정이 틀어지므로, 분할 배치 등에서도 View의 값을 그대로 물려준다.
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
-/// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
+/// - 터치 영역은 기본적으로 각인 띠 아래 키캡 줄의 셀 폭 전체다 — 그린 키캡이 셀보다 좁아도([keycapMaxAspectRatio], #220)
+///   키캡 옆 빈 곳까지 그 키다. [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
 ///   작아도 늘 셀 전체(각인 띠 포함)가 터치 영역이다(#190).
 ///   [hitShape]가 있으면 그림([shape])과 별도로 버튼 상자 ∩ [hitShape]가 터치 영역이다(커서 패드, #64).
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.

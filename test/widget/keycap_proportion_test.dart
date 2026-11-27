@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -5,8 +6,9 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../support/bundled_fonts.dart';
 
 /// 키캡 크기를 실물 fx-991EX에 맞춘 규칙 (#220, [CalcTheme] "키캡 크기 (#220)" 절):
 /// - 각인 띠는 모든 구역이 함수부 띠와 같은 높이다 — 숫자부 셀이 높은 몫은 키캡이 받는다.
@@ -23,8 +25,9 @@ Finder _button(CalcKeyId id) =>
 Future<void> _pumpScreen(
   WidgetTester tester,
   Size size,
-  EdgeInsets padding,
-) async {
+  EdgeInsets padding, {
+  double textScale = 1.0,
+}) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
@@ -35,12 +38,42 @@ Future<void> _pumpScreen(
             size: size,
             padding: padding,
             viewPadding: padding,
+            textScaler: TextScaler.linear(textScale),
           ),
           child: const CalculatorScreen(),
         ),
       ),
     ),
   );
+}
+
+/// [id] 키의 SHIFT·ALPHA 각인(키캡 위 각인 띠의 `FittedBox` — 평문·2차원 모두)이 그린 키캡 폭 안에 있고, 따로 줄지 않았는지
+/// 확인한다 (#220 R1·R2 — 실물처럼 각인을 키캡 폭 안에 인쇄하고, 좁힌 띠에서도 통일 글자 크기 그대로 그린다).
+void _expectLegendsInsideCapUnscaled(WidgetTester tester, CalcKeyId id) {
+  final cap = tester.getRect(_keycap(id));
+  final boxes = find.descendant(
+    of: _button(id),
+    matching: find.byType(FittedBox),
+  );
+  for (final e in boxes.evaluate()) {
+    final box = tester.getRect(find.byWidget(e.widget));
+    if (box.bottom > cap.top + 0.01) continue; // 키캡 안 메인 라벨
+    final reason = '${id.name} 각인 $box (키캡 $cap)';
+    expect(box.left, greaterThanOrEqualTo(cap.left - 0.01), reason: reason);
+    expect(box.right, lessThanOrEqualTo(cap.right + 0.01), reason: reason);
+    final render = e.renderObject! as RenderFittedBox;
+    final child = render.child!.size;
+    expect(
+      child.width,
+      lessThanOrEqualTo(render.size.width + 0.01),
+      reason: reason,
+    );
+    expect(
+      child.height,
+      lessThanOrEqualTo(render.size.height + 0.01),
+      reason: reason,
+    );
+  }
 }
 
 /// 화면에 그린 키패드의 치수
@@ -60,6 +93,9 @@ double _aspectOf(WidgetTester tester, CalcKeyId id) {
 }
 
 void main() {
+  // 각인 폭·축소는 실제 글꼴로 잰다 (키캡 치수는 글꼴과 무관하다)
+  setUpAll(loadBundledFonts);
+
   group('keyCapFaceWidth', () {
     test('키캡이 상한보다 납작하지 않으면 셀 폭 그대로다', () {
       expect(
@@ -214,25 +250,26 @@ void main() {
             lessThanOrEqualTo(cell.width / oldCap + 1e-6),
             reason: reason,
           );
-          // SHIFT·ALPHA 각인은 키캡 폭 안에 인쇄한다 (#220 R1 — 실물처럼)
-          final legends = find.descendant(
-            of: _button(def.id),
-            matching: find.byType(KeyLegendView),
-          );
-          for (final e in legends.evaluate()) {
-            final r = tester.getRect(find.byWidget(e.widget));
-            if (r.top >= cap.top - 0.01) continue; // 키캡 위 메인 라벨
-            expect(
-              r.left,
-              greaterThanOrEqualTo(cap.left - 0.01),
-              reason: reason,
-            );
-            expect(
-              r.right,
-              lessThanOrEqualTo(cap.right + 0.01),
-              reason: reason,
-            );
+          _expectLegendsInsideCapUnscaled(tester, def.id);
+        }
+      });
+    }
+
+    // 글자 배율 1.3(키 글자 배율 상한)에서도 각인이 키캡 폭 안에 따로 줄지 않고 들어간다 — 작은 폰·짧은 창·넓은 배열·초광폭
+    for (final (size, padding) in const [
+      (Size(320, 568), EdgeInsets.only(top: 20)),
+      (Size(360, 520), EdgeInsets.only(top: 24)),
+      (Size(800, 360), EdgeInsets.only(top: 24)),
+      (Size(2000, 400), EdgeInsets.zero),
+    ]) {
+      testWidgets('$size·글자 배율 1.3: 각인이 키캡 폭 안에 축소 없이 들어간다', (tester) async {
+        await _pumpScreen(tester, size, padding, textScale: 1.3);
+        for (final def in allKeys) {
+          if (def.category == KeyCategory.cursor ||
+              def.face == KeyFace.roundButton) {
+            continue;
           }
+          _expectLegendsInsideCapUnscaled(tester, def.id);
         }
       });
     }
@@ -289,6 +326,50 @@ void main() {
         );
       },
     );
+
+    testWidgets('터치 영역의 세로 경계: 각인 띠까지 넓히지 않는 키는 띠 아래부터, 넓히는 키는 셀 위부터다', (
+      tester,
+    ) async {
+      // 함수부 키캡은 48dp 미만(띠까지 넓힘), 숫자부 키캡은 48dp 이상(키캡만)인 키패드
+      const size = Size(520, 650);
+      final pressed = <CalcKeyId>[];
+      tester.view.physicalSize = size * tester.view.devicePixelRatio;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: size),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox.fromSize(
+                size: size,
+                child: CalcKeypad(onKeyPressed: pressed.add),
+              ),
+            ),
+          ),
+        ),
+      );
+      final m = KeypadMetrics.compute(size, TextScaler.noScaling);
+      expect(m.extendFunctionHitArea, isTrue);
+      expect(m.extendNumberHitArea, isFalse);
+      Future<bool> hits(CalcKeyId id, double y) async {
+        pressed.clear();
+        await tester.tapAt(Offset(tester.getRect(_button(id)).center.dx, y));
+        await tester.pump(const Duration(milliseconds: 200));
+        return pressed.contains(id);
+      }
+
+      for (final id in [CalcKeyId.num7, CalcKeyId.multiply]) {
+        final cell = tester.getRect(_button(id));
+        final bandBottom = cell.top + m.legendBandHeight;
+        expect(await hits(id, bandBottom - 0.5), isFalse, reason: id.name);
+        expect(await hits(id, bandBottom + 0.5), isTrue, reason: id.name);
+      }
+      for (final id in [CalcKeyId.sin, CalcKeyId.optn]) {
+        final cell = tester.getRect(_button(id));
+        expect(await hits(id, cell.top + 0.5), isTrue, reason: id.name);
+      }
+    });
 
     testWidgets('키캡 옆 빈 곳(셀 안)을 눌러도 그 키가 입력된다 — 터치 영역은 셀 폭 그대로다', (
       tester,
