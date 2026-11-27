@@ -981,11 +981,13 @@ void _cursorPadR2Tests() {
 
     // 쓸어 넘기기(다음 항목) 순서는 ◀ ▲ ▼ ▶이다 — TalkBack 에뮬레이터에서 앞·뒤 쓸기로 확인한 순서(#173).
     // 정렬 키 없이 Flutter 기본 순서(위치)로 정해지므로, 영역 나누기(semanticRect)를 바꿔도 이 순서가 남는지 지킨다.
+    // 키패드 크기: 기본 테스트 영역, 세로 폰 키패드 근사, 셀이 가로로 넓은 경우(#159), 셀이 납작한 짧은 창 근사.
+    // 넓은 배열(가로형·테이블톱)과 숫자부 왼쪽은 keypad_wide_arrangement_test.dart의 읽기 순서 테스트가 본다.
     for (final area in const [
       Size(360, 420),
       Size(393, 560),
       Size(800, 300),
-      Size(411, 452),
+      Size(411, 260),
     ]) {
       testWidgets('${area.width}×${area.height}: 쓸어 넘기기 순서는 ◀ ▲ ▼ ▶', (
         tester,
