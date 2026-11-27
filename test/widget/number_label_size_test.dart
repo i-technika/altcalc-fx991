@@ -15,7 +15,8 @@ import '../support/ttf_cmap.dart';
 
 /// 숫자부 메인 각인 크기 (#225, [CalcTheme] "숫자부 메인 각인 크기 (#225)" 절):
 /// - 숫자는 숫자부 키캡 높이의 비율이고, 두 구역의 글자/키캡 비가 실물의 같은 배수다.
-/// - 글자 각인(DEL·AC·Ans·×10ˣ)은 숫자의 0.83배, 연산 기호(× ÷ + − =)는 Noto Sans Mono Medium을 숫자의 1.37배로 그린다.
+/// - 글자 각인(DEL·AC·Ans·×10ˣ)은 숫자의 0.83배, 연산 기호(× ÷ + − =)는 Noto Sans Mono Medium을 숫자의 1.41배로 그리고, 잉크 가운데를 숫자에 맞춰
+///   내려 그린다.
 /// - 글자 배율 1.0·1.3·2.0에서 숫자부 각인은 따로 줄지 않는다.
 
 // 실물 키패드 근접 사진에서 잰 값 (CalcTheme "숫자부 메인 각인 크기" 절)
@@ -108,6 +109,51 @@ double _inkCenter(ByteData font, String ch) {
   return (y.yMin + y.yMax) / 2;
 }
 
+/// 연산 기호 [operator]의 잉크 가운데 높이가 같은 행 숫자 [digit]의 잉크 가운데와 0.25dp 안인지 본다 (#225).
+///
+/// 내리는 거리는 기호·숫자의 대표 잉크 가운데(0.35·0.346em)로 정했으므로 글리프마다(기호 0.346~0.3535em, 숫자
+/// 0.344~0.348em) 조금 남는다. 기호가 키캡 높이에 묶인 창은 숫자가 기호 ÷ 배율보다 커서 약 0.1dp 더 어긋난다.
+/// 줄 상자 높이는 글자 크기를 정수로 반올림한 값이라(TextPainter) 가운데 정렬한 라벨은 글자 크기마다 0.25dp 이하
+/// 오르내린다 — 크기가 다른 모든 각인에 공통인 반올림이므로 그 몫은 빼고(줄 상자 높이를 글자 크기로 보고) 비교한다.
+void _expectOperatorInkAlignedWithDigit(
+  WidgetTester tester, {
+  required CalcKeyDef operator,
+  required CalcKeyDef digit,
+  required ByteData operatorFont,
+  required ByteData digitFont,
+  required double effectiveScale,
+  required String reason,
+}) {
+  double inkCenterY(CalcKeyDef def, ByteData font) {
+    final ch = def.mainLabel;
+    final finder = _mainText(def.id);
+    final text = tester.widget<Text>(finder);
+    final fontSize = text.style!.fontSize! * effectiveScale;
+    // 그린 Text와 같은 스타일·줄 상자로 기준선을 잰다
+    final painter = TextPainter(
+      text: TextSpan(text: ch, style: text.style),
+      strutStyle: text.strutStyle,
+      textScaler: text.textScaler!,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final baseline = painter.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
+    final rounding = (painter.height - fontSize) / 2;
+    painter.dispose();
+    return tester.getRect(finder).top +
+        rounding +
+        baseline -
+        _inkCenter(font, ch) * fontSize;
+  }
+
+  expect(
+    inkCenterY(operator, operatorFont),
+    closeTo(inkCenterY(digit, digitFont), 0.25),
+    reason: reason,
+  );
+}
+
 void main() {
   setUpAll(loadBundledFonts);
 
@@ -119,7 +165,7 @@ void main() {
   });
 
   group('실물 대조 (#225)', () {
-    test('연산 기호 배율은 근접 사진 / Noto Sans Mono Medium의 기호·숫자 비 여섯 값의 평균이고, 글리프마다 5% 안이다', () {
+    test('연산 기호 배율은 근접 사진 / Noto Sans Mono Medium의 기호·숫자 비 여덟 값의 평균이고, 글리프마다 5% 안이다', () {
       // 숫자는 같은 모양끼리 짝짓는다 — 사진의 평평한 숫자(45px)와 Saira '4'(0.688em)
       final digit = readGlyphYBounds(saira, '4'.runes.single)!;
       final digitHeight = digit.yMax - digit.yMin;
@@ -312,41 +358,14 @@ void main() {
                   greaterThanOrEqualTo(m.numberMainLabelFontSize),
                   reason: reason,
                 );
-                // 잉크 가운데 높이가 같은 행 숫자(행 첫 키)의 잉크 가운데와 0.25dp 안이다 (내려 그리지 않으면 0.5~1.1dp).
-                // 내리는 거리는 기호·숫자의 대표 잉크 가운데(0.35·0.346em)로 정했으므로 글리프마다(기호 0.346~0.3535em, 숫자
-                // 0.344~0.348em) 조금 남는다.
-                // 줄 상자 높이는 글자 크기를 정수로 반올림한 값이라(TextPainter) 가운데 정렬한 라벨은 글자 크기마다 0.25dp
-                // 이하 오르내린다 — 크기가 다른 모든 각인에 공통인 반올림이므로 그 몫은 빼고(줄 상자 높이를 글자 크기로 보고) 비교한다.
-                double fontSizeOf(Text text) =>
-                    text.style!.fontSize! * effective;
-                double inkCenterY(CalcKeyId id, ByteData font, String ch) {
-                  final finder = _mainText(id);
-                  final text = tester.widget<Text>(finder);
-                  // 그린 Text와 같은 스타일·줄 상자로 기준선을 잰다
-                  final painter = TextPainter(
-                    text: TextSpan(text: ch, style: text.style),
-                    strutStyle: text.strutStyle,
-                    textScaler: text.textScaler!,
-                    textDirection: TextDirection.ltr,
-                  )..layout();
-                  final baseline = painter.computeDistanceToActualBaseline(
-                    TextBaseline.alphabetic,
-                  );
-                  final rounding = (painter.height - fontSizeOf(text)) / 2;
-                  painter.dispose();
-                  return tester.getRect(finder).top +
-                      rounding +
-                      baseline -
-                      _inkCenter(font, ch) * fontSizeOf(text);
-                }
-
-                final digitDef = row.first;
-                expect(
-                  inkCenterY(def.id, monoMedium, def.mainLabel),
-                  closeTo(
-                    inkCenterY(digitDef.id, saira, digitDef.mainLabel),
-                    0.25,
-                  ),
+                // 잉크 가운데 높이가 같은 행 숫자(행 첫 키)의 잉크 가운데와 0.25dp 안이다 (내려 그리지 않으면 0.5~1.1dp)
+                _expectOperatorInkAlignedWithDigit(
+                  tester,
+                  operator: def,
+                  digit: row.first,
+                  operatorFont: monoMedium,
+                  digitFont: saira,
+                  effectiveScale: effective,
                   reason: reason,
                 );
               }
@@ -404,11 +423,40 @@ void main() {
                   lessThanOrEqualTo(render.size.height + 0.01),
                   reason: reason,
                 );
+                if (KeypadMetrics.numberLabelKindOf(def) ==
+                    NumberLabelKind.operator) {
+                  _expectOperatorInkAlignedWithDigit(
+                    tester,
+                    operator: def,
+                    digit: row.first,
+                    operatorFont: monoMedium,
+                    digitFont: saira,
+                    effectiveScale: scale,
+                    reason: reason,
+                  );
+                }
               }
             }
           },
         );
       }
+    }
+
+    // CalcTheme "숫자부 메인 각인 크기" 절 4 — 키캡 폭 하한을 풀지 않는 근거: 함수부 글자가 키캡 폭에 가장 많이 묶이는
+    // 넓은 배열의 낮은 키패드에서도 배율 1.3의 글자가 배율 1.0보다 1.14배 이상 크다
+    for (final size in const [Size(320, 103.6), Size(400, 129.4)]) {
+      test('키패드 $size(wide): 배율 1.3의 함수부 메인 글자가 배율 1.0의 1.14배 이상이다', () {
+        KeypadMetrics at(double scale) => KeypadMetrics.compute(
+          size,
+          TextScaler.linear(scale),
+          arrangement: KeypadArrangement.wide,
+        );
+        final ratio =
+            at(1.3).mainLabelFontSize * 1.3 / at(1.0).mainLabelFontSize;
+        expect(ratio, greaterThanOrEqualTo(1.14));
+        // 키캡 폭에 실제로 묶인다 — 묶이지 않으면 이 근거가 필요 없다
+        expect(ratio, lessThan(1.3));
+      });
     }
   });
 }
