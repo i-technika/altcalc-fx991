@@ -28,7 +28,7 @@ import '../support/bundled_fonts.dart';
 /// 한 줄 상자 아래로 잉크가 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)은 이웃과 기준선을 함께 쓰지 않는다 (#260). 실물은 그 각인의 잉크
 /// 아래끝(분모 `dx`·아래 끝 칸)을 이웃 각인 기준선에 두고 같은 키의 짝 각인 `:`도 함께 올려 인쇄한다([CalcTheme] "2차원 각인 배치"
 /// 절의 사진 실측). 앱은 띠 위쪽 여유만큼 그렇게 올린다([KeyLegendView.bandLifts]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
-/// (360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다. 띠 위쪽
+/// (글자 배율 1.3에서 360×800 폰 0.94dp·800×1280 태블릿 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다. 띠 위쪽
 /// 여유가 없는 창(큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창)은 지금도 그렇다([_Raise.none]).
 
 /// 각인 띠에 그린 각인 하나 (전역 좌표, dp)
@@ -304,16 +304,22 @@ enum _Raise {
           reason: '$what 와 짝 각인 "${l.text}"의 기준선',
         );
       }
-      expect(o.drawnBaseline, lessThan(baseline - 0.01), reason: '$what 올림');
       final inkBottom =
           o.drawnBaseline -
           KeyLegendView.emMetrics(o.legend!, o.style).inkBottom * fontSize;
       if ((inkBottom - baseline).abs() <= 0.01) {
         raised[o.text] = _Raise.full;
+        expect(o.drawnBaseline, lessThan(baseline - 0.01), reason: '$what 올림');
       } else {
-        raised[o.text] = bottom - o.slot.bottom <= 0.01
-            ? _Raise.none
-            : _Raise.partial;
+        final none = bottom - o.slot.bottom <= 0.01;
+        raised[o.text] = none ? _Raise.none : _Raise.partial;
+        // 여유가 없으면 아래 정렬 그대로다 — 넘친 깊이만큼만 위이고, 줄 상자 높이 반올림으로 한 줄 상자가 잉크보다 깊은 글자
+        // 크기에서는 이웃과 같은 기준선이다(R2). 어느 쪽이든 띠 기준선보다 아래로 내려가지는 않는다.
+        expect(
+          o.drawnBaseline,
+          none ? lessThanOrEqualTo(baseline + 0.01) : lessThan(baseline - 0.01),
+          reason: '$what 올림',
+        );
         expect(
           o.slot.top,
           moreOrLessEquals(o.bandTop, epsilon: 0.01),
@@ -420,7 +426,7 @@ void main() {
     // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지, `d/dx◼`를 올린 결과 — 글자 배율 1.0·1.3) — 세로 폰·태블릿과 가로형(넓은 배열
     // — 가로 폰은 옮긴 거리가 반올림 경계 0.5dp에 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2).
     // 넘치는 각인(#260)을 사진과 같은 자리까지 올리려면 띠 위쪽 여유가 한 줄 상자 깊이(약 0.215em — 그린 크기에서는 줄 상자
-    // 높이 반올림으로 0.15~0.27em) 이상이어야 한다.
+    // 높이 반올림으로 글자 크기에 따라 0.14~0.29em) 이상이어야 한다.
     // - 태블릿: 각인 글자가 상한(11dp)에 묶이고 띠가 높아 여유가 넉넉하다 — 잉크 아래끝이 띠 기준선에 온다.
     // - 폰: 각인 글자가 띠 높이의 0.8배라 여유가 약 0.13em뿐이다 — 여유만큼만 올린다(360×800 `d/dx◼` 잉크 아래끝이 띠
     //   기준선보다 0.98dp 아래, 글자 배율 1.3은 여유 약 0.05em·1.18dp 아래).

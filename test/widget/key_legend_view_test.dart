@@ -265,46 +265,53 @@ void main() {
           ]);
         });
 
-        test(
-          '글자 크기 $fontSize: 띠 위쪽 여유가 모자라면 여유만큼만 올리고, 각인이 띠를 채우면 아래 정렬 그대로다',
-          () {
-            final (ascent, descent) = line();
-            final height = KeyLegendView.layoutSize(
-              derivative,
-              shiftStyle,
-            ).height;
-            final inkDepth =
-                -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
-                fontSize;
-            // 아래 정렬만으로 기준선이 올라가는 거리 (넘친 깊이)
-            final natural = inkDepth - descent;
-            for (final room in [0.0, descent * 0.4]) {
-              final insets = KeyLegendView.bandLifts([
-                (derivative, shiftStyle),
-                (colon, alphaStyle),
-              ], height + room);
-              expect(insets[0], moreOrLessEquals(room, epsilon: 1e-9));
-              // 짝 각인은 넘치는 각인의 기준선(띠 기준선 + 넘친 깊이 + 올린 거리)에 맞춘다
-              expect(
-                insets[1],
-                moreOrLessEquals(natural + room, epsilon: 1e-9),
-              );
-              // 짝 각인의 위끝도 띠 안이다
-              expect(
-                insets[1] + ascent + descent,
-                lessThanOrEqualTo(height + room + 1e-9),
-              );
-            }
-            // 띠가 각인보다 낮아도(FittedBox가 줄이는 경우) 음수가 되지 않는다
+        test('글자 크기 $fontSize: 띠 위쪽 여유가 모자라면 여유만큼만 올리고, 각인이 띠를 채우면 아래 정렬 그대로다', () {
+          final (ascent, descent) = line();
+          final height = KeyLegendView.layoutSize(
+            derivative,
+            shiftStyle,
+          ).height;
+          final inkDepth =
+              -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
+              fontSize;
+          // 아래 정렬만으로 기준선이 올라가는 거리 (넘친 깊이)
+          final natural = inkDepth - descent;
+          for (final room in [0.0, descent * 0.4]) {
+            final insets = KeyLegendView.bandLifts([
+              (derivative, shiftStyle),
+              (colon, alphaStyle),
+            ], height + room);
+            expect(insets[0], moreOrLessEquals(room, epsilon: 1e-9));
+            // 짝 각인은 넘치는 각인의 기준선(띠 기준선 + 넘친 깊이 + 올린 거리)에 맞춘다
+            expect(insets[1], moreOrLessEquals(natural + room, epsilon: 1e-9));
+            // 짝 각인의 위끝도 띠 안이다
             expect(
-              KeyLegendView.bandLifts([
-                (derivative, shiftStyle),
-                (colon, alphaStyle),
-              ], height - 2),
-              everyElement(greaterThanOrEqualTo(0.0)),
+              insets[1] + ascent + descent,
+              lessThanOrEqualTo(height + room + 1e-9),
             );
-          },
-        );
+          }
+          // 띠가 넘치는 각인보다 낮으면(키패드 밖의 키 버튼 — FittedBox가 그 각인을 줄인다) 넘치는 각인은 올리지 않고,
+          // 짝 각인도 자기 여유까지만 올린다 — 띠 위로 나가지 않는다(#260 R2: 하한이 상한을 이겨 `:`이 띠 위로 나갔다)
+          final lineHeight = ascent + descent;
+          for (final band in [
+            height - 0.5,
+            lineHeight + 0.2,
+            lineHeight,
+            lineHeight - 1,
+          ]) {
+            final lifts = KeyLegendView.bandLifts([
+              (derivative, shiftStyle),
+              (colon, alphaStyle),
+            ], band);
+            expect(lifts[0], 0.0, reason: '띠 $band');
+            expect(lifts[1], greaterThanOrEqualTo(0.0), reason: '띠 $band');
+            expect(
+              lifts[1] + lineHeight,
+              lessThanOrEqualTo(math.max(band, lineHeight) + 1e-9),
+              reason: '띠 $band: $lifts',
+            );
+          }
+        });
 
         test(
           '글자 크기 $fontSize: 넘치는 각인이 둘이어도 기준선이 같고, 어느 각인도 띠 위로 나가지 않는다 (#260 R1)',

@@ -214,8 +214,14 @@ class KeyLegendView extends LeafRenderObjectWidget {
       lowest = math.max(lowest, natural);
     }
     final raise = math.max(lowest, math.min(target, highest));
+    // 띠가 각인보다 낮으면(키패드 밖의 키 버튼 — `FittedBox`가 그 각인을 줄인다) 하한이 상한보다 높다. 그때도 각인마다 자기
+    // 여유까지만 올려 띠 위로 나가지 않게 한다(줄어든 각인과는 어차피 기준선이 맞지 않는다, #260 R2).
     return [
-      for (final (_, natural, _) in boxes) math.max(0.0, raise - natural),
+      for (final (height, natural, _) in boxes)
+        math.min(
+          math.max(0.0, raise - natural),
+          math.max(0.0, bandHeight - height),
+        ),
     ];
   }
 
