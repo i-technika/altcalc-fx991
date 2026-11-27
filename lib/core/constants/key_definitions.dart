@@ -42,14 +42,15 @@ export 'key_legend.dart';
 // ※ 각인 표기 (#16에서 칸 규칙 확정, #155에서 2차원 모양으로 바꿈 — 실물 키캡 각인과 같은 규칙):
 //   - 각인은 구조([KeyLegend], `key_legend.dart`)로 담는다. 글자만 있는 각인은 [LegendText]이고,
 //     분수·위첨자·아래첨자·근호·위아래 끝(∑)이 있는 각인은 실물처럼 2차원으로 그린다(아래 "2차원 각인" 절).
-//     실물 비율이 필요한 칸은 글자 대신 직접 그리는 칸([LegendBox])으로 둔다(지금은 ∑ 각인만, #169).
+//     입력 칸은 모두 글자 대신 자리별 비율로 직접 그리는 칸([LegendBox])으로 둔다(#169 ∑, #186 나머지 — 테스트로 검증).
 //     키캡 각인 어디에도 한 줄 임시 표기(분수 `/`, 위첨자 `^`, 유니코드 위첨자 `²`·`⁻¹`·`ˣ`)를 쓰지 않는다
 //     (테스트로 검증). 한 줄 표기는 [KeyLegend.plainText]로만 만든다(M1 LCD 임시 표시·로그용).
 //   - 입력 칸은 **실물 각인에 그려진 칸 수**만큼 쓴다(템플릿의 실제 입력 칸 수와 다를 수 있다 —
 //     예: `d/dx◼` 각인은 칸 1개지만 템플릿은 함수·x값 2칸). `◼` = 템플릿을 넣은 직후 커서가 들어가는 칸,
 //     `◻` = 나머지 칸. 템플릿 각인에는 `◼`가 정확히 하나 있다(테스트로 검증).
 //     예: `log◼◻`(밑 → 진수), `◼√◻`(지수 → 피개법수), `∫◻◻◼`(본문 → 아래·위 끝).
-//     (예시는 [KeyLegend.plainText] 표기다. 칸의 채움 여부는 Quick Start Guide 1쪽 제품 사진을 따른다.)
+//     (예시는 [KeyLegend.plainText] 표기다. 칸의 채움 여부는 Quick Start Guide 1쪽 제품 사진을 따른다.
+//     [LegendBox]의 채움 여부가 곧 `◼`·`◻`다.)
 //   - `▭`(U+25AD)는 쓰지 않는다. 번들 글꼴 Noto Sans Mono에서 두 칸 폭이라 라벨 폭 측정을 왜곡한다.
 //     같은 이유로 커서 패드 좌우는 `◀`·`▶` 대신 한 칸 폭인 `◄`·`►`를 쓴다 (`▲`·`▼`와 같은 디자인).
 //     두 칸 폭 글자는 실물 각인에 꼭 필요한 `⇔`(S⇔D)만 허용한다(테스트로 검증).
@@ -241,23 +242,37 @@ class CalcKeyDef {
 //   - 나머지도 맞다: 대분수 `◼ ◻/◻`(채운 정수 칸이 분수 가운데 높이, 분수 두 칸은 빈 칸), `d/dx◼`, `a b/c⇔d/c`(작게
 //     쌓은 분수 둘), `√◼`·`∛◼`(작은 3이 근호 왼쪽 위), `◼√◻`(채운 지수 칸이 근호 왼쪽 위), `x^◼`·`10^◼`·`e^◼`(채운 칸이
 //     위첨자), 분수 키 `◼/◻`(분자 채움·분모 빈 칸).
-// - **모양**(칸의 가로세로 비)은 ∑ 각인 말고는 아직 사진과 다르다 — 실물 칸은 자리마다 비가 다른 직사각형인데
-//   (log 진수 칸 약 6×13px로 세로로 길고, ∫ 본문 칸 약 12×6px로 가로로 길며, ∫ 아래 끝 칸은 ∫ 기울기를 따라 위 끝
-//   칸보다 약 4px 왼쪽) 앱은 글꼴의 정사각형 `◼`·`◻`를 쓴다. 칸 모양을 맞출지는 #186에서 정한다.
+// - **모양**(칸의 가로세로 비, #186): 실물 칸은 자리마다 비가 다른 직사각형이라, 모든 칸을 글꼴의 정사각형
+//   `◼`·`◻` 대신 자리별 [LegendBox]로 그린다(사용자 결정 "모든 칸 사진 비율로"). 비는 실물 키패드 근접 사진
+//   (가로 2048px — 메인 각인 글자 크기 약 33px, SHIFT 각인 약 22px라 Quick Start Guide 사진보다 약 2배 크다)에서
+//   원본 픽셀로 쟀다(밝기 중간값 경계, 번짐 ±1px). 이 사진은 EN판과 각인 몇 개가 다르지만 칸 모양은 같고,
+//   Quick Start Guide 사진에서 #169가 잰 값(log 진수 칸 6×13px, ∫ 본문 칸 12×6px)과 비가 맞는다.
+//   - 세로로 긴 칸: log 진수 13×26px(1:2) — 아래끝이 기준선, 위끝이 `l` 윗끝이다.
+//   - 가로로 긴 칸: ∫ 본문 25×12px, 분수 키 분자·분모 25×14px, 대분수 분자·분모 18×11px, d/dx 칸 14×10px.
+//   - 정사각형에 가까운 칸: ∫ 끝 칸 14×13·13×13px, √ 16×15px, ∛ 12×11px, `◼√◻` 지수 12×10px·피개법수 14×11px,
+//     x^ 14×14px, 10^ 11×10px, e^ 10×9px, 대분수 정수 칸 14×11px, log 밑 칸 11×13px.
+//   - ∫ 아래 끝 칸은 ∫ 아래쪽 끝을 따라 위 끝 칸보다 9px 왼쪽이다(`subscriptFollowsSlant`).
+//   크기 규칙은 `KeyLegendView`·`CalcTheme` "2차원 각인 배치" 절에 있다 — 칸 높이는 지금까지의 글꼴 칸 높이를 지키고
+//   (그래서 각인 높이 예산이 그대로다) 폭만 사진 비율로 바꾼다. 예외는 ∑ 칸(∑ 기준, #169), log 진수 칸(`l` 높이),
+//   ∫ 본문 칸(사진 높이 약 0.36em)이다. 앞 칸과 맞닿는 자리(log 진수 칸, ∫ 본문 칸)는 왼쪽 여백이 없다.
+//   비는 맞추지만 사진과 다르게 남는 점(첨자·작은 분수 속 칸의 크기, 빈 칸 테두리 두께)은 `CalcTheme` 같은 절에 적었다.
 
-const _box = LegendText('◼');
-const _emptyBox = LegendText('◻');
-
-/// `∫◻◻◼` — ∫ 오른쪽 아래·위 끝 칸, 그다음 본문 칸
+/// `∫◻◻◼` — ∫ 오른쪽 아래·위 끝 칸(아래 칸은 ∫ 기울기를 따라 왼쪽으로 당긴다), 그다음 가로로 긴 본문 칸
+const _integralLimit = LegendBox(LegendBoxShape.integralLimit, filled: false);
 const _integral = LegendRow([
-  LegendScript(LegendText('∫'), subscript: _emptyBox, superscript: _emptyBox),
-  _box,
+  LegendScript(
+    LegendText('∫'),
+    subscript: _integralLimit,
+    superscript: _integralLimit,
+    subscriptFollowsSlant: true,
+  ),
+  LegendBox(LegendBoxShape.integralOperand, filled: true),
 ]);
 
 /// `d/dx◼` — d 위·dx 아래로 쌓은 분수, 그다음 칸
 const _derivative = LegendRow([
   LegendFraction(LegendText('d'), LegendText('dx')),
-  _box,
+  LegendBox(LegendBoxShape.derivativeOperand, filled: true),
 ]);
 
 /// `∑◻◻◼` — ∑ 바로 아래·위에 쌓은 납작한 끝 칸, 그다음 ∑ 가운데 높이의 납작한 본문 칸 (#169 — 실물은 오른쪽 첨자가
@@ -268,17 +283,32 @@ const _sum = LegendRow([
   LegendBox(LegendBoxShape.sumOperand, filled: true),
 ]);
 
-/// `◼/◻` — 위 ◼, 가로줄, 아래 ◻
-const _fraction = LegendFraction(_box, _emptyBox);
+/// `◼/◻` — 위 ◼, 가로줄, 아래 ◻ (둘 다 가로로 긴 칸)
+const _fraction = LegendFraction(
+  LegendBox(LegendBoxShape.fractionPart, filled: true),
+  LegendBox(LegendBoxShape.fractionPart, filled: false),
+);
 
-/// `◼ ◻/◻` — 대분수: 왼쪽 ◼, 오른쪽에 쌓은 분수
-const _mixedFraction = LegendRow([_box, LegendFraction(_emptyBox, _emptyBox)]);
+/// `◼ ◻/◻` — 대분수: 왼쪽 ◼, 오른쪽에 쌓은 분수(가로로 긴 빈 칸 둘)
+const _mixedFractionPart = LegendBox(
+  LegendBoxShape.mixedFractionPart,
+  filled: false,
+);
+const _mixedFraction = LegendRow([
+  LegendBox(LegendBoxShape.mixedWhole, filled: true),
+  LegendFraction(_mixedFractionPart, _mixedFractionPart),
+]);
 
 /// `√◼` — 근호 가로줄이 칸 위를 덮는다
-const _squareRoot = LegendRadical(_box);
+const _squareRoot = LegendRadical(
+  LegendBox(LegendBoxShape.squareRootRadicand, filled: true),
+);
 
 /// `∛◼` — 근호 왼쪽 위에 작은 3
-const _cubeRoot = LegendRadical(_box, index: LegendText('3'));
+const _cubeRoot = LegendRadical(
+  LegendBox(LegendBoxShape.cubeRootRadicand, filled: true),
+  index: LegendText('3'),
+);
 
 /// `x²`
 const _square = LegendScript(LegendText('x'), superscript: LegendText('2'));
@@ -287,22 +317,38 @@ const _square = LegendScript(LegendText('x'), superscript: LegendText('2'));
 const _cube = LegendScript(LegendText('x'), superscript: LegendText('3'));
 
 /// `x^◼` — x 오른쪽 위에 작은 칸
-const _power = LegendScript(LegendText('x'), superscript: _box);
+const _power = LegendScript(
+  LegendText('x'),
+  superscript: LegendBox(LegendBoxShape.powerExponent, filled: true),
+);
 
 /// `◼√◻` — 근호 왼쪽 위에 작은 지수 칸
-const _nthRoot = LegendRadical(_emptyBox, index: _box);
+const _nthRoot = LegendRadical(
+  LegendBox(LegendBoxShape.rootRadicand, filled: false),
+  index: LegendBox(LegendBoxShape.rootIndex, filled: true),
+);
 
-/// `log◼◻` — log 오른쪽에 작은 밑 칸(아래끝이 기준선 — #169 사진 대조), 그다음 진수 칸
+/// `log◼◻` — log 오른쪽에 작은 밑 칸(아래끝이 기준선 — #169 사진 대조), 그다음 세로로 긴 진수 칸(`l` 높이 — #186)
 const _logBase = LegendRow([
-  LegendScript(LegendText('log'), subscript: _box, subscriptOnBaseline: true),
-  _emptyBox,
+  LegendScript(
+    LegendText('log'),
+    subscript: LegendBox(LegendBoxShape.logBase, filled: true),
+    subscriptOnBaseline: true,
+  ),
+  LegendBox(LegendBoxShape.logArgument, filled: false),
 ]);
 
 /// `10^◼` — 10 오른쪽 위에 작은 칸
-const _tenPower = LegendScript(LegendText('10'), superscript: _box);
+const _tenPower = LegendScript(
+  LegendText('10'),
+  superscript: LegendBox(LegendBoxShape.tenPowerExponent, filled: true),
+);
 
 /// `e^◼` — e 오른쪽 위에 작은 칸
-const _ePower = LegendScript(LegendText('e'), superscript: _box);
+const _ePower = LegendScript(
+  LegendText('e'),
+  superscript: LegendBox(LegendBoxShape.ePowerExponent, filled: true),
+);
 
 /// 위첨자 −1 (역수·역삼각함수)
 const _inverse = LegendText('−1');

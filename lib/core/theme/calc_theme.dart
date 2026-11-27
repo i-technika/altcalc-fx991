@@ -536,7 +536,19 @@ abstract final class CalcTheme {
   // 실물·화면 대조 (#169):
   // - 자리: Quick Start Guide 1쪽 제품 사진과 대조했다 — ∑의 끝 칸을 위아래로 쌓고(`LegendLimits`, 칸은 사진 비율의
   //   `LegendBox` — 아래 `keyLegendLimit*`·`keyLegendSum*`), log 밑 칸을 기준선에 두도록 고쳤다. 나머지 자리는 사진과
-  //   같다. 칸 모양(가로세로 비)은 ∑ 말고는 사진과 달라 #186에서 정한다(`key_definitions.dart` "2차원 각인" 절).
+  //   같다.
+  // - 칸 모양(#186): 모든 입력 칸을 자리별 가로세로 비([keyLegendBoxAspectRatio] — 실물 키패드 근접 사진에서 잼,
+  //   `key_definitions.dart` "2차원 각인" 절)의 직사각형으로 그린다. 높이는 글꼴 `◼`·`◻`의 잉크 높이 그대로라
+  //   (∑ 칸·log 진수 칸·∫ 본문 칸 제외) 각인 높이·잉크 범위가 #186 전과 같고 폭만 바뀐다. 바뀐 각인은 키패드 통일
+  //   글자 크기를 정하지 않는다(폭 기준은 메인 `SHIFT`·`ALPHA` 3.0em, 각인 `Ran#`·`RanInt` 쌍) — 가장 넓은 `∫◻◻◼`도
+  //   약 1.86 → 2.08em로 `SHIFT`보다 좁고, `log◼◻`는 약 2.83 → 2.62em로 좁아진다(테스트로 고정).
+  //   크기는 사진과 다른 곳이 남는다: 첨자·작은 분수 속 칸은 첨자·분수 배율([keyLegendScriptScale] 등)을 따르므로
+  //   같은 각인 안의 칸끼리 크기 비가 사진과 다르다(∫ 끝 칸:본문 칸 높이 사진 약 1:1 → 앱 0.32:0.36em, 대분수 정수
+  //   칸:분자 칸 사진 1:1 → 앱 0.48:0.31em, `◼√◻` 지수:피개법수 사진 약 0.9:1 → 앱 0.6:1). 빈 칸 테두리도 사진(칸
+  //   높이의 약 0.3)보다 가늘고(약 0.1, [keyLegendBoxStroke]), 분수 키 가로줄도 사진(약 0.14em — 칸 높이의 약 0.33)보다
+  //   가늘다([keyLegendFractionBarThickness] 0.06em) — 두 두께는 #206에서 정한다. ∫ 각인은 사진(약 1.94em)보다 약 7%
+  //   넓고(2.08em), ∫ 꼬리와 아래 끝 칸 사이가 사진(약 0.15em)보다 넓다 — 번들 ∫ 글리프가 사진의 ∫보다 아래쪽이 좁기
+  //   때문이다([keyLegendIntegralSubscriptShift]).
   // - 작은 쌓은 분수의 크기: Android 에뮬레이터(1080×2400, 420dpi = 2.625배, 본체 폭 약 396dp)에 실제 앱을 띄워 기기
   //   픽셀로 쟀다. 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려진다. 크기(기기 픽셀, 1px ≈ 0.06mm):
   //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px,
@@ -586,6 +598,52 @@ abstract final class CalcTheme {
   /// 각인(짧은 창 하한 약 3.2dp)에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2, 테스트로 고정).
   static const double keyLegendBoxStroke = 0.05;
 
+  /// 직접 그리는 칸(`LegendBox`)의 가로/세로 비 — 자리마다 실물 사진에서 잰 원본 픽셀 비 (#186, ∑ 칸은 #169).
+  ///
+  /// 픽셀 값의 출처는 `LegendBoxShape` 각 값의 설명이다. 정사각형에 가까운 칸도 잰 비를 그대로 쓴다(사용자 결정
+  /// "모든 칸 사진 비율로"). 칸의 높이는 `KeyLegendView`가 정한다 — ∑ 칸은 ∑ 잉크 기준([keyLegendSumBoxHeightRatio]),
+  /// log 진수 칸은 `l` 윗끝, ∫ 본문 칸은 [keyLegendIntegralOperandHeight], 나머지는 글꼴 `◼`의 잉크 높이(그 자리 글자
+  /// 크기 대비)다.
+  static double keyLegendBoxAspectRatio(LegendBoxShape shape) =>
+      switch (shape) {
+        LegendBoxShape.sumLimit =>
+          keyLegendSumLimitWidthRatio / keyLegendSumBoxHeightRatio, // 9×4
+        LegendBoxShape.sumOperand =>
+          keyLegendSumOperandWidthRatio / keyLegendSumBoxHeightRatio, // 8×4
+        LegendBoxShape.integralLimit => 27 / 26, // 위 14×13·아래 13×13의 평균
+        LegendBoxShape.integralOperand => 25 / 12,
+        LegendBoxShape.derivativeOperand => 14 / 10,
+        LegendBoxShape.fractionPart => 25 / 14,
+        LegendBoxShape.mixedWhole => 14 / 11,
+        LegendBoxShape.mixedFractionPart => 18 / 11,
+        LegendBoxShape.squareRootRadicand => 16 / 15,
+        LegendBoxShape.cubeRootRadicand => 12 / 11,
+        LegendBoxShape.rootIndex => 12 / 10,
+        LegendBoxShape.rootRadicand => 14 / 11,
+        LegendBoxShape.powerExponent => 14 / 14,
+        LegendBoxShape.tenPowerExponent => 11 / 10,
+        LegendBoxShape.ePowerExponent => 10 / 9,
+        LegendBoxShape.logBase => 11 / 13,
+        LegendBoxShape.logArgument => 13 / 26,
+      };
+
+  /// 직접 그리는 칸(∑ 칸 제외)의 좌우 여백 (그 자리 글자 크기 대비) — 글꼴 `◼`·`◻`의 좌우 여백(번들 Noto Sans Mono
+  /// 0.059em, 글자 폭 0.6em − 잉크 폭 0.482em의 절반)과 같게 해, 비가 1인 칸은 글꼴 칸과 같은 자리·폭을 차지한다(#186).
+  /// 앞에 칸이 붙는 자리(log 진수 칸, ∫ 본문 칸)는 왼쪽 여백을 두지 않는다 — 사진에서 앞 칸과 0~1px로 맞닿는다.
+  static const double keyLegendBoxSideBearing = 0.059;
+
+  /// `∫` 본문 칸의 높이 (글자 크기 대비, #186 R1·R2). 근접 사진의 본문 칸 25×12px(채운 부분 — 번진 가장자리까지 넣으면
+  /// 27×14px)의 높이 12px ÷ 메인 각인 글자 크기 약 33px(`l` 잉크 0.76em = 25px) ≈ 0.36em. 비(25/12)와 같은 경계에서 쟀다.
+  /// 글꼴 칸 높이(0.482em)로 두면 ∫ 끝 칸보다 1.5배 높고 각인 전체가 사진(약 1.94em)보다 24% 넓어진다(2.40em) — 이
+  /// 높이면 약 2.08em이다.
+  static const double keyLegendIntegralOperandHeight = 0.36;
+
+  /// `∫` 아래 끝 칸을 위 끝 칸보다 왼쪽으로 당기는 길이 (`subscriptFollowsSlant`, #186). 근접 사진에서 아래 칸이 위 칸보다
+  /// 9px 왼쪽이다(왼쪽·오른쪽 테두리 모두) — 메인 각인 글자 크기 약 33px로 나누면 약 0.27em. 사진의 ∫ 꼬리와 아래 칸
+  /// 사이는 약 5px(0.15em)인데, 번들 ∫ 글리프는 아래쪽이 좁아 같은 길이를 당겨도 그 사이가 약 0.28em으로 더 넓다
+  /// (R2에서 확인 — 칸끼리의 어긋남을 사진에 맞추고, 꼬리 간격 차이는 "2차원 각인 배치" 절에 적었다).
+  static const double keyLegendIntegralSubscriptShift = 0.27;
+
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
   static const double keyLegendFractionScale = 0.65;
 
@@ -601,8 +659,14 @@ abstract final class CalcTheme {
   /// 분수 가로줄과 분자·분모 잉크 사이 간격
   static const double keyLegendFractionGap = 0.04;
 
-  /// 분수 가로줄이 분자·분모보다 좌우로 더 나가는 길이
+  /// 분수 가로줄이 분자·분모 조각보다 좌우로 더 나가는 길이
   static const double keyLegendFractionOverhang = 0.06;
+
+  /// 분수 키 각인(`◼/◻`, 디스플레이 분수)의 가로줄이 분자·분모 조각보다 좌우로 더 나가는 길이 (#186 R1).
+  /// 근접 사진은 가로줄 37~38px, 칸 25~26px로 가로줄/칸 잉크 폭 ≈ 1.46이다. 칸 조각 폭에는 좌우 여백
+  /// ([keyLegendBoxSideBearing] × [keyLegendDisplayFractionScale])이 들어 있어, 이 값과 합쳐 약 1.46이 되도록 정했다
+  /// (칸 잉크 0.818em → 가로줄 0.93 + 2 × 0.13 ≈ 1.19em). 여백을 바꾸면 이 값도 다시 맞춘다(테스트로 고정).
+  static const double keyLegendDisplayFractionOverhang = 0.13;
 
   /// 거듭제곱근 지수(`∛`의 3, `◼√◻`의 ◼) 글자 크기 비율
   static const double keyLegendRadicalIndexScale = 0.6;
