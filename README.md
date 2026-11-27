@@ -137,6 +137,13 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
   - TalkBack이 읽은 문구: TalkBack 설정 → 고급 설정 → 개발자 설정 → "음성 출력 표시"를 켜면 화면 아래에 읽은 문구가 떠
     `screencap`으로 남길 수 있다(#137 — 창이 너무 작다는 안내를 확인). 끝나면 끈다.
     설정 화면은 `am start -n com.google.android.marvin.talkback/com.android.talkback.TalkBackPreferencesActivity`로 연다(`-S`를 붙이면 TalkBack이 꺼진다).
+  - 읽은 문구와 끊김을 시간순으로 남기려면 같은 개발자 설정의 **"진단 모드"(Diagnosis mode)** 를 켠다(#207, TalkBack 16).
+    logcat `talkback` 태그에 `SpeechControllerImpl: Speaking fragment text="…", utteranceId=…, event=…(원인 이벤트)`와
+    `Received utterance completed for "…", returned true|false`(`false` = 끝까지 읽지 못하고 끊김)가 찍힌다.
+    liveRegion 알림은 `WindowContentChangedFeedbackRule: … ttsOutput= {…}, nodeLiveRegion=1`로 보인다.
+    설정 화면은 TalkBack을 잠시 끄고(`enabled_accessibility_services ""`) `input tap`으로 조작하면 빠르다. 끝나면 진단 모드를 끈다.
+  - TalkBack이 켜진 채 `input keyevent BACK`으로 앱을 벗어나면 다음 가상 터치가 뒤에 있던 다른 앱(TalkBack 설정 등)을 누른다.
+    돌아갈 때는 `am start -n <앱>`으로 앱을 앞에 둔다.
   - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
     `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
     `AltCalc_Pixel_Fold_API36`(폴더블)은 `Medium_Phone_API_36.1`과 같은 시스템 이미지(`android-36.1/google_apis_playstore`)다.
@@ -147,6 +154,16 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
     아래의 `-read-only`로 띄우면 끌 때 로그인·설치가 사라지므로, Scanner를 쓸 때는 `-read-only` 없이 띄운다(그 AVD를 쓰는 다른 세션이 없을 때).
   - `google_apis` 이미지에는 Play 스토어가 없다(`AltCalc_Phone_API34`의 `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이었다, 실측).
   - Play 이미지이지만 `PlayStore.enabled=no`인 `Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)에서 설치되는지는 확인하지 않았다.
+- **하드웨어 키보드**: `input keyevent`는 가상 키보드로 들어가 포커스 테두리가 보이지 않는다. 루트 가능한 `google_apis` 이미지에서
+  `adb root` 뒤 누름·뗌을 모두 보낸다(뗌을 빼면 키가 눌린 채 반복 입력된다). Tab 한 번:
+  `sendevent /dev/input/event1 1 15 1; sendevent /dev/input/event1 0 0 0; sendevent /dev/input/event1 1 15 0; sendevent /dev/input/event1 0 0 0`
+  (`event1`은 예시 — `AT Translated Set 2 keyboard`의 장치는 `getevent -p`로 확인한다. 키 코드: TAB 15·ENTER 28·SPACE 57·ESC 1).
+  - 첫 Tab은 Android가 앱 화면 View(FlutterView)에 포커스를 준다. 이때 Android 기본 포커스 강조로 창 가장자리에 초록 테두리가
+    생기고, 다음 Tab부터 앱 안(설정 키)으로 간다(#207, API 34 실측). 초록 테두리는 키보드 입력이 이 창으로 간다는 시스템 표시라
+    그대로 둔다(분할 화면에서 어느 창이 키를 받는지 알려 준다).
+- **한 프레임 단위 화면 변화**: `screencap`은 한 번에 약 200ms가 걸려 순간 변화를 놓친다. `shell screenrecord --size <W>x<H> /sdcard/r.mp4`로
+  녹화하는 동안 조작하고 `pkill -INT screenrecord`로 멈춘 뒤 내려받아 프레임을 나눠 본다(#207 — 스크래치 가상 환경에 PyAV(`av`)를 설치해
+  프레임과 시각을 꺼냈다. 녹화는 화면이 바뀔 때만 프레임을 남긴다). `--output-format=frames`는 Android 16 에뮬레이터에서 아무것도 쓰지 않고 멈췄다.
 - **한국어 음성**: Play 이미지 36.1에는 Google 음성 엔진(`com.google.android.tts`)이 설치돼 있다 (실측).
   한국어 음성 데이터가 들어 있는지, 내려받아야 하는지, `google_apis` 이미지에도 엔진이 있는지는 확인하지 않았다.
 - 이미지 종류는 `~/.android/avd/<AVD ID>.ini`의 `path`가 가리키는 폴더(이름이 AVD ID와 다를 수 있다)의 `config.ini`에서

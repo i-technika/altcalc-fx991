@@ -54,6 +54,30 @@ Future<void> _pumpPreview(
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
+void _announcerTests() {
+  testWidgets('스크린리더 알림 노드도 기기 화면 안에 있다 — 앱과 같은 구조 (#207, #72)', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    // 알림을 지원하지 않는 플랫폼(Android)처럼 liveRegion 알림 노드를 쓰게 한다.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures();
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await _pumpPreview(tester);
+    await tester.tap(_keycap(CalcKeyId.shift));
+    await tester.pump();
+    final announcer = find.byKey(const ValueKey('screen-reader-announcer'));
+    expect(announcer, findsOneWidget);
+    final screen = tester.getRect(_deviceScreen);
+    final node = tester.getRect(announcer);
+    expect(screen.contains(node.center), isTrue, reason: '$node ⊄ $screen');
+    // 기기 화면의 오른쪽 아래 구석이다 (축소 배율과 무관하게 1dp 이내)
+    expect(node.right, moreOrLessEquals(screen.right, epsilon: 1));
+    expect(node.bottom, moreOrLessEquals(screen.bottom, epsilon: 1));
+    handle.dispose();
+  });
+}
+
 /// 설정 키(ON, #190) — 누르면 설정 대화상자가 열린다
 final _settingsKey = _keycap(settingsKey);
 
@@ -295,6 +319,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
 };
 
 void main() {
+  _announcerTests();
   group('릴리스 빌드 분리', () {
     test('lib/의 상대 경로 .dart URI 중 preview/ 아래로 풀리는 것이 없다', () {
       // lib/ 밖으로 나가는 길은 상대 경로뿐이다(package: URI는 lib/ 안을 가리킨다).

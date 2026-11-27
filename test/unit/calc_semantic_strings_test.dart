@@ -5,7 +5,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
-import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_reader_announcer.dart';
 
 /// 음성 라벨에 허용하는 글자: 한글 음절, 영문, 숫자, 공백, 아포스트로피(Euler's).
 /// 쉼표는 키 힌트에서 시프트·알파 기능을 나누는 구분자로만 쓰므로 기능 이름에는 넣지 않는다.
