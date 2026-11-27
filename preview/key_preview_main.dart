@@ -416,12 +416,12 @@ const List<PreviewDevice> previewDevices = [
   ),
   // 펼친 트라이폴드 (#144, Galaxy Z TriFold 공개 사양 근사 — 밀도·접힘선은 실기기 미확인). 접힘선이 2개라 앱이 접힘선을 무시하고
   // 태블릿처럼 그린다: 가로로 들면 가로형, 세로로 돌리면 세로형. 두 접힘선이 LCD·키 열 위를 지나가는 것을 여기서 본다.
-  // 자세(반 접힘)를 골라도 배치는 같다. 인셋은 폴더블 내부와 같게 근사했다.
+  // 자세(반 접힘)를 골라도 배치는 같다. 인셋은 폴더블 내부와 같게(Pixel 대화면 임시 작업 표시줄 실측을 빌려, #118) 근사했다.
   PreviewDevice(
     '트라이폴드',
     Size(823, 603),
-    padding: EdgeInsets.only(top: 24, bottom: 24),
-    systemGestureInsets: _gestureNavInsets,
+    padding: _gestureNavLargePadding,
+    systemGestureInsets: _gestureNavLargeInsets,
     displayFeatures: [previewTriFoldLeftFold, previewTriFoldRightFold],
     foldable: true,
   ),
