@@ -755,7 +755,8 @@ void main() {
         greaterThan(CalcTheme.lcdStatusStoreTipDepthCells),
       );
       // →x 잉크 = x 상자 한 칸 + 상자 밖 화살표(머리가 내민 부분 + 몸통). 몸통이 남으려면(없으면 경로가 뒤집힌다)
-      // 한 칸 + 머리가 내민 부분보다 넓어야 하고, 2칸 슬롯에 들어가야 한다.
+      // 한 칸 + 머리가 내민 부분보다 넓어야 하고, 2칸 슬롯에 들어가야 한다. 몸통 0.1칸은 몸통 굵기(대문자 높이의
+      // 0.26 ≈ 0.22칸)의 절반쯤 — 이보다 짧으면 몸통 없는 삼각형으로 보인다고 보고 둔 하한이다(측정값이 아니다).
       final headOutside =
           CalcTheme.lcdStatusStoreHeadCells -
           CalcTheme.lcdStatusStoreTipDepthCells;
@@ -765,9 +766,9 @@ void main() {
         reason: '몸통 0.1칸 이상',
       );
       expect(CalcTheme.lcdStatusStoreInkCells, lessThanOrEqualTo(2));
-      // 실물 →x 잉크 폭은 대문자 높이(7도트)의 8/7배다(스프라이트 8도트, #58 표). 대문자 높이 대비 앱 폭
-      // (칸 × 0.6em ÷ 0.714em)은 그보다 15% 넘게 넓지 않아야 한다 — x 상자를 한 칸으로 두는 한(x 가독성) 몸통 0.1칸
-      // 이상의 최소 화살표(약 1.3칸 = 1.09배)부터 지금 1.5칸(1.26배)까지가 여기 든다. #160의 1.88칸은 1.58배였다.
+      // 실물 →x 잉크 폭은 대문자 높이(7도트)의 8/7배다(스프라이트 8도트, #58 표). 상한은 회귀 방지용이다:
+      // 대문자 높이 대비 앱 폭(칸 × 0.6em ÷ 0.714em)이 지금(1.5칸 = 1.26배, 실물 +10%)에서 조금 여유를 둔 15%를
+      // 넘지 않게 한다(약 1.56칸까지). #160의 1.88칸 + 자간은 약 1.58배였다.
       // 옆 반전 상자(S) 대비로는 1.5배 대 실물 1.14배다(앱 S 상자가 실물보다 좁은 탓 — CalcTheme 문서).
       final storeCapRatio =
           CalcTheme.lcdStatusStoreInkCells *

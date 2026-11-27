@@ -367,7 +367,7 @@ void main() {
         );
       }
       // →x: 굵은 화살표는 대문자 높이 띠 가운데에 대칭이고 머리가 몸통보다 높다. x는 한 칸 폭 상자 안에 있다 —
-      // 상자는 띠를 채우고, 왼쪽 변 가운데가 열려 화살표 끝이 들어간다. 가운데 줄은 화살표 끝·x·오른쪽 변 세 구간이다.
+      // 상자는 띠를 채우고, 왼쪽 변 가운데가 열려 화살표 끝이 들어간다. 화살표 끝·x·오른쪽 변은 서로 떨어져 있다.
       // 가로(#183): 잉크 전체는 lcdStatusStoreInkCells칸(상자 한 칸 + 상자 밖 화살표)이고 2칸 슬롯 가운데에 놓인다.
       final store = _slotRect(tester, LcdIndicatorSlot.store);
       // 슬롯 안 좌표(계산값): 슬롯이 줄면 가운데 기준으로 같은 비율로 준다. [u]는 줄기 전 슬롯 왼쪽에서 잰 dp.
@@ -432,18 +432,6 @@ void main() {
         closeTo(cap * 0.26, reach),
         reason: '몸통 $shaftInk (x=$shaftX)',
       );
-      // 가운데 줄(상자 안)은 화살표 끝·x·오른쪽 변 세 구간이다. 글자가 물리 30px 미만이면 화살표 끝과 x 사이가
-      // 1px 안팎이라 안티에일리어싱으로 이어 보이므로 그 크기에서는 보지 않는다(8dp×1.3·2.625x에서 두 구간).
-      if (fontSize * scale * dpr >= 30) {
-        expect(
-          shot.inkRuns(
-            letter.center.dy,
-            Rect.fromLTRB(boxLeft, store.top, col1X(1) + reach, store.bottom),
-          ),
-          3,
-          reason: '→x 상자 가운데 줄',
-        );
-      }
       double capY(double fraction) => letter.top + cap * fraction;
       // x 잉크: 화살표 끝(12%)·왼쪽 짧은 변(0~17%)·오른쪽 변(83%~)·위아래 변과 그 안티에일리어싱 밖의 안쪽만 본다
       // (x는 가로 약 26~74%, 세로 약 29~71%).
@@ -464,6 +452,19 @@ void main() {
           reason: 'x $xInk',
         );
       }
+      // 화살표 끝은 x와 떨어져 있다(#183): 몸통 굵기 띠 안에서 화살표 끝과 x 사이에 배경이 보이는 열이 하나는 있다.
+      // 행마다 구간 수를 세면 x의 두 팔이 갈라지는 행을 지날 때 결과가 힌팅·반올림에 따라 바뀌므로 밝기로 본다(R2).
+      final tipX = col1X(CalcTheme.lcdStatusStoreTipDepthCells);
+      expect(
+        shot.hasGapColumn(
+          tipX,
+          xInk.left,
+          letter.center.dy - cap * 0.13,
+          letter.center.dy + cap * 0.13,
+        ),
+        isTrue,
+        reason: '화살표 끝 $tipX, x $xInk',
+      );
       // x는 테두리에 붙지 않는다(붙으면 ⊠처럼 보인다, #160 리뷰 R1·R2): x와 오른쪽 변 사이, x와 윗변 사이에
       // 배경이 보이는 열·줄이 하나는 있다. 구간 수 대신 밝기로 보므로 안티에일리어싱에 덜 민감하다.
       final borderLeft = col1X(1) - stroke * shrink;
