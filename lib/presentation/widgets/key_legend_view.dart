@@ -383,6 +383,8 @@ class _LegendLayout {
             fontSize,
             partScale: CalcTheme.keyLegendDisplayFractionScale,
             overhangRatio: CalcTheme.keyLegendDisplayFractionOverhang,
+            barRatio: CalcTheme.keyLegendDisplayFractionBarThickness,
+            gapRatio: CalcTheme.keyLegendDisplayFractionGap,
           )
         : builder.layout(legend, fontSize);
     // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자).
@@ -461,15 +463,17 @@ class _Builder {
 
   // ── 근호 모양 (글자 크기 대비, 근호 왼쪽 부분 폭은 [CalcTheme.keyLegendRadicalSignWidth]) ──
 
-  /// 근호 아래 끝이 피개법수 잉크 아래끝(또는 기준선)보다 더 내려가는 길이
-  static const double _radicalBottomDrop = 0.03;
+  /// 근호 아래 꼭짓점의 **잉크** 아래끝이 피개법수 잉크 아래끝(또는 기준선)보다 더 내려가는 길이. 꼭짓점은 둥근 이음이라
+  /// 잉크가 선 가운데보다 반 두께 아래까지 내려가므로, 선 가운데는 반 두께만큼 올려 둔다 — 선 두께와 상관없이 잉크가 내려가는
+  /// 길이가 같다. #206 전(선 0.07em, 선 가운데 0.03em 아래)의 잉크 깊이 0.065em과 같고, 근접 사진(꼭짓점이 칸 아래끝보다
+  /// 약 2px ≈ 0.06em 아래)과도 맞는다(#206 R1).
+  static const double _radicalBottomInkDrop = 0.065;
 
-  /// 머리(왼쪽 시작점) 높이 — 근호 아래 끝에서 위끝까지의 비율
+  /// 머리(왼쪽 시작점) 높이 — 근호 아래 끝에서 위끝까지의 비율. 머리는 시작점에서 아래 꼭짓점으로 곧게 내려가는 짧은
+  /// 획이다(#206 R1 — 근접 사진의 메인 `√◼`처럼 올라가는 끝이 없다. 전에는 짧게 올라갔다 내려갔는데, 선을 굵게 하자
+  /// 올라가는 길이(0.06em)가 선 두께보다 짧아 머리가 뭉쳤다). 사진의 머리 높이는 약 0.55~0.59로 더 높지만, 올리면 지수가
+  /// 따라 올라가 `∛◼`가 가장 높은 SHIFT 각인(`d/dx◼`)의 잉크 위끝을 넘으므로 그대로 둔다.
   static const double _radicalHookHeight = 0.42;
-
-  /// 머리가 짧게 올라가는 끝점: 왼쪽 부분 폭 대비 가로 위치, 글자 크기 대비 올라가는 높이
-  static const double _radicalHookPeakX = 0.2;
-  static const double _radicalHookRise = 0.06;
 
   /// 근호가 내려가 닿는 아래 꼭짓점의 가로 위치 (왼쪽 부분 폭 대비)
   static const double _radicalTickX = 0.48;
@@ -477,9 +481,16 @@ class _Builder {
   /// 근호 선과 피개법수 사이, 피개법수와 가로줄 오른쪽 끝 사이 여백
   static const double _radicalPadding = 0.04;
 
-  /// 지수 오른쪽 끝과 아래 꼭짓점 사이 여백, 지수 잉크 아래끝을 머리 위로 띄우는 높이
+  /// 지수 오른쪽 끝과 아래 꼭짓점 사이 여백
   static const double _radicalIndexGap = 0.04;
-  static const double _radicalIndexLift = 0.10;
+
+  /// 지수 잉크 아래끝과 근호 머리 잉크 위끝(시작점 + 반 두께로 어림 — 실제 잉크는 그보다 낮다) 사이 틈 (#206 R1). 선
+  /// 두께에 묶어야 근호를 굵게 해도 지수가 머리에 붙지 않는다 — #206 전에는 머리 끝점에서 0.10em 위(선 0.07em일 때 틈 약
+  /// 0.005em)로 고정해, 선을 0.14em으로 굵게 하자 `∛◼`의 3·`◼√◻`의 지수 칸이 근호에 붙었다. 근접 사진의 SHIFT 각인은 지수와
+  /// 머리 사이가 약 2~3px(각인 글자 크기 약 22px 대비 0.09~0.14em)이다. 지수 잉크 위끝이 가장 높은 SHIFT 각인 `d/dx◼`의
+  /// 잉크 위끝(0.85em)보다 낮아야 작은 글자의 줄 상자 반올림에서도 `d/dx◼`가 SHIFT 각인 높이 맞춤을 정하므로(테스트로 고정),
+  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.837em — `d/dx◼` 0.8505em까지 여유 약 0.013em).
+  static const double _radicalIndexClearance = 0.05;
 
   StrutStyle _strut(double fontSize) => StrutStyle.fromTextStyle(
     style.copyWith(fontSize: fontSize),
@@ -708,12 +719,10 @@ class _Builder {
       op = _BarOp(rect);
     } else {
       // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다. 테두리는 칸 안쪽에 칠하므로
-      // 남는 구멍은 `칸 − 2 × 두께`다 — 최소 두께로 굵어져도 두께를 칸의 1/4 이하로 두어 구멍이 칸의 절반 이상 남게
-      // 한다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
-      final stroke = math.min(
-        _paintStroke(fontSize * CalcTheme.keyLegendBoxStroke),
-        math.min(width, height) / 4,
-      );
+      // 남는 구멍은 `칸 − 2 × 두께`다. 두께는 칸의 짧은 변에 비례해(사진 비율, #206) 글자 크기와 상관없이 구멍이 칸의
+      // 절반으로 남는다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
+      final stroke =
+          math.min(width, height) * CalcTheme.keyLegendBoxStrokeRatio;
       final r = rect.deflate(stroke / 2);
       op = _PathOp(
         [
@@ -771,13 +780,16 @@ class _Builder {
   }
 
   /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓고, 가로줄을 분자·분모 조각 폭보다 좌우로
-  /// 글자 크기 × [overhangRatio]만큼 더 긋는다.
+  /// 글자 크기 × [overhangRatio]만큼 더 긋는다. 가로줄 두께·분자·분모와의 간격은 글자 크기 × [barRatio]·[gapRatio]다
+  /// (분수 키 각인은 사진 두께, 작은 분수는 높이 예산 안의 두께 — #206).
   _Piece fraction(
     KeyLegend numerator,
     KeyLegend denominator,
     double fontSize, {
     required double partScale,
     double overhangRatio = CalcTheme.keyLegendFractionOverhang,
+    double barRatio = CalcTheme.keyLegendFractionBarThickness,
+    double gapRatio = CalcTheme.keyLegendFractionGap,
   }) {
     final partSize = fontSize * partScale;
     final num = layout(numerator, partSize);
@@ -785,9 +797,9 @@ class _Builder {
     final overhang = fontSize * overhangRatio;
     final width = math.max(num.width, den.width) + 2 * overhang;
     final axis = fontSize * CalcTheme.keyLegendFractionAxis;
-    final bar = fontSize * CalcTheme.keyLegendFractionBarThickness;
+    final bar = fontSize * barRatio;
     final paintBar = _paintStroke(bar);
-    final gap = fontSize * CalcTheme.keyLegendFractionGap;
+    final gap = fontSize * gapRatio;
     // 분자 잉크 아래끝·분모 잉크 위끝이 가로줄에서 [gap]만큼 떨어지게 한다.
     final numBaseline = axis + bar / 2 + gap - num.inkBottom;
     final denBaseline = axis - bar / 2 - gap - den.inkTop;
@@ -817,7 +829,10 @@ class _Builder {
     // 근호의 위(가로줄)·아래 끝 — 배치 두께 선 가운데 기준
     final top =
         rad.inkTop + fontSize * CalcTheme.keyLegendRadicalGap + stroke / 2;
-    final bottom = math.min(rad.inkBottom, 0.0) - fontSize * _radicalBottomDrop;
+    final bottom =
+        math.min(rad.inkBottom, 0.0) -
+        fontSize * _radicalBottomInkDrop +
+        stroke / 2;
     final signWidth = fontSize * CalcTheme.keyLegendRadicalSignWidth;
     final hookY = bottom + (top - bottom) * _radicalHookHeight;
     // 선 끝(butt)이 왼쪽으로 나가지 않도록 반 두께만큼 오른쪽에서 시작한다.
@@ -835,22 +850,23 @@ class _Builder {
       // 지수는 머리 위에 두고 오른쪽 끝을 근호가 내려가는 지점 앞에 맞춘다. 넓으면 근호를 오른쪽으로 민다.
       final right = tickX - fontSize * _radicalIndexGap;
       shift = math.max(0.0, idx.width - right);
-      final idxBaseline = hookY + fontSize * _radicalIndexLift - idx.inkBottom;
+      // 머리 시작점의 잉크 위끝(어림)에서 틈만큼 띄운다. 배치는 비율 두께(stroke)로만 해 각인 크기가 글자 크기에
+      // 비례하게 한다([_paintStroke] 설명) — 최소 두께로 굵게 칠하는 만큼(짧은 창 하한 약 3.2dp에서 약 0.03dp)은 틈
+      // (글자 크기의 0.05배)이 받는다.
+      final hookInkTop = hookY + stroke / 2;
+      final idxBaseline =
+          hookInkTop + fontSize * _radicalIndexClearance - idx.inkBottom;
       ops.addAll(idx.shifted(shift + right - idx.width, idxBaseline));
       inkTop = math.max(inkTop, idxBaseline + idx.inkTop);
     }
     final signRight = left + signWidth;
     final radX = shift + signRight + fontSize * _radicalPadding;
     final end = radX + rad.width + fontSize * _radicalPadding;
-    // 근호 모양: 짧게 올라가는 머리 → 아래로 → 길게 위로 → 가로줄
+    // 근호 모양: 머리에서 아래로 → 길게 위로 → 가로줄
     ops.add((
       Offset(shift, 0),
       _PathOp([
         Offset(left + extra, hookY),
-        Offset(
-          left + signWidth * _radicalHookPeakX,
-          hookY + fontSize * _radicalHookRise,
-        ),
         Offset(tickX, bottom + extra),
         Offset(signRight, top - extra),
         Offset(end - shift, top - extra),
