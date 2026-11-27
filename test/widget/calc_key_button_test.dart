@@ -507,6 +507,7 @@ void main() {
     testWidgets('비활성이면 원판을 흐리게 그리고, 눌러도 입력되지 않는다', (tester) async {
       await tester.pumpWidget(_host(CalcKeyButton(keyDef: on)));
       expect(face(tester).enabled, isFalse);
+      expect(painter(tester).enabled, isFalse);
       final gesture = await tester.startGesture(
         tester.getCenter(_keycap(on.id)),
       );
@@ -546,23 +547,50 @@ void main() {
       },
     );
 
-    testWidgets('키보드: focusable이 아닌 키는 Tab으로 포커스를 받지 않는다', (tester) async {
+    testWidgets('키보드: focusable이 아닌 키는 Tab으로 포커스를 받지 않는다 (원형 버튼·키캡 모두)', (
+      tester,
+    ) async {
+      for (final def in [on, keyDefOf(CalcKeyId.sin)]) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final focused = FocusManager.instance.primaryFocus?.context;
+        final inKey =
+            focused != null &&
+            find
+                .descendant(
+                  of: find.byType(CalcKeyButton),
+                  matching: find.byElementPredicate(
+                    (e) => identical(e, focused),
+                  ),
+                )
+                .evaluate()
+                .isNotEmpty;
+        expect(inKey, isFalse, reason: def.id.name);
+      }
+    });
+
+    testWidgets('스크린리더: focusable 키는 포커스를 받을 수 있고 지금 포커스가 있는지 알린다', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _host(CalcKeyButton(keyDef: on, onPressed: (_) {})),
+        _host(CalcKeyButton(keyDef: on, onPressed: (_) {}, focusable: true)),
       );
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      final button = find.byType(CalcKeyButton);
+      expect(
+        tester.getSemantics(button),
+        isSemantics(isButton: true, isFocusable: true, isFocused: false),
+      );
+      Focus.of(tester.element(_keycap(on.id))).requestFocus();
       await tester.pump();
-      final focused = FocusManager.instance.primaryFocus?.context;
-      final inKey =
-          focused != null &&
-          find
-              .descendant(
-                of: find.byType(CalcKeyButton),
-                matching: find.byElementPredicate((e) => identical(e, focused)),
-              )
-              .evaluate()
-              .isNotEmpty;
-      expect(inKey, isFalse);
+      expect(
+        tester.getSemantics(button),
+        isSemantics(isButton: true, isFocusable: true, isFocused: true),
+      );
+      handle.dispose();
     });
   });
 

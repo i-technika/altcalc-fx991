@@ -289,11 +289,13 @@ void main() {
       },
     );
 
-    test('전원 각인(ON·OFF)은 어느 층에도 없다 (#190)', () {
+    test('쓰지 않는 기능은 SHIFT + AC(OFF)뿐이고 그 각인은 실물대로 있다 (#190)', () {
+      expect(ignoredShiftFunctions, {CalcKeyId.ac});
+      for (final id in ignoredShiftFunctions) {
+        expect(keyDefOf(id).shiftLabel, 'OFF');
+      }
       for (final key in allKeys) {
-        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
-          expect(label, isNot(anyOf('ON', 'OFF')), reason: key.id.name);
-        }
+        expect(key.mainLabel, isNot('ON'), reason: key.id.name);
       }
     });
 
@@ -361,8 +363,7 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.num8: ('8', 'CONV', null),
   CalcKeyId.num9: ('9', 'RESET', null), // G7
   CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
-  // 실물 SHIFT 각인 `OFF`(G3 전원 끄기)는 뺐다 — 전원이 없다 (#190, 실물 대조에서 의도적으로 다른 행)
-  CalcKeyId.ac: ('AC', null, null),
+  CalcKeyId.ac: ('AC', 'OFF', null), // G3 전원 — 각인은 실물대로, 동작은 무시 (#190)
   CalcKeyId.num4: ('4', null, null),
   CalcKeyId.num5: ('5', null, null),
   CalcKeyId.num6: ('6', null, null),

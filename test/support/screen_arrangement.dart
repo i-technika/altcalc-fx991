@@ -34,7 +34,7 @@ enum DrawnArrangement {
 
 /// 그려진 계산기 화면의 배치 종류 (#41 R1). 위아래 배치는 [isStackedArrangement]의 세 조건을 모두 만족할 때다.
 /// - 가로형: 키패드가 넓은 배열이고 LCD 바로 아래(간격)에 있다(활성 LCD는 기록 영역이 있으면 블록 폭이다).
-/// - 좌우: LCD와 키패드가 가로로 겹치지 않는다(세로 접힘선 양쪽).
+/// - 좌우: LCD와 키패드가 가로로 겹치지 않고, LCD 윗변이 키패드 윗변 이하다(세로 접힘선 양쪽 — LCD는 본체 윗변부터, #190).
 /// - 테이블톱: 키패드가 LCD 아래에 간격보다 더 떨어져 있다(사이에 접힘선과 양쪽 여백).
 DrawnArrangement drawnArrangementOf(WidgetTester tester) {
   const tolerance = 0.01;
@@ -52,8 +52,9 @@ DrawnArrangement drawnArrangementOf(WidgetTester tester) {
       (keypad.right - lcd.right).abs() <= tolerance) {
     return DrawnArrangement.stacked;
   }
-  if (keypad.left >= lcd.right - tolerance ||
-      keypad.right <= lcd.left + tolerance) {
+  if ((keypad.left >= lcd.right - tolerance ||
+          keypad.right <= lcd.left + tolerance) &&
+      lcd.top <= keypad.top + tolerance) {
     return DrawnArrangement.sideBySide;
   }
   if (gap > CalcTheme.screenLcdKeypadGap + tolerance) {

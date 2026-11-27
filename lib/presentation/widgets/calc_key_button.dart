@@ -327,6 +327,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     ),
   };
 
+  /// 키보드 포커스를 가졌는지 ([CalcKeyButton.focusable]일 때만) — 스크린리더에 포커스 상태로 알린다.
+  bool _focused = false;
+
   Object? _activateByKeyboard() {
     if (_enabled) _commitPress();
     return null;
@@ -348,7 +351,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         actions: _keyboardActions,
         child: Focus(
           canRequestFocus: _enabled,
-          // 키 버튼의 시맨틱은 바깥 Semantics 하나다.
+          onFocusChange: (focused) {
+            if (focused != _focused) setState(() => _focused = focused);
+          },
+          // 키 버튼의 시맨틱은 바깥 Semantics 하나다(포커스 상태도 그쪽에 싣는다).
           includeSemantics: false,
           child: keycap,
         ),
@@ -359,9 +365,13 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   @override
   Widget build(BuildContext context) {
     final strings = CalcSemanticStrings.of(context);
+    final focusable = widget.focusable && _enabled;
     return Semantics(
       button: true,
       enabled: _enabled,
+      // 키보드 포커스를 받는 키(설정 키, #190)는 그 상태도 알린다 — 없어진 설정 버튼(IconButton)이 알리던 것과 같다.
+      focusable: focusable ? true : null,
+      focused: focusable ? _focused : null,
       // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
       // 메인 기능은 라벨, SHIFT·ALPHA 기능은 힌트로 나눠 키를 훑을 때 짧게 읽히게 한다.
       label: strings.keyButton(widget.keyDef.id),

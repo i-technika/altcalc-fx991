@@ -131,7 +131,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('ON'), findsNothing);
-      expect(find.text('OFF'), findsNothing);
+      // AC 위 OFF는 실물대로 인쇄한다(동작만 무시, #190).
+      expect(find.text('OFF'), findsOneWidget);
     });
 
     testWidgets('ON 키를 누르면 설정이 열리고, LCD를 눌러도 열리지 않는다', (tester) async {
@@ -328,6 +329,85 @@ void main() {
       expect(tester.getRect(_surface).left, greaterThanOrEqualTo(350));
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      '대화상자가 열린 채 접힘선 나뉨이 바뀌어도 대화상자 element와 키보드 포커스가 유지된다 (#41 R2)',
+      (tester) async {
+        // 세로 접힘선 기준 배치(대화상자를 ON 키 쪽 절반에 둔다) → 접힘선이 없어짐(가로형, 나누지 않음)
+        const fold = DisplayFeature(
+          bounds: Rect.fromLTWH(420, 0, 0, 701),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        final container = await _pump(
+          tester,
+          size: const Size(841, 701),
+          displayFeatures: const [fold],
+        );
+        await _open(tester);
+        final option = find.byKey(
+          HandednessDialog.optionKeyOf(Handedness.values.first),
+        );
+        // 키보드로 첫 선택지에 포커스를 준다.
+        for (var i = 0; i < 5 && !_focusIn(option); i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(_focusIn(option), isTrue);
+        final focused = FocusManager.instance.primaryFocus;
+        final optionElement = tester.element(option);
+
+        for (final features in const [
+          <DisplayFeature>[],
+          [fold],
+        ]) {
+          await _pump(
+            tester,
+            size: const Size(841, 701),
+            displayFeatures: features,
+            container: container,
+          );
+          await tester.pumpAndSettle();
+          expect(_dialog, findsOneWidget);
+          expect(identical(tester.element(option), optionElement), isTrue);
+          expect(FocusManager.instance.primaryFocus, same(focused));
+        }
+      },
+    );
+
+    // 작은 창 — 위아래 배치로 남는 창은 안내 글이 나오고, 가로형이 된 짧은 창(#38, #142)은 손잡이가 적용되므로
+    // 안내 글이 없다. 어느 쪽이든 첫 선택지가 스크롤 없이 눌린다.
+    for (final (size, stacked) in const [
+      (Size(300, 420), true),
+      (Size(411, 420), true), // #190 뒤로 위아래 배치의 키가 더 크다
+      (Size(360, 300), false),
+      (Size(568, 320), false),
+      (Size(640, 360), false),
+    ]) {
+      testWidgets('작은 창 ${size.width}×${size.height}: '
+          '${stacked ? '안내 글이 있어도' : '가로형(#38, #142)에서'} 첫 선택지가 스크롤 없이 눌린다', (
+        tester,
+      ) async {
+        final container = await _pump(tester, size: size);
+        expect(tester.takeException(), isNull);
+        expect(
+          drawnArrangementOf(tester),
+          stacked ? DrawnArrangement.stacked : DrawnArrangement.landscape,
+        );
+        // 첫 선택지(오른손잡이)를 눌러 바뀌는지 보려고 왼손잡이로 시작한다.
+        container.read(handednessProvider.notifier).set(Handedness.left);
+        await tester.pump();
+        await _open(tester);
+        expect(
+          find.byKey(HandednessDialog.noteKey),
+          stacked ? findsOneWidget : findsNothing,
+        );
+        final first = Handedness.values.first;
+        await tester.tap(find.byKey(HandednessDialog.optionKeyOf(first)));
+        await tester.pumpAndSettle();
+        expect(container.read(handednessProvider), first);
+      });
+    }
 
     testWidgets('회전으로 배치가 바뀌어도 ON 키 element가 유지된다', (tester) async {
       const padding = EdgeInsets.only(top: 24, bottom: 48);

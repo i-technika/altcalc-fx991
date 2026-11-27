@@ -139,8 +139,12 @@ void main() {
           final reason = '${modifier.name} + ${def.id.name}';
           expect(next.modifier, KeyModifier.none, reason: reason);
 
-          // 설정 키(ON)는 계산기 입력이 아니다 (#190) — 기능 없는 층처럼 대기만 푼다.
-          final expectedLabel = def.id == settingsKey
+          // 설정 키(ON)·쓰지 않는 기능(SHIFT + AC)은 계산기 입력이 아니다 (#190) — 기능 없는 층처럼 대기만 푼다.
+          final ignored =
+              def.id == settingsKey ||
+              (modifier == KeyModifier.shift &&
+                  ignoredShiftFunctions.contains(def.id));
+          final expectedLabel = ignored
               ? null
               : switch (modifier) {
                   KeyModifier.none => def.mainLabel,
@@ -187,7 +191,7 @@ void main() {
       );
     });
 
-    test('SHIFT + AC(실물 OFF)는 기능 없는 층이라 아무것도 입력하지 않는다', () {
+    test('SHIFT + AC(실물 OFF)는 각인이 있어도 아무것도 입력하지 않는다', () {
       final next = _press([CalcKeyId.shift, CalcKeyId.ac]);
       expect(next.modifier, KeyModifier.none);
       expect(next.inputCount, 0);

@@ -48,6 +48,10 @@ class KeyInput {
         '모디파이어 키는 입력이 아니다: $id',
       ),
       assert(id != settingsKey, '설정 키(ON)는 계산기 입력이 아니다 (#190)'),
+      assert(
+        layer != KeyLayer.shift || !ignoredShiftFunctions.contains(id),
+        '쓰지 않는 기능은 입력이 아니다 (#190): $id',
+      ),
       assert(labelOf(id, layer) != null, '$id 키에는 $layer 기능이 없다'),
       assert(
         !isRepeat || (layer == KeyLayer.main && autoRepeatKeys.contains(id)),
@@ -92,9 +96,10 @@ class KeyInput {
 /// - SHIFT를 누르면 SHIFT 대기(S), 대기 중 다시 누르면 해제한다. ALPHA도 같다.
 /// - 한 모디파이어 대기 중 다른 모디파이어를 누르면 그쪽으로 바뀐다(SHIFT → ALPHA = A만 켜짐).
 /// - 모디파이어가 아닌 키를 누르면 대기 중인 층의 기능을 입력하고 대기를 **항상** 해제한다.
-///   그 층에 기능이 없는 키(예: SHIFT + 4, SHIFT + AC — 실물 OFF는 뺐다)는 아무것도 입력하지 않고 대기만 해제한다.
+///   그 층에 기능이 없는 키(예: SHIFT + 4)는 아무것도 입력하지 않고 대기만 해제한다. 각인은 있지만 이 앱이 쓰지 않는
+///   기능([ignoredShiftFunctions] — SHIFT + AC의 전원 끄기 `OFF`, #190)도 같다.
 /// - 설정 키([settingsKey] — ON)는 계산기 입력이 아니다(#190). 화면이 설정을 열고, 상태 머신은 기능 없는 층의
-///   키처럼 대기만 해제한다 — 실물 ON 키도 대기를 지운다.
+///   키처럼 대기만 해제한다(앱 규칙 — 모디파이어가 아닌 키는 대기를 늘 해제한다는 위 규칙을 따른다).
 ///
 /// 위 규칙과 아래 "모디파이어 기능은 반복하지 않는다"는 #15에서 확정했다.
 /// - 키를 누르면 대기가 해제된다: User's Guide 인쇄 4쪽 "S … will disappear when you press a key"
@@ -172,8 +177,9 @@ class CalcState {
       KeyModifier.shift => KeyLayer.shift,
       KeyModifier.alpha => KeyLayer.alpha,
     };
-    if (KeyInput.labelOf(id, layer) == null) {
-      // 기능 없는 층: 입력 없이 대기만 해제한다. 반복 대상도 끊는다.
+    if (KeyInput.labelOf(id, layer) == null ||
+        (layer == KeyLayer.shift && ignoredShiftFunctions.contains(id))) {
+      // 기능 없는 층(또는 쓰지 않는 기능): 입력 없이 대기만 해제한다. 반복 대상도 끊는다.
       return CalcState(lastInput: lastInput, inputCount: inputCount);
     }
     return CalcState(

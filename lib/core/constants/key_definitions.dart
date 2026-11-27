@@ -633,12 +633,12 @@ const List<List<CalcKeyDef>> numberRows = [
       alphaLegend: LegendText('UNDO'),
       category: KeyCategory.del,
     ),
-    // 실물의 SHIFT 각인 `OFF`(전원 끄기)는 뺐다 — 이 앱에는 전원이 없다(#190). 기능 없는 각인을 남기면 누를 수
-    // 있는 것처럼 보이므로, ON 각인을 `SETTING`으로 바꾼 것과 같은 이유로 지운다. SHIFT + AC는 기능 없는 층이라
-    // 아무것도 입력하지 않는다.
+    // SHIFT 각인 `OFF`(전원 끄기)는 실물대로 인쇄하지만, 이 앱에는 전원이 없어 SHIFT + AC는 아무것도 하지 않는다
+    // ([ignoredShiftFunctions], #190 — 이슈는 동작을 무시하라고 했고 바꾸라고 한 인쇄는 ON → SETTING뿐이다).
     CalcKeyDef(
       id: CalcKeyId.ac,
       mainLegend: LegendText('AC'),
+      shiftLegend: LegendText('OFF'),
       category: KeyCategory.ac,
     ),
   ],
@@ -767,6 +767,10 @@ List<CalcKeyDef> _buildAllKeys() {
 /// 계산기 입력 대신 설정이 열린다(`CalculatorScreen`). 계산기 상태 머신은 이 키를 입력으로 받지 않는다
 /// (`CalcState.pressKey` — 모디파이어 대기만 푼다).
 const CalcKeyId settingsKey = CalcKeyId.on;
+
+/// 각인은 실물대로 있지만 이 앱에서 무시하는 기능 — (키, SHIFT 층인지). 지금은 SHIFT + AC(전원 끄기 `OFF`)뿐이다
+/// (#190 — 이 앱에는 전원이 없다). 계산기 상태 머신은 이 기능을 기능 없는 층처럼 다룬다(`CalcState.pressKey`).
+const Set<CalcKeyId> ignoredShiftFunctions = {CalcKeyId.ac};
 
 /// 길게 누르면 반복 입력되는 키 (커서 패드 4방향, DEL).
 const Set<CalcKeyId> autoRepeatKeys = {

@@ -1013,7 +1013,8 @@ void main() {
     for (final (size, arrangement) in const [
       (Size(320, 568), DrawnArrangement.stacked), // 0.957
       (Size(412, 915), DrawnArrangement.stacked), // 0.956
-      (Size(410, 400), DrawnArrangement.landscape), // 작은 가로형 창, 0.957
+      // 작은 가로형 창 — #190 뒤로 410×400은 위아래 배치의 키가 더 커 410×380으로 바꿨다
+      (Size(410, 380), DrawnArrangement.landscape),
       (Size(360, 300), DrawnArrangement.landscape), // 0.956
       (Size(844, 390), DrawnArrangement.landscape), // 가로 폰, 0.963
       (Size(841, 701), DrawnArrangement.landscape), // 폴더블 내부 가로, 0.956
