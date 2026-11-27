@@ -2423,6 +2423,392 @@ void _hingeLayoutTests() {
     );
   });
 
+  group('접힘선이 2개 이상인 화면(펼친 트라이폴드)의 설정 대화상자 (#198)', () {
+    // Galaxy Z TriFold 공개 해상도 근사(#144) — 가로가 기본 방향, 세로로 돌리면 접힘선이 가로로 눕는다.
+    const landscape = Size(823, 603);
+    const portrait = Size(603, 823);
+    // 위아래가 같아 화면 가운데 = 안전 영역 가운데
+    const padding = EdgeInsets.only(top: 24, bottom: 24);
+
+    /// [size] 화면을 세 장으로 나누는 접힘선 2개 (폭 [width], 접힘선 가운데가 1/3·2/3 근사 위치)
+    List<DisplayFeature> triFold(
+      Size size, {
+      double width = 0,
+      DisplayFeatureType type = DisplayFeatureType.fold,
+      DisplayFeatureState state = DisplayFeatureState.postureHalfOpened,
+    }) {
+      final vertical = size.width > size.height;
+      return [
+        for (final at in const [274.5, 548.5])
+          _foldAt(
+            vertical
+                ? Rect.fromLTWH(at - width / 2, 0, width, size.height)
+                : Rect.fromLTWH(0, at - width / 2, size.width, width),
+            type: type,
+            state: state,
+          ),
+      ];
+    }
+
+    Future<void> pumpTriFold(
+      WidgetTester tester, {
+      required Size size,
+      required List<DisplayFeature> features,
+      required Handedness handedness,
+    }) async {
+      // 실제 앱처럼 View에도 인셋을 넣는다 (대화상자 경로는 View의 MediaQuery를 본다)
+      _setViewPadding(tester, padding);
+      await _pump(
+        tester,
+        size: size,
+        padding: padding,
+        handedness: handedness,
+        displayFeatures: features,
+      );
+    }
+
+    // 자세·힌지 폭과 상관없이 화면 전체 가운데다. 고치기 전(`showDialog`)에는 반 접힘·폭 있는 힌지에서 Flutter가 만든
+    // 겹치는 하위 화면(0~548.5)에 떠 카드가 x=55~493으로 접힘선 하나를 가로질렀다(#190 R2 실측).
+    for (final (name, featuresOf)
+        in <(String, List<DisplayFeature> Function(Size))>[
+          (
+            '펼친 폭 0 접힘선',
+            (s) => triFold(s, state: DisplayFeatureState.postureFlat),
+          ),
+          ('반 접은 폭 0 접힘선', triFold),
+          (
+            '폭 20dp 물리 힌지 (칸이 모두 최소 크기 미만)',
+            (s) => triFold(
+              s,
+              width: 20,
+              type: DisplayFeatureType.hinge,
+              state: DisplayFeatureState.postureFlat,
+            ),
+          ),
+        ]) {
+      for (final size in const [landscape, portrait]) {
+        testWidgets(
+          '$name · ${size.width}×${size.height}: 손잡이와 무관하게 화면 가운데에 뜬다',
+          (tester) async {
+            for (final h in Handedness.values) {
+              await pumpTriFold(
+                tester,
+                size: size,
+                features: featuresOf(size),
+                handedness: h,
+              );
+              expect(
+                drawnArrangementOf(tester),
+                isNot(DrawnArrangement.sideBySide),
+              );
+              await tester.tap(_settings);
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull);
+              final dialog = tester.getRect(_dialogSurface);
+              final center = (Offset.zero & size).center;
+              expect(
+                dialog.center.dx,
+                moreOrLessEquals(center.dx),
+                reason: '$h $dialog',
+              );
+              expect(
+                dialog.center.dy,
+                moreOrLessEquals(center.dy),
+                reason: '$h $dialog',
+              );
+              // 카드가 Material 최소 폭을 지킨다 (한 칸에 갇히면 약 194dp)
+              expect(
+                dialog.width,
+                greaterThanOrEqualTo(280),
+                reason: '$h $dialog',
+              );
+              await tester.tap(find.byKey(HandednessDialog.closeKey));
+              await tester.pumpAndSettle();
+            }
+          },
+        );
+      }
+    }
+
+    testWidgets('폭 있는 힌지로 나눈 칸이 넉넉하면 설정 키에 가장 가까운 칸에 떠 틈을 가로지르지 않는다', (
+      tester,
+    ) async {
+      // 가상의 큰 세 장 화면: 폭 10dp 힌지 2개로 나눈 칸 460·460·460dp가 모두 최소 크기(360dp)를 넘는다
+      const size = Size(1400, 900);
+      const gaps = [
+        Rect.fromLTWH(460, 0, 10, 900),
+        Rect.fromLTWH(930, 0, 10, 900),
+      ];
+      for (final h in Handedness.values) {
+        await pumpTriFold(
+          tester,
+          size: size,
+          features: [
+            for (final g in gaps) _foldAt(g, type: DisplayFeatureType.hinge),
+          ],
+          handedness: h,
+        );
+        final key = tester.getRect(_settings).center;
+        await tester.tap(_settings);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final dialog = tester.getRect(_dialogSurface);
+        for (final g in gaps) {
+          expect(dialog.overlaps(g), isFalse, reason: '$h $dialog $g');
+        }
+        // 설정 키가 든 칸 (칸 가장자리 = 화면 끝 또는 틈)
+        final cellLeft = key.dx < 460 ? 0.0 : (key.dx < 930 ? 470.0 : 940.0);
+        expect(
+          dialog.left,
+          greaterThanOrEqualTo(cellLeft),
+          reason: '$h $key $dialog',
+        );
+        expect(
+          dialog.right,
+          lessThanOrEqualTo(cellLeft + 460),
+          reason: '$h $key $dialog',
+        );
+        await tester.tap(find.byKey(HandednessDialog.closeKey));
+        await tester.pumpAndSettle();
+      }
+    });
+
+    testWidgets('열린 채 접힘 정보가 바뀌면 영역을 다시 고르고, 대화상자 상태는 유지된다', (tester) async {
+      const size = Size(1400, 900);
+      final hinges = [
+        for (final x in const [460.0, 930.0])
+          _foldAt(Rect.fromLTWH(x, 0, 10, 900), type: DisplayFeatureType.hinge),
+      ];
+      // 같은 자리의 폭 0 반 접힘 접힘선 — 칸으로 나누지 않고 화면 전체다
+      final creases = [
+        for (final x in const [465.0, 935.0])
+          _halfOpenedAt(Rect.fromLTWH(x, 0, 0, 900)),
+      ];
+      await pumpTriFold(
+        tester,
+        size: size,
+        features: hinges,
+        handedness: Handedness.left,
+      );
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      final element = tester.element(find.byType(HandednessDialog));
+      final inCell = tester.getRect(_dialogSurface);
+      expect(inCell.left, greaterThanOrEqualTo(940));
+
+      tester.view.displayFeatures = creases;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final whole = tester.getRect(_dialogSurface);
+      expect(whole.center.dx, moreOrLessEquals(size.width / 2));
+      expect(tester.element(find.byType(HandednessDialog)), same(element));
+
+      // 다시 폭 있는 힌지로 — 연 시점의 설정 키 쪽 칸으로 돌아온다
+      tester.view.displayFeatures = hinges;
+      await tester.pumpAndSettle();
+      expect(tester.getRect(_dialogSurface), inCell);
+      expect(tester.element(find.byType(HandednessDialog)), same(element));
+    });
+
+    group('영역 계산 (multiHingeDialogRegionOf)', () {
+      const minRegion = Size(360, 328);
+      final whole = Offset.zero & landscape;
+      MediaQueryData screenOf(
+        Size size,
+        List<DisplayFeature> features, {
+        EdgeInsets padding = EdgeInsets.zero,
+      }) => MediaQueryData(
+        size: size,
+        padding: padding,
+        displayFeatures: features,
+      );
+
+      test('창을 가로지르는 접힘선이 2개 미만이면 null이다 (경로가 원래대로 나눈다)', () {
+        for (final features in [
+          <DisplayFeature>[],
+          [_halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603))],
+          // 둘째 접힘선이 창 가장자리 — 세지 않는다 (#144)
+          [
+            _halfOpenedAt(const Rect.fromLTWH(274.5, 0, 0, 603)),
+            _halfOpenedAt(const Rect.fromLTWH(823, 0, 0, 603)),
+          ],
+        ]) {
+          expect(
+            SettingsLauncher.multiHingeDialogRegionOf(
+              screenOf(landscape, features),
+              const Offset(700, 300),
+              minRegion,
+            ),
+            isNull,
+            reason: '$features',
+          );
+        }
+      });
+
+      test('폭 0 접힘선은 자세와 상관없이 화면 전체다', () {
+        for (final state in DisplayFeatureState.values) {
+          for (final type in [
+            DisplayFeatureType.fold,
+            DisplayFeatureType.hinge,
+          ]) {
+            expect(
+              SettingsLauncher.multiHingeDialogRegionOf(
+                screenOf(
+                  landscape,
+                  triFold(landscape, type: type, state: state),
+                ),
+                const Offset(700, 300),
+                minRegion,
+              ),
+              whole,
+              reason: '$type $state',
+            );
+          }
+        }
+      });
+
+      test('폭 있는 힌지로 나눈 칸이 모두 최소 크기 미만이면 화면 전체다', () {
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(
+            screenOf(landscape, triFold(landscape, width: 20)),
+            const Offset(700, 300),
+            minRegion,
+          ),
+          whole,
+        );
+      });
+
+      test('넉넉한 칸 중 설정 키에 가장 가까운 칸이다 — 겹치는 칸을 만들지 않는다', () {
+        const size = Size(1400, 900);
+        final screen = screenOf(size, [
+          _foldAt(
+            const Rect.fromLTWH(930, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+          _foldAt(
+            const Rect.fromLTWH(460, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+        ]);
+        for (final (anchor, cell) in const [
+          (Offset(100, 800), Rect.fromLTRB(0, 0, 460, 900)),
+          (Offset(600, 10), Rect.fromLTRB(470, 0, 930, 900)),
+          (Offset(1300, 450), Rect.fromLTRB(940, 0, 1400, 900)),
+          // 틈 위 — 왼쪽 칸과의 거리가 더 짧다
+          (Offset(462, 450), Rect.fromLTRB(0, 0, 460, 900)),
+        ]) {
+          expect(
+            SettingsLauncher.multiHingeDialogRegionOf(
+              screen,
+              anchor,
+              minRegion,
+            ),
+            cell,
+            reason: '$anchor',
+          );
+        }
+        // 설정 키 위치를 모르면 화면 가운데에 가까운 칸
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(screen, null, minRegion),
+          const Rect.fromLTRB(470, 0, 930, 900),
+        );
+      });
+
+      test('폭 0 접힘선(주름)은 칸을 나누지 않고, 폭 있는 힌지로만 나눈다', () {
+        const size = Size(1400, 900);
+        final screen = screenOf(size, [
+          _foldAt(
+            const Rect.fromLTWH(460, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+          _halfOpenedAt(const Rect.fromLTWH(935, 0, 0, 900)),
+        ]);
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(
+            screen,
+            const Offset(1300, 450),
+            minRegion,
+          ),
+          const Rect.fromLTRB(470, 0, 1400, 900),
+        );
+      });
+
+      test('같은 힌지가 폭 0 접힘선과 함께 두 번 보고되어도 틈을 피한다', () {
+        const size = Size(1400, 900);
+        final screen = screenOf(size, [
+          // 폭 0 반 접힘이 먼저 와 `FormFactor.crossingHingesOf`는 그것을 남긴다
+          _halfOpenedAt(const Rect.fromLTWH(465, 0, 0, 900)),
+          _foldAt(
+            const Rect.fromLTWH(460, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+          _halfOpenedAt(const Rect.fromLTWH(935, 0, 0, 900)),
+          _foldAt(
+            const Rect.fromLTWH(930, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+        ]);
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(
+            screen,
+            const Offset(1300, 450),
+            minRegion,
+          ),
+          const Rect.fromLTRB(940, 0, 1400, 900),
+        );
+      });
+
+      test('칸은 인셋을 빼고 잰다 — 옆 인셋으로 최소 폭 아래가 된 칸은 고르지 않는다', () {
+        const size = Size(1400, 900);
+        final features = [
+          _foldAt(
+            const Rect.fromLTWH(460, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+          _foldAt(
+            const Rect.fromLTWH(930, 0, 10, 900),
+            type: DisplayFeatureType.hinge,
+          ),
+        ];
+        // 오른쪽 칸 460dp에서 인셋 120dp를 빼면 340dp < 360dp → 가운데 칸
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(
+            screenOf(
+              size,
+              features,
+              padding: const EdgeInsets.only(right: 120),
+            ),
+            const Offset(1300, 450),
+            minRegion,
+          ),
+          const Rect.fromLTRB(470, 0, 930, 900),
+        );
+      });
+
+      test('가로 힌지도 같다 (세로로 돌린 화면)', () {
+        const size = Size(900, 1400);
+        final screen = screenOf(size, [
+          _foldAt(
+            const Rect.fromLTWH(0, 460, 900, 10),
+            type: DisplayFeatureType.hinge,
+          ),
+          _foldAt(
+            const Rect.fromLTWH(0, 930, 900, 10),
+            type: DisplayFeatureType.hinge,
+          ),
+        ]);
+        expect(
+          SettingsLauncher.multiHingeDialogRegionOf(
+            screen,
+            const Offset(450, 1300),
+            minRegion,
+          ),
+          const Rect.fromLTRB(0, 940, 900, 1400),
+        );
+      });
+    });
+  });
+
   group('CalcHingeSplitLayout · CalcTabletopLayout', () {
     void expectSane(Size body, List<Rect> rects, String reason) {
       final bounds = (Offset.zero & body).inflate(0.01);
