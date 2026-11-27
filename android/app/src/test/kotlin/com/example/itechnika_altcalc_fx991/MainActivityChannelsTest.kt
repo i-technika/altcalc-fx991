@@ -120,6 +120,18 @@ class MainActivityChannelsTest {
     }
 
     @Test
+    fun `isInMultiWindowMode - 액티비티의 여러 창 모드 여부를 그때그때 답한다 (#137)`() {
+        assertEquals(MethodReply.Success(false), messenger.invokeMethod(DEVICE_CHANNEL, "isInMultiWindowMode"))
+
+        // 분할 화면에 들어감 — 등록 때 값을 기억하지 않고 물을 때마다 읽는다
+        shadowOf(activity).setInMultiWindowMode(true)
+        assertEquals(MethodReply.Success(true), messenger.invokeMethod(DEVICE_CHANNEL, "isInMultiWindowMode"))
+
+        shadowOf(activity).setInMultiWindowMode(false)
+        assertEquals(MethodReply.Success(false), messenger.invokeMethod(DEVICE_CHANNEL, "isInMultiWindowMode"))
+    }
+
+    @Test
     fun `기기 채널은 모르는 메서드에 notImplemented로 답한다`() {
         assertEquals(MethodReply.NotImplemented, messenger.invokeMethod(DEVICE_CHANNEL, "noSuchMethod"))
     }

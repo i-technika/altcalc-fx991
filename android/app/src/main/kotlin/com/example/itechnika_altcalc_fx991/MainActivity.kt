@@ -43,6 +43,10 @@ class MainActivity : FlutterActivity() {
                     // 폴더블 판정 (#70): 접힘 정보(displayFeatures)는 화면이 붙은 뒤 비동기로 오므로, 힌지 신호와
                     // 창 배치 정보 첫 값으로 시작 시점에 구분한다 — 규칙은 [FoldableDeviceProbe]. 답은 map (#158).
                     "isFoldableDevice" -> probe.query { result.success(it.toChannelValue()) }
+                    // 여러 창 모드(분할 화면·자유 형식 창·팝업 창)인지 (#137). Android는 이 모드에서 방향을 고정한 앱의
+                    // 창 모양이 요청 방향과 다르면 창 안에 레터박스로 줄여 그린다 — Dart(`DeviceOrientationLock`)가 이
+                    // 답으로 방향 고정을 풀어 창 전체를 쓴다. 화면 정보가 바뀔 때마다 묻는다(API 24 = minSdk부터 있다).
+                    "isInMultiWindowMode" -> result.success(isInMultiWindowMode)
                     else -> result.notImplemented()
                 }
             }

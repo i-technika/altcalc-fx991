@@ -173,7 +173,7 @@ abstract final class LayoutLog {
   }
 
   /// 방향 요청 — [kind]·[display](물리 화면, dp)로 고른 [policy]를 보냈다. 실패하면 [error]가 있다.
-  /// [reason]은 크기 규칙 말고 따로 정한 근거다 — 펼친 트라이폴드의 `접힘선 2개`·`접힘선 2개 기억`(#144).
+  /// [reason]은 크기 규칙 말고 따로 정한 근거다 — 펼친 트라이폴드의 `접힘선 2개`·`접힘선 2개 기억`(#144), `여러 창 모드`(#137).
   static void orientationRequest(
     OrientationPolicy policy, {
     required DeviceKind kind,

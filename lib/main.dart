@@ -91,6 +91,12 @@ Future<void> main() async {
 /// 네 방향으로 둔다. 접은 커버 화면은 비율이 달라 기억을 쓰지 않는다.
 /// 기억할 때는 창과 물리 화면이 같은 화면이어야 한다 — 접을 때 물리 화면 크기가 창·접힘 정보보다 먼저 바뀌는 순간(위젯
 /// 테스트에서 재현)에 커버 화면을 기억하지 않게 한다.
+///
+/// ## 여러 창 모드 (#137)
+/// 분할 화면·자유 형식 창·팝업 창에서는 방향을 고정하지 않는다([FormFactor.orientationPolicyOf]의 `multiWindow`) — 고정하면
+/// 창 모양이 요청 방향과 다를 때 Android가 앱을 레터박스로 줄인다(폰 1/3 분할 창 411×305 → 301.7×304.8dp,
+/// [FormFactor.queryMultiWindowMode]). 여러 창 모드인지는 화면 정보가 바뀔 때마다 요청 직전에 Android에 묻는다 — 여러 창
+/// 모드에 들어가고 나올 때는 늘 창 크기가 바뀐다. 전체 화면으로 돌아오면 기기별 정책으로 다시 고정한다.
 class DeviceOrientationLock with WidgetsBindingObserver {
   DeviceOrientationLock._();
 
@@ -106,6 +112,9 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   /// 창을 가로지르는 접힘선이 둘 이상이었던 물리 화면 크기 (dp, 펼친 트라이폴드 — 아래 "트라이폴드 방향 기억", #144).
   /// 없으면 `null`.
   Size? _multiHingeDisplay;
+
+  /// 마지막으로 물어본 여러 창 모드 여부 (위 "여러 창 모드", #137) — 요청할 때마다 다시 묻는다.
+  bool _multiWindow = false;
 
   /// 처리 중인 마지막 요청 (없으면 `null`). 다음 요청은 이것이 끝난 뒤 판정·전송한다.
   /// 비어 있을 때 미리 만든 Future를 두지 않는다 — Future는 만들어진 Zone에 묶이므로, 호출한 쪽 Zone에서
@@ -142,19 +151,16 @@ class DeviceOrientationLock with WidgetsBindingObserver {
     _foldableDevice.value = false;
     _lastDisplay = null;
     _multiHingeDisplay = null;
+    _multiWindow = false;
     _pending = null;
   }
 
-  /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다.
+  /// 현재 화면의 방향 정책. 화면(view)이 없으면 폰(세로)으로 본다. 여러 창 모드 여부는 마지막으로 물어본 값이다(#137).
   OrientationPolicy currentPolicy() => _currentDecision().policy;
 
-  /// 방향 정책과 그 근거(기기 종류·물리 화면 크기·접힘선 2개 판정 — 진단 로그용, #158·#144). 화면이 없으면 크기 0의 폰이다.
-  ({
-    OrientationPolicy policy,
-    DeviceKind kind,
-    Size display,
-    String? multipleHinges,
-  })
+  /// 방향 정책과 그 근거(기기 종류·물리 화면 크기·크기 규칙 말고 따로 정한 근거 — 진단 로그용, #158·#144·#137).
+  /// 화면이 없으면 크기 0의 폰이다.
+  ({OrientationPolicy policy, DeviceKind kind, Size display, String? reason})
   _currentDecision() {
     final view = _view;
     if (view == null) {
@@ -162,7 +168,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         policy: OrientationPolicy.portrait,
         kind: DeviceKind.phone,
         display: Size.zero,
-        multipleHinges: null,
+        reason: null,
       );
     }
     final displaySize = FormFactor.displaySizeOf(view);
@@ -180,15 +186,18 @@ class DeviceOrientationLock with WidgetsBindingObserver {
               !FormFactor.isOtherScreen(remembered, displaySize)
         ? '접힘선 2개 기억'
         : null;
+    final multiWindow = _multiWindow;
     return (
       policy: FormFactor.orientationPolicyOf(
         kind,
         displaySize,
         multipleHinges: multipleHinges != null,
+        multiWindow: multiWindow,
       ),
       kind: kind,
       display: displaySize,
-      multipleHinges: multipleHinges,
+      // 여러 창 모드가 접힘선 2개보다 먼저 정책을 정한다(둘 다 네 방향이다)
+      reason: multiWindow ? '여러 창 모드' : multipleHinges,
     );
   }
 
@@ -205,6 +214,12 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   ///
   /// 최악의 시작 지연(시작 화면이 남는 시간)은 [FormFactor.foldableQueryTimeout](Android 판정 응답) + 이 시간이다.
   static const Duration foldFeatureWait = Duration(milliseconds: 300);
+
+  /// 여러 창 모드에서 나왔다는 답을 다시 확인하기까지 기다리는 시간 (#137, 위 "여러 창 모드"). 전체 화면으로 돌아온 뒤
+  /// 세로로 다시 고정하는 것이 이만큼 늦어진다.
+  static const Duration multiWindowExitConfirmDelay = Duration(
+    milliseconds: 100,
+  );
 
   /// 화면 정보([FlutterView.displayFeatures])에 접히는 부분이 올 때까지(최대 [timeout]) 기다린다 (#158).
   /// 이미 있으면 바로 끝난다. 앱 시작(`main()`)이 Android 판정의 `fold`가 참일 때 첫 화면을 띄우기 전에 부른다.
@@ -283,7 +298,16 @@ class DeviceOrientationLock with WidgetsBindingObserver {
   }
 
   Future<void> _applyNow() async {
-    final (:policy, :kind, :display, :multipleHinges) = _currentDecision();
+    // 여러 창 모드인지 요청 직전에 묻는다 (#137) — 앞 요청이 끝난 뒤라 답과 요청 순서가 엇갈리지 않는다.
+    var multiWindow = await FormFactor.queryMultiWindowMode();
+    if (_multiWindow && !multiWindow) {
+      // 여러 창 모드에서 나왔다는 답은 잠시 뒤 한 번 더 확인한다 — 분할 화면에서 화면을 돌릴 때 7ms 동안 false가 왔다가
+      // 돌아온 적이 있다(Android 16 에뮬레이터, 5번 중 1번). 그대로 믿으면 그 사이 세로 고정을 보내 레터박스로 줄었다 돌아온다.
+      await Future<void>.delayed(multiWindowExitConfirmDelay);
+      multiWindow = await FormFactor.queryMultiWindowMode();
+    }
+    _multiWindow = multiWindow;
+    final (:policy, :kind, :display, :reason) = _currentDecision();
     if (policy == _applied) return;
     try {
       await SystemChrome.setPreferredOrientations(
@@ -294,7 +318,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         policy,
         kind: kind,
         display: display,
-        reason: multipleHinges,
+        reason: reason,
       );
     } catch (error) {
       // 기록하지 않으므로 다음 화면 정보 변화 때 다시 시도한다.
@@ -303,7 +327,7 @@ class DeviceOrientationLock with WidgetsBindingObserver {
         policy,
         kind: kind,
         display: display,
-        reason: multipleHinges,
+        reason: reason,
         error: error,
       );
     }

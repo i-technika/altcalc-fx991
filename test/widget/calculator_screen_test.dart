@@ -818,6 +818,81 @@ void main() {
       },
     );
 
+    testWidgets(
+      '여러 창 모드(분할 화면)에서는 방향을 고정하지 않고, 전체 화면으로 돌아오면 다시 세로로 고정한다 (#137)',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        // Android 16 폰 에뮬레이터(1080×2400·420dpi) 실측: 화면 411.43×914.29dp, 1/3 분할 창 411.43×304.76dp.
+        // 세로로 고정하면 Android가 이 가로로 긴 창을 301.7×304.8dp 레터박스로 줄여 안내가 나왔다.
+        const display = Size(411.43, 914.29);
+        const third = Size(411.43, 304.76);
+        setDevice(tester, display);
+        tester.view.physicalSize = third * 2;
+        var multiWindow = true;
+        final methods = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          FormFactor.deviceChannel,
+          (call) async {
+            methods.add(call.method);
+            return call.method == FormFactor.multiWindowModeMethod
+                ? multiWindow
+                : {FormFactor.foldableKey: false, FormFactor.foldKey: false};
+          },
+        );
+        final calls = recordPlatformCalls(tester);
+        await app.main();
+        await tester.pump();
+        // 처음부터 세로 고정을 보내지 않는다 — 보내면 그 사이 레터박스로 줄었다가 돌아온다.
+        expect(orientationRequests(calls), [anyOrientation]);
+        expect(methods, contains(FormFactor.multiWindowModeMethod));
+        expect(
+          printed,
+          contains(
+            startsWith(
+              'AltCalc 방향 요청: any (기기 phone, 화면 411.4x914.3, 여러 창 모드)',
+            ),
+          ),
+        );
+        // 창 전체(가로로 긴 창)를 가로형으로 쓴다
+        expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
+        expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
+
+        // 분할 화면 경계를 옮겨도(여전히 여러 창 모드) 다시 요청하지 않는다
+        tester.view.physicalSize = const Size(411.43, 452.19) * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(1));
+
+        // 여러 창 모드 답이 잠깐만 false였다가 돌아오면(분할 화면에서 화면을 돌릴 때 실측) 세로 고정을 보내지 않는다
+        multiWindow = false;
+        tester.view.physicalSize = const Size(452.19, 411.43) * 2;
+        await tester.pump();
+        multiWindow = true;
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), hasLength(1));
+
+        // 전체 화면으로 돌아오면 확인 시간 뒤 세로로 고정한다
+        multiWindow = false;
+        tester.view.physicalSize = display * 2;
+        await tester.pump();
+        expect(orientationRequests(calls), hasLength(1));
+        await tester.pump(DeviceOrientationLock.multiWindowExitConfirmDelay);
+        expect(orientationRequests(calls), [
+          anyOrientation,
+          ['DeviceOrientation.portraitUp'],
+        ]);
+        expect(
+          DeviceOrientationLock.instance.appliedPolicy,
+          OrientationPolicy.portrait,
+        );
+
+        // 다시 분할 화면에 들어가면 고정을 푼다
+        multiWindow = true;
+        tester.view.physicalSize = third * 2;
+        await tester.pump();
+        expect(orientationRequests(calls).last, anyOrientation);
+      },
+    );
+
     testWidgets('방향 요청이 실패해도 앱은 뜨고, 다음 화면 정보 변화 때 다시 요청한다', (tester) async {
       SharedPreferences.setMockInitialValues({});
       setDevice(tester, const Size(390, 844));

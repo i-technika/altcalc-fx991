@@ -74,6 +74,11 @@ void main() {
     expect(_kotlinConstant(probe, 'KEY_FOLD'), FormFactor.foldKey);
   });
 
+  test('여러 창 모드 조회 메서드 이름 (#137)', () {
+    // 한쪽만 바꾸면 Dart는 notImplemented(→ false)를 받아 분할 화면에서도 방향을 고정해 레터박스로 줄어든다
+    expect(source, contains('"${FormFactor.multiWindowModeMethod}" ->'));
+  });
+
   test('고대비 텍스트 이벤트 채널 (#95)', () {
     expect(
       SystemHighTextContrast.channel.name,
