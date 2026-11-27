@@ -1268,33 +1268,38 @@ abstract final class CalcTheme {
   // 잉크 가운데는 면의 0.565로 아래에 있다), log◼▯(내림 글자 g)와 ln도 기준선이 같다(log 0.546·ln 0.500). x²(0.482)처럼
   // 위첨자가 있는 각인은 그만큼 잉크 가운데가 위에 있다. 그래서 메인 각인은 두 가지로 맞춘다
   // (`calc_key_button.dart`의 `mainLegendInkCenter`):
-  // 1. 기준선 글자가 있는 각인([hasKeyBaselineText] — 로마자·숫자·소수점): 대문자·숫자 잉크 가운데([keyMainLegendInkCenter],
-  //    기준선 위)를 면 가운데에 둔다. 모든 각인의 기준선이 줄 상자 기준선에서 같은 거리라 실물처럼 기준선이 맞는다.
-  // 2. 기준선 글자가 없는 각인(연산 기호 × ÷ + − =, 방향 키 ▲▼◄►, 변수 x 하나, (−)·( )·°'", 분수·근호·적분·x^◼): 자기
-  //    잉크(`KeyLegendView.glyphInk` 표로 잰 범위)의 가운데를 면 가운데에 둔다. 연산 기호(Noto Sans Mono Medium, 잉크 가운데
-  //    0.346~0.354em)는 그래서 숫자와 같은 높이에 놓인다(#225의 내려 그리기를 대신한다). 실물의 x 키(0.509)·분수 키(0.509)·
-  //    °'" 키(0.536)도 잉크가 가운데에 있다. 방향 키(커서 패드 반쪽 키캡의 라벨 자리, #65)도 같은 규칙으로 라벨 자리 가운데에
-  //    잉크를 둔다(#230 전과 기준선 반올림 차 0.5dp 안).
+  // 1. 기준선 글자가 있는 각인([hasKeyBaselineText] — 로마자·숫자·소수점, 변수 x 포함): 대문자·숫자 잉크 가운데
+  //    ([keyMainLegendInkCenter], 기준선 위)를 면 가운데에 둔다. 모든 각인의 기준선이 줄 상자 기준선에서 같은 거리라 실물처럼
+  //    기준선이 맞는다 — 같은 행의 x²·x^◼·log◼▯·ln, x⁻¹·sin·cos·tan의 기준선이 같다.
+  // 2. 기준선 글자가 없는 각인(연산 기호 × ÷ + − =, 방향 키 ▲▼◄►, (−)·( )·°'", 분수·근호·적분)과 변수 x 하나만 있는 x 키:
+  //    자기 잉크(`KeyLegendView.glyphInk` 표로 잰 범위)의 가운데를 면 가운데에 둔다. 연산 기호(Noto Sans Mono Medium, 잉크
+  //    가운데 0.346~0.354em)는 그래서 숫자와 같은 높이에 놓인다(#225의 내려 그리기를 대신한다). 분수 키(사진 0.509)는 맞출
+  //    기준선이 없다. x 키는 키 안에 기준선을 함께 쓸 글자가 없고 사진도 잉크가 가운데(0.509)라 자기 잉크로 맞춘다 — 그래서
+  //    x 키의 기준선은 같은 행 OPTN·CALC보다 약 0.08em(360×800 폰 약 1dp) 높다(의도한 결과다). 괄호·°'"는 사진(0.527~0.536)이
+  //    측정 잡음(같은 행 숫자끼리도 ±0.02) 안이라 두 규칙이 구별되지 않아, 글자가 없는 각인의 규칙(자기 잉크)을 따른다.
+  //    방향 키(커서 패드 반쪽 키캡의 라벨 자리, #65)도 같은 규칙으로 라벨 자리 가운데에 잉크를 둔다(#230 전과 반올림 차
+  //    0.5dp 안).
   // 줄 상자 높이·줄 간격 배분·엔진의 기준선 반올림·2차원 각인의 큰 상자에 상관없이 **그린 기준선**에서 맞추므로(`InkCenteredLabel`)
   // 기준 높이가 면 가운데와 0.01dp 안이다(그린 픽셀로 재면 대문자·숫자·기호 0.49~0.51). 내림 글자(g)·분수·∫도 키캡 면 안에
-  // 그려진다(`test/widget/main_legend_ink_center_test.dart`).
+  // 그려진다(`test/widget/main_legend_ink_center_test.dart`). `Text`의 반올림 보정은 엔진(SkParagraph) 동작에 기대므로, Flutter SDK를
+  // 올릴 때 그 동작이 바뀌면 같은 테스트의 픽셀 측정("실물 사진 대조")이 잡는다.
 
   /// 메인 각인을 기준선으로 맞출 때 키캡 면 세로 가운데에 두는 높이 — 각인 글꼴 Saira 대문자·숫자의 잉크 가운데 (기준선 위,
   /// 글자 크기 대비, #230). 윗변이 평평한 글자(E·7, 0~0.688em)와 둥근 글자(S·0, −0.008~0.696em)가 같다. 위 "메인 각인 세로
   /// 위치" 절의 1이다.
   static const double keyMainLegendInkCenter = 0.344;
 
-  /// 메인 각인 [legend]에 기준선 글자가 있는지 (#230, 위 "메인 각인 세로 위치" 절) — 각인 글꼴(Saira)로 그리는 로마자·숫자·
-  /// 소수점이다. 변수 이탤릭 글자([isKeyVariableLetter] — `x`·`e` 등)는 세지 않는다(`x²`는 위첨자 2가 있어 기준선 각인이다).
-  static bool hasKeyBaselineText(KeyLegend legend) => legend.texts.any((piece) {
-    final text = piece.text;
-    for (var i = 0; i < text.length; i++) {
-      if (_keyBaselineChar.hasMatch(text[i]) && !isKeyVariableLetter(text, i)) {
-        return true;
-      }
+  /// 메인 각인 [legend]에 기준선 글자가 있는지 (#230, 위 "메인 각인 세로 위치" 절) — 로마자·숫자·소수점이다. 변수 이탤릭
+  /// 글자([isKeyVariableLetter])도 센다(x²·x⁻¹·x^◼의 x는 이웃 각인과 기준선을 함께 쓴다). 단 변수 글자만 있는 글자 각인
+  /// (x 키)은 키 안에 기준선을 함께 쓸 글자가 없어 기준선 각인이 아니다.
+  static bool hasKeyBaselineText(KeyLegend legend) {
+    if (legend case LegendText(:final text)) {
+      final onlyVariables = Iterable.generate(text.length)
+          .every((i) => isKeyVariableLetter(text, i));
+      if (onlyVariables) return false;
     }
-    return false;
-  });
+    return legend.texts.any((piece) => _keyBaselineChar.hasMatch(piece.text));
+  }
 
   static final RegExp _keyBaselineChar = RegExp(r'[A-Za-z0-9.]');
 

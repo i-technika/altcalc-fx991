@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -65,6 +66,29 @@ const _photoInkCenter = <CalcKeyId, double>{
   CalcKeyId.ans: 0.543,
   CalcKeyId.equals: 0.531,
 };
+
+/// 사진에서 면 윤곽이 또렷한 흰 키 — 숫자 0~9
+const _photoDigits = [
+  CalcKeyId.num0,
+  CalcKeyId.num1,
+  CalcKeyId.num2,
+  CalcKeyId.num3,
+  CalcKeyId.num4,
+  CalcKeyId.num5,
+  CalcKeyId.num6,
+  CalcKeyId.num7,
+  CalcKeyId.num8,
+  CalcKeyId.num9,
+];
+
+/// 사진에서 면 윤곽이 또렷한 흰 키 — 연산 기호
+const _photoOperators = [
+  CalcKeyId.multiply,
+  CalcKeyId.divide,
+  CalcKeyId.add,
+  CalcKeyId.subtract,
+  CalcKeyId.equals,
+];
 
 /// 키캡에 메인 각인을 그리는 키 — 원형 버튼(SHIFT·ALPHA·MENU·ON, 각인은 본체에)과 커서 패드(반쪽 키캡 안의 라벨 자리,
 /// #65)를 뺀 키
@@ -147,7 +171,7 @@ typedef _Drawn = ({
 /// [def] 키의 키캡 면과, 그린 각인의 기준 높이([mainLegendInkCenter])·잉크 위끝·아래끝 위치를 렌더 트리에서 잰다.
 ///
 /// 글자 상자(자식) 위끝 + 그린 기준선 − 높이 × 글자 크기이고, `FittedBox`가 줄였으면 그 비율을 곱한다. 그린 기준선은
-/// `Text`면 보고한 기준선을 정수로 반올림한 곳(SkParagraph가 글자를 그리는 곳 — [InkCenteredLabel.roundsBaseline]),
+/// `Text`면 보고한 기준선을 정수로 반올림한 곳(SkParagraph가 글자를 그리는 곳 — [InkCenteredLabel]),
 /// 2차원 각인이면 보고한 기준선이다.
 _Drawn _measure(WidgetTester tester, CalcKeyDef def, _Fonts fonts) {
   final legend = def.mainLegend;
@@ -267,7 +291,7 @@ void main() {
 
   group('맞춤 기준 (#230)', () {
     test(
-      '기준선 글자가 없는 메인 각인은 기호·변수·칸뿐이다 — 연산 기호·방향 키·x·(−)·°\'"·괄호·분수·근호·적분·x^◼',
+      '기준선 각인이 아닌 메인 각인은 기호·칸과 x 키뿐이다 — 연산 기호·방향 키·x 키·(−)·°\'"·괄호·분수·근호·적분',
       () {
         expect(
           {
@@ -292,7 +316,6 @@ void main() {
             CalcKeyId.fraction,
             CalcKeyId.sqrt,
             CalcKeyId.integral,
-            CalcKeyId.power,
           },
         );
         // 소수점은 숫자의 기준선에 놓이는 글자다 — 자기 잉크로 맞추면 키캡 가운데로 올라간다
@@ -368,7 +391,7 @@ void main() {
     }
 
     testWidgets(
-      '함수부 같은 행의 기준선 각인은 기준선이 같다 — sin·cos·tan, x²·log◼▯·ln (실물처럼, #230 전에는 log가 약 1dp 위)',
+      '함수부 같은 행의 기준선 각인은 기준선이 같다 — x⁻¹·sin·cos·tan, x²·x^◼·log◼▯·ln (실물처럼, #230 전에는 log가 약 1dp 위)',
       (tester) async {
         await _pumpApp(tester, const Size(360, 800), 1);
         for (final row in functionRows) {
@@ -385,6 +408,60 @@ void main() {
         }
       },
     );
+
+    testWidgets('dry 기준선은 실제 기준선과 같다 — 옮긴 거리를 함께 더한다 (글자·2차원 각인)', (
+      tester,
+    ) async {
+      for (final legend in const <KeyLegend>[
+        LegendText('7'),
+        LegendText('°\'"'),
+        LegendScript(LegendText('x'), superscript: LegendText('2')),
+        LegendFraction(
+          LegendBox(LegendBoxShape.fractionPart, filled: true),
+          LegendBox(LegendBoxShape.fractionPart, filled: false),
+        ),
+      ]) {
+        final style = CalcTheme.keyMainLabelStyleFor(legend)
+            .copyWith(fontSize: 18.62);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: InkCenteredLabel(
+                inkCenter: mainLegendInkCenter(legend, style) * 18.62,
+                child: legend is LegendText
+                    ? Text(
+                        legend.text,
+                        style: style,
+                        strutStyle: keyLabelStrut(style),
+                      )
+                    : KeyLegendView(legend: legend, style: style),
+              ),
+            ),
+          ),
+        );
+        final render = tester.renderObject<RenderInkCenteredLabel>(
+          find.byType(InkCenteredLabel),
+        );
+        final constraints = BoxConstraints.loose(const Size(400, 400));
+        final dry = render.getDryBaseline(
+          constraints,
+          TextBaseline.alphabetic,
+        )!;
+        final childDry = render.child!.getDryBaseline(
+          constraints,
+          TextBaseline.alphabetic,
+        )!;
+        // 분수 키는 잉크가 상자 가운데라 옮기지 않는다 — 나머지는 옮긴 거리가 dry 기준선에 들어가는지 본다
+        if (legend is! LegendFraction) {
+          expect(render.shift, isNot(0.0), reason: legend.plainText);
+        }
+        expect(
+          dry,
+          closeTo(childDry + render.shift, 1e-9),
+          reason: legend.plainText,
+        );
+      }
+    });
 
     // 넓은 배열의 낮은 키패드(접힘선 기준 배치·짧은 가로 창)와 실물 배열의 작은 키패드 — 글자가 키캡 높이에 묶여
     // 각인이 면을 가장 많이 채우는 곳
@@ -436,16 +513,23 @@ void main() {
   });
 
   group('실물 사진 대조 — 그린 픽셀의 잉크 가운데 / 키캡 면 비 (#230)', () {
-    // 실물 사진처럼 그린 픽셀에서 면 안의 잉크 행을 찾아 잰다. 대문자·숫자·기호 각인은 0.49~0.52(사진 숫자·연산 기호·
-    // 함수부 대문자 범위 — #230 전에는 숫자 약 0.53·연산 기호 약 0.54)이고, 사진을 잰 모든 키가 사진 값과 0.055(면 높이
-    // 55px의 3px) 안이다. 사진은 아래 행일수록 0.01~0.03 커지는 카메라 각도가 있어 앱보다 조금 큰 쪽으로 치우친다.
-    // (창, 픽셀 비) — 폰·태블릿 세로
+    // 실물 사진처럼 그린 픽셀에서 면 안의 잉크 행을 찾아 잰다. 검사(앞의 셋은 #230 전 상태 — 숫자 약 0.528·연산 기호 약
+    // 0.541·log◼▯와 ln의 비 차 약 0.012 — 에서 실패한다):
+    // 1. 대문자·숫자·기호 각인은 0.5 − max(0.01, 1 물리 픽셀)~0.52 (사진 숫자·연산 기호·함수부 대문자 범위가 0.49~0.52)
+    // 2. 면 윤곽이 또렷한 흰 키의 구역 평균이 사진 평균과 0.02 안 — 숫자 0~9(사진 0.494), 연산 기호 다섯(사진 0.516)
+    // 3. 같은 행에서 기준선을 함께 써 잉크 가운데가 갈리는 짝의 비 차가 사진과 0.025 안(두 키의 1 물리 픽셀씩 — 함수 키 면
+    //    약 27dp, 픽셀 비 2.625에서 각 약 0.014) — cos − sin(사진 0.046), log◼▯ − ln(사진 0.046). 각인마다 잉크를 가운데에
+    //    두면 0, 기준선이 어긋나면(#230 전 log◼▯ − ln 0.012) 크게 달라진다
+    // 4. 사진을 잰 모든 키가 사진 값과 0.06(사진 함수 키 면 55px의 3px + 앱 1 물리 픽셀) 안 — 사진은 아래 행일수록
+    //    0.01~0.03 커지는 카메라 각도가 있어 앱보다 조금 큰 쪽으로 치우친다
+    // (창, 픽셀 비) — 폰(Android 흔한 픽셀 비 3·2.625)·태블릿 세로
     for (final (size, pixelRatio) in const [
       (Size(360, 800), 3.0),
+      (Size(360, 800), 2.625),
       (Size(800, 1280), 2.0),
     ]) {
       for (final scale in [1.0, 1.3]) {
-        testWidgets('$size·글자 배율 $scale', (tester) async {
+        testWidgets('$size·픽셀 비 $pixelRatio·글자 배율 $scale', (tester) async {
           await _pumpApp(tester, size, pixelRatio, textScale: scale);
           final boundary = tester.renderObject<RenderRepaintBoundary>(
             find
@@ -463,8 +547,10 @@ void main() {
             () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
           ))!;
           final ratios = <CalcKeyId, double>{};
+          final faceHeights = <CalcKeyId, double>{};
           for (final def in _keycapKeys) {
             final face = tester.getRect(_keycap(def.id)).shift(-origin);
+            faceHeights[def.id] = face.height;
             final ink = _pixelInk(data, image.width, pixelRatio, face);
             if (ink == null) {
               // ignore: avoid_print
@@ -481,11 +567,35 @@ void main() {
                 '${id.name} ($size, $scale): ${ratio.toStringAsFixed(3)}';
             // 잉크가 대문자·숫자 높이인 각인(기준선 각인)과 자기 잉크로 맞추는 각인 — 실물처럼 면 가운데다
             if (!_offCenterByDesign.contains(id)) {
-              expect(ratio, inInclusiveRange(0.49, 0.52), reason: reason);
+              final onePixel = 1 / (pixelRatio * faceHeights[id]!);
+              expect(
+                ratio,
+                inInclusiveRange(0.5 - math.max(0.01, onePixel), 0.52),
+                reason: reason,
+              );
             }
             final photo = _photoInkCenter[id];
             if (photo == null || id == CalcKeyId.reciprocal) continue;
-            expect(ratio, closeTo(photo, 0.055), reason: '$reason, 사진 $photo');
+            expect(ratio, closeTo(photo, 0.06), reason: '$reason, 사진 $photo');
+          }
+          double mean(Iterable<CalcKeyId> ids, Map<CalcKeyId, double> of) =>
+              ids.map((id) => of[id]!).reduce((a, b) => a + b) / ids.length;
+          for (final group in [_photoDigits, _photoOperators]) {
+            expect(
+              mean(group, ratios),
+              closeTo(mean(group, _photoInkCenter), 0.02),
+              reason: '구역 평균 $group',
+            );
+          }
+          for (final (lower, upper) in const [
+            (CalcKeyId.cos, CalcKeyId.sin),
+            (CalcKeyId.logBase, CalcKeyId.ln),
+          ]) {
+            expect(
+              ratios[lower]! - ratios[upper]!,
+              closeTo(_photoInkCenter[lower]! - _photoInkCenter[upper]!, 0.025),
+              reason: '${lower.name} − ${upper.name}',
+            );
           }
           // 소수점은 숫자 기준선에 놓인다 (자기 잉크로 맞추지 않는다)
           expect(ratios[CalcKeyId.dot], greaterThan(0.55));

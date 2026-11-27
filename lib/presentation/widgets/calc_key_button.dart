@@ -1049,8 +1049,6 @@ class _Keycap extends StatelessWidget {
                       inkCenter:
                           mainLegendInkCenter(legend, style) *
                           textScaler.scale(fontSize),
-                      // 글자만 있는 각인은 `Text`다 (_legendLabel)
-                      roundsBaseline: legend is LegendText,
                       child: _legendLabel(
                         legend,
                         style.copyWith(fontSize: fontSize, color: color),
@@ -1172,63 +1170,49 @@ double mainLegendInkCenter(KeyLegend legend, TextStyle style) {
 /// 옮겨 그린다 (#230).
 ///
 /// 크기는 [child] 그대로라 감싸는 `Center`·`FittedBox`의 배치(글자 줄이기 포함)는 바뀌지 않고, 그 상자 안에서 [child]만
-/// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). 옮기는 거리는 [child]가 실제로 배치한 기준선으로 정한다 —
-/// 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 간격 배분(앱 테마의 `TextLeadingDistribution.even`이면 기준선이 줄 상자
-/// 위에서 약 0.888em, 아니면 0.785em)·2차원 각인의 큰 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
+/// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). 옮기는 거리는 [child]가 글자를 실제로 그리는 기준선으로
+/// 정한다 — 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 간격 배분(앱 테마의 `TextLeadingDistribution.even`이면 기준선이
+/// 줄 상자 위에서 약 0.888em, 아니면 0.785em)·2차원 각인의 큰 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
 /// 기준선이 없는 자식은 옮기지 않는다.
+///
+/// `Text`(`RenderParagraph`)는 보고한 기준선이 아니라 그 거리(글자 상자 위끝에서 소수 거리)를 정수 dp로 반올림한 곳에 글자를
+/// 그린다 — 글자 배치 엔진 SkParagraph의 `TextLine::paintText`(`correctedBaseline`)다. 반올림 차는 최대 0.5dp(360×800 폰
+/// 숫자 18.62dp에서 0.47dp)라 반올림한 기준선으로 맞춘다. [KeyLegendView]는 글자 조각을 계산한 기준선에 맞춰 그리므로
+/// (`_text`) 보고한 기준선 그대로다. Flutter SDK를 올릴 때 엔진의 이 반올림이 바뀌면 그린 픽셀로 재는 테스트
+/// (`test/widget/main_legend_ink_center_test.dart` "실물 사진 대조")가 잡는다.
 class InkCenteredLabel extends SingleChildRenderObjectWidget {
   /// 상자 세로 가운데에 둘 높이 — 자식 기준선 위 거리 (dp, 글자 배율 반영)
   final double inkCenter;
 
-  /// [child]가 글자를 보고한 기준선이 아니라 그 거리를 정수 dp로 반올림한 기준선에 그리는지 — `Text`(`RenderParagraph`)다.
-  ///
-  /// 글자 배치 엔진(SkParagraph)은 기준선을 보고한 값(글자 상자 위끝에서 소수 거리)이 아니라 그 거리를 반올림한 곳에 글자를
-  /// 그린다(`TextLine::paintText`의 `correctedBaseline`). 그래서 반올림 차(최대 0.5dp — 360×800 폰 숫자 18.62dp에서 0.47dp)만큼
-  /// 잉크가 계산한 자리에서 어긋나므로, 반올림한 기준선으로 맞춘다. [KeyLegendView]는 글자 조각을 이미 계산한 기준선에 맞춰
-  /// 그리므로(`_text`) `false`다.
-  final bool roundsBaseline;
-
   const InkCenteredLabel({
     super.key,
     required this.inkCenter,
-    required this.roundsBaseline,
     required Widget super.child,
   });
 
   @override
   RenderInkCenteredLabel createRenderObject(BuildContext context) =>
-      RenderInkCenteredLabel(inkCenter, roundsBaseline);
+      RenderInkCenteredLabel(inkCenter);
 
   @override
   void updateRenderObject(
     BuildContext context,
     RenderInkCenteredLabel renderObject,
   ) {
-    renderObject
-      ..inkCenter = inkCenter
-      ..roundsBaseline = roundsBaseline;
+    renderObject.inkCenter = inkCenter;
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties
-      ..add(DoubleProperty('inkCenter', inkCenter))
-      ..add(
-        FlagProperty(
-          'roundsBaseline',
-          value: roundsBaseline,
-          ifTrue: 'rounds baseline',
-        ),
-      );
+    properties.add(DoubleProperty('inkCenter', inkCenter));
   }
 }
 
 /// [InkCenteredLabel]의 렌더 객체 — 크기는 자식 크기이고, 자식을 세로로만 옮겨 둔다.
 class RenderInkCenteredLabel extends RenderShiftedBox {
-  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 [_inkCenter](dp)와, 자식이 반올림한 기준선에 글자를 그리는지
-  /// [_roundsBaseline]([InkCenteredLabel.roundsBaseline])로 만든다.
-  RenderInkCenteredLabel(this._inkCenter, this._roundsBaseline) : super(null);
+  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 [_inkCenter](dp)로 만든다.
+  RenderInkCenteredLabel(this._inkCenter) : super(null);
 
   double _inkCenter;
 
@@ -1240,23 +1224,41 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
     markNeedsLayout();
   }
 
-  bool _roundsBaseline;
-
-  /// 자식이 기준선 거리를 반올림한 곳에 글자를 그리는지 ([InkCenteredLabel.roundsBaseline])
-  bool get roundsBaseline => _roundsBaseline;
-  set roundsBaseline(bool value) {
-    if (value == _roundsBaseline) return;
-    _roundsBaseline = value;
-    markNeedsLayout();
-  }
-
   /// 자식을 아래로 옮긴 거리 (dp, 위로 옮기면 음수) — 마지막 배치의 값
   double get shift =>
       child == null ? 0 : (child!.parentData! as BoxParentData).offset.dy;
 
+  /// 높이 [height]인 자식 상자를, 보고한 알파벳 기준선 [baseline]으로 옮길 거리 (기준선이 없으면 0)
+  double _shiftFor(RenderBox child, double height, double? baseline) {
+    if (baseline == null) return 0;
+    // `Text`는 기준선 거리를 반올림한 곳에 글자를 그린다 (클래스 설명)
+    final drawn = child is RenderParagraph
+        ? baseline.roundToDouble()
+        : baseline;
+    return height / 2 - (drawn - _inkCenter);
+  }
+
   @override
   Size computeDryLayout(covariant BoxConstraints constraints) =>
       child?.getDryLayout(constraints) ?? constraints.smallest;
+
+  @override
+  double? computeDryBaseline(
+    covariant BoxConstraints constraints,
+    TextBaseline baseline,
+  ) {
+    final child = this.child;
+    if (child == null) return null;
+    final result = child.getDryBaseline(constraints, baseline);
+    if (result == null) return null;
+    final height = constraints
+        .constrain(child.getDryLayout(constraints))
+        .height;
+    final alphabetic = baseline == TextBaseline.alphabetic
+        ? result
+        : child.getDryBaseline(constraints, TextBaseline.alphabetic);
+    return result + _shiftFor(child, height, alphabetic);
+  }
 
   @override
   void performLayout() {
@@ -1267,12 +1269,11 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
     }
     child.layout(constraints, parentUsesSize: true);
     size = constraints.constrain(child.size);
-    final baseline = child.getDistanceToBaseline(
-      TextBaseline.alphabetic,
-      onlyReal: true,
+    final dy = _shiftFor(
+      child,
+      size.height,
+      child.getDistanceToBaseline(TextBaseline.alphabetic, onlyReal: true),
     );
-    final drawn = _roundsBaseline ? baseline?.roundToDouble() : baseline;
-    final dy = drawn == null ? 0.0 : size.height / 2 - (drawn - _inkCenter);
     (child.parentData! as BoxParentData).offset = Offset(0, dy);
   }
 }

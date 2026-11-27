@@ -297,6 +297,12 @@ class RenderKeyLegend extends RenderBox
       constraints.constrain(_resolved.size);
 
   @override
+  double? computeDryBaseline(
+    covariant BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => _resolved.baseline;
+
+  @override
   void performLayout() {
     size = constraints.constrain(_resolved.size);
   }
