@@ -56,7 +56,7 @@ enum OrientationPolicy {
   /// 가로 두 방향 (태블릿)
   landscape,
 
-  /// 네 방향 모두 (폴더블 내부 화면 — 배치가 접힘선 방향을 따른다)
+  /// 네 방향 모두 (폴더블 내부 화면 — 배치가 접힘선 방향을 따른다. 여러 창 모드의 창 — 방향을 고정하지 않는다, #137)
   any,
 }
 
@@ -80,6 +80,8 @@ enum OrientationPolicy {
 ///   그런 창은 화면이 본체 크기로 다시 판정해 키가 큰 배치로 그리거나 창을 키워 달라는 안내를 띄운다
 ///   (`CalculatorScreen`, `CalcTheme` "짧은 창" 절, #38). 분할 화면·팝업 창 자체는 막지 않는다
 ///   (`resizeableActivity`·최소 창 크기를 선언하지 않는 이유도 그 절).
+///   이런 여러 창 모드에서는 방향을 고정하지 않는다([orientationPolicyOf]의 `multiWindow`, #137) — 고정하면 Android가 창
+///   모양이 요청 방향과 다를 때 앱을 창 안의 레터박스로 줄여 그린다(아래 [queryMultiWindowMode]).
 /// 그래서 태블릿을 세로로 들면 대개 세로 창이 되고, 그때는 위아래 배치로 보여 준다.
 abstract final class FormFactor {
   /// 대화면 기준 짧은 변 (dp). Material 창 크기 등급 medium(폭 600dp) 이상과 같고, Android가 방향
@@ -93,6 +95,69 @@ abstract final class FormFactor {
   /// [deviceChannel]의 폴더블 판정 메서드 이름 ([queryFoldableDevice])
   @visibleForTesting
   static const String foldableDeviceMethod = 'isFoldableDevice';
+
+  /// [deviceChannel]의 여러 창 모드 조회 메서드 이름 ([queryMultiWindowMode], #137)
+  @visibleForTesting
+  static const String multiWindowModeMethod = 'isInMultiWindowMode';
+
+  /// Android가 여러 창 모드 변경을 알리는 메서드 이름 (#137 R1, Android → Dart, 인자는 새 여러 창 모드 여부).
+  /// Android `MainActivity`의 `MULTI_WINDOW_MODE_CHANGED`와 같아야 한다.
+  @visibleForTesting
+  static const String multiWindowModeChangedMethod = 'multiWindowModeChanged';
+
+  /// Android가 여러 창 모드 변경을 알리면 [onChanged]를 부른다 (#137 R1, [multiWindowModeChangedMethod]). `null`이면 듣지
+  /// 않는다. 기기 채널로 Android가 보내는 호출은 이것 하나뿐이라 채널 처리기를 통째로 건다. Android가 아니면 아무것도
+  /// 오지 않는다.
+  static void onMultiWindowModeChanged(
+    void Function(bool multiWindow)? onChanged,
+  ) {
+    deviceChannel.setMethodCallHandler(
+      onChanged == null
+          ? null
+          : (call) async {
+              if (call.method == multiWindowModeChangedMethod) {
+                onChanged(call.arguments == true);
+                return null;
+              }
+              throw MissingPluginException(call.method);
+            },
+    );
+  }
+
+  /// 여러 창 모드 조회 응답 제한 시간 (#137). Android가 바로 답하는 값이라 짧게 둔다 — 넘기면 모름(`null`)이다.
+  static const Duration multiWindowQueryTimeout = Duration(milliseconds: 500);
+
+  /// 앱 창이 Android 여러 창 모드(분할 화면·자유 형식 창·팝업 창)인지 (#137, `Activity.isInMultiWindowMode`).
+  ///
+  /// 여러 창 모드에서 방향을 고정한 앱은, 창 모양(가로가 긴지 세로가 긴지)이 요청 방향과 다르면 Android가 창 안에 요청
+  /// 방향 모양의 레터박스를 두고 그 안에만 그리게 한다(`letterboxReason=FIXED_ORIENTATION`). Android 16 폰 에뮬레이터
+  /// (1080×2400·420dpi, 세로)의 1/3 분할 창 411×305dp가 301.7×304.8dp로 줄어 "창이 너무 작다" 안내가 나왔다 —
+  /// 창 전체를 쓰면 가로형 키 21.8dp로 쓸 수 있는 크기다. 그래서 여러 창 모드에서는 방향을 고정하지 않는다
+  /// ([orientationPolicyOf]의 `multiWindow`). 분할 화면·자유 형식 창의 앱은 어차피 화면 회전을 정하지 못한다.
+  ///
+  /// 창 크기를 물리 화면 크기와 비교하지 않고 Android에 묻는 이유: 전체 화면에서도 창이 화면보다 작을 수 있다(화면 구멍을
+  /// 피한 창 등). 그런 창을 여러 창 모드로 잘못 보면 폰의 세로 고정이 풀린다.
+  ///
+  /// Android가 아니거나 채널이 없으면(`MissingPluginException`) `false`(전과 같은 방향 고정)다. 조회에 실패하거나
+  /// [multiWindowQueryTimeout] 안에 답이 없거나 답이 bool이 아니면 `null`(모름)이다 — 부르는 쪽(`DeviceOrientationLock`)은
+  /// 지난 값을 그대로 쓴다(#137 R1). 화면을 돌리는 중처럼 Android 메인 스레드가 바쁠 때 500ms 안에 답하지 못한 적이 있어
+  /// (Android 16 에뮬레이터, 다른 에뮬레이터가 부팅하던 때), 그것을 "여러 창 모드에서 나옴"으로 읽지 않으려는 것이다.
+  static Future<bool?> queryMultiWindowMode() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+    try {
+      final result = await deviceChannel
+          .invokeMethod<Object?>(multiWindowModeMethod)
+          .timeout(multiWindowQueryTimeout);
+      return result is bool ? result : null;
+    } on MissingPluginException {
+      return false;
+    } catch (error) {
+      debugPrint('여러 창 모드 조회 실패: $error');
+      return null;
+    }
+  }
 
   /// [features]에 접히는 부분(fold·hinge)이 있는지. 화면 구멍(cutout)은 세지 않는다.
   static bool hasFoldOrHinge(Iterable<DisplayFeature> features) => features.any(
@@ -231,11 +296,17 @@ abstract final class FormFactor {
   ///   2.625 가정으로 약 823×603dp라, 화면 크기 설정을 키우면 600 아래로 내려가 세로로 고정될 수 있다. [multipleHinges]는
   ///   접힘 정보가 온 뒤에만 참이다 — 그 전(시작 직후)에는 크기 규칙을 따르지만, 앱 시작은 접힘 정보가 올 때까지 첫 방향
   ///   요청을 미룬다(#158, `main()`).
+  /// - 여러 창 모드([multiWindow] — 분할 화면·자유 형식 창·팝업 창, #137): 기기와 상관없이 네 방향 모두 — 방향을 고정하지
+  ///   않는다. 고정하면 창 모양이 요청 방향과 다를 때 Android가 레터박스로 줄인다([queryMultiWindowMode]). 여러 창 모드의
+  ///   앱은 화면 회전을 정하지 못하므로, 회전은 사용자 설정·센서와 전체 화면 앱을 따른다. 전체 화면으로 돌아오면 다시
+  ///   기기별 정책으로 고정한다.
   static OrientationPolicy orientationPolicyOf(
     DeviceKind kind,
     Size displaySize, {
     bool multipleHinges = false,
+    bool multiWindow = false,
   }) => switch (kind) {
+    _ when multiWindow => OrientationPolicy.any,
     DeviceKind.phone => OrientationPolicy.portrait,
     DeviceKind.tablet => OrientationPolicy.landscape,
     DeviceKind.foldable =>

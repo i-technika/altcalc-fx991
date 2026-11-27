@@ -14,7 +14,8 @@
             android:windowSoftInputMode="adjustResize">
             <!-- 분할 화면·팝업 창 (#38): resizeableActivity="false"로 막지 않고, <layout android:minWidth/minHeight>도
                  선언하지 않는다(분할 화면 경계를 최소 크기보다 작게 옮기면 시스템이 앱을 잘라 보여 줘 키가 가려진다).
-                 짧은 창은 앱이 좌우 분할로 그리거나 창을 키워 달라는 안내를 띄운다 — CalcTheme "짧은 창" 절. -->
+                 짧은 창은 앱이 키가 더 큰 가로형으로 그리거나 창을 키워 달라는 안내를 띄운다 — CalcTheme "짧은 창" 절.
+                 방향 고정도 여러 창 모드에서는 풀어 창이 레터박스로 줄지 않게 한다(#137, MainActivity "isInMultiWindowMode"). -->
             <!-- configChanges의 assetsPaths (#96): Android 14 이상에서 "색상 대비"(표준·중간·높음)를 바꾸면 시스템이
                  리소스 오버레이를 바꿔 CONFIG_ASSETS_PATHS 구성 변경이 난다. 선언하지 않으면 액티비티가 다시 만들어지면서
                  Flutter 엔진도 새로 시작해 입력 상태가 사라지고 몇 초간 빈 화면이 보였다(에뮬레이터 API 36.1 확인).
