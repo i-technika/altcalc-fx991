@@ -23,6 +23,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
+import '../support/semantics_hit_testing.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
 
@@ -1005,6 +1006,26 @@ void main() {
           }
         });
       }
+    }
+  });
+
+  group('커서 패드 터치 탐색 — 실제 화면 (#203)', () {
+    // 키패드만 띄운 테스트(calc_keypad_test·keypad_wide_arrangement_test)와 달리 LCD·기록 영역 등 화면 전체 트리에서
+    // 커서 패드 셀을 짚어도 semanticSectorAt 방향의 노드에 닿는지 본다(키패드 위를 덮는 노드가 생기면 실패한다).
+    for (final (size, padding) in const [
+      (
+        Size(411, 914),
+        EdgeInsets.only(top: 24, bottom: 24),
+      ), // Android 기본 인셋 세로 폰(#173 에뮬레이터)
+      (Size(2000, 400), EdgeInsets.zero), // 가로형·넓은 셀
+    ]) {
+      testWidgets('${size.width}×${size.height}', (tester) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester, size: size, padding: padding);
+        expectCursorPadTouchExplorationMatchesSpec(tester, reason: '$size');
+        handle.dispose();
+      });
     }
   });
 

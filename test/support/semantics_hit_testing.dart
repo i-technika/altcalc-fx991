@@ -12,9 +12,13 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// 엔진과 다른 점(이 앱의 키패드 트리에서는 결과가 같다):
 /// - 초점 조건은 라벨·값·힌트·동작 유무만 본다. Android `isFocusable`의 `IS_FOCUSABLE`·`FOCUSABLE_FLAGS`·
-///   `SCOPES_ROUTE`·`IS_ACCESSIBILITY_FOCUS_BLOCKED`와 스크롤 동작 제외는 흉내 내지 않는다.
-/// - 루트 노드의 변환도 적용한다(Android는 루트 변환을 쓰지 않고 물리 픽셀 좌표를 그대로 넘긴다 —
-///   테스트에서는 루트 변환이 기기 배율이라 [point]를 물리 픽셀로 주면 같다).
+///   `SCOPES_ROUTE`·`IS_ACCESSIBILITY_FOCUS_BLOCKED`와 스크롤 동작 제외, iOS의 implicitScrolling+hidden 조건은
+///   흉내 내지 않는다.
+/// - 숨은 자식 건너뛰기는 Android만 한다(iOS `search:`는 건너뛰지 않는다).
+/// - 영역은 각 노드 좌표에서 반열린 사각형으로 본다(Android와 같다). iOS는 변환된 사각형을 감싸는 축 정렬 사각형
+///   (`globalRect`)과 `CGRectContainsPoint`로 본다 — 회전 없는 이 트리에서는 같다.
+/// - 루트 노드는 변환이 없고 rect가 물리 픽셀이다(기기 배율은 루트 자식의 변환에 있다). 그래서 [point]를
+///   물리 픽셀로 주면 된다.
 SemanticsNode? semanticsHitTest(SemanticsNode node, Offset point) {
   var local = point;
   final transform = node.transform;

@@ -893,7 +893,7 @@ void _cursorPadR2Tests() {
       for (final size in const [
         Size(90, 64),
         Size(97.7, 67.8), // #166 당시 320×568·상태바 20dp 패드
-        Size(127.2, 90.9), // 지금 411×914 패드
+        Size(127.2, 90.9), // 지금 412×915 패드(에뮬레이터 411.43×914.29와 같다)
         Size(200, 111),
         Size(100, 100),
       ]) {
@@ -1004,8 +1004,8 @@ void _cursorPadR2Tests() {
 
     // 쓸어 넘기기(다음 항목) 순서는 ◀ ▲ ▼ ▶이다 — TalkBack 에뮬레이터에서 앞·뒤 쓸기로 확인한 순서(#173).
     // 영역이 겹쳐(#203) 위치순 정렬로는 순서가 정해지지 않으므로 정렬 키(CursorPad.semanticTraversalOrder)로 고정한다.
-    // 쌓는 순서(▲ ▼ ◀ ▶)와 달라도 네 방향이 이 순서로 나오는지 지킨다. 이웃 키와의 순서는 네 노드를 한 노드로 묶어
-    // 구조상 바뀌지 않는다(#203 R1에서 화면 10개 구성의 전체 읽기 순서를 #203 전과 비교해 확인).
+    // 쌓는 순서(▲ ▼ ◀ ▶)와 달라도 네 방향이 이 순서로 나오고, 앞뒤 이웃(CALC·MENU)도 #203 전과 같은지 지킨다
+    // (#203 R1에서 화면 10개 구성의 전체 읽기 순서가 #203 전과 같음을 확인했다).
     // 키패드 크기: 기본 테스트 영역, 세로 폰 키패드 근사, 셀이 가로로 넓은 경우(#159), 셀이 납작한 짧은 창 근사.
     // 넓은 배열(가로형·테이블톱)과 숫자부 왼쪽은 keypad_wide_arrangement_test.dart의 읽기 순서 테스트가 본다.
     for (final area in const [
@@ -1021,14 +1021,13 @@ void _cursorPadR2Tests() {
         useKoreanLocale(tester);
         await tester.pumpWidget(_host(const CalcKeypad(), size: area));
         const strings = KoSemanticStrings();
-        final labelToSector = {
-          for (final sector in CursorPadSector.values)
-            strings.keyButton(CursorPad.defOf(sector).id): sector,
+        final labelToId = {
+          for (final def in allKeys) strings.keyButton(def.id): def.id,
         };
-        final order = <CursorPadSector>[];
+        final order = <CalcKeyId>[];
         void visit(SemanticsNode node) {
-          final sector = labelToSector[node.label];
-          if (sector != null) order.add(sector);
+          final id = labelToId[node.label];
+          if (id != null) order.add(id);
           for (final child in node.debugListChildrenInOrder(
             DebugSemanticsDumpOrder.traversalOrder,
           )) {
@@ -1037,12 +1036,16 @@ void _cursorPadR2Tests() {
         }
 
         visit(tester.getSemantics(find.byKey(const ValueKey('calc-keypad'))));
-        expect(order, [
-          CursorPadSector.left,
-          CursorPadSector.up,
-          CursorPadSector.down,
-          CursorPadSector.right,
-        ]);
+        // 앞뒤 이웃까지: CALC → ◀ ▲ ▼ ▶ → MENU (TalkBack 에뮬레이터 확인, #173·#203)
+        final first = order.indexOf(CalcKeyId.cursorLeft);
+        expect(order.sublist(first - 1, first + 5), const [
+          CalcKeyId.calc,
+          CalcKeyId.cursorLeft,
+          CalcKeyId.cursorUp,
+          CalcKeyId.cursorDown,
+          CalcKeyId.cursorRight,
+          CalcKeyId.menu,
+        ], reason: '$order');
         handle.dispose();
       });
     }
@@ -1369,7 +1372,7 @@ void _cursorPadHitTests() {
 
     test('셀까지 넓힌 시맨틱 영역은 바깥쪽 변이 셀 변이고, 셀을 빈 곳 없이 덮으며, 터치 방향과 같게 읽히는 넓이가 넉넉하다 (#203)', () {
       // 측정(0.25dp 격자, 터치 영역 중 같은 방향이 읽히는 넓이): 셀 = 패드 83.3%(▲·▼ 89.0%, ◀·▶ 78.2%),
-      // 가로 여백 83.0%, 세로 여백 82.3%(▲·▼ 83.2%, ◀·▶ 81.2%), 세로 여백 큼(×2) 78.4%(▲·▼ 75.3%),
+      // 가로 여백 84.8%(▲·▼ 83.4%, ◀·▶ 85.7% — 셀이 넓어 ◀·▶ 높이를 늘린다), 세로 여백 82.3%(▲·▼ 83.2%, ◀·▶ 81.2%), 세로 여백 큼(×2) 78.4%(▲·▼ 75.3%),
       // 매우 큼(×3) 75.5%(▲·▼ 71.3%). ◀·▶ 높이를 셀 높이에 맞춰 늘리지 않으면 ×3에서 ◀·▶가 43.8%로 떨어진다.
       // 앱 배치의 셀은 패드 높이의 1.08배 이하다(세로 여백 1.27배보다 낮다).
       for (final MapEntry(key: name, value: bounds) in cases.entries) {
