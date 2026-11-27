@@ -902,8 +902,9 @@ class _ShapeClipper extends CustomClipper<Path> {
 /// 가로로는 실물처럼 놓는다([CalcTheme] "각인 띠 좌우 정렬 (#265)" 절):
 /// - 각인이 하나면 키캡 가운데다.
 /// - 둘이면 SHIFT 각인은 왼쪽, ALPHA 각인은 오른쪽이고, 두 바깥 끝을 키캡 둥근 모서리 안쪽([sideInset])에 맞춘다. 두 각인의
-///   자연 폭과 사이 간격이 그 안에 다 들어가지 않으면 안쪽 여백부터 양쪽 똑같이 줄이고(실물 `SOLVE =`·`Ran# RanInt`처럼 긴 쌍은
-///   키캡 폭을 다 쓴다), 여백이 0이 된 뒤에야 위의 폭 배분대로 각인이 줄어든다 — 그래서 `KeypadMetrics`의 폭 기준(키캡 폭
+///   폭과 사이 간격을 빼고 남는 폭이 모자라면 들이는 거리를 양쪽 똑같이 줄인다 — 남는 폭을 왼쪽 여백·사이·오른쪽 여백 셋이
+///   똑같이 나눠, 바깥을 들이느라 두 각인이 서로 붙지 않게 한다([keyLegendPairInset]). 실물 `SOLVE =`·`Ran# RanInt`처럼 긴 쌍은
+///   키캡 폭을 다 쓴다. 남는 폭이 없으면 들이지 않고 위의 폭 배분대로 각인이 줄어든다 — 그래서 `KeypadMetrics`의 폭 기준(키캡 폭
 ///   전체)은 그대로다.
 ///
 /// 세로로는 띠 아래끝에 정렬해 모든 키의 각인이 기준선을 함께 쓴다(#252). 한 줄 아래로 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)이 있는
@@ -959,23 +960,22 @@ class _LegendRow extends StatelessWidget {
     final shortMaxWidth = math.max(0.0, (width - gap) / 2);
     // 한 줄 아래로 넘치는 각인이 있는 키는 각인들을 띠 아래끝에서 올린다 (#260) — 그리는 글자 크기(배율 반영)로 잰다
     final scaledFontSize = textScaler.scale(fontSize);
-    // 각인 둘의 바깥 끝을 들이는 거리 (#265) — 두 각인의 자연 폭과 사이 간격을 빼고 남는 폭의 절반까지만 들인다
+    // 각인 둘의 바깥 끝을 들이는 거리 (#265) — 두 각인이 그려질 폭과 사이 간격을 빼고 남는 폭에서 정한다.
+    // 그려질 폭은 자연 폭(큰 글자 크기로 잰 비율 × 그리는 글자 크기)이고, 띠 높이보다 높은 각인은 높이에 맞춰 줄어든 폭이다
+    // (키패드 밖에서 글자 크기를 주입받지 않은 키 버튼 — 키패드는 띠 높이에 맞춘 크기를 준다).
+    double drawnWidth(KeyLegend legend, TextStyle style) {
+      final natural = KeyLegendView.emSize(legend, style) * scaledFontSize;
+      return natural.height > height && natural.height > 0
+          ? natural.width * height / natural.height
+          : natural.width;
+    }
+
     final inset = both
         ? keyLegendPairInset(
             width: width,
             gap: gap,
-            shiftWidth:
-                KeyLegendView.emSize(
-                  shift,
-                  CalcTheme.keyShiftLabelStyle,
-                ).width *
-                scaledFontSize,
-            alphaWidth:
-                KeyLegendView.emSize(
-                  alpha,
-                  CalcTheme.keyAlphaLabelStyle,
-                ).width *
-                scaledFontSize,
+            leftWidth: drawnWidth(shift, CalcTheme.keyShiftLabelStyle),
+            rightWidth: drawnWidth(alpha, CalcTheme.keyAlphaLabelStyle),
             sideInset: sideInset,
           )
         : 0.0;
@@ -1058,19 +1058,18 @@ class _LegendRow extends StatelessWidget {
           ),
       ],
     );
-    return inset > 0
-        ? Padding(
-            padding: EdgeInsets.symmetric(horizontal: inset),
-            child: row,
-          )
-        : row;
+    // 들이는 거리가 0이어도 같은 트리를 쓴다 — 0을 넘나들 때 각인 줄을 다시 만들지 않는다
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: inset),
+      child: row,
+    );
   }
 }
 
 /// 각인 둘(SHIFT·ALPHA)의 바깥 끝을 키캡 끝에서 들이는 거리의 상한 (dp, #265) — 그린 키캡 폭 [faceWidth]의
 /// [CalcTheme.keyLegendSideInsetRatio]와 키캡 모서리 반경 [cornerRadius] 가운데 큰 쪽이다. 실물 각인의 바깥 끝은 키캡 폭의
-/// 약 0.09만큼 들어와 있고, 그 자리는 키캡 윗변이 곧은 구간(둥근 모서리 안쪽)이다 — 모서리가 폭에 비해 큰 키(폰 세로의 함수
-/// 키)에서도 각인 끝이 둥근 모서리 위로 나가지 않게 반경을 하한으로 둔다. 키캡 폭의 절반을 넘지 않는다.
+/// 0.08~0.10만큼 들어와 있다. 각인 끝을 키캡 윗변이 곧은 구간(둥근 모서리 안쪽)에 맞추려고 반경을 하한으로 둔다 — 함수부 키는
+/// 반경이 폭의 0.11~0.12라 실물보다 0.02~0.04 더 들어온다([CalcTheme] "각인 띠 좌우 정렬 (#265)" 절). 키캡 폭의 절반을 넘지 않는다.
 @visibleForTesting
 double keyLegendSideInset({
   required double faceWidth,
@@ -1083,19 +1082,22 @@ double keyLegendSideInset({
   );
 }
 
-/// 각인 띠 폭 [width]에 자연 폭 [shiftWidth]·[alphaWidth]인 각인 둘을 사이 간격 [gap]으로 놓을 때 양쪽 바깥을 들이는
-/// 거리 (dp, #265). 상한 [sideInset]까지 들이되, 각인과 간격이 다 들어가고 남는 폭의 절반을 넘지 않는다 — 남는 폭이 없으면 0이다
-/// (각인이 키캡 폭을 다 쓴다. 그래도 넘치면 각인 줄이 줄인다).
+/// 각인 띠 폭 [width]에 왼쪽 묶음(폭 [leftWidth])과 오른쪽 묶음(폭 [rightWidth])을 최소 사이 간격 [gap]으로 놓을 때 양쪽
+/// 바깥을 들이는 거리 (dp, #265). 지금은 묶음이 SHIFT 각인 하나·ALPHA 각인 하나다(모드 전용 각인과 괄호는 #266).
+///
+/// 상한 [sideInset]까지 들이되, 묶음과 최소 간격을 빼고 남는 폭의 1/3을 넘지 않는다 — 남는 폭을 왼쪽 여백·사이·오른쪽 여백이
+/// 똑같이 나눈다. 그래서 두 묶음 사이는 늘 `gap + 들이는 거리` 이상이다(바깥을 들이느라 두 각인이 붙지 않는다 — 실물 `INS UNDO`도
+/// 사이가 바깥 여백보다 넓다). 남는 폭이 없으면 0이다(각인이 키캡 폭을 다 쓰고, 그래도 넘치면 각인 줄이 줄인다).
 @visibleForTesting
 double keyLegendPairInset({
   required double width,
   required double gap,
-  required double shiftWidth,
-  required double alphaWidth,
+  required double leftWidth,
+  required double rightWidth,
   required double sideInset,
 }) {
-  final spare = width - gap - shiftWidth - alphaWidth;
-  return math.max(0.0, math.min(sideInset, spare / 2));
+  final spare = width - gap - leftWidth - rightWidth;
+  return math.max(0.0, math.min(sideInset, spare / 3));
 }
 
 /// 키캡([KeyFace.keycap]) 모서리 반경 (#156) — 숫자부 키(흰 키·파란 키)는 [CalcTheme.keyCapNumberCornerRadiusRatio],
