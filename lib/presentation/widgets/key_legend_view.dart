@@ -19,7 +19,8 @@ import '../../core/theme/calc_theme.dart';
 ///   strut 한 줄)와 모든 잉크(첨자·분수·근호 선 포함)를 합친 높이다. 그래서 잉크가 상자 밖에 그려지지 않는다.
 ///   키 버튼은 `Text`와 같은 방식(`FittedBox`)으로 줄인다.
 /// - 글자만 있는 각인([LegendText])은 한 줄 상자만 쓴다 — 같은 스타일의 `Text`(strut 고정)와 크기·기준선이 같다
-///   (`g` 같은 내림 글자도 `Text`처럼 상자 밖으로 조금 나가 그려진다).
+///   (`g` 같은 내림 글자도 `Text`처럼 상자 밖으로 조금 나가 그려진다). 단 앱 화면의 `Text`는 테마 글자 스타일의 줄 간격 배분
+///   (`even`)을 받아 기준선이 약 0.1em 낮다 — 키 버튼은 두 위젯 모두 그린 기준선으로 맞춰 그린다(#230 `InkCenteredLabel`).
 /// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
 ///   각인 띠에서는 기준선이 그만큼(가장 많은 `d/dx◼`도 0.08em 미만, 테스트로 고정) 이웃 각인보다 올라간다.
 ///
@@ -52,6 +53,10 @@ class KeyLegendView extends LeafRenderObjectWidget {
   ///
   /// `◼`는 직접 그리는 칸의 기본 높이로 쓴다. `◻`는 그리는 데 쓰지 않지만, 칸의 한 줄 표기 글자([LegendBox.texts])라
   /// "2차원 각인의 모든 글자가 표에 있다" 검사가 찾으므로 함께 둔다(글자 조각으로 다시 쓰일 때도 맞는 값이다).
+  ///
+  /// 기준선 글자가 없는 메인 각인(`(−)`·`°'"`·방향 키·연산 기호 — [CalcTheme.hasKeyBaselineText])은 이 표로 잰 잉크 가운데를
+  /// 키캡 면 가운데에 둔다(#230). 그 각인의 글자(`(`·`)`·`'`·`"`·`°`·`▲`·`▼`·`◄`·`►`·`+`·`÷`·`=`)도 그래서 표에 있다.
+  /// 연산 기호는 Noto Sans Mono Medium으로 그리며 표 값(SemiBold·Medium 평균)과 0.006em 안이다.
   static const Map<String, (double, double)> glyphInk = {
     '◼': (0.0, 0.482),
     '◻': (0.0, 0.482),
@@ -70,8 +75,20 @@ class KeyLegendView extends LeafRenderObjectWidget {
     'o': (-0.008, 0.518),
     's': (-0.008, 0.518),
     't': (0.0, 0.658),
+    '(': (-0.15, 0.743),
+    ')': (-0.15, 0.743),
+    "'": (0.436, 0.688),
+    '"': (0.436, 0.688),
+    '°': (0.416, 0.724),
+    '▲': (0.0, 0.585),
+    '▼': (-0.013, 0.572),
+    '◄': (-0.013, 0.584),
+    '►': (-0.013, 0.584),
+    '+': (0.12, 0.588),
     '−': (0.294, 0.396),
     '×': (0.136, 0.57),
+    '÷': (0.11, 0.595),
+    '=': (0.199, 0.497),
     '⇔': (-0.034, 0.59),
     '∫': (-0.238, 0.893),
     '∑': (-0.24, 0.714),
@@ -270,6 +287,10 @@ class RenderKeyLegend extends RenderBox
   @override
   double? computeDistanceToActualBaseline(TextBaseline baseline) =>
       _resolved.baseline;
+
+  /// 위에서 기준선까지 거리 (배치 뒤 값 — 테스트가 그린 각인의 자리를 잴 때 쓴다)
+  @visibleForTesting
+  double get debugBaseline => _resolved.baseline;
 
   @override
   Size computeDryLayout(covariant BoxConstraints constraints) =>
@@ -592,8 +613,11 @@ class _Builder {
       }
     }
     if (top == double.negativeInfinity) (top, bottom) = (0, 0);
+    // 글자 조각의 기준선을 정수 dp로 반올림해 그리는 엔진(SkParagraph — 글자 상자 안 기준선 거리를 반올림한다)에 맞춰,
+    // 상자 위끝을 반올림한 거리만큼 위에 둔다. 그래야 글자가 이 배치가 정한 기준선에 정확히 놓여 칸·선과 어긋나지 않고,
+    // 키 버튼이 잉크 가운데를 맞출 때(#230 `InkCenteredLabel`)도 그린 자리와 계산한 자리가 같다.
     return _Piece(painter.width, top, bottom, [
-      (Offset.zero, _TextOp(painter, text, Offset(0, ascent))),
+      (Offset.zero, _TextOp(painter, text, Offset(0, ascent.roundToDouble()))),
     ]);
   }
 

@@ -1042,23 +1042,20 @@ class _Keycap extends StatelessWidget {
                   tween: ColorTween(end: labelColor),
                   duration: duration,
                   builder: (context, color, _) {
-                    final label = _legendLabel(
-                      keyDef.mainLegend,
-                      CalcTheme.keyMainLabelStyleFor(keyDef.mainLegend)
-                          .copyWith(fontSize: fontSize, color: color),
-                      textScaler,
-                    );
-                    // 숫자부 연산 기호는 키운 만큼 내려 잉크 가운데를 숫자와 맞춘다 (#225). 그리기만 옮긴다(배치·터치 영역은 그대로).
-                    if (!CalcTheme.isKeyOperatorLegend(keyDef.mainLegend)) {
-                      return label;
-                    }
-                    return Transform.translate(
-                      offset: Offset(
-                        0,
-                        textScaler.scale(fontSize) *
-                            CalcTheme.keyNumberOperatorLabelDrop,
+                    final legend = keyDef.mainLegend;
+                    final style = CalcTheme.keyMainLabelStyleFor(legend);
+                    // 잉크 가운데를 키캡 면 가운데에 둔다 (#230, CalcTheme "메인 각인 세로 위치" 절)
+                    return InkCenteredLabel(
+                      inkCenter:
+                          mainLegendInkCenter(legend, style) *
+                          textScaler.scale(fontSize),
+                      // 글자만 있는 각인은 `Text`다 (_legendLabel)
+                      roundsBaseline: legend is LegendText,
+                      child: _legendLabel(
+                        legend,
+                        style.copyWith(fontSize: fontSize, color: color),
+                        textScaler,
                       ),
-                      child: label,
                     );
                   },
                 ),
@@ -1155,4 +1152,127 @@ Widget _legendLabel(KeyLegend legend, TextStyle style, TextScaler textScaler) {
     );
   }
   return KeyLegendView(legend: legend, style: style, textScaler: textScaler);
+}
+
+/// 메인 각인 [legend]([style]로 그린다)를 키캡 면 세로 가운데에 맞출 때 면 가운데에 두는 높이 — 기준선 위, 글자 크기 대비
+/// (#230, [CalcTheme] "메인 각인 세로 위치" 절).
+///
+/// 기준선 글자가 있는 각인([CalcTheme.hasKeyBaselineText])은 대문자·숫자 잉크 가운데([CalcTheme.keyMainLegendInkCenter])다
+/// — 실물처럼 모든 각인의 기준선이 맞는다. 없는 각인은 자기 잉크 범위(잉크 범위 표 `KeyLegendView.glyphInk`로 잰
+/// [KeyLegendView.emMetrics])의 가운데다. 표에 없는 글자는 한 줄 상자를 잉크로 보므로 줄 상자 가운데가 된다(#230 전과 같다).
+double mainLegendInkCenter(KeyLegend legend, TextStyle style) {
+  if (CalcTheme.hasKeyBaselineText(legend)) {
+    return CalcTheme.keyMainLegendInkCenter;
+  }
+  final m = KeyLegendView.emMetrics(legend, style);
+  return (m.inkTop + m.inkBottom) / 2;
+}
+
+/// 각인 라벨([child] — `Text` 또는 [KeyLegendView])을 기준선 위 [inkCenter](dp) 높이가 자기 상자의 세로 가운데에 오도록
+/// 옮겨 그린다 (#230).
+///
+/// 크기는 [child] 그대로라 감싸는 `Center`·`FittedBox`의 배치(글자 줄이기 포함)는 바뀌지 않고, 그 상자 안에서 [child]만
+/// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). 옮기는 거리는 [child]가 실제로 배치한 기준선으로 정한다 —
+/// 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 간격 배분(앱 테마의 `TextLeadingDistribution.even`이면 기준선이 줄 상자
+/// 위에서 약 0.888em, 아니면 0.785em)·2차원 각인의 큰 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
+/// 기준선이 없는 자식은 옮기지 않는다.
+class InkCenteredLabel extends SingleChildRenderObjectWidget {
+  /// 상자 세로 가운데에 둘 높이 — 자식 기준선 위 거리 (dp, 글자 배율 반영)
+  final double inkCenter;
+
+  /// [child]가 글자를 보고한 기준선이 아니라 그 거리를 정수 dp로 반올림한 기준선에 그리는지 — `Text`(`RenderParagraph`)다.
+  ///
+  /// 글자 배치 엔진(SkParagraph)은 기준선을 보고한 값(글자 상자 위끝에서 소수 거리)이 아니라 그 거리를 반올림한 곳에 글자를
+  /// 그린다(`TextLine::paintText`의 `correctedBaseline`). 그래서 반올림 차(최대 0.5dp — 360×800 폰 숫자 18.62dp에서 0.47dp)만큼
+  /// 잉크가 계산한 자리에서 어긋나므로, 반올림한 기준선으로 맞춘다. [KeyLegendView]는 글자 조각을 이미 계산한 기준선에 맞춰
+  /// 그리므로(`_text`) `false`다.
+  final bool roundsBaseline;
+
+  const InkCenteredLabel({
+    super.key,
+    required this.inkCenter,
+    required this.roundsBaseline,
+    required Widget super.child,
+  });
+
+  @override
+  RenderInkCenteredLabel createRenderObject(BuildContext context) =>
+      RenderInkCenteredLabel(inkCenter, roundsBaseline);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderInkCenteredLabel renderObject,
+  ) {
+    renderObject
+      ..inkCenter = inkCenter
+      ..roundsBaseline = roundsBaseline;
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DoubleProperty('inkCenter', inkCenter))
+      ..add(
+        FlagProperty(
+          'roundsBaseline',
+          value: roundsBaseline,
+          ifTrue: 'rounds baseline',
+        ),
+      );
+  }
+}
+
+/// [InkCenteredLabel]의 렌더 객체 — 크기는 자식 크기이고, 자식을 세로로만 옮겨 둔다.
+class RenderInkCenteredLabel extends RenderShiftedBox {
+  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 [_inkCenter](dp)와, 자식이 반올림한 기준선에 글자를 그리는지
+  /// [_roundsBaseline]([InkCenteredLabel.roundsBaseline])로 만든다.
+  RenderInkCenteredLabel(this._inkCenter, this._roundsBaseline) : super(null);
+
+  double _inkCenter;
+
+  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 (dp)
+  double get inkCenter => _inkCenter;
+  set inkCenter(double value) {
+    if (value == _inkCenter) return;
+    _inkCenter = value;
+    markNeedsLayout();
+  }
+
+  bool _roundsBaseline;
+
+  /// 자식이 기준선 거리를 반올림한 곳에 글자를 그리는지 ([InkCenteredLabel.roundsBaseline])
+  bool get roundsBaseline => _roundsBaseline;
+  set roundsBaseline(bool value) {
+    if (value == _roundsBaseline) return;
+    _roundsBaseline = value;
+    markNeedsLayout();
+  }
+
+  /// 자식을 아래로 옮긴 거리 (dp, 위로 옮기면 음수) — 마지막 배치의 값
+  double get shift =>
+      child == null ? 0 : (child!.parentData! as BoxParentData).offset.dy;
+
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) =>
+      child?.getDryLayout(constraints) ?? constraints.smallest;
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(constraints, parentUsesSize: true);
+    size = constraints.constrain(child.size);
+    final baseline = child.getDistanceToBaseline(
+      TextBaseline.alphabetic,
+      onlyReal: true,
+    );
+    final drawn = _roundsBaseline ? baseline?.roundToDouble() : baseline;
+    final dy = drawn == null ? 0.0 : size.height / 2 - (drawn - _inkCenter);
+    (child.parentData! as BoxParentData).offset = Offset(0, dy);
+  }
 }
