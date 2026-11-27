@@ -1253,50 +1253,98 @@ void main() {
 
   group('폰 세로 화면의 터치 대상 높이 (#236, Accessibility Scanner)', () {
     // 함수부 키는 셀 전체가 터치 영역이고, 셀 둘레 키 사이 간격 몫까지 터치·의미 노드다(`CalcKeyButton.gapInsets`).
-    // 접근성 검사기는 의미 노드 경계를 터치 대상으로 재므로, 노드 높이 = 셀 + 위아래 간격 몫이다.
-    // 390dp 폭 이상의 폰은 48dp를 넘는다. 그보다 작은 폰은 50키를 한 화면에 담느라 48dp에 못 미친다 — 받아들인 하한이다
-    // (`CalcTheme.keyMinTouchTargetHeight` 문서의 실측표). 값이 바뀌면 이 표를 다시 잰다.
-    const cases = <(String, Size, EdgeInsets, double)>[
-      ('320×568', Size(320, 568), EdgeInsets.only(top: 20), 37.5),
-      ('360×640', Size(360, 640), EdgeInsets.only(top: 24, bottom: 48), 38.9),
-      ('375×667', Size(375, 667), EdgeInsets.only(top: 20), 44.6),
-      ('360×800', Size(360, 800), EdgeInsets.only(top: 24, bottom: 24), 45.9),
-      ('390×844', Size(390, 844), EdgeInsets.only(top: 47, bottom: 34), 49.9),
+    // 접근성 검사기는 의미 노드 경계를 터치 대상으로 재므로, 노드 높이 = 셀 + 위아래 간격 몫 = 행 간격이다.
+    // 행 간격은 키패드 높이가 정한다 — 창 폭(키패드 가로/세로 비 하한, #141)과 인셋을 뺀 높이가 모두 커야 48dp를 넘는다.
+    // 48dp에 못 미치는 폰은 받아들인 하한이다(`CalcTheme.keyMinTouchTargetHeight` 문서의 실측표). 값이 바뀌면 이 표를 다시 잰다.
+    const cases = <(String, Size, EdgeInsets, double, bool)>[
+      ('320×568', Size(320, 568), EdgeInsets.only(top: 20), 37.5, false),
+      (
+        '360×640',
+        Size(360, 640),
+        EdgeInsets.only(top: 24, bottom: 48),
+        38.9,
+        false,
+      ),
+      ('375×667', Size(375, 667), EdgeInsets.only(top: 20), 44.6, false),
+      (
+        '411×731',
+        Size(411.4, 731.4),
+        EdgeInsets.only(top: 24, bottom: 48),
+        45.5,
+        false,
+      ),
+      (
+        '360×800',
+        Size(360, 800),
+        EdgeInsets.only(top: 24, bottom: 24),
+        45.9,
+        false,
+      ),
+      (
+        '375×812',
+        Size(375, 812),
+        EdgeInsets.only(top: 50, bottom: 34),
+        47.9,
+        false,
+      ),
+      (
+        '390×844',
+        Size(390, 844),
+        EdgeInsets.only(top: 47, bottom: 34),
+        49.9,
+        true,
+      ),
+      (
+        '411×797 Fold 커버',
+        Size(411.4, 797),
+        EdgeInsets.only(top: 41.9, bottom: 24),
+        50.7,
+        true,
+      ),
       (
         '411×914 (Medium Phone)',
         Size(411.4, 914.3),
         EdgeInsets.only(top: 52.6, bottom: 24),
         52.7,
+        true,
       ),
-      ('430×932', Size(430, 932), EdgeInsets.only(top: 59, bottom: 34), 55.2),
+      (
+        '430×932',
+        Size(430, 932),
+        EdgeInsets.only(top: 59, bottom: 34),
+        55.2,
+        true,
+      ),
     ];
-    for (final (name, size, padding, height) in cases) {
-      testWidgets('$name: 함수 키 의미 노드 높이 $height dp', (tester) async {
-        final handle = tester.ensureSemantics();
-        await _pumpScreen(tester, size: size, padding: padding);
-        final finder = find.byWidgetPredicate(
-          (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
-        );
-        final button = tester.widget<CalcKeyButton>(finder);
-        expect(button.hitsWholeCell, isTrue);
-        final node = tester.getSemantics(finder);
-        // 의미 노드는 키 셀 상자 기준 좌표라 변환 없이 크기만 본다 (화면 밀도 반영 전 dp)
-        expect(node.rect.height, moreOrLessEquals(height, epsilon: 0.05));
-        expect(
-          node.rect.height,
-          moreOrLessEquals(
-            tester.getSize(finder).height + button.gapInsets.vertical,
-            epsilon: 1e-6,
-          ),
-        );
-        if (size.width >= 390) {
+    for (final (name, size, padding, height, reaches48) in cases) {
+      testWidgets(
+        '$name: 함수 키 의미 노드 높이 $height dp (48dp ${reaches48 ? '이상' : '미만'})',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          await _pumpScreen(tester, size: size, padding: padding);
+          final finder = find.byWidgetPredicate(
+            (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+          );
+          expect(tester.widget<CalcKeyButton>(finder).hitsWholeCell, isTrue);
+          final node = tester.getSemantics(finder);
+          expect(node.rect.height, moreOrLessEquals(height, epsilon: 0.05));
+          // 의미 노드 높이 = 실제 터치 높이(셀 + 위아래 간격 몫)
           expect(
             node.rect.height,
+            moreOrLessEquals(functionKeyHitHeight(tester), epsilon: 1e-6),
+          );
+          expect(
+            node.rect.height >= CalcTheme.keyMinTouchTargetHeight,
+            reaches48,
+          );
+          // 키 폭은 늘 48dp 이상이다 (셀 폭 + 좌우 간격 몫)
+          expect(
+            node.rect.width,
             greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
           );
-        }
-        handle.dispose();
-      });
+          handle.dispose();
+        },
+      );
     }
   });
 
@@ -1398,7 +1446,9 @@ void main() {
           final sinCell = tester.getSize(find.byWidget(sin));
           final cellArea = sinCell.width * sinCell.height;
           final g = CursorPadGeometry(pad.size);
-          final bounds = cursorPadTouchCell(tester).shift(-pad.topLeft);
+          final bounds = tester
+              .getRect(find.byType(CursorPad))
+              .shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
@@ -1560,7 +1610,9 @@ void main() {
             ),
           );
           final g = CursorPadGeometry(pad.size);
-          final bounds = cursorPadTouchCell(tester).shift(-pad.topLeft);
+          final bounds = tester
+              .getRect(find.byType(CursorPad))
+              .shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;

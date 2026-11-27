@@ -153,8 +153,9 @@ class CalcKeyButton extends StatefulWidget {
   /// 셀 바깥에서 이 키가 맡는 키 사이 간격 몫 (#236) — 키패드는 이웃 키와의 간격 절반씩을 셀 둘레 여백으로 두고 그 값을
   /// 넘긴다. 버튼 상자(셀)와 그림은 그대로이고, 터치 영역을 셀 전체로 넓힌 키([extendHitAreaToLegend], 원형 버튼)만
   /// 누름 판정과 스크린리더 영역(의미 노드 경계 — 접근성 검사기가 터치 대상 크기로 재는 상자)을 이만큼 바깥으로 넓힌다.
-  /// - 목적: 키캡이 48dp보다 낮아 셀 전체를 터치 영역으로 쓰는 작은 화면에서도 터치 높이를 늘린다. 셀은 48dp에 못 미쳐도
-  ///   키 사이 간격(약 6~8dp)을 더하면 390dp 폭 이상의 폰에서 48dp를 넘는다(Accessibility Scanner 지적, #236).
+  /// - 목적: 키캡이 48dp보다 낮아 셀 전체를 터치 영역으로 쓰는 작은 화면에서도 터치 높이를 늘린다. 셀이 48dp에 못
+  ///   미쳐도 키 사이 간격(폰 세로에서 약 5.6~8.3dp)을 더하면 키패드가 충분히 높은 폰에서 48dp를 넘는다(Accessibility
+  ///   Scanner 지적, #236 — 기준과 실측표는 [CalcTheme.keyMinTouchTargetHeight]).
   /// - 간격을 누르면 가장 가까운 키가 눌린다(예전에는 아무 키도 눌리지 않았다). 이웃 키의 몫과 겹치지 않는다 — 키패드가
   ///   간격을 절반씩 나누기 때문이다.
   /// - 셀 전체로 넓히지 않는 키(키캡이 [CalcTheme.keyMinTouchTargetHeight] 이상)는 키캡 줄만 터치 영역이다(이 값을 쓰지 않음).
@@ -527,6 +528,13 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     );
     assert(widget.hitOutset.isNonNegative, 'hitOutset은 음수일 수 없다');
     assert(widget.labelInsets.isNonNegative, 'labelInsets는 음수일 수 없다');
+    assert(widget.gapInsets.isNonNegative, 'gapInsets는 음수일 수 없다');
+    assert(
+      widget.shape == null ||
+          widget.hitShape != null ||
+          widget.hitGapInsets == EdgeInsets.zero,
+      '모양(shape)이 있는 키는 간격 몫(gapInsets)까지 터치를 넓히지 않는다 — 당긴 점이 모양 밖일 수 있다',
+    );
     assert(
       widget.hitShape == null || !widget.extendHitAreaToLegend,
       'hitShape가 있으면 터치 영역은 그 경로가 정한다 — extendHitAreaToLegend와 함께 쓰지 않는다',
@@ -742,10 +750,29 @@ class GapSemantics extends Semantics {
         blockUserActions: blockUserActions,
         properties: properties,
         localeForSubtree: localeForSubtree,
-        // `Semantics`와 같은 규칙: 라벨이 있으면 주변 글자 방향 (업데이트는 상위 클래스가 같은 규칙으로 한다)
-        textDirection:
-            properties.textDirection ?? Directionality.maybeOf(context),
+        // `Semantics`와 같은 규칙: 글자 속성이 있을 때만 주변 글자 방향 (업데이트는 상위 클래스가 같은 규칙으로 한다)
+        textDirection: _textDirectionOf(context),
       );
+
+  /// `Semantics`가 쓰는 규칙(프레임워크 내부 `_getTextDirection`)과 같다 — 지정한 방향이 없으면, 글자 속성(라벨·값·
+  /// 힌트·툴팁)이 있을 때만 주변 글자 방향을 쓰고 없으면 `null`이다. 생성 때와 갱신 때(상위 클래스)가 같은 값을 준다.
+  TextDirection? _textDirectionOf(BuildContext context) {
+    final p = properties;
+    if (p.textDirection != null) return p.textDirection;
+    final hasText =
+        p.label != null ||
+        p.attributedLabel != null ||
+        p.value != null ||
+        p.attributedValue != null ||
+        p.increasedValue != null ||
+        p.attributedIncreasedValue != null ||
+        p.decreasedValue != null ||
+        p.attributedDecreasedValue != null ||
+        p.hint != null ||
+        p.attributedHint != null ||
+        p.tooltip != null;
+    return hasText ? Directionality.maybeOf(context) : null;
+  }
 
   @override
   void updateRenderObject(
@@ -787,13 +814,19 @@ class _RenderGapSemantics extends RenderSemanticsAnnotations {
       : _hitTestWithGap(this, _gap, result, position);
 }
 
-/// [point]를 [size] 상자 안쪽(가장자리 포함, 오른쪽·아래 변은 0.01dp 안쪽)으로 당긴다 — 키 사이 간격 몫(#236)의 점을
-/// 상자 가장자리의 점으로 바꿔 판정할 때 쓴다.
+/// [point]를 [size] 상자 안쪽(네 변 모두 0.01dp 안쪽)으로 당긴다 — 키 사이 간격 몫(#236)의 점을 상자 가장자리 바로
+/// 안쪽의 점으로 바꿔 판정할 때 쓴다. 변 위가 아니라 안쪽으로 당겨, 터치 경로의 변 위 판정에 기대지 않는다.
+/// 상자가 0.02dp보다 작으면 가운데로 당긴다.
 @visibleForTesting
-Offset clampIntoBox(Offset point, Size size) => Offset(
-  point.dx.clamp(0.0, math.max(0.0, size.width - 0.01)),
-  point.dy.clamp(0.0, math.max(0.0, size.height - 0.01)),
-);
+Offset clampIntoBox(Offset point, Size size) {
+  const inset = 0.01;
+  double clampAxis(double v, double extent) =>
+      extent <= 2 * inset ? extent / 2 : v.clamp(inset, extent - inset);
+  return Offset(
+    clampAxis(point.dx, size.width),
+    clampAxis(point.dy, size.height),
+  );
+}
 
 /// [box] 상자를 [gap]만큼 넓힌 영역의 점을 받아들이고, 상자 가장자리로 당겨 자식에게 묻는 히트 테스트 (#236).
 /// 이벤트 좌표는 실제 위치 그대로 간다(히트 항목에 원래 위치를 넣는다).

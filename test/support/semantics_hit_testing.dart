@@ -4,8 +4,6 @@ import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'touch_metrics.dart';
-
 /// 엔진 브리지의 터치 탐색 판정을 흉내 낸다 — Android `AccessibilityBridge.SemanticsNode.hitTest`,
 /// iOS `SemanticsObject search:` (#203). [point]는 [node]의 부모 좌표다(루트면 물리 픽셀).
 ///
@@ -62,8 +60,8 @@ void expectCursorPadTouchExplorationMatchesSpec(
   String reason = '',
 }) {
   final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-  // 셀과 둘레 키 사이 간격 몫 (#236) — 시맨틱 영역의 기준이자 짚어 볼 범위
-  final cell = cursorPadTouchCell(tester);
+  // 셀 안만 짚는다 — 방향 나눔은 셀 기준이다. 셀 둘레 간격 몫(#236)의 시맨틱 영역은 키패드 테스트가 따로 본다.
+  final cell = tester.getRect(find.byType(CursorPad));
   final bounds = cell.shift(-pad.topLeft);
   final g = CursorPadGeometry(pad.size);
   final labels = {

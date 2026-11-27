@@ -1564,10 +1564,12 @@ class CursorPadGeometry {
 ///     옆 여백을 받는 ◀·▶ 내접원이 약 +12dp 커진다.
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
 /// - 셀 밖(셀 여백 `_cellPadding`, 키 사이 간격의 절반)도 다른 키처럼 패드의 몫이다(#236, [gapInsets]). 그 점은 셀
-///   가장자리로 당겨 판정하므로, 셀 변마다 그쪽 방향 키(옆 변 ◀·▶, 위·아래 변 ▲·▼)가 바깥 간격까지 받는다.
+///   가장자리 안쪽(0.01dp)으로 당겨 셀 기준 터치 경로로 판정하므로, 셀 변마다 그쪽 방향 키(옆 변 ◀·▶, 위·아래 변 ▲·▼)가
+///   바깥 간격까지 받는다. 모서리 바깥의 간격은 셀 모서리 점으로 당겨지고, 그 점은 홈 끝 → 셀 모서리 선이 가른다.
 ///   (#236 전에는 넓히지 않았다 — 그때는 다른 키도 셀 여백을 받지 않았다.)
 /// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
-/// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203).
+/// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203). 셀 둘레 간격 몫(#236)은
+///   각 영역의 바깥쪽 변을 늘려 덮는다 — 셀 안의 나눔은 그대로다.
 /// - 패드 상자는 셀 **가운데**에 있다고 가정한다([hitPath]가 상자 크기만으로 셀·패드를 되돌린다).
 ///
 /// ## 허브 한가운데만 데드존이다 (#43)
@@ -1606,6 +1608,18 @@ class CursorPad extends StatelessWidget {
     this.enableHaptics = true,
     this.gapInsets = EdgeInsets.zero,
   });
+
+  /// 셀([cell], 셀 로컬 좌표 원점) 안의 사각형 [rect]에서 셀 변에 닿은 변만 셀 둘레 간격 몫 [gap]만큼 바깥으로 늘린다 (#236).
+  /// 셀 변에 닿지 않은 변은 그대로다 — 셀 안의 나눔을 바꾸지 않는다. 방향별 시맨틱 영역에 쓴다.
+  static Rect inflateOnCellEdges(Rect rect, Size cell, EdgeInsets gap) {
+    const eps = 1e-6;
+    return Rect.fromLTRB(
+      rect.left <= eps ? rect.left - gap.left : rect.left,
+      rect.top <= eps ? rect.top - gap.top : rect.top,
+      rect.right >= cell.width - eps ? rect.right + gap.right : rect.right,
+      rect.bottom >= cell.height - eps ? rect.bottom + gap.bottom : rect.bottom,
+    );
+  }
 
   /// [sector] 버튼 상자(셀의 반쪽)의 바깥쪽 변들에 붙는 간격 몫 — 셀 둘레 간격 몫 [gap]에서 패드 안쪽(가운데) 변을 뺀다.
   static EdgeInsets hitGapOf(CursorPadSector sector, EdgeInsets gap) =>
@@ -1791,9 +1805,8 @@ class CursorPad extends StatelessWidget {
           final padRect = padRectIn(cell);
           final size = padRect.size;
           // 패드 로컬 좌표의 시맨틱 영역 기준 — 셀과 그 둘레 간격 몫 (#236)
-          final bounds = gapInsets
-              .inflateRect(Offset.zero & cell)
-              .shift(-padRect.topLeft);
+          // 패드 로컬 좌표의 셀 — 방향 나눔(터치·시맨틱)은 셀 기준 그대로다(#64·#203). 셀 둘레 간격 몫은 바깥 변에만 붙인다.
+          final bounds = (Offset.zero & cell).shift(-padRect.topLeft);
           final press = onKeyPressed;
           final strings = CalcSemanticStrings.of(context);
           return SizedBox.fromSize(
@@ -1840,11 +1853,13 @@ class CursorPad extends StatelessWidget {
                 // 겹쳐 쌓은 시맨틱 영역 — 뒤에 쌓은 ◀·▶가 겹친 곳을 가진다 (자식이 없어 터치는 받지 않는다, #203)
                 for (final sector in CursorPadGeometry.semanticStackOrder)
                   Positioned.fromRect(
-                    rect: semanticRect(
-                      sector,
-                      size,
-                      bounds,
-                    ).shift(padRect.topLeft),
+                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 터치(간격의 점을 셀 가장자리로 당겨
+                    // 판정)와 같은 쪽 방향이 간격을 받고, 셀 안의 나눔은 그대로다.
+                    rect: inflateOnCellEdges(
+                      semanticRect(sector, size, bounds).shift(padRect.topLeft),
+                      cell,
+                      gapInsets,
+                    ),
                     child: Semantics(
                       container: true,
                       sortKey: OrdinalSortKey(
