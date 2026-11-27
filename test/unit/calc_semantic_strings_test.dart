@@ -17,7 +17,6 @@ const _realWordLegends = {
   'SHIFT',
   'ALPHA',
   'MENU',
-  'SETUP',
   'SOLVE',
   'RECALL',
   'RESET',
@@ -65,13 +64,13 @@ void main() {
       });
 
       test(
-        'SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다 (쓰지 않는 SHIFT 기능은 빼고, #190)',
+        'SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다 (MENU·AC에는 SHIFT 기능이 없다, #253)',
         () {
           for (final def in allKeys) {
             final speech = strings.keys[def.id]!;
             expect(
               speech.shift != null,
-              def.hasShift && !ignoredShiftFunctions.contains(def.id),
+              def.hasShift,
               reason: '${def.id.name} SHIFT',
             );
             expect(
@@ -99,11 +98,6 @@ void main() {
           for (final layer in KeyLayer.values) {
             final display = KeyInput.labelOf(def.id, layer);
             if (display == null || RegExp(r'^[0-9]$').hasMatch(display)) {
-              continue;
-            }
-            // 쓰지 않는 SHIFT 기능(#190 — OFF)은 읽지 않는다.
-            if (layer == KeyLayer.shift &&
-                ignoredShiftFunctions.contains(def.id)) {
               continue;
             }
             // 대소문자만 다른 경우(OPTN/Optn)도 철자로 읽히므로 막는다. 각인 자체가 실제 영단어라
@@ -136,15 +130,17 @@ void main() {
         );
       });
 
-      test('키 버튼 힌트는 SHIFT·ALPHA 기능이 있는 키에만 있다 (쓰지 않는 SHIFT 기능은 빼고, #190)', () {
+      test('키 버튼 힌트는 SHIFT·ALPHA 기능이 있는 키에만 있다', () {
         for (final def in allKeys) {
           expect(
             strings.keyButtonHint(def.id) != null,
-            (def.hasShift && !ignoredShiftFunctions.contains(def.id)) ||
-                def.hasAlpha,
+            def.hasShift || def.hasAlpha,
             reason: def.id.name,
           );
         }
+        // 실물 SHIFT 각인을 뺀 MENU(SETUP)·AC(OFF)는 힌트가 없다 (#253)
+        expect(strings.keyButtonHint(CalcKeyId.menu), isNull);
+        expect(strings.keyButtonHint(CalcKeyId.ac), isNull);
       });
 
       test('켜진 표시기는 모두 기호 없는 의미 라벨을 갖고, 꺼진 표시기는 읽지 않는다', () {

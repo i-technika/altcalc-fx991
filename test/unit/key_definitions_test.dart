@@ -332,18 +332,54 @@ void main() {
         ],
         [CalcKeyId.shift, CalcKeyId.alpha, CalcKeyId.menu, settingsKey],
       );
-      final on = keyDefOf(settingsKey);
-      expect(on.mainLabel, 'SETTING');
-      expect(on.hasShift || on.hasAlpha, isFalse);
+      expect(keyDefOf(settingsKey).mainLabel, 'SETUP');
+      // 원형 버튼 위 각인 띠에는 이름 하나만 인쇄한다 — SHIFT·ALPHA 각인이 없다 (#253, CalcKeyDef assert)
+      for (final key in allKeys) {
+        if (key.face != KeyFace.roundButton) continue;
+        expect(key.hasShift || key.hasAlpha, isFalse, reason: key.id.name);
+      }
     });
 
-    test('쓰지 않는 기능은 SHIFT + AC(OFF)뿐이고 그 각인은 실물대로 있다 (#190)', () {
-      expect(ignoredShiftFunctions, {CalcKeyId.ac});
-      for (final id in ignoredShiftFunctions) {
-        expect(keyDefOf(id).shiftLabel, 'OFF');
+    test('원형 버튼에 SHIFT·ALPHA 각인을 주면 assert로 막는다 (#253)', () {
+      for (final (shift, alpha) in [
+        (const LegendText('SETUP'), null),
+        (null, const LegendText('X')),
+      ]) {
+        expect(
+          () => CalcKeyDef(
+            id: CalcKeyId.menu,
+            mainLegend: const LegendText('MENU'),
+            shiftLegend: shift,
+            alphaLegend: alpha,
+            category: KeyCategory.menu,
+            face: KeyFace.roundButton,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
       }
+    });
+
+    test('설정(SETUP)은 설정 키 하나로만 들어간다 — 실물 MENU의 SETUP·AC의 OFF·ON 각인은 없다 (#253, #190)', () {
+      final setup = [
+        for (final key in allKeys)
+          for (final (layer, label) in [
+            ('main', key.mainLabel),
+            ('shift', key.shiftLabel),
+            ('alpha', key.alphaLabel),
+          ])
+            if (label == 'SETUP') (key.id, layer),
+      ];
+      expect(setup, [(settingsKey, 'main')]);
+      expect(keyDefOf(CalcKeyId.menu).hasShift, isFalse);
+      expect(keyDefOf(CalcKeyId.ac).hasShift, isFalse);
       for (final key in allKeys) {
-        expect(key.mainLabel, isNot('ON'), reason: key.id.name);
+        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+          expect(
+            label,
+            isNot(anyOf('ON', 'OFF', 'SETTING')),
+            reason: key.id.name,
+          );
+        }
       }
     });
 
@@ -368,10 +404,12 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   // 상단 조작부
   CalcKeyId.shift: ('SHIFT', null, null),
   CalcKeyId.alpha: ('ALPHA', null, null),
-  CalcKeyId.menu: ('MENU', 'SETUP', null), // G3
-  // 실물 각인은 `ON`(버튼 위 본체에 인쇄) — 이 앱에는 전원이 없어 ON을 설정 키로 쓰고 같은 자리에 `SETTING`을
-  // 인쇄한다 (#190, 사용자 결정 — 실물 대조에서 의도적으로 다른 행)
-  CalcKeyId.on: ('SETTING', null, null),
+  // 실물 SHIFT 각인은 `SETUP`(G3) — 앱은 설정을 설정 키 하나로만 열어 인쇄하지 않는다
+  // (#253, 사용자 결정 — 실물 대조에서 의도적으로 다른 행)
+  CalcKeyId.menu: ('MENU', null, null),
+  // 실물 각인은 `ON`(버튼 위 본체에 인쇄) — 이 앱에는 전원이 없어 ON을 설정 키로 쓰고 같은 자리에 `SETUP`을
+  // 인쇄한다 (#190·#253, 사용자 결정 — 실물 대조에서 의도적으로 다른 행)
+  CalcKeyId.on: ('SETUP', null, null),
   CalcKeyId.optn: ('OPTN', 'QR', null), // G7
   CalcKeyId.calc: ('CALC', 'SOLVE', '='),
   CalcKeyId.integral: ('∫◻◻◼', 'd/dx◼', ':'), // G15 d/dx, G11 :
@@ -411,7 +449,9 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.num8: ('8', 'CONV', null),
   CalcKeyId.num9: ('9', 'RESET', null), // G7
   CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
-  CalcKeyId.ac: ('AC', 'OFF', null), // G3 전원 — 각인은 실물대로, 동작은 무시 (#190)
+  // 실물 SHIFT 각인은 `OFF`(G3 전원 끄기) — 이 앱에는 전원이 없어 인쇄하지 않는다
+  // (#253, 사용자 결정 — 실물 대조에서 의도적으로 다른 행)
+  CalcKeyId.ac: ('AC', null, null),
   CalcKeyId.num4: ('4', null, null),
   CalcKeyId.num5: ('5', null, null),
   CalcKeyId.num6: ('6', null, null),

@@ -139,12 +139,8 @@ void main() {
           final reason = '${modifier.name} + ${def.id.name}';
           expect(next.modifier, KeyModifier.none, reason: reason);
 
-          // 설정 키(ON)·쓰지 않는 기능(SHIFT + AC)은 계산기 입력이 아니다 (#190) — 기능 없는 층처럼 대기만 푼다.
-          final ignored =
-              def.id == settingsKey ||
-              (modifier == KeyModifier.shift &&
-                  ignoredShiftFunctions.contains(def.id));
-          final expectedLabel = ignored
+          // 설정 키(ON)는 계산기 입력이 아니다 (#190) — 기능 없는 층처럼 대기만 푼다.
+          final expectedLabel = def.id == settingsKey
               ? null
               : switch (modifier) {
                   KeyModifier.none => def.mainLabel,
@@ -190,9 +186,13 @@ void main() {
         throwsA(isA<AssertionError>()),
       );
     });
+  });
 
-    test('쓰지 않는 SHIFT 기능(OFF)으로 입력을 만들 수 없다', () {
-      for (final id in ignoredShiftFunctions) {
+  group('실물 SHIFT 각인을 뺀 키 — SHIFT + MENU(SETUP)·SHIFT + AC(OFF) (#253)', () {
+    const removed = [CalcKeyId.menu, CalcKeyId.ac];
+
+    test('SHIFT 층으로 입력을 만들 수 없다 (그 층에 기능이 없다)', () {
+      for (final id in removed) {
         expect(
           () => KeyInput(id, KeyLayer.shift),
           throwsA(isA<AssertionError>()),
@@ -201,11 +201,31 @@ void main() {
       }
     });
 
-    test('SHIFT + AC(실물 OFF)는 각인이 있어도 아무것도 입력하지 않는다', () {
-      final next = _press([CalcKeyId.shift, CalcKeyId.ac]);
-      expect(next.modifier, KeyModifier.none);
-      expect(next.inputCount, 0);
-      expect(next.lastInput, isNull);
+    test(
+      'SHIFT 대기 중에 누르면 MENU·AC가 실행되지 않고 SHIFT 대기만 풀린다 — 마지막 입력·입력 수는 그대로다',
+      () {
+        final typed = _press([CalcKeyId.num7]);
+        for (final id in removed) {
+          final from = CalcState(
+            modifier: KeyModifier.shift,
+            lastInput: typed.lastInput,
+            inputCount: typed.inputCount,
+          );
+          final next = from.pressKey(id);
+          expect(next.modifier, KeyModifier.none, reason: id.name);
+          expect(next.lastInput, typed.lastInput, reason: id.name);
+          expect(next.inputCount, typed.inputCount, reason: id.name);
+          expect(next.repeatableKey, isNull, reason: id.name);
+        }
+      },
+    );
+
+    test('SHIFT를 풀고 다시 누르면 메인 기능(MENU·AC)이 입력된다', () {
+      for (final id in removed) {
+        final next = _press([CalcKeyId.shift, id, id]);
+        expect(next.inputCount, 1, reason: id.name);
+        expect(next.lastInput, KeyInput(id, KeyLayer.main), reason: id.name);
+      }
     });
   });
 

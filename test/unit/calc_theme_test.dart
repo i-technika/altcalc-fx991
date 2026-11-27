@@ -686,21 +686,24 @@ void main() {
       );
     });
 
-    test('본체 인쇄 글자(원형 버튼 위 SETTING, #190)는 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이다', () {
-      for (final body in [
-        CalcTheme.bodyBackground,
-        CalcTheme.bodyFrame,
-        CalcTheme.bodyBottomGradient,
-      ]) {
-        final hc = contrastRatio(high.bodyPrint, body);
-        expect(hc, greaterThanOrEqualTo(aaa), reason: '$body');
-        expect(
-          hc,
-          greaterThanOrEqualTo(contrastRatio(normal.bodyPrint, body)),
-          reason: '$body',
-        );
-      }
-    });
+    test(
+      '본체 인쇄 글자(원형 버튼 위 MENU·SETUP, #190)는 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이다',
+      () {
+        for (final body in [
+          CalcTheme.bodyBackground,
+          CalcTheme.bodyFrame,
+          CalcTheme.bodyBottomGradient,
+        ]) {
+          final hc = contrastRatio(high.bodyPrint, body);
+          expect(hc, greaterThanOrEqualTo(aaa), reason: '$body');
+          expect(
+            hc,
+            greaterThanOrEqualTo(contrastRatio(normal.bodyPrint, body)),
+            reason: '$body',
+          );
+        }
+      },
+    );
 
     test('LCD 비활성 표시기: 일반보다 진하되(배경 대비) 켜진 표시기 색과는 7:1 이상 떨어진다', () {
       final hc = high.lcdStatusInactive;

@@ -205,6 +205,8 @@ abstract final class CalcTheme {
   // 테두리 고리(지름 약 41px) 안에 금속을 돌려 깎은 듯한 바람개비 무늬의 은색 원판(지름 약 35px)이 있고, 버튼 면에는
   // 글자가 없다. 이름(`SHIFT` 금색, `ALPHA` 자홍색, `MENU`·`ON` 흰색)은 버튼 위 본체에 인쇄돼 있다(`RoundKeyFace`,
   // 인쇄 색은 [CalcPalette.bodyPrintOf]). #190에서 ON 키를, #156에서 SHIFT·ALPHA·MENU를 이 모양으로 바꿨다.
+  // 실물 MENU 위에는 SHIFT 각인 `SETUP`(금색)도 나란히 인쇄돼 있지만, 앱은 설정을 ON 자리의 설정 키(`SETUP` 인쇄) 하나로
+  // 열어 MENU 위에는 `MENU`만 인쇄한다 — 네 버튼 모두 이름 하나만 각인 띠 가운데에 있다(앱 고유, #253).
   // 실물 버튼은 옆 키캡(OPTN 높이 약 22px)보다 크지만, 앱은 셀 크기를 바꾸지 않고 키캡 자리 안에 고리를 내접시킨다 —
   // 터치 영역은 셀 전체다(`CalcKeyButton`).
   // 고리·원판 색은 두 모드가 같다 — 은색 원판과 어두운 고리가 이미 3:1 이상 구분되고, 버튼 경계(고리 바깥 선)는 고대비
@@ -233,7 +235,7 @@ abstract final class CalcTheme {
   // 본체 인쇄 (Body Print)
   // ───────────────────────────────────────────
 
-  /// 본체에 인쇄된 흰 글자 — 원형 버튼 위 메인 각인(실물 `ON`·`MENU`, 앱은 ON 자리에 `SETTING`, #190).
+  /// 본체에 인쇄된 흰 글자 — 원형 버튼 위 메인 각인(실물 `ON`·`MENU`, 앱은 ON 자리에 `SETUP`, #190·#253).
   /// 본체 배경 대비 4.5:1 이상(테스트로 검증). 고대비는 [bodyPrintHighContrast].
   /// SHIFT·ALPHA 버튼 위 이름은 각인 색([shiftLabel]·[alphaLabel])으로 인쇄한다(#156, [CalcPalette.bodyPrintOf]).
   static const Color bodyPrint = Color(0xFFE8E8E8);
@@ -1892,7 +1894,7 @@ final class CalcPalette {
   /// 화면 안내(창이 너무 작다는 안내) 글자·아이콘 색
   final Color noticeForeground;
 
-  /// 본체에 인쇄된 흰 글자 색 — MENU·ON 자리(`SETTING`) 원형 버튼 위 이름 (#190, #156). SHIFT·ALPHA 버튼 위 이름은
+  /// 본체에 인쇄된 흰 글자 색 — MENU·ON 자리(`SETUP`) 원형 버튼 위 이름 (#190, #156, #253). SHIFT·ALPHA 버튼 위 이름은
   /// 각인 색이다 — 원형 버튼 인쇄 색은 [bodyPrintOf]로 고른다.
   final Color bodyPrint;
 
@@ -1983,7 +1985,7 @@ final class CalcPalette {
   Color keyForeground(KeyCategory category) => category.foreground;
 
   /// [category] 원형 버튼(#190) 위 본체에 인쇄한 이름의 색 (#156) — 실물처럼 SHIFT는 금색([shiftLabel]), ALPHA는
-  /// 자홍색([alphaLabel]), 나머지(MENU·ON 자리의 SETTING)는 흰색([bodyPrint])이다.
+  /// 자홍색([alphaLabel]), 나머지(MENU·ON 자리의 SETUP)는 흰색([bodyPrint])이다.
   Color bodyPrintOf(KeyCategory category) => switch (category) {
     KeyCategory.shift => shiftLabel,
     KeyCategory.alpha => alphaLabel,
