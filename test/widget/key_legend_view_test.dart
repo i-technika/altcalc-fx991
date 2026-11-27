@@ -1137,11 +1137,7 @@ void main() {
         ]) {
           ({double main, double numberMain, double legend}) limits([
             bool Function(CalcKeyDef)? where,
-          ]) => KeypadMetrics.debugWidthLimits(
-            functionKeyWidth: m.functionKeyWidth,
-            numberKeyWidth: m.numberKeyWidth,
-            where: where,
-          );
+          ]) => KeypadMetrics.debugWidthLimits(m, where: where);
           final all = limits();
           final mainOnly = limits(twoDimensionalMain);
           final legendOnly = limits(twoDimensionalLegend);

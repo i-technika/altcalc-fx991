@@ -5,6 +5,7 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 키캡 크기를 실물 fx-991EX에 맞춘 규칙 (#220, [CalcTheme] "키캡 크기 (#220)" 절):
@@ -143,6 +144,12 @@ void main() {
       (Size(800, 1280), EdgeInsets.only(top: 24, bottom: 48)),
       (Size(800, 360), EdgeInsets.only(top: 24)),
       (Size(841, 701), EdgeInsets.only(top: 24, bottom: 32)),
+      // 키패드가 실물 비보다 넓은 창 — 폭 하한에 걸린다 (#220 R1)
+      (Size(1024, 1366), EdgeInsets.only(top: 24, bottom: 20)),
+      (Size(600, 960), EdgeInsets.only(top: 24, bottom: 48)),
+      (Size(673, 841), EdgeInsets.zero),
+      (Size(360, 520), EdgeInsets.only(top: 24)),
+      (Size(2000, 400), EdgeInsets.zero),
     ];
     for (final (size, padding) in cases) {
       testWidgets('$size: 각인 띠가 구역과 무관하게 같고, 키캡은 셀 가운데에 비 상한·폭 하한 규칙대로 그린다', (
@@ -192,6 +199,40 @@ void main() {
             ),
             reason: reason,
           );
+          // 실물보다 세로로 길지 않고, #220 전 규칙(셀 폭 키캡·셀 높이 비율 띠)보다 납작하지 않다
+          final aspect = cap.width / cap.height;
+          expect(
+            aspect,
+            greaterThanOrEqualTo(maxAspect - 1e-3),
+            reason: reason,
+          );
+          final oldCap =
+              cell.height * (1 - CalcTheme.keyLegendHeightRatio) -
+              CalcTheme.keyPressedOffset;
+          expect(
+            aspect,
+            lessThanOrEqualTo(cell.width / oldCap + 1e-6),
+            reason: reason,
+          );
+          // SHIFT·ALPHA 각인은 키캡 폭 안에 인쇄한다 (#220 R1 — 실물처럼)
+          final legends = find.descendant(
+            of: _button(def.id),
+            matching: find.byType(KeyLegendView),
+          );
+          for (final e in legends.evaluate()) {
+            final r = tester.getRect(find.byWidget(e.widget));
+            if (r.top >= cap.top - 0.01) continue; // 키캡 위 메인 라벨
+            expect(
+              r.left,
+              greaterThanOrEqualTo(cap.left - 0.01),
+              reason: reason,
+            );
+            expect(
+              r.right,
+              lessThanOrEqualTo(cap.right + 0.01),
+              reason: reason,
+            );
+          }
         }
       });
     }
@@ -203,6 +244,11 @@ void main() {
       (Size(320, 568), EdgeInsets.only(top: 20), 1.86, 1.69),
       (Size(800, 1280), EdgeInsets.only(top: 24, bottom: 48), 1.93, 1.76),
       (Size(800, 360), EdgeInsets.only(top: 24), 2.18, 1.86),
+      (Size(841, 701), EdgeInsets.only(top: 24, bottom: 32), 1.85, 1.49),
+      (Size(1024, 1366), EdgeInsets.only(top: 24, bottom: 20), 2.20, 2.01),
+      (Size(600, 960), EdgeInsets.only(top: 24, bottom: 48), 2.13, 1.94),
+      (Size(360, 520), EdgeInsets.only(top: 24), 2.35, 2.13),
+      (Size(2000, 400), EdgeInsets.zero, 4.14, 3.54),
     ];
     for (final (size, padding, function, number) in measured) {
       testWidgets('$size 실측: 함수 키캡 $function, 숫자 키캡 $number', (tester) async {
@@ -213,6 +259,36 @@ void main() {
         expect(_aspectOf(tester, CalcKeyId.equals), closeTo(number, 0.01));
       });
     }
+
+    testWidgets(
+      '600×960: 숫자부 키캡이 48dp를 넘어 숫자부 터치가 키캡뿐이고(50.3dp), 가장 낮은 터치가 된다 (#220 R1)',
+      (tester) async {
+        await _pumpScreen(
+          tester,
+          const Size(600, 960),
+          const EdgeInsets.only(top: 24, bottom: 48),
+        );
+        final m = _drawnMetrics(tester);
+        final seven = tester.widget<CalcKeyButton>(_button(CalcKeyId.num7));
+        final sin = tester.widget<CalcKeyButton>(_button(CalcKeyId.sin));
+        expect(seven.extendHitAreaToLegend, isFalse);
+        expect(sin.extendHitAreaToLegend, isTrue);
+        final numberTouch = m.numberKeyHeight - m.legendBandHeight;
+        expect(numberTouch, closeTo(50.3, 0.05));
+        expect(
+          numberTouch,
+          greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+        );
+        expect(numberTouch, lessThan(m.functionKeyHeight));
+        expect(
+          KeypadMetrics.minKeyTouchHeightOf(
+            tester.getSize(find.byKey(const ValueKey('calc-keypad'))),
+            KeypadArrangement.standard,
+          ),
+          closeTo(numberTouch, 0.01),
+        );
+      },
+    );
 
     testWidgets('키캡 옆 빈 곳(셀 안)을 눌러도 그 키가 입력된다 — 터치 영역은 셀 폭 그대로다', (
       tester,

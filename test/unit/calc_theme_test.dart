@@ -928,6 +928,16 @@ void main() {
         lessThan(CalcTheme.keyCapMaxAspectRatio),
       );
       expect(CalcTheme.keyCapMinWidthRatio, inInclusiveRange(0.8, 1.0));
+      // 폭 하한에서 키캡 폭 / 가로 간격(열 폭)이 실물(함수부 약 0.82, 숫자부 약 0.81)과 2% 안이다 — 셀은 열 폭에서
+      // 키 사이 간격(키패드 폭 × keyHorizontalGapRatio)을 뺀 폭이다(함수부 6열, 숫자부 5열).
+      for (final (columns, real) in [(6, 0.82), (5, 0.81)]) {
+        final cellPerPitch = 1 - columns * CalcTheme.keyHorizontalGapRatio;
+        expect(
+          CalcTheme.keyCapMinWidthRatio * cellPerPitch,
+          closeTo(real, 0.02),
+          reason: '$columns열',
+        );
+      }
       expect(CalcTheme.keyBorderWidth, greaterThan(0));
       expect(CalcTheme.keyPressedOffset, greaterThanOrEqualTo(0));
       expect(CalcTheme.keyMaxTextScaleFactor, inInclusiveRange(1.0, 2.0));

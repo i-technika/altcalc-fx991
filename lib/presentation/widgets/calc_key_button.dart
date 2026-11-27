@@ -461,17 +461,14 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     );
   }
 
-  /// 셀 폭 [width]보다 좁은 키캡([faceWidth], #220)을 가운데에 둔다. 같으면 그대로다 — 셀 폭 키캡(원형 버튼·커서 패드·
-  /// 키패드 밖의 키)의 위젯 트리를 바꾸지 않는다.
+  /// 키캡을 셀 가운데에 [faceWidth] 폭(#220 — 셀 폭 이하)으로 둔다. 셀 폭과 같아도 늘 같은 위젯으로 감싼다 — 창 크기가
+  /// 바뀌어 키캡 폭이 셀 폭 문턱을 넘나들 때 위젯 트리가 바뀌면 키캡의 애니메이션·포커스 상태가 다시 만들어진다(#220 R1).
   static Widget _centerFace({
     required double faceWidth,
-    required double width,
     required Widget child,
-  }) => faceWidth >= width
-      ? child
-      : Center(
-          child: SizedBox(width: faceWidth, child: child),
-        );
+  }) => Center(
+    child: SizedBox(width: faceWidth, child: child),
+  );
 
   Widget _wrapHitArea(Widget child) {
     return Listener(
@@ -551,7 +548,6 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       padding: EdgeInsets.only(bottom: pressRoom),
       child: _centerFace(
         faceWidth: faceWidth,
-        width: width,
         child: _wrapFocus(
           round
               ? _RoundKeycap(
@@ -604,13 +600,19 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                     ),
                     textScaler: textScaler,
                   )
-                : _LegendRow(
-                    shiftLegend: widget.keyDef.shiftLegend,
-                    alphaLegend: widget.keyDef.alphaLegend,
-                    width: width,
-                    fontSize: legendFontSize,
-                    maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
-                    textScaler: textScaler,
+                // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭 안에 인쇄한다 (#220 R1)
+                : Center(
+                    child: SizedBox(
+                      width: faceWidth,
+                      child: _LegendRow(
+                        shiftLegend: widget.keyDef.shiftLegend,
+                        alphaLegend: widget.keyDef.alphaLegend,
+                        width: faceWidth,
+                        fontSize: legendFontSize,
+                        maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
+                        textScaler: textScaler,
+                      ),
+                    ),
                   ),
           ),
         SizedBox(height: capHeight, width: width, child: keycap),

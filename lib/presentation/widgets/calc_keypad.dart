@@ -135,24 +135,21 @@ class KeypadMetrics {
   static double wideBlockWidthOf(double width) =>
       math.max(0.0, width) / _wideWidthUnits;
 
-  /// 셀 너비 [functionKeyWidth]·[numberKeyWidth]에서 폭 기준이 허락하는 (배율 반영) 최대 글자 크기 — 메인 라벨·각인.
+  /// 키패드 치수 [metrics]의 셀·키캡 폭에서 폭 기준이 허락하는 (배율 반영) 최대 글자 크기 — 메인 라벨·각인.
   ///
   /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
   /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
-  /// 메인 라벨은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220 — 빠뜨리면 셀 너비)에, 각인은 셀 너비에 맞춘다.
+  /// 폭은 [metrics]에서 읽는다 — 셀 너비만 따로 받으면 그린 키캡 폭(#220)을 빠뜨려 제품과 다른 규칙을 잴 수 있다(#220 R1).
   @visibleForTesting
-  static ({double main, double numberMain, double legend}) debugWidthLimits({
-    required double functionKeyWidth,
-    required double numberKeyWidth,
-    double? functionCapWidth,
-    double? numberCapWidth,
+  static ({double main, double numberMain, double legend}) debugWidthLimits(
+    KeypadMetrics metrics, {
     bool Function(CalcKeyDef def)? where,
   }) {
     final limits = _LabelLimits.measure(
-      functionKeyWidth: functionKeyWidth,
-      numberKeyWidth: numberKeyWidth,
-      functionCapWidth: functionCapWidth ?? functionKeyWidth,
-      numberCapWidth: numberCapWidth ?? numberKeyWidth,
+      functionKeyWidth: metrics.functionKeyWidth,
+      numberKeyWidth: metrics.numberKeyWidth,
+      functionCapWidth: metrics.functionCapWidth,
+      numberCapWidth: metrics.numberCapWidth,
       where: where,
     );
     return (
@@ -202,6 +199,20 @@ class KeypadMetrics {
     numberCapHeight,
     CalcTheme.keyCapNumberMaxAspectRatio,
   );
+
+  /// 숫자부 키(숫자·사칙연산·`=`·DEL·AC 등 [numberRows])인지 — 숫자부 글자 크기·키캡 비 상한을 고를 때 쓴다
+  static bool isNumberKey(CalcKeyId id) => _numberKeyIds.contains(id);
+
+  static final Set<CalcKeyId> _numberKeyIds = {
+    for (final row in numberRows)
+      for (final def in row) def.id,
+  };
+
+  /// [id] 키캡의 가로/세로 비 상한 (#220) — 숫자부는 [CalcTheme.keyCapNumberMaxAspectRatio], 나머지는
+  /// [CalcTheme.keyCapMaxAspectRatio]. 키패드가 키에 주는 값과 글자 크기 계산이 같은 값을 쓴다.
+  static double keycapMaxAspectRatioOf(CalcKeyId id) => isNumberKey(id)
+      ? CalcTheme.keyCapNumberMaxAspectRatio
+      : CalcTheme.keyCapMaxAspectRatio;
 
   /// 함수부 셀 높이 [functionCell]의 각인 띠 높이 (dp)
   static double _legendBandHeightOf(double functionCell) =>
@@ -291,9 +302,10 @@ class KeypadMetrics {
   /// 키캡을 합친 높이, 커서 패드 제외). 두 배열 모두 함수부 행이 가장 낮다.
   ///
   /// 키패드 크기에 대해 단조 증가한다 — 세로형과 가로형 중 키가 큰 쪽을 고를 때 쓴다(#142). [minKeyTouchHeightOf]는
-  /// 키캡이 [CalcTheme.keyMinTouchTargetHeight]를 넘는 순간 각인 띠를 터치 영역에서 빼므로 키가 커질 때 한 번 줄어든다
-  /// (셀 66.7dp에서 66.7 → 48dp). 그 값으로 비교하면 키가 큰 배치를 버리게 된다 — 12.9인치 iPad 세로 1024×1366은
-  /// 세로형(셀 76.1dp, 터치 54.8dp)이 가로형(셀·터치 55.4dp)보다 키가 큰데 터치 높이로는 가로형이 이긴다.
+  /// 키캡이 [CalcTheme.keyMinTouchTargetHeight]를 넘는 순간 각인 띠를 터치 영역에서 빼므로 키가 커질 때 줄어든다 — 실물
+  /// 배열은 두 번이다(#220 뒤: 함수부 셀 약 50.3dp에서 숫자부 키캡이 48dp를 넘어 50.2 → 48dp, 함수부 셀 66.7dp에서 함수부
+  /// 키캡이 넘어 63.7 → 48dp). 그 값으로 비교하면 키가 큰 배치를 버리게 된다 — 창 920×1100(인셋 없음, 본체 904×1084)은
+  /// 세로형(셀 68.2dp, 터치 49.1dp)이 가로형(셀·터치 49.7dp)보다 키가 큰데 터치 높이로는 가로형이 이긴다.
   static double minKeyCellHeightOf(
     Size available,
     KeypadArrangement arrangement,
@@ -580,16 +592,12 @@ class _LabelLimits {
     final tallMains = <KeyLegendEmMetrics>[];
     final tallNumberMains = <KeyLegendEmMetrics>[];
     final tallLegends = <KeyLegendEmMetrics>[];
-    final numberIds = {
-      for (final row in numberRows)
-        for (final def in row) def.id,
-    };
     final cursorIds = {for (final def in cursorPad.all) def.id};
 
     for (final def in allKeys) {
       if (cursorIds.contains(def.id)) continue;
       if (where != null && !where(def)) continue;
-      final number = numberIds.contains(def.id);
+      final number = KeypadMetrics.isNumberKey(def.id);
       final width = number ? numberKeyWidth : functionKeyWidth;
 
       // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인을 SHIFT·ALPHA 각인과 함께 각인 띠에 한 줄로 인쇄한다
@@ -645,6 +653,7 @@ class _LabelLimits {
       // 두 폭의 합이 띠 폭 이하여야 하고, 짧은 쪽이 우선 배분을 받으면 절반 이하여야 한다.
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
+      // 각인 띠 폭은 그린 키캡 폭이다 (#220 R1 — 실물처럼 각인이 키캡 폭 안에 놓인다).
       final shift = def.shiftLegend;
       final alpha = def.alphaLegend;
       if (shift == null && alpha == null) continue;
@@ -652,12 +661,12 @@ class _LabelLimits {
         final (text, style) = shift != null
             ? (shift, CalcTheme.keyShiftLabelStyle)
             : (alpha!, CalcTheme.keyAlphaLabelStyle);
-        legend = math.min(legend, width / _emWidth(text, style));
+        legend = math.min(legend, capWidth / _emWidth(text, style));
         continue;
       }
       final usable = math.max(
         0.0,
-        width - width * CalcTheme.keyLegendGapMaxWidthRatio,
+        capWidth - capWidth * CalcTheme.keyLegendGapMaxWidthRatio,
       );
       final shiftEm = _emWidth(shift, CalcTheme.keyShiftLabelStyle);
       final alphaEm = _emWidth(alpha, CalcTheme.keyAlphaLabelStyle);
@@ -803,12 +812,6 @@ class _KeypadBody extends StatelessWidget {
     vertical: metrics.verticalGap / 2,
   );
 
-  /// 숫자부 키 — 메인 라벨을 [KeypadMetrics.numberMainLabelFontSize]로 그린다 (#156)
-  static final Set<CalcKeyId> _numberKeyIds = {
-    for (final row in numberRows)
-      for (final def in row) def.id,
-  };
-
   Widget _button(
     CalcKeyDef def, {
     bool showLegendBand = true,
@@ -868,14 +871,13 @@ class _KeypadBody extends StatelessWidget {
       showLegendBand: showLegendBand,
       extendHitAreaToLegend: showLegendBand && extendHitArea,
       legendFontSize: metrics.legendFontSize,
-      mainLabelFontSize: _numberKeyIds.contains(def.id)
+      // 숫자부 키는 메인 라벨을 [KeypadMetrics.numberMainLabelFontSize]로 그린다 (#156)
+      mainLabelFontSize: KeypadMetrics.isNumberKey(def.id)
           ? metrics.numberMainLabelFontSize
           : metrics.mainLabelFontSize,
       // 모든 구역이 함수부와 같은 각인 띠, 구역별 키캡 가로/세로 비 상한 (#220)
       legendHeight: metrics.legendBandHeight,
-      keycapMaxAspectRatio: _numberKeyIds.contains(def.id)
-          ? CalcTheme.keyCapNumberMaxAspectRatio
-          : CalcTheme.keyCapMaxAspectRatio,
+      keycapMaxAspectRatio: KeypadMetrics.keycapMaxAspectRatioOf(def.id),
       focusable: def.id == settingsKey,
     );
   }
