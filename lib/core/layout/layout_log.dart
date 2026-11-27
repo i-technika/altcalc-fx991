@@ -204,6 +204,7 @@ abstract final class LayoutLog {
     required ScreenArrangement chosen,
     required ScreenArrangement drawn,
     required bool tooSmall,
+    bool lcdBesideKeypad = false,
     required Size window,
     required Iterable<DisplayFeature> features,
     required bool foldableDevice,
@@ -212,6 +213,7 @@ abstract final class LayoutLog {
     final line =
         '배치: ${drawn.name}'
         '${drawn == chosen ? '' : ' (고른 배치 ${chosen.name})'}'
+        '${lcdBesideKeypad ? ' (LCD 옆 패널)' : ''}'
         '${tooSmall ? ' 안내' : ''}'
         ' — 창 ${_size(window)}, 화면 특징 [${features.map(_feature).join(', ')}], '
         // 창을 가로지르는 접힘선 수 — 2 이상이면 접힘선을 무시한다(트라이폴드, #144)

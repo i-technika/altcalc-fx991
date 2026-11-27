@@ -18,6 +18,7 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -463,8 +464,13 @@ void main() {
         final keypad = tester.getRect(
           find.byKey(const ValueKey('calc-keypad')),
         );
-        expect(lcd.right, lessThanOrEqualTo(420));
+        // 책 자세(#143): 오른손잡이라 LCD·키패드는 오른쪽 절반, 계산 기록은 왼쪽 절반
+        expect(lcd.left, greaterThanOrEqualTo(420));
         expect(keypad.left, greaterThanOrEqualTo(420));
+        expect(
+          tester.getRect(find.byType(HistoryPanel)).right,
+          lessThanOrEqualTo(420),
+        );
       },
     );
 

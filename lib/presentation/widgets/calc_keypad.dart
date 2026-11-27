@@ -27,14 +27,11 @@ enum KeypadArrangement {
   /// 실물 배열 — 숫자부가 함수부 아래에 있다.
   standard,
 
-  /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 반 접은 테이블톱 자세의 아래
-  /// 절반처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
-  /// 같은 높이에서 키가 약 2배가 된다(Fold 가로 반 접힘 19.9 → 39.9dp).
+  /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 가로 접힘선 기준 배치의 아래 패널
+  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
+  /// 같은 높이에서 키가 약 2배가 된다(#80 당시 Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 기본으로 오른쪽이고(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것), `CalcKeypad.numbersOnLeft`로
-  /// 좌우를 맞바꿀 수 있다 — 가로형 배치는 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, 사용자 결정).
-  /// 테이블톱 배치는 #143까지 손잡이와 무관하게 숫자부가 오른쪽이고, 블록 폭 상한
-  /// (`CalcTheme.screenTabletopKeypadMaxBlockWidth`)에 걸리는 넓은 창(아래 절반 폭 약 990dp 초과)에서는 키패드가 손 쪽
-  /// 가장자리로 가서 왼손잡이면 숫자부가 화면 가운데 쪽에 온다.
+  /// 좌우를 맞바꿀 수 있다 — 두 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, 사용자 결정).
   wide,
 }
 
@@ -201,11 +198,13 @@ class KeypadMetrics {
     return Size(width, math.min(availableHeight, maxHeight));
   }
 
-  /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키가 [KeypadArrangement.standard]보다
-  /// **클 때만** wide다(같으면 실물 배열). 낮고 넓은 영역(반 접은 테이블톱 자세의 아래 절반)에서 쓴다 (#80).
+  /// [available] 영역에서 키가 더 큰 배열 — [KeypadArrangement.wide]의 가장 낮은 키 셀([minKeyCellHeightOf])이
+  /// [KeypadArrangement.standard]보다 **높을 때만** wide다(같으면 실물 배열). 가로 접힘선 기준 배치의 아래 패널에서 쓴다
+  /// (#80, #143). 셀 높이로 비교하는 이유는 가로형·세로형 비교(`CalculatorScreen`, #142)와 같다 — 터치 높이는 키가 커질 때
+  /// 각인 띠를 빼며 한 번 줄어 큰 영역의 비교가 뒤집힌다. #143 전에는 터치 높이로 비교했다.
   static KeypadArrangement preferredArrangementFor(Size available) =>
-      minKeyTouchHeightOf(available, KeypadArrangement.wide) >
-          minKeyTouchHeightOf(available, KeypadArrangement.standard)
+      minKeyCellHeightOf(available, KeypadArrangement.wide) >
+          minKeyCellHeightOf(available, KeypadArrangement.standard)
       ? KeypadArrangement.wide
       : KeypadArrangement.standard;
 

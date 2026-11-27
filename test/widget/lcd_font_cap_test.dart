@@ -295,7 +295,7 @@ void main() {
       },
     );
 
-    test('테이블톱 배치도 LCD 높이는 상한 높이 이하다 (폭 상한 480dp: 274.3 → 273.5, 글자 그대로)', () {
+    test('가로 접힘선 배치도 LCD 높이는 상한 높이 이하다 (#143 — 실물 배열·넓은 배열 모두)', () {
       for (var width = 300.0; width <= 2400; width += 61) {
         for (var height = 400.0; height <= 2000; height += 47) {
           final body = Size(width, height);
@@ -316,17 +316,24 @@ void main() {
           }
         }
       }
+      // 넓은 위 패널: 넓은 배열의 숫자부 블록 폭 활성 LCD가 상한 높이·상한 글자에 묶인다(#143 전에는 폭 상한 480dp로
+      // 480×273.5, 줄 글자 39.1dp였다).
       final wide = CalcTabletopLayout.of(
         const Size(1600, 1200),
         const Rect.fromLTWH(0, 600, 1600, 0),
         Handedness.right,
       );
-      expect(wide.lcd.width, CalcTheme.screenTabletopLcdMaxWidth);
+      expect(wide.keypadArrangement, KeypadArrangement.wide);
+      expect(wide.history, isNotNull);
+      expect(
+        wide.lcd.width,
+        moreOrLessEquals(KeypadMetrics.wideBlockWidthOf(1600)),
+      );
       expect(
         wide.lcd.height,
         moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont),
       );
-      expect(_lineFontOf(wide.lcd.size), moreOrLessEquals(39.1, epsilon: 0.05));
+      expect(_lineFontOf(wide.lcd.size), _cap);
     });
 
     test('세로 접힘선 배치(책 자세)도 LCD 높이는 상한 높이 이하다', () {

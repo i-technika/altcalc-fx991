@@ -1319,10 +1319,6 @@ void main() {
   });
 
   group('가로형·접힘선 기준 배치 (#142, #25)', () {
-    test('간격 상수: 손잡이를 바꿔도 같은 자리로 보는 이동 폭은 양수다', () {
-      expect(CalcTheme.screenPanelGap, greaterThan(0));
-    });
-
     test(
       '가로형 기록 영역 문턱: LCD 최소 높이보다 높다 — 가로 폰처럼 위 띠가 LCD 최소 높이에 묶인 창에는 두지 않는다',
       () {
@@ -1335,57 +1331,19 @@ void main() {
       },
     );
 
-    test('LCD 최대 폭 비율: 0 초과 1 이하 — 책 자세 LCD가 키패드보다 넓어지지 않는다 (#71)', () {
-      // LCD 줄 글자가 키 메인 각인보다 큰지는 screen_layout_test에서 번들 글꼴로 실측한다.
-      expect(CalcTheme.screenLcdMaxWidthRatio, greaterThan(0));
-      expect(CalcTheme.screenLcdMaxWidthRatio, lessThanOrEqualTo(1));
-    });
-
-    test('테이블톱 키패드 임시 상한 (#143까지): 블록은 실물 본체 폭 이하·폰보다 넓고, 가로세로비 상한 > 하한', () {
-      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
-      expect(
-        CalcTheme.screenTabletopKeypadMaxBlockWidth,
-        greaterThan(widestPhoneBody),
-      );
-      // 실물 fx-991EX 본체 폭(약 77mm = 약 485dp, 1dp = 1/160인치)을 크게 넘지 않는다.
-      expect(
-        CalcTheme.screenTabletopKeypadMaxBlockWidth,
-        lessThanOrEqualTo(77 / 25.4 * 160),
-      );
-      expect(
-        CalcTheme.screenTabletopKeypadMaxAspectRatio,
-        greaterThan(CalcTheme.keypadMinAspectRatio),
-      );
-    });
-
-    test(
-      '테이블톱 LCD 최대 폭 (#143까지의 임시 상한): 가장 넓은 폰 본체보다 넓고 최대 높이가 최소 높이 이상이다',
-      () {
-        // Flip 내부(폰 폭)에서는 걸리지 않는다 (가장 넓은 폰 440dp − 좌우 여백).
-        const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
-        expect(
-          CalcTheme.screenTabletopLcdMaxWidth,
-          greaterThan(widestPhoneBody),
-        );
-        // 상한 폭에서도 LCD 최대 높이가 최소 높이 이상이다.
-        expect(
-          CalcTheme.screenTabletopLcdMaxWidth /
-              CalcTheme.screenLcdMinAspectRatio,
-          greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
-        );
-      },
-    );
-
-    test('키 터치 하한: 기본은 터치 확장 기준 이하, 테이블톱 하한은 기본보다 낮은 양수 (#25)', () {
+    test('키 터치 하한: 터치 확장 기준 이하의 양수 (#25)', () {
       expect(CalcTheme.keyTouchHeightFloor, greaterThan(0));
       expect(
         CalcTheme.keyTouchHeightFloor,
         lessThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
       );
-      expect(CalcTheme.tabletopKeyTouchHeightFloor, greaterThan(0));
+    });
+
+    test('Flip 위 패널 기록 영역 (#143): 간격은 0 이상, 문턱은 LCD 최소 높이 이상', () {
+      expect(CalcTheme.screenLcdHistoryGap, greaterThanOrEqualTo(0));
       expect(
-        CalcTheme.tabletopKeyTouchHeightFloor,
-        lessThan(CalcTheme.keyTouchHeightFloor),
+        CalcTheme.screenHistoryBelowLcdMinHeight,
+        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
       );
     });
 
@@ -1397,25 +1355,19 @@ void main() {
       expect(CalcTheme.keypadWideSectionGapRatio, lessThan(0.2));
     });
 
-    test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수이고, 테이블톱 하한은 그 아래로 내려가지 않는다 (#38)', () {
+    test('쓸 수 있는 키 최소: 일반 하한보다 낮은 양수 (#38)', () {
       expect(CalcTheme.keyTouchHeightUsableMin, greaterThan(0));
       expect(
         CalcTheme.keyTouchHeightUsableMin,
         lessThan(CalcTheme.keyTouchHeightFloor),
-      );
-      // 테이블톱 하한이 더 낮으면, 고른 테이블톱 배치가 곧바로 "창이 너무 작다" 안내가 된다.
-      expect(
-        CalcTheme.tabletopKeyTouchHeightFloor,
-        greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin),
       );
       expect(CalcTheme.windowTooSmallIconSize, greaterThan(0));
       expect(CalcTheme.windowTooSmallFontSize, greaterThan(0));
       expect(CalcTheme.windowTooSmallPadding, greaterThanOrEqualTo(0));
     });
 
-    test('접힘선 간격: 양수이고, 폭 0 접힘선 양쪽 내용 사이가 나란히 놓은 영역 사이 간격과 같다 (#25)', () {
+    test('접힘선 간격: 양수 (#25)', () {
       expect(CalcTheme.screenHingeMargin, greaterThan(0));
-      expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenPanelGap);
     });
 
     test('화면 안내 글자는 본체 배경 대비 4.5:1 이상이다', () {

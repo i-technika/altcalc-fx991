@@ -232,15 +232,16 @@ void main() {
         Handedness.right,
         DrawnArrangement.landscape,
       ),
+      // 가로 접힘선의 넓은 배열은 숫자부·활성 LCD가 손 쪽으로 옮겨 간다 (#143)
       (
-        '테이블톱 716×1200',
-        const Size(716, 1200),
-        const EdgeInsets.only(top: 32, bottom: 24),
+        '가로 접힘선 Fold 가로 841×673(넓은 배열)',
+        const Size(841, 673),
+        const EdgeInsets.only(top: 24, bottom: 24),
         const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(0, 600, 716, 0),
+            bounds: Rect.fromLTWH(0, 336.5, 841, 0),
             type: DisplayFeatureType.fold,
-            state: DisplayFeatureState.postureHalfOpened,
+            state: DisplayFeatureState.postureFlat,
           ),
         ],
         Handedness.left,
@@ -276,6 +277,26 @@ void main() {
       });
     }
 
+    testWidgets('가로 접힘선의 실물 배열(Flip 내부)은 손잡이로 옮겨 가는 것이 없어 안내 글이 있다 (#143)', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        size: const Size(411, 1006),
+        padding: const EdgeInsets.only(top: 32, bottom: 24),
+        displayFeatures: const [
+          DisplayFeature(
+            bounds: Rect.fromLTWH(0, 503, 411, 0),
+            type: DisplayFeatureType.fold,
+            state: DisplayFeatureState.postureFlat,
+          ),
+        ],
+      );
+      expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
+      await _open(tester);
+      expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+    });
+
     testWidgets('대화상자가 열린 채 배치가 바뀌면 안내 글이 따라 나타나고 사라진다', (tester) async {
       const padding = EdgeInsets.only(top: 24, bottom: 48);
       final container = await _pump(
@@ -308,13 +329,14 @@ void main() {
     testWidgets('대화상자가 열린 채 접힘선 기준 배치로 바뀌면 지금 ON 키가 있는 절반으로 옮겨 간다 (#41 R2)', (
       tester,
     ) async {
-      // Fold 내부 화면 가로(펼친 가로 접힘선): 위아래 배치
+      // 위 패널이 패널 최소 길이(128dp)보다 짧은 가로 접힘선: 접힘선 기준으로 나누지 않아 위아래 배치
+      // (#143 전에는 펼친 가로 접힘선이면 위아래 배치였다 — 이제는 펼쳐도 나눈다)
       final container = await _pump(
         tester,
         size: const Size(841, 701),
         displayFeatures: const [
           DisplayFeature(
-            bounds: Rect.fromLTWH(0, 350, 841, 0),
+            bounds: Rect.fromLTWH(0, 100, 841, 0),
             type: DisplayFeatureType.fold,
             state: DisplayFeatureState.postureFlat,
           ),
@@ -426,12 +448,12 @@ void main() {
     testWidgets(
       '세로 접힘선 배치를 한쪽 손잡이로만 쓸 수 있는 화면: 안내 글을 보이지 않고, 대화상자를 좁은 절반에 가두지 않는다 (#41 R1·R2)',
       (tester) async {
-        // 세로 접힘선 x=560, 오른쪽 인셋 48 → 오른쪽 절반은 233dp뿐이다.
+        // 세로 접힘선 x=654, 오른쪽 인셋 48 → 오른쪽 손 쪽 패널은 123dp뿐이다(키 13.9dp — 쓸 수 있는 크기 16dp 미만, #143).
         // - 오른손잡이: 키패드가 오른쪽 절반에 들어가지 못해 위아래 배치로 대체한다. ON 키는 키패드 오른쪽 위(접힘선 오른쪽).
         // - 왼손잡이: 키패드가 넓은 왼쪽 절반에 들어가 접힘선 기준 배치가 된다 — 그래서 손잡이 설정이 이 화면에
         //   적용된다(위아래 배치로 그렸어도 안내 글을 보이면 안 된다).
         const fold = DisplayFeature(
-          bounds: Rect.fromLTWH(560, 0, 0, 701),
+          bounds: Rect.fromLTWH(654, 0, 0, 701),
           type: DisplayFeatureType.fold,
           state: DisplayFeatureState.postureFlat,
         );
@@ -449,11 +471,14 @@ void main() {
           displayFeatures: const [fold],
         );
         expect(isStackedArrangement(tester), isTrue);
-        expect(tester.getRect(_onKey).left, greaterThan(560));
+        expect(
+          tester.getRect(_onKey).center.dx,
+          greaterThan(654),
+        ); // 대화상자 기준점(ON 키 중심)이 좁은 절반
         await _open(tester);
         Rect surface() => tester.getRect(_surface);
         expect(surface().width, greaterThanOrEqualTo(280));
-        expect(surface().left, lessThan(560)); // 접힘선 오른쪽 좁은 절반에 갇히지 않았다
+        expect(surface().left, lessThan(654)); // 접힘선 오른쪽 좁은 절반에 갇히지 않았다
         expect(find.byKey(HandednessDialog.noteKey), findsNothing);
 
         // 왼손잡이를 고르면 접힘선 기준 배치가 된다. 반대 손잡이로는 위아래 배치라 대화상자는 화면 전체에 그대로 둔다.
@@ -465,8 +490,8 @@ void main() {
         expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
         expect(_dialog, findsOneWidget);
         expect(surface().width, greaterThanOrEqualTo(280));
-        expect(surface().left, lessThan(560));
-        expect(surface().right, greaterThan(560));
+        // 화면 전체(인셋 안) 가운데 그대로 — 왼쪽 절반에 가뒀다면 가운데가 접힘선 왼쪽 절반(0~654)의 가운데 327이다.
+        expect(surface().center.dx, moreOrLessEquals((841 - 48) / 2));
         expect(find.byKey(HandednessDialog.noteKey), findsNothing);
         expect(tester.takeException(), isNull);
       },

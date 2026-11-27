@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
+import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 
 /// 세로 접힘선 (폴더블 내부 화면 펼침)
 const _fold = DisplayFeature(
@@ -634,8 +635,8 @@ void main() {
         ]),
         hasLength(1),
       );
-      // 장 폭이 [hingeMinPanelExtent] 미만이면(공개 사양 근사 823×603의 두 장 약 548.5×603) 접힘선 1개 규칙에서도
-      // 나누지 않는다 — 가장자리 접힘선을 빼도 배치는 위아래다(짧은 변 600 미만이 아니므로 화면도 비교하지 않는다).
+      // 공개 사양 근사 823×603의 두 장(약 548.5×603)도 장 폭(274.5)이 [hingeMinPanelExtent](128, #143) 이상이라 가운데
+      // 접힘선 기준 좌우 배치(책 자세)다. #143 전(280)에는 나누지 않고 위아래 배치였다.
       const specTwoPanels = Size(548.5, 603);
       final specFolds = [
         feature(const Rect.fromLTWH(274.5, 0, 0, 603)),
@@ -650,7 +651,7 @@ void main() {
           specFolds,
           foldableDevice: true,
         ),
-        ScreenArrangement.stacked,
+        ScreenArrangement.hingeSplit,
       );
     });
 
@@ -857,29 +858,32 @@ void main() {
       state: state,
     );
 
-    test('가로 접힘선은 반 접은 테이블톱 자세·물리 힌지일 때만 위아래로 나눈다', () {
+    test('가로 접힘선은 자세(펼침·반 접힘)와 무관하게 위아래로 나눈다 (#143)', () {
       for (final (window, y) in const [
         (Size(841, 673), 336.5), // Fold 내부를 가로로
         (Size(701, 841), 420.5), // Pixel Fold 내부를 세로로
         (Size(411, 1006), 503.0), // Flip 내부 (Flex 모드)
+        (
+          Size(673, 539),
+          269.5,
+        ), // "화면 크기"를 키운 Fold 가로 (#139 — 280dp 사전 판정에서 떨어졌다)
       ]) {
-        expect(
-          FormFactor.arrangementOf(window, [
-            horizontal(window, y),
-          ], foldableDevice: true),
-          ScreenArrangement.hingeStacked,
-          reason: '$window 반 접힘',
-        );
-        // 펼친 폭 0 가로 접힘선은 나누지 않는다 (키패드가 아래 절반에 갇혀 터치 하한 아래로 작아진다).
-        expect(
-          FormFactor.arrangementOf(window, [
-            horizontal(window, y, state: DisplayFeatureState.postureFlat),
-          ], foldableDevice: true),
-          ScreenArrangement.stacked,
-          reason: '$window 펼침',
-        );
+        for (final state in const [
+          DisplayFeatureState.postureHalfOpened,
+          DisplayFeatureState.postureFlat,
+          DisplayFeatureState.unknown,
+        ]) {
+          // 살짝 꺾은 각도는 대개 펼침으로 들어온다 — 앱은 반 접힘과 구분할 수 없어 언제나 나눈다.
+          expect(
+            FormFactor.arrangementOf(window, [
+              horizontal(window, y, state: state),
+            ], foldableDevice: true),
+            ScreenArrangement.hingeStacked,
+            reason: '$window $state',
+          );
+        }
       }
-      // 폭이 있는 물리 힌지는 펼쳐도 나눈다.
+      // 폭이 있는 물리 힌지도 나눈다.
       const duo = Size(720, 1114);
       expect(
         FormFactor.arrangementOf(duo, [
@@ -920,8 +924,22 @@ void main() {
       // 가로 접힘선도 같다 (위 절반이 짧은 창)
       const tall = Size(701, 841);
       expect(
-        FormFactor.arrangementOf(tall, [horizontal(tall, 200)]),
+        FormFactor.arrangementOf(tall, [horizontal(tall, min - 1)]),
         ScreenArrangement.stacked,
+      );
+      expect(
+        FormFactor.arrangementOf(tall, [horizontal(tall, min)]),
+        ScreenArrangement.hingeStacked,
+      );
+    });
+
+    test('패널 최소 길이는 활성 LCD 최소 높이 + 화면 여백 + 접힘선 여백이다 (#143)', () {
+      // 인셋이 없을 때 가로 접힘선 위 패널에 활성 LCD 최소 높이가 들어가는 길이 (form_factor는 테마를 읽지 않는다)
+      expect(
+        FormFactor.hingeMinPanelExtent,
+        CalcTheme.screenLcdMinHeight +
+            CalcTheme.screenPadding +
+            CalcTheme.screenHingeMargin,
       );
     });
 
