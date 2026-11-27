@@ -1028,7 +1028,12 @@ abstract final class CalcTheme {
   //   본체 폭(없을 때) / [screenLcdMinAspectRatio](#142 R2)와 줄 글자 상한 높이(`LcdFontSizes.heightAtMaxLineFont` 약 273.5dp,
   //   [lcdLineMaxFontSize] — #189, 사용자 결정) 중 낮은 쪽. 그보다 높이면 글자는 커지지 않고 식과 답만 세로로 멀어진다.
   //   위 띠가 그보다 높으면 활성 LCD 위가 빈다(12.9인치 iPad 가로 약 205.6dp, 데스크톱 2000×1400 약 420dp). 기록 영역이 있으면
-  //   기록 영역은 위 띠 전체를 쓴다. 상단 띠의 내용 줄은 활성 LCD가 아니라 위 띠 위에 놓인다(기록 영역 유무와 무관한 자리).
+  //   기록 영역은 위 띠 전체를 쓴다. 상단 띠의 내용 줄은 기록 영역이 있으면 위 띠 바로 위, 없으면 활성 LCD 바로 위다
+  //   (`CalcLandscapeLayout.stripBase`, #189 R1 — 빈 곳은 내용 줄 위로 간다. 세로형 큰 창과 같다). 그래서 기록 영역이 생기고
+  //   없어지는 경계(폭 약 730dp)에서 내용 줄·설정 버튼이 최대 (위 띠 − 상한 높이)만큼 옮겨 간다(본체 높이 740 이상에서 약 143.8dp
+  //   — 본체 729.5×710 → 730×710: 버튼 윗변 144.4 → 0.6, #189 R2). 같은 경계에서 활성 LCD도 원래 크게 바뀐다(729.5×273.5 →
+  //   354.4×202.5). 내용 줄을 늘 위 띠 맨 위에 두면 경계는 연속이지만 기록 없는 창에서 LCD 위에 최대 약 143dp 빈틈이 늘 남아,
+  //   창 크기를 조절할 때만 생기는 이동을 받아들인다. 위 띠·키 높이의 연속성(#142 R1)은 그대로다(lcd_font_cap_test가 고정).
   // - 기록 영역은 위 띠가 [screenLandscapeHistoryMinHeight] 이상이고, 블록이 [screenLandscapeHistoryMinLcdWidth] 이상이고, 블록
   //   폭 활성 LCD의 줄 글자가 띠 폭 전체 LCD의 [screenLandscapeHistoryMinLcdFontRatio]배 이상일 때만 둔다. 없으면 활성 LCD가
   //   띠 폭 전체를 쓴다. 기록 영역이 생기고 없어지는 경계에서 활성 LCD 줄 글자는 30%보다 많이 줄지 않는다(landscape_layout_test가

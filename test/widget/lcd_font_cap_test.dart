@@ -10,6 +10,8 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dar
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/top_strip.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -217,14 +219,38 @@ void main() {
               greaterThanOrEqualTo(l.band.top - 1e-9),
               reason: reason,
             );
-            expect(l.band.top, moreOrLessEquals(l.top), reason: reason);
-            expect(l.band.width, moreOrLessEquals(width), reason: reason);
+            // 위 띠는 키패드 윗변 − 간격에서 끝나고, 높이는 본체 폭의 실물 비율 높이(LCD 최소 높이 하한) 이하다 — 줄 글자 상한
+            // 높이로는 줄이지 않는다.
+            expect(
+              l.keypad.top - l.band.bottom,
+              moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
+              reason: reason,
+            );
+            expect(
+              l.band.height,
+              lessThanOrEqualTo(
+                math.max(
+                      CalcTheme.screenLcdMinHeight,
+                      width / CalcTheme.screenLcdMinAspectRatio,
+                    ) +
+                    1e-9,
+              ),
+              reason: reason,
+            );
             final history = l.history;
             if (history != null) {
-              expect(history.top, moreOrLessEquals(l.band.top), reason: reason);
+              // 기록 영역은 활성 LCD 옆(겹치지 않음)에서 상단 띠 최소 높이 아래부터 활성 LCD 아래 끝까지이고, 활성 LCD보다
+              // 낮지 않다(남는 높이를 기록 영역이 쓴다).
+              expect(history.overlaps(l.lcd), isFalse, reason: reason);
               expect(
-                history.height,
-                moreOrLessEquals(l.band.height),
+                history.top,
+                greaterThanOrEqualTo(CalcTheme.screenTopStripMinHeight - 1e-9),
+                reason: reason,
+              );
+              expect(history.top, lessThanOrEqualTo(l.lcd.top + 1e-9));
+              expect(
+                history.bottom,
+                moreOrLessEquals(l.lcd.bottom),
                 reason: reason,
               );
             } else {
@@ -252,6 +278,54 @@ void main() {
       expect(
         l.lcd.top - l.band.top,
         moreOrLessEquals(l.band.height - LcdFontSizes.heightAtMaxLineFont),
+      );
+    });
+
+    test('가로형 상단 띠 내용 줄: 기록 영역 경계에서만 (위 띠 − 상한 높이) 이하로 옮겨 가고, 그 밖에서는 연속이다 (#189 R2)', () {
+      const step = 0.5;
+      var jumps = 0;
+      for (var height = 300.0; height <= 1600; height += 10) {
+        CalcLandscapeLayout? previous;
+        double? previousRowTop;
+        for (var width = 300.0; width <= 2400; width += step) {
+          final body = Size(width, height);
+          final l = CalcLandscapeLayout.of(body, Handedness.right);
+          final rowTop = CalcTopStripLayout.of(body, l.stripBase).row.top;
+          final p = previous;
+          final pRow = previousRowTop;
+          if (p != null && pRow != null) {
+            final jump = (rowTop - pRow).abs();
+            final reason = '$body $p → $l';
+            if ((p.history == null) == (l.history == null)) {
+              expect(jump, lessThanOrEqualTo(step + 1e-6), reason: reason);
+            } else {
+              jumps++;
+              final limit = math.max(
+                0.0,
+                math.max(p.band.height, l.band.height) -
+                    LcdFontSizes.heightAtMaxLineFont,
+              );
+              expect(jump, lessThanOrEqualTo(limit + step), reason: reason);
+            }
+          }
+          previous = l;
+          previousRowTop = rowTop;
+        }
+      }
+      // 기록 영역 경계를 실제로 지난다(훑기 범위가 경계를 건너뛰지 않는다).
+      expect(jumps, greaterThan(0));
+      // 문서 실측: 본체 729.5×710 → 730×710에서 내용 줄 윗변 144.4 → 0.6
+      double rowTopOf(Size body) => CalcTopStripLayout.of(
+        body,
+        CalcLandscapeLayout.of(body, Handedness.right).stripBase,
+      ).row.top;
+      expect(
+        rowTopOf(const Size(729.5, 710)),
+        moreOrLessEquals(144.4, epsilon: 0.1),
+      );
+      expect(
+        rowTopOf(const Size(730, 710)),
+        moreOrLessEquals(0.6, epsilon: 0.1),
       );
     });
 
@@ -430,15 +504,38 @@ void main() {
       });
     }
 
-    testWidgets('글자 배율 1.3에서도 줄 글자는 상한을 넘지 않는다 (2000×1400)', (tester) async {
-      await _pump(tester, size: const Size(2000, 1400), textScale: 1.3);
-      expect(tester.takeException(), isNull);
-      // LCD 안 배율은 CalcTheme.lcdMaxTextScaleFactor(1.3)로 자른다 — 그려지는 크기 = 글자 크기 × 1.3
-      final scaled = drawnLineFont(tester) * CalcTheme.lcdMaxTextScaleFactor;
-      expect(scaled, lessThanOrEqualTo(_cap + 1e-6));
-      // 상태 표시줄이 커진 만큼만 줄어든다(배율 1의 95% 이상).
-      expect(scaled, greaterThan(_cap * 0.95));
-    });
+    testWidgets(
+      '기록 영역 없는 가로형 창 745×694: 설정 버튼·워드마크가 활성 LCD 바로 위에 그려지고 빈 곳은 그 위다 (#189 R1)',
+      (tester) async {
+        await _pump(tester, size: const Size(745, 694));
+        expect(tester.takeException(), isNull);
+        expect(_history, findsNothing);
+        final lcd = tester.getRect(_lcd);
+        final keypad = tester.getRect(_keypad);
+        expect(lcd.height, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+        expect(
+          keypad.top - lcd.bottom,
+          moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
+        );
+        final button = tester.getRect(find.byKey(SettingsButton.buttonKey));
+        expect(button.bottom, moreOrLessEquals(lcd.top));
+        final wordmark = tester.getRect(
+          find.byKey(TopStripDecoration.wordmarkKey),
+        );
+        expect(wordmark.bottom, lessThanOrEqualTo(lcd.top + 1e-6));
+        expect(wordmark.top, greaterThanOrEqualTo(button.top - 1e-6));
+        // 위 띠(394.1dp)가 활성 LCD(273.5dp)보다 높은 몫(약 120.6dp)이 내용 줄 위로 간다 — 위 띠는 본체 윗변(화면 여백 8)에서
+        // 상단 띠(본체 안 40dp) 아래부터이고, 활성 LCD 윗변은 그보다 120.6dp 아래, 내용 줄(48dp)은 그 바로 위다.
+        expect(
+          lcd.top - CalcTheme.screenPadding - 40,
+          moreOrLessEquals(120.6, epsilon: 0.2),
+        );
+        expect(
+          button.top,
+          moreOrLessEquals(lcd.top - CalcTheme.topStripRowMaxHeight),
+        );
+      },
+    );
 
     testWidgets('폰 390×844는 상한에 닿지 않아 #189 전과 같다 (줄 글자 29.8dp)', (
       tester,

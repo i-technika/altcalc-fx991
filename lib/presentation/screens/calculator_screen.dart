@@ -1166,7 +1166,7 @@ class _Body extends ConsumerWidget {
     var numbersOnLeft = false;
     // 계산 기록 영역 — 가로형에서 위 띠가 충분히 클 때만 있다 (#142)
     Rect? history;
-    // 상단 띠 내용 줄의 기준 영역 — LCD, 가로형은 위 띠 전체(활성 LCD + 기록)
+    // 상단 띠 내용 줄의 기준 영역 — LCD. 가로형은 [CalcLandscapeLayout.stripBase](기록 영역이 있으면 위 띠 전체, 없으면 활성 LCD)
     Rect? stripBase;
     // 띠 밖에 놓는 설정 버튼 (접힘선 기준 배치). 위아래 배치·가로형은 상단 띠 안에 둔다.
     Rect? settings;
@@ -1332,7 +1332,7 @@ class _Body extends ConsumerWidget {
     final handednessKeepsArrangement = hingeLayouts.values.every(
       (l) => (l == null) == (hingeLayout == null),
     );
-    // 상단 띠 (#41): LCD(가로형은 위 띠 전체) 위에 장식 줄을 두고, 위아래 배치·가로형은 설정 버튼도 그 줄에 둔다.
+    // 상단 띠 (#41): LCD(가로형은 stripBase) 위에 장식 줄을 두고, 위아래 배치·가로형은 설정 버튼도 그 줄에 둔다.
     final strip = CalcTopStripLayout.of(
       body,
       stripBase ?? lcd,
