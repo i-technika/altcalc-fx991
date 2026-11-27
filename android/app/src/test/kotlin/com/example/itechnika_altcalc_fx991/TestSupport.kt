@@ -201,6 +201,13 @@ internal class FakeBinaryMessenger : BinaryMessenger {
         return replies
     }
 
+    /** 플랫폼이 [channel]로 Dart에 보낸 메서드 호출(`MethodChannel.invokeMethod`)을 순서대로 푼다 */
+    fun sentMethodCalls(channel: String): List<MethodCall> =
+        sent.filter { it.first == channel }.map { (_, message) ->
+            val buffer = message ?: throw AssertionError("메서드 호출 메시지가 비어 있다")
+            StandardMethodCodec.INSTANCE.decodeMethodCall(buffer.duplicate().apply { flip() })
+        }
+
     /** 플랫폼이 [channel]로 보낸 이벤트(성공 봉투)를 순서대로 푼다 */
     fun sentEvents(channel: String): List<Any?> =
         sent.filter { it.first == channel }.map { (_, message) ->

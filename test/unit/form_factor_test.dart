@@ -278,6 +278,124 @@ void main() {
         expect(called, isFalse);
       });
     });
+
+    group('여러 창 모드 조회 (#137)', () {
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(FormFactor.deviceChannel, null);
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      void mockChannel(Future<Object?> Function(MethodCall) handler) =>
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(FormFactor.deviceChannel, handler);
+
+      test('Android: 채널 답(bool)을 그대로 쓴다', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final methods = <String>[];
+        Object? reply;
+        mockChannel((call) async {
+          methods.add(call.method);
+          return reply;
+        });
+        reply = true;
+        expect(await FormFactor.queryMultiWindowMode(), isTrue);
+        reply = false;
+        expect(await FormFactor.queryMultiWindowMode(), isFalse);
+        expect(methods, List.filled(2, FormFactor.multiWindowModeMethod));
+      });
+
+      test(
+        'Android: 오류·null·bool 아닌 답이면 모름(null), 채널 미등록이면 false (#137 R1)',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          mockChannel((_) async => throw PlatformException(code: 'x'));
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          mockChannel((_) async => null);
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          mockChannel((_) async => 'true');
+          expect(await FormFactor.queryMultiWindowMode(), isNull);
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(FormFactor.deviceChannel, null);
+          expect(
+            await FormFactor.queryMultiWindowMode(),
+            isFalse,
+          ); // MissingPlugin
+        },
+      );
+
+      test('Android: 제한 시간 안에 답이 없으면 모름(null)', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final never = Completer<ByteData?>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMessageHandler(
+              FormFactor.deviceChannel.name,
+              (_) => never.future,
+            );
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMessageHandler(FormFactor.deviceChannel.name, null),
+        );
+        final watch = Stopwatch()..start();
+        expect(await FormFactor.queryMultiWindowMode(), isNull);
+        expect(
+          watch.elapsed,
+          greaterThanOrEqualTo(FormFactor.multiWindowQueryTimeout),
+        );
+      });
+
+      test('Android의 변경 알림을 받아 넘기고, 다른 호출은 모른다고 답한다 (#137 R1)', () async {
+        final received = <bool>[];
+        FormFactor.onMultiWindowModeChanged(received.add);
+        addTearDown(() => FormFactor.onMultiWindowModeChanged(null));
+        const codec = StandardMethodCodec();
+        Future<ByteData?> send(MethodCall call) {
+          final reply = Completer<ByteData?>();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .handlePlatformMessage(
+                FormFactor.deviceChannel.name,
+                codec.encodeMethodCall(call),
+                reply.complete,
+              );
+          return reply.future;
+        }
+
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, true),
+        );
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, false),
+        );
+        // bool이 아닌 인자는 false로 읽는다
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, 'yes'),
+        );
+        expect(received, [true, false, false]);
+        // 모르는 호출은 notImplemented(빈 응답)
+        expect(await send(const MethodCall('noSuchMethod')), isNull);
+        expect(received, hasLength(3));
+
+        // 듣지 않으면 아무것도 받지 않는다
+        FormFactor.onMultiWindowModeChanged(null);
+        await send(
+          const MethodCall(FormFactor.multiWindowModeChangedMethod, true),
+        );
+        expect(received, hasLength(3));
+      });
+
+      test('iOS: 채널을 부르지 않고 false', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        var called = false;
+        mockChannel((_) async {
+          called = true;
+          return true;
+        });
+        expect(await FormFactor.queryMultiWindowMode(), isFalse);
+        expect(called, isFalse);
+      });
+    });
   });
 
   group('방향 요청', () {
@@ -311,6 +429,31 @@ void main() {
         FormFactor.orientationPolicyOf(DeviceKind.tablet, tabletDisplay),
         OrientationPolicy.landscape,
       );
+    });
+
+    test('여러 창 모드(분할 화면·자유 형식 창)는 기기와 상관없이 방향을 고정하지 않는다 (#137)', () {
+      // 고정하면 창 모양이 요청 방향과 다를 때 Android가 레터박스로 줄인다(폰 1/3 분할 창 411×305 → 301.7×304.8dp)
+      for (final (kind, display) in const [
+        (DeviceKind.phone, phoneDisplay),
+        (DeviceKind.foldable, coverDisplay),
+        (DeviceKind.foldable, innerDisplay),
+        (DeviceKind.tablet, tabletDisplay),
+      ]) {
+        expect(
+          FormFactor.orientationPolicyOf(kind, display, multiWindow: true),
+          OrientationPolicy.any,
+          reason: '$kind $display',
+        );
+        expect(
+          FormFactor.orientationPolicyOf(
+            kind,
+            display,
+            multipleHinges: true,
+            multiWindow: true,
+          ),
+          OrientationPolicy.any,
+        );
+      }
     });
 
     test('정책별 방향 목록', () {

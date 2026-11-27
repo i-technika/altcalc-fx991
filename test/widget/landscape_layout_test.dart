@@ -393,6 +393,10 @@ void main() {
   group('기록 없는 작은 가로형 창의 큰 글자 배율', () {
     for (final (size, padding) in const [
       (Size(411, 400), EdgeInsets.only(top: 24)),
+      // Android 16 폰 에뮬레이터 실측 분할 창(#137 R1): 1/3 위·아래(3버튼), 320×568dp 화면의 1/2 위
+      (Size(411.43, 304.76), EdgeInsets.only(top: 24)),
+      (Size(411.43, 304.76), EdgeInsets.only(bottom: 48)),
+      (Size(320, 278.86), EdgeInsets.only(top: 24)),
       (Size(640, 360), EdgeInsets.only(top: 24)),
       (Size(568, 320), EdgeInsets.zero),
       (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21)),

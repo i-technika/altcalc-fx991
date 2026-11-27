@@ -153,8 +153,11 @@ void main() {
   group('짧은 창은 키가 더 큰 가로형으로 그린다 (#38, #142)', () {
     // (창, 인셋, 그린 키 터치 하한 — CalcTheme "짧은 창" 절의 실측값을 내림)
     const cases = [
-      (Size(411, 400), EdgeInsets.only(top: 24), 21.0), // 폰 분할 화면 위 (미리보기 프리셋)
-      (Size(411, 420), EdgeInsets.only(bottom: 48), 21.0), // 폰 분할 화면 아래
+      // 폰 1/3 분할 창 — Android 16 에뮬레이터 실측(#137). 위 창(미리보기 프리셋)과 3버튼 내비게이션의 아래 창
+      (Size(411.43, 304.76), EdgeInsets.only(top: 24), 21.0),
+      (Size(411.43, 304.76), EdgeInsets.only(bottom: 48), 20.0),
+      // 화면을 320×568dp로 줄인 에뮬레이터의 1/2 분할 위 창(#137) — 안내 바로 위
+      (Size(320, 278.86), EdgeInsets.only(top: 24), 16.0),
       (Size(844, 390), EdgeInsets.only(left: 47, right: 47, bottom: 21), 37.0),
       (Size(640, 360), EdgeInsets.only(top: 24), 31.0),
       (Size(568, 320), EdgeInsets.zero, 29.0),
@@ -299,9 +302,11 @@ void main() {
 
   group('짧은 창이어도 위아래 배치의 키가 더 크면 위아래 배치다', () {
     for (final (size, padding) in const [
-      // 폰 분할 화면 위: 키 22.1dp — 가로형은 21.7dp (#190에서 상단 띠 최소 높이 12dp가 키패드로 가 위아래 배치가 이겼다.
-      // 그 전 예시 412×520은 키 28.7dp로 일반 하한을 넘어 짧은 창이 아니다.)
-      (Size(411, 420), EdgeInsets.only(top: 24)),
+      // 폰 1/2 분할 창 — Android 16 에뮬레이터 실측(#137): 위 창 키 24.5dp, 3버튼 내비게이션의 아래 창 22.8dp. 가로형보다
+      // 커 위아래 배치다. (#38에서 가정한 411×420도 #190 뒤로 위아래 배치였다. 그 전 예시 412×520은 키 28.7dp로 일반
+      // 하한을 넘어 짧은 창이 아니다.)
+      (Size(411.43, 452.19), EdgeInsets.only(top: 24)),
+      (Size(411.43, 452.19), EdgeInsets.only(bottom: 48)),
       // iPhone 4s 크기: 키 25.8dp로 일반 하한 미만이지만 가로형은 약 16.7dp. (#141 전의 예시 iPhone SE 1세대
       // 320×568은 맨 아래 광고 슬롯이 빠져 키 31.1dp로 일반 하한을 넘어 짧은 창이 아니다.)
       (Size(320, 480), EdgeInsets.only(top: 20)),

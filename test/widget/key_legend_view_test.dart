@@ -43,57 +43,93 @@ void main() {
   setUpAll(() async => loadBundledFonts());
 
   group('잉크 범위 표 (KeyLegendView.glyphInk)', () {
-    test('2차원 각인의 모든 글자가 표에 있다', () {
+    test('2차원 각인의 모든 글자가 표에 있다 (변수 이탤릭 글자는 이탤릭 표에)', () {
       final missing = {
         for (final (_, legend, _) in _twoDimensional())
           for (final piece in legend.texts)
-            for (final ch in piece.text.split(''))
-              if (!KeyLegendView.glyphInk.containsKey(ch)) ch,
+            for (final (i, ch) in piece.text.split('').indexed)
+              if (!(CalcTheme.isKeyVariableLetter(piece.text, i)
+                      ? KeyLegendView.variableGlyphInk
+                      : KeyLegendView.glyphInk)
+                  .containsKey(ch))
+                ch,
       };
       expect(missing, isEmpty, reason: '표에 없으면 한 줄 상자를 잉크로 봐 배치가 성겨진다');
     });
 
-    test('표의 값은 번들 글꼴의 glyf 잉크 범위와 0.012em 안에서 같다 (각인에 쓰는 굵기 모두)', () async {
-      // 메인 각인은 SemiBold, SHIFT·ALPHA 각인은 Medium이다. ∫·∑는 대체 글꼴 Noto Sans Math에만 있다.
-      final fonts = {
-        'SemiBold': await rootBundle.load(
-          'assets/fonts/NotoSansMono-SemiBold.ttf',
-        ),
-        'Medium': await rootBundle.load('assets/fonts/NotoSansMono-Medium.ttf'),
-      };
-      final math = await rootBundle.load(
-        'assets/fonts/NotoSansMath-Regular.ttf',
-      );
-      expect(
-        {
-          CalcTheme.keyMainLabelStyle.fontWeight,
-          CalcTheme.keyShiftLabelStyle.fontWeight,
-          CalcTheme.keyAlphaLabelStyle.fontWeight,
-        },
-        {FontWeight.w600, FontWeight.w500},
-        reason: '굵기가 바뀌면 위 글꼴 목록도 바꾼다',
-      );
-      for (final MapEntry(key: ch, value: (yMin, yMax))
-          in KeyLegendView.glyphInk.entries) {
-        final code = ch.runes.single;
-        final sources = readCmap(fonts['Medium']!).containsKey(code)
-            ? fonts.entries.toList()
-            : [MapEntry('Math', math)];
-        for (final MapEntry(key: weight, value: data) in sources) {
-          final bounds = readGlyphYBounds(data, code)!;
+    test(
+      '표의 값은 그 글자를 그리는 번들 글꼴의 glyf 잉크 범위와 0.012em 안에서 같다 (각인에 쓰는 굵기 모두, #156)',
+      () async {
+        // 메인 각인은 SemiBold, SHIFT·ALPHA 각인은 Medium이다. 글자는 각인 글꼴 Saira에서, Saira에 없는 기호는 대체 글꼴
+        // Noto Sans Mono에서, ∫·∑는 Noto Sans Math에서 찾는다(CalcTheme.keyFontFallback 순서).
+        final key = {
+          'SemiBold': await rootBundle.load('assets/fonts/Saira-SemiBold.ttf'),
+          'Medium': await rootBundle.load('assets/fonts/Saira-Medium.ttf'),
+        };
+        final mono = {
+          'SemiBold': await rootBundle.load(
+            'assets/fonts/NotoSansMono-SemiBold.ttf',
+          ),
+          'Medium': await rootBundle.load(
+            'assets/fonts/NotoSansMono-Medium.ttf',
+          ),
+        };
+        final math = await rootBundle.load(
+          'assets/fonts/NotoSansMath-Regular.ttf',
+        );
+        expect(
+          {
+            CalcTheme.keyMainLabelStyle.fontWeight,
+            CalcTheme.keyShiftLabelStyle.fontWeight,
+            CalcTheme.keyAlphaLabelStyle.fontWeight,
+          },
+          {FontWeight.w600, FontWeight.w500},
+          reason: '굵기가 바뀌면 위 글꼴 목록도 바꾼다',
+        );
+        void check(
+          String ch,
+          (double, double) ink,
+          String name,
+          ByteData font,
+        ) {
+          final bounds = readGlyphYBounds(font, ch.runes.single)!;
           expect(
-            yMin,
+            ink.$1,
             moreOrLessEquals(bounds.yMin, epsilon: 0.012),
-            reason: '$ch $weight yMin',
+            reason: '$ch $name yMin',
           );
           expect(
-            yMax,
+            ink.$2,
             moreOrLessEquals(bounds.yMax, epsilon: 0.012),
-            reason: '$ch $weight yMax',
+            reason: '$ch $name yMax',
           );
         }
-      }
-    });
+
+        for (final MapEntry(key: ch, value: ink)
+            in KeyLegendView.glyphInk.entries) {
+          final code = ch.runes.single;
+          // `⇔`는 일부러 수학 글꼴로 그린다 (CalcTheme.isKeyMathSymbol, #156 R2)
+          final sources = CalcTheme.isKeyMathSymbol(ch)
+              ? {'Math': math}
+              : readCmap(key['Medium']!).containsKey(code)
+              ? key
+              : readCmap(mono['Medium']!).containsKey(code)
+              ? mono
+              : {'Math': math};
+          for (final MapEntry(key: weight, value: data) in sources.entries) {
+            check(ch, ink, weight, data);
+          }
+        }
+        // 변수 이탤릭 글자는 Noto Serif Bold Italic 하나로 그린다(굵기와 무관).
+        final italic = await rootBundle.load(
+          'assets/fonts/NotoSerif-BoldItalic.ttf',
+        );
+        for (final MapEntry(key: ch, value: ink)
+            in KeyLegendView.variableGlyphInk.entries) {
+          check(ch, ink, 'BoldItalic', italic);
+        }
+      },
+    );
   });
 
   group('크기·기준선', () {
@@ -101,17 +137,15 @@ void main() {
       tester,
     ) async {
       const style = CalcTheme.keyShiftLabelStyle;
-      // `log`는 내림 글자 g가 한 줄 아래로 나가지만 Text처럼 한 줄 상자만 쓴다.
-      for (final text in ['SOLVE', 'A', '⇔', 'log']) {
+      // `log`는 내림 글자 g가 한 줄 아래로 나가지만 Text처럼 한 줄 상자만 쓴다. 키 버튼의 Text와 같이 글자 조각(변수 이탤릭·
+      // 수학 기호 `⇔`, #156)과 각인 strut로 그린다.
+      for (final text in ['SOLVE', 'A', '⇔', 'log', 'x!', 'S⇔D']) {
+        final sized = style.copyWith(fontSize: 100);
         await tester.pumpWidget(
           _host(
-            Text(
-              text,
-              style: style.copyWith(fontSize: 100),
-              strutStyle: StrutStyle.fromTextStyle(
-                style.copyWith(fontSize: 100),
-                forceStrutHeight: true,
-              ),
+            Text.rich(
+              keyLabelSpan(text, sized),
+              strutStyle: keyLabelStrut(sized),
             ),
           ),
         );
@@ -469,6 +503,57 @@ void main() {
       expect(sum.inkBottom, greaterThanOrEqualTo(derivative.inkBottom - 1e-9));
     });
 
+    test('분수 키 각인 높이는 사진(약 1.13em)이고, 굵게 한 각인(#206)이 메인·SHIFT 각인 높이 맞춤의 기준 각인을 넘지 않는다', () {
+      // 사진의 분수 키 각인 높이 37.9px ÷ 33.5px ≈ 1.13em
+      final fraction = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.fraction).mainLegend,
+        CalcTheme.keyMainLabelStyle,
+      );
+      expect(
+        fraction.inkTop - fraction.inkBottom,
+        moreOrLessEquals(37.9 / 33.5, epsilon: 0.02),
+      );
+      // 키패드 통일 글자 크기의 높이 맞춤(KeypadMetrics)은 가장 높은 각인이 정한다 — 메인은 ∫◻◻◼, SHIFT·ALPHA는
+      // d/dx◼다. 분수 키(메인)·∛◼(SHIFT, 지수가 굵은 근호 머리 위로 올라감)를 굵게 해도 어느 글자 크기에서든(작은 글자의
+      // 줄 상자 반올림 포함) 실제 배치 높이가 그 기준을 넘지 않아야 글자 크기가 #206 전과 같다(#206 R1).
+      final integral = keyDefOf(CalcKeyId.integral);
+      for (final (isMain, reference) in [
+        (true, integral.mainLegend),
+        (false, integral.shiftLegend!),
+      ]) {
+        // 메인·SHIFT·ALPHA는 각인을 그리는 스타일로 나눈다(같은 const 각인이 두 자리에 쓰여도 섞이지 않게, #206 R2).
+        // SHIFT·ALPHA 스타일은 글꼴·굵기가 같아 기준 높이는 SHIFT 스타일로 잰다.
+        final legends = [
+          for (final (_, legend, style) in _twoDimensional())
+            if (identical(style, CalcTheme.keyMainLabelStyle) == isMain)
+              (legend, style),
+        ];
+        final referenceStyle = isMain
+            ? CalcTheme.keyMainLabelStyle
+            : CalcTheme.keyShiftLabelStyle;
+        expect(
+          CalcTheme.keyAlphaLabelStyle.fontWeight,
+          CalcTheme.keyShiftLabelStyle.fontWeight,
+        );
+        for (var f = 3.0; f <= 40; f += 0.1) {
+          final limit = KeyLegendView.layoutSize(
+            reference,
+            referenceStyle.copyWith(fontSize: f),
+          ).height;
+          for (final (legend, style) in legends) {
+            expect(
+              KeyLegendView.layoutSize(
+                legend,
+                style.copyWith(fontSize: f),
+              ).height,
+              lessThanOrEqualTo(limit + 1e-9),
+              reason: '${legend.plainText} 글자 $f',
+            );
+          }
+        }
+      }
+    });
+
     /// [legend]를 글자 크기 [fontSize]·빨간색으로 그려 잉크 픽셀을 `(x, y)` 목록으로 돌려준다.
     Future<List<(int, int)>> inkPixels(
       WidgetTester tester,
@@ -648,6 +733,53 @@ void main() {
       }
     });
 
+    testWidgets(
+      '빈 칸 테두리는 모든 모양에서 칸 짧은 변의 1/4이고, 구멍이 칸의 절반이다 (#206 사진 0.24~0.31)',
+      (tester) async {
+        for (final shape in LegendBoxShape.values) {
+          final ink = await inkPixels(
+            tester,
+            LegendBox(shape, filled: false),
+            200,
+          );
+          final (left, top, right, bottom) = boundsOf(ink);
+          final width = right - left + 1;
+          final height = bottom - top + 1;
+          final short = math.min(width, height);
+          final wall = short * CalcTheme.keyLegendBoxStrokeRatio;
+          // 가운데 가로줄·세로줄 단면: 벽 둘과 그 사이 구멍
+          final midY = (top + bottom) ~/ 2;
+          final midX = (left + right) ~/ 2;
+          final across = runsOf(
+            ink.where((p) => p.$2 == midY).map((p) => p.$1),
+          );
+          final down = runsOf(ink.where((p) => p.$1 == midX).map((p) => p.$2));
+          for (final (name, runs, length) in [
+            ('가로', across, width),
+            ('세로', down, height),
+          ]) {
+            expect(runs, hasLength(2), reason: '$shape $name $runs');
+            for (final run in runs) {
+              expect(
+                run.$2 - run.$1 + 1,
+                moreOrLessEquals(wall, epsilon: 1.5),
+                reason: '$shape $name 벽',
+              );
+            }
+            final hole = runs.last.$1 - runs.first.$2 - 1;
+            expect(hole, closeTo(length - 2 * wall, 2), reason: '$shape $name');
+          }
+          // 짧은 변 방향의 구멍은 칸의 절반 (#169 R2 — 작은 각인에서도 빈 칸이 메워지지 않는다)
+          final shortRuns = width <= height ? across : down;
+          expect(
+            (shortRuns.last.$1 - shortRuns.first.$2 - 1) / short,
+            moreOrLessEquals(0.5, epsilon: 0.03),
+            reason: '$shape',
+          );
+        }
+      },
+    );
+
     test('비가 1인 칸은 글꼴 칸 ◼와 폭·잉크 높이가 같고, 좌우 여백은 번들 글꼴 ◼의 여백이다', () async {
       // 정사각형 자리(x^◼)는 #186 전의 글꼴 칸과 같은 자리·폭을 차지한다 — 칸 모양을 바꿔도 이웃 글자 간격이 그대로다.
       const square = LegendBox(LegendBoxShape.powerExponent, filled: true);
@@ -705,13 +837,14 @@ void main() {
         );
         final baseline = l.$4; // l의 아래끝
         // 칸은 열 구간이 아니라 높이 띠로 찾는다 — 사진처럼 두 칸이 맞닿아 한 열 구간이 되어도 찾을 수 있다(R2).
-        // g 윗끝(0.55em)·밑 칸 윗끝(약 0.32em)보다 높은 띠에는 l과 진수 칸 왼쪽·오른쪽 벽만 있다.
+        // g 윗끝(0.52em)·밑 칸 윗끝(약 0.32em)보다 높고 진수 칸 위 벽(l 윗끝 0.743em(#156 Saira)에서 칸 폭 약 0.37em의 1/4
+        // ≈ 0.093em 아래까지, #206)보다 낮은 띠에는 l과 진수 칸 왼쪽·오른쪽 벽만 있다.
         final high = runsOf(
           ink
               .where(
                 (p) =>
-                    p.$2 < baseline - fontSize * 0.6 &&
-                    p.$2 > baseline - fontSize * 0.7,
+                    p.$2 < baseline - fontSize * 0.56 &&
+                    p.$2 > baseline - fontSize * 0.63,
               )
               .map((p) => p.$1),
         );
@@ -817,7 +950,98 @@ void main() {
         final bar = rowBounds(rows[1]);
         expect(
           (bar.$3 - bar.$1 + 1) / (part.$3 - part.$1 + 1),
-          moreOrLessEquals(1.46, epsilon: 0.08),
+          moreOrLessEquals(1.46, epsilon: 0.02),
+        );
+        // 두께·간격 (#206): 사진(칸 높이 14px 대비) 가로줄 4.9px ≈ 0.35, 간격 2.4~2.5px ≈ 0.17, 분모 테두리 3.4~4.0px
+        // ≈ 0.26, 각인 전체 37.9px ≈ 2.7
+        final box = (part.$4 - part.$2 + 1).toDouble();
+        double ofBox(int pixels) => pixels / box;
+        expect(ofBox(rows[1].$2 - rows[1].$1 + 1), closeTo(4.9 / 14, 0.04));
+        expect(ofBox(rows[1].$1 - rows[0].$2 - 1), closeTo(2.45 / 14, 0.04));
+        expect(ofBox(rows[2].$1 - rows[1].$2 - 1), closeTo(2.45 / 14, 0.04));
+        expect(
+          ofBox(rows.last.$2 - rows.first.$1 + 1),
+          closeTo(37.9 / 14, 0.1),
+        );
+        final den = rowBounds(rows.last);
+        final denColumn = runsOf(
+          ink
+              .where((p) => p.$1 == (den.$1 + den.$3) ~/ 2 && p.$2 >= den.$2)
+              .map((p) => p.$2),
+        );
+        expect(denColumn, hasLength(2), reason: '분모 위·아래 벽 $denColumn');
+        for (final wall in denColumn) {
+          expect(ofBox(wall.$2 - wall.$1 + 1), closeTo(0.26, 0.03));
+        }
+      },
+    );
+
+    testWidgets('굵은 근호에서도 지수(∛◼의 3, ◼√◻의 지수 칸)·피개법수는 근호와 떨어져 있다 (#206 R1)', (
+      tester,
+    ) async {
+      // 잉크 픽셀의 8방향 연결 성분 수 — 지수·근호·피개법수가 서로 닿지 않으면 3이다(∛의 3은 한 획이다).
+      int components(List<(int, int)> ink) {
+        final remaining = ink.toSet();
+        var count = 0;
+        while (remaining.isNotEmpty) {
+          count++;
+          final stack = [remaining.first];
+          remaining.remove(stack.first);
+          while (stack.isNotEmpty) {
+            final (x, y) = stack.removeLast();
+            for (var dx = -1; dx <= 1; dx++) {
+              for (var dy = -1; dy <= 1; dy++) {
+                if (remaining.remove((x + dx, y + dy))) {
+                  stack.add((x + dx, y + dy));
+                }
+              }
+            }
+          }
+        }
+        return count;
+      }
+
+      for (final legend in [
+        keyDefOf(CalcKeyId.sqrt).shiftLegend!,
+        keyDefOf(CalcKeyId.power).shiftLegend!,
+      ]) {
+        // 큰 글자와 실제 크기대(각인 약 9dp × 기기 배율 2.625 ≈ 24px)
+        for (final fontSize in [140.0, 24.0]) {
+          final ink = await inkPixels(tester, legend, fontSize);
+          expect(components(ink), 3, reason: '${legend.plainText} $fontSize');
+        }
+      }
+    });
+
+    testWidgets(
+      '그린 √ 각인: 근호 가로줄 두께는 피개법수 칸 높이의 약 0.3이다 (#206 사진 4.7px / 15.7px)',
+      (tester) async {
+        const fontSize = 140.0;
+        final ink = await inkPixels(
+          tester,
+          keyDefOf(CalcKeyId.sqrt).mainLegend,
+          fontSize,
+        );
+        final (_, _, right, inkBottom) = boundsOf(ink);
+        // 오른쪽 끝 근처 세로 단면: 근호 가로줄 → 간격 → 채운 피개법수 칸
+        final x = right - (fontSize * 0.25).round();
+        final column = runsOf(ink.where((p) => p.$1 == x).map((p) => p.$2));
+        expect(column, hasLength(2), reason: '근호 가로줄·피개법수 칸 $column');
+        final bar = column.first.$2 - column.first.$1 + 1;
+        final box = column.last.$2 - column.last.$1 + 1;
+        expect(bar / box, closeTo(4.7 / 15.7, 0.04));
+        expect(
+          bar,
+          moreOrLessEquals(
+            fontSize * CalcTheme.keyLegendRadicalStroke,
+            epsilon: 2,
+          ),
+        );
+        // 아래 꼭짓점 잉크는 선 두께와 상관없이 칸 아래끝보다 약 0.065em 아래다(사진 약 2px ≈ 0.06em, #206 R1 —
+        // 선을 굵게 한 만큼 더 내려가지 않는다).
+        expect(
+          inkBottom - column.last.$2,
+          moreOrLessEquals(fontSize * 0.065, epsilon: 2),
         );
       },
     );
@@ -911,7 +1135,7 @@ void main() {
             arrangement: KeypadArrangement.wide,
           ),
         ]) {
-          ({double main, double legend}) limits([
+          ({double main, double numberMain, double legend}) limits([
             bool Function(CalcKeyDef)? where,
           ]) => KeypadMetrics.debugWidthLimits(
             functionKeyWidth: m.functionKeyWidth,
@@ -1028,7 +1252,7 @@ void main() {
     testWidgets('그린 분수 가로줄·근호 선은 최소 두께로 굵어져도 각인 상자 안에 있다', (tester) async {
       // 선은 글자 크기가 작으면 CalcTheme.keyLegendMinStroke로 굵게 칠한다(#155 R1 m8). 굵어진 선(반 두께 포함)이
       // 상자 밖에 그려지면 키캡·각인 띠 경계를 넘는다.
-      for (final fontSize in [4.0, 6.0, 9.0, 20.0]) {
+      for (final fontSize in [3.2, 3.5, 4.0, 6.0, 9.0, 20.0]) {
         for (final (k, legend, style) in _twoDimensional()) {
           await tester.pumpWidget(
             _host(

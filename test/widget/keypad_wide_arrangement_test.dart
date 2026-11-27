@@ -8,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/korean_locale.dart';
+import '../support/semantics_hit_testing.dart';
 
 /// 넓은 키패드 배열 (#80) — 숫자부를 함수부 오른쪽에 나란히 두는 배열의 치수·배치·선택 규칙.
 
@@ -534,6 +535,11 @@ void main() {
         expect(order.sublist(firstNumber), [
           for (final r in numberRows) ...r.map((d) => d.id),
         ]);
+        // 터치 탐색: 커서 패드 셀 어디를 짚어도 semanticSectorAt 방향의 노드에 닿는다 (#203)
+        expectCursorPadTouchExplorationMatchesSpec(
+          tester,
+          reason: '${arrangement.name} $numbersOnLeft',
+        );
         handle.dispose();
       });
     }

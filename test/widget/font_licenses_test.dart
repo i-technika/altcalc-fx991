@@ -40,7 +40,8 @@ void main() {
       expect(matching, hasLength(1), reason: family);
       final text = matching.single.paragraphs.map((p) => p.text).join(' ');
       expect(text, contains('SIL Open Font License, Version 1.1'));
-      expect(text, contains('The Noto Project Authors'));
+      // 저작권자는 글꼴마다 다르다 (Saira는 Saira 프로젝트, 나머지는 Noto 프로젝트 — assets/fonts/README.md)
+      expect(text, contains(RegExp(r'The (Noto|Saira) Project Authors')));
     }
   });
 

@@ -129,6 +129,14 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
     등록·주입 스크립트와 판정 방법(화면 캡처의 초록 초점 테두리 + `uiautomator dump` 노드 경계)은 PR #204 본문과 #203 코멘트에 있다.
   - 분할 화면: `adb shell dumpsys activity service SystemUIService WMShell splitscreen moveToSideStage <다른 앱 taskId> 0`
     (`am stack list`로 taskId를 본다). `uiautomator dump`는 초점 창만 읽으므로 앱을 `am start`로 다시 앞에 둔다.
+    분할선은 `input swipe 540 <분할선 y> 540 <목표 y> 1500`으로 옮긴다 — 폰에서는 1/3·1/2·2/3에서만 멈춘다(#137).
+    앱 창이 레터박스로 줄었는지는 `dumpsys activity activities | grep letterboxReason`으로 본다.
+  - 자유 형식 창(#137): `settings put global enable_freeform_support 1`·`settings put global force_resizable_activities 1` 뒤
+    `am start --windowingMode 5 -n <앱>`으로 띄우고 `am task resize <taskId> <왼> <위> <오른> <아래>`(px)로 크기를 바꾼다(최소 약 220dp).
+    끝나면 두 설정을 0으로 되돌린다.
+  - TalkBack이 읽은 문구: TalkBack 설정 → 고급 설정 → 개발자 설정 → "음성 출력 표시"를 켜면 화면 아래에 읽은 문구가 떠
+    `screencap`으로 남길 수 있다(#137 — 창이 너무 작다는 안내를 확인). 끝나면 끈다.
+    설정 화면은 `am start -n com.google.android.marvin.talkback/com.android.talkback.TalkBackPreferencesActivity`로 연다(`-S`를 붙이면 TalkBack이 꺼진다).
   - `adb -s <기기> shell pm path com.google.android.marvin.talkback`가 `/product/app/talkback/talkback.apk`였다:
     `AltCalc_Phone_API34`(`google_apis`)·`Medium_Phone_API_36.1`(Play 이미지) (실측).
     `AltCalc_Pixel_Fold_API36`(폴더블)은 `Medium_Phone_API_36.1`과 같은 시스템 이미지(`android-36.1/google_apis_playstore`)다.

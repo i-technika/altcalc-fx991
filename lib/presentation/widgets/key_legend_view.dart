@@ -10,8 +10,9 @@ import '../../core/theme/calc_theme.dart';
 ///
 /// 분수는 위아래로 쌓고 가로줄을 긋고, 위첨자·아래첨자는 작게 올리거나 내리며, 근호는 가로줄이 피개법수를
 /// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 입력 칸([LegendBox])은 모두 글자 대신 자리별 비율의
-/// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
-/// 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
+/// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(#156부터 번들 Saira, 기호는 대체 글꼴 Noto Sans Mono, ∫·∑는
+/// Noto Sans Math(`⇔`도), 변수 `x`·`y`·`π`·`e`는 이탤릭 세리프 — [keyLabelSpan])로, 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를
+/// 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
 ///
 /// ## 크기·기준선
 /// - 크기는 [textScaler]를 반영한 글자 크기로 배치한 각인의 폭과, **한 줄 상자**(같은 글자 크기의
@@ -42,37 +43,46 @@ class KeyLegendView extends LeafRenderObjectWidget {
 
   /// 잉크 범위 표 — 2차원 각인에 쓰는 글자의 세로 잉크 범위 `(아래끝, 위끝)` (글자 크기 대비, 기준선 위가 +).
   ///
-  /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값(SemiBold·Medium의 평균,
-  /// ∫·∑는 Noto Sans Math)을 적어 둔다. 실제 글꼴과 맞는지, 2차원 각인의 모든 글자가 표에 있는지
-  /// 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를 잉크로 본다.
+  /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값을 적어 둔다 — 그 글자를 실제로 그리는 글꼴의
+  /// 값이다: 글자·숫자는 각인 글꼴 Saira(SemiBold·Medium의 평균, #156), 기호(`◼`·`◻`·`−`·`×`·`⇔`)는 대체 글꼴 Noto Sans
+  /// Mono, ∫·∑·⇔는 Noto Sans Math(`⇔`는 #156 R2 — [CalcTheme.isKeyMathSymbol]). 변수 이탤릭 글자(`x`·`y`·`e`)는
+  /// [variableGlyphInk]에 따로 둔다. 실제 글꼴과 맞는지, 2차원
+  /// 각인의 모든 글자가 표에 있는지 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를
+  /// 잉크로 본다.
   ///
   /// `◼`는 직접 그리는 칸의 기본 높이로 쓴다. `◻`는 그리는 데 쓰지 않지만, 칸의 한 줄 표기 글자([LegendBox.texts])라
   /// "2차원 각인의 모든 글자가 표에 있다" 검사가 찾으므로 함께 둔다(글자 조각으로 다시 쓰일 때도 맞는 값이다).
   static const Map<String, (double, double)> glyphInk = {
     '◼': (0.0, 0.482),
     '◻': (0.0, 0.482),
-    '0': (-0.01, 0.724),
-    '1': (0.0, 0.714),
-    '2': (0.0, 0.724),
-    '3': (-0.01, 0.724),
-    'x': (0.0, 0.54),
-    'a': (-0.01, 0.55),
-    'b': (-0.01, 0.76),
-    'c': (-0.01, 0.55),
-    'd': (-0.01, 0.76),
-    'e': (-0.01, 0.55),
-    'g': (-0.245, 0.551),
-    'i': (0.0, 0.768),
-    'l': (0.0, 0.76),
-    'n': (0.0, 0.55),
-    'o': (-0.01, 0.55),
-    's': (-0.01, 0.55),
-    't': (-0.01, 0.68),
+    '0': (-0.008, 0.696),
+    '1': (0.0, 0.688),
+    '2': (0.0, 0.696),
+    '3': (-0.008, 0.696),
+    'a': (-0.008, 0.518),
+    'b': (-0.008, 0.743),
+    'c': (-0.008, 0.518),
+    'd': (-0.008, 0.743),
+    'g': (-0.206, 0.518),
+    'i': (0.0, 0.743),
+    'l': (0.0, 0.743),
+    'n': (0.0, 0.518),
+    'o': (-0.008, 0.518),
+    's': (-0.008, 0.518),
+    't': (0.0, 0.658),
     '−': (0.294, 0.396),
     '×': (0.136, 0.57),
-    '⇔': (-0.02, 0.358),
+    '⇔': (-0.034, 0.59),
     '∫': (-0.238, 0.893),
     '∑': (-0.24, 0.714),
+  };
+
+  /// 변수 이탤릭 글자([CalcTheme.isKeyVariableLetter])의 세로 잉크 범위 — 번들 Noto Serif Bold Italic의 `glyf` 값 (#156).
+  /// [glyphInk]와 같은 규칙이고, 이탤릭으로 그리는 글자만 담는다(`y`는 지금 2차원 각인에 없지만 변수 글자라 함께 둔다).
+  static const Map<String, (double, double)> variableGlyphInk = {
+    'x': (0.0, 0.536),
+    'y': (-0.24, 0.546),
+    'e': (-0.01, 0.546),
   };
 
   /// 측정 기준 글자 크기 — 크기는 글자 크기에 비례한다고 보고 1dp당 크기(em 크기)를 구한다.
@@ -294,10 +304,13 @@ sealed class _Op {
 final class _TextOp extends _Op {
   final TextPainter painter;
 
+  /// 그린 글자열 (색만 바꿀 때 같은 글자 조각을 다시 만든다)
+  final String text;
+
   /// 글자 상자 왼쪽 위 (조각 원점 기준, 위가 +)
   final Offset topLeft;
 
-  const _TextOp(this.painter, this.topLeft);
+  const _TextOp(this.painter, this.text, this.topLeft);
 }
 
 final class _BarOp extends _Op {
@@ -362,9 +375,9 @@ class _LegendLayout {
     for (final (_, op) in _ops) {
       if (op is _TextOp) {
         final span = op.painter.text! as TextSpan;
-        op.painter.text = TextSpan(
-          text: span.text,
-          style: span.style!.copyWith(color: color),
+        op.painter.text = keyLabelSpan(
+          op.text,
+          span.style!.copyWith(color: color),
         );
       }
     }
@@ -383,6 +396,8 @@ class _LegendLayout {
             fontSize,
             partScale: CalcTheme.keyLegendDisplayFractionScale,
             overhangRatio: CalcTheme.keyLegendDisplayFractionOverhang,
+            barRatio: CalcTheme.keyLegendDisplayFractionBarThickness,
+            gapRatio: CalcTheme.keyLegendDisplayFractionGap,
           )
         : builder.layout(legend, fontSize);
     // 한 줄 상자: 바탕 글자 크기의 strut 한 줄 (글자만 있는 각인의 `Text`와 같은 상자).
@@ -461,15 +476,17 @@ class _Builder {
 
   // ── 근호 모양 (글자 크기 대비, 근호 왼쪽 부분 폭은 [CalcTheme.keyLegendRadicalSignWidth]) ──
 
-  /// 근호 아래 끝이 피개법수 잉크 아래끝(또는 기준선)보다 더 내려가는 길이
-  static const double _radicalBottomDrop = 0.03;
+  /// 근호 아래 꼭짓점의 **잉크** 아래끝이 피개법수 잉크 아래끝(또는 기준선)보다 더 내려가는 길이. 꼭짓점은 둥근 이음이라
+  /// 잉크가 선 가운데보다 반 두께 아래까지 내려가므로, 선 가운데는 반 두께만큼 올려 둔다 — 선 두께와 상관없이 잉크가 내려가는
+  /// 길이가 같다. #206 전(선 0.07em, 선 가운데 0.03em 아래)의 잉크 깊이 0.065em과 같고, 근접 사진(꼭짓점이 칸 아래끝보다
+  /// 약 2px ≈ 0.06em 아래)과도 맞는다(#206 R1).
+  static const double _radicalBottomInkDrop = 0.065;
 
-  /// 머리(왼쪽 시작점) 높이 — 근호 아래 끝에서 위끝까지의 비율
+  /// 머리(왼쪽 시작점) 높이 — 근호 아래 끝에서 위끝까지의 비율. 머리는 시작점에서 아래 꼭짓점으로 곧게 내려가는 짧은
+  /// 획이다(#206 R1 — 근접 사진의 메인 `√◼`처럼 올라가는 끝이 없다. 전에는 짧게 올라갔다 내려갔는데, 선을 굵게 하자
+  /// 올라가는 길이(0.06em)가 선 두께보다 짧아 머리가 뭉쳤다). 사진의 머리 높이는 약 0.55~0.59로 더 높지만, 올리면 지수가
+  /// 따라 올라가 `∛◼`가 가장 높은 SHIFT 각인(`d/dx◼`)의 잉크 위끝을 넘으므로 그대로 둔다.
   static const double _radicalHookHeight = 0.42;
-
-  /// 머리가 짧게 올라가는 끝점: 왼쪽 부분 폭 대비 가로 위치, 글자 크기 대비 올라가는 높이
-  static const double _radicalHookPeakX = 0.2;
-  static const double _radicalHookRise = 0.06;
 
   /// 근호가 내려가 닿는 아래 꼭짓점의 가로 위치 (왼쪽 부분 폭 대비)
   static const double _radicalTickX = 0.48;
@@ -477,20 +494,22 @@ class _Builder {
   /// 근호 선과 피개법수 사이, 피개법수와 가로줄 오른쪽 끝 사이 여백
   static const double _radicalPadding = 0.04;
 
-  /// 지수 오른쪽 끝과 아래 꼭짓점 사이 여백, 지수 잉크 아래끝을 머리 위로 띄우는 높이
+  /// 지수 오른쪽 끝과 아래 꼭짓점 사이 여백
   static const double _radicalIndexGap = 0.04;
-  static const double _radicalIndexLift = 0.10;
 
-  StrutStyle _strut(double fontSize) => StrutStyle.fromTextStyle(
-    style.copyWith(fontSize: fontSize),
-    forceStrutHeight: true,
-  );
+  /// 지수 잉크 아래끝과 근호 머리 잉크 위끝(시작점 + 반 두께로 어림 — 실제 잉크는 그보다 낮다) 사이 틈 (#206 R1). 선
+  /// 두께에 묶어야 근호를 굵게 해도 지수가 머리에 붙지 않는다 — #206 전에는 머리 끝점에서 0.10em 위(선 0.07em일 때 틈 약
+  /// 0.005em)로 고정해, 선을 0.14em으로 굵게 하자 `∛◼`의 3·`◼√◻`의 지수 칸이 근호에 붙었다. 근접 사진의 SHIFT 각인은 지수와
+  /// 머리 사이가 약 2~3px(각인 글자 크기 약 22px 대비 0.09~0.14em)이다. 지수 잉크 위끝이 가장 높은 SHIFT 각인 `d/dx◼`의
+  /// 잉크 위끝(0.85em)보다 낮아야 작은 글자의 줄 상자 반올림에서도 `d/dx◼`가 SHIFT 각인 높이 맞춤을 정하므로(테스트로 고정),
+  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.837em — `d/dx◼` 0.8505em까지 여유 약 0.013em).
+  static const double _radicalIndexClearance = 0.05;
+
+  StrutStyle _strut(double fontSize) =>
+      keyLabelStrut(style.copyWith(fontSize: fontSize));
 
   TextPainter _painter(String text, double fontSize) => TextPainter(
-    text: TextSpan(
-      text: text,
-      style: style.copyWith(fontSize: fontSize),
-    ),
+    text: keyLabelSpan(text, style.copyWith(fontSize: fontSize)),
     strutStyle: _strut(fontSize),
     textDirection: TextDirection.ltr,
     maxLines: 1,
@@ -559,8 +578,10 @@ class _Builder {
     );
     var top = double.negativeInfinity;
     var bottom = double.infinity;
-    for (final ch in text.split('')) {
-      final ink = KeyLegendView.glyphInk[ch];
+    for (final (i, ch) in text.split('').indexed) {
+      final ink = CalcTheme.isKeyVariableLetter(text, i)
+          ? KeyLegendView.variableGlyphInk[ch]
+          : KeyLegendView.glyphInk[ch];
       if (ink == null) {
         // 표에 없는 글자는 한 줄 상자 전체를 잉크로 본다 (보수적으로 크게).
         top = math.max(top, ascent);
@@ -572,7 +593,7 @@ class _Builder {
     }
     if (top == double.negativeInfinity) (top, bottom) = (0, 0);
     return _Piece(painter.width, top, bottom, [
-      (Offset.zero, _TextOp(painter, Offset(0, ascent))),
+      (Offset.zero, _TextOp(painter, text, Offset(0, ascent))),
     ]);
   }
 
@@ -708,12 +729,10 @@ class _Builder {
       op = _BarOp(rect);
     } else {
       // 선 가운데를 반 두께만큼 안쪽에 두어 칠한 테두리 바깥 끝이 칸 크기와 같게 한다. 테두리는 칸 안쪽에 칠하므로
-      // 남는 구멍은 `칸 − 2 × 두께`다 — 최소 두께로 굵어져도 두께를 칸의 1/4 이하로 두어 구멍이 칸의 절반 이상 남게
-      // 한다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
-      final stroke = math.min(
-        _paintStroke(fontSize * CalcTheme.keyLegendBoxStroke),
-        math.min(width, height) / 4,
-      );
+      // 남는 구멍은 `칸 − 2 × 두께`다. 두께는 칸의 짧은 변에 비례해(사진 비율, #206) 글자 크기와 상관없이 구멍이 칸의
+      // 절반으로 남는다(작은 각인에서 빈 칸이 채운 칸처럼 메워지지 않게, #169 R2).
+      final stroke =
+          math.min(width, height) * CalcTheme.keyLegendBoxStrokeRatio;
       final r = rect.deflate(stroke / 2);
       op = _PathOp(
         [
@@ -771,13 +790,16 @@ class _Builder {
   }
 
   /// 분수 — 분자·분모를 글자 크기의 [partScale]배로 쌓고, 가로줄을 분자·분모 조각 폭보다 좌우로
-  /// 글자 크기 × [overhangRatio]만큼 더 긋는다.
+  /// 글자 크기 × [overhangRatio]만큼 더 긋는다. 가로줄 두께·분자·분모와의 간격은 글자 크기 × [barRatio]·[gapRatio]다
+  /// (분수 키 각인은 사진 두께, 작은 분수는 높이 예산 안의 두께 — #206).
   _Piece fraction(
     KeyLegend numerator,
     KeyLegend denominator,
     double fontSize, {
     required double partScale,
     double overhangRatio = CalcTheme.keyLegendFractionOverhang,
+    double barRatio = CalcTheme.keyLegendFractionBarThickness,
+    double gapRatio = CalcTheme.keyLegendFractionGap,
   }) {
     final partSize = fontSize * partScale;
     final num = layout(numerator, partSize);
@@ -785,9 +807,9 @@ class _Builder {
     final overhang = fontSize * overhangRatio;
     final width = math.max(num.width, den.width) + 2 * overhang;
     final axis = fontSize * CalcTheme.keyLegendFractionAxis;
-    final bar = fontSize * CalcTheme.keyLegendFractionBarThickness;
+    final bar = fontSize * barRatio;
     final paintBar = _paintStroke(bar);
-    final gap = fontSize * CalcTheme.keyLegendFractionGap;
+    final gap = fontSize * gapRatio;
     // 분자 잉크 아래끝·분모 잉크 위끝이 가로줄에서 [gap]만큼 떨어지게 한다.
     final numBaseline = axis + bar / 2 + gap - num.inkBottom;
     final denBaseline = axis - bar / 2 - gap - den.inkTop;
@@ -817,7 +839,10 @@ class _Builder {
     // 근호의 위(가로줄)·아래 끝 — 배치 두께 선 가운데 기준
     final top =
         rad.inkTop + fontSize * CalcTheme.keyLegendRadicalGap + stroke / 2;
-    final bottom = math.min(rad.inkBottom, 0.0) - fontSize * _radicalBottomDrop;
+    final bottom =
+        math.min(rad.inkBottom, 0.0) -
+        fontSize * _radicalBottomInkDrop +
+        stroke / 2;
     final signWidth = fontSize * CalcTheme.keyLegendRadicalSignWidth;
     final hookY = bottom + (top - bottom) * _radicalHookHeight;
     // 선 끝(butt)이 왼쪽으로 나가지 않도록 반 두께만큼 오른쪽에서 시작한다.
@@ -835,22 +860,23 @@ class _Builder {
       // 지수는 머리 위에 두고 오른쪽 끝을 근호가 내려가는 지점 앞에 맞춘다. 넓으면 근호를 오른쪽으로 민다.
       final right = tickX - fontSize * _radicalIndexGap;
       shift = math.max(0.0, idx.width - right);
-      final idxBaseline = hookY + fontSize * _radicalIndexLift - idx.inkBottom;
+      // 머리 시작점의 잉크 위끝(어림)에서 틈만큼 띄운다. 배치는 비율 두께(stroke)로만 해 각인 크기가 글자 크기에
+      // 비례하게 한다([_paintStroke] 설명) — 최소 두께로 굵게 칠하는 만큼(짧은 창 하한 약 3.2dp에서 약 0.03dp)은 틈
+      // (글자 크기의 0.05배)이 받는다.
+      final hookInkTop = hookY + stroke / 2;
+      final idxBaseline =
+          hookInkTop + fontSize * _radicalIndexClearance - idx.inkBottom;
       ops.addAll(idx.shifted(shift + right - idx.width, idxBaseline));
       inkTop = math.max(inkTop, idxBaseline + idx.inkTop);
     }
     final signRight = left + signWidth;
     final radX = shift + signRight + fontSize * _radicalPadding;
     final end = radX + rad.width + fontSize * _radicalPadding;
-    // 근호 모양: 짧게 올라가는 머리 → 아래로 → 길게 위로 → 가로줄
+    // 근호 모양: 머리에서 아래로 → 길게 위로 → 가로줄
     ops.add((
       Offset(shift, 0),
       _PathOp([
         Offset(left + extra, hookY),
-        Offset(
-          left + signWidth * _radicalHookPeakX,
-          hookY + fontSize * _radicalHookRise,
-        ),
         Offset(tickX, bottom + extra),
         Offset(signRight, top - extra),
         Offset(end - shift, top - extra),
@@ -860,3 +886,55 @@ class _Builder {
     return _Piece(end, inkTop, math.min(inkBottom, rad.inkBottom), ops);
   }
 }
+
+/// 키캡 각인 글자열 [text]를 [style]로 그리는 글자 조각 (#156). 변수 글자([CalcTheme.isKeyVariableLetter])는
+/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로, 수학 기호([CalcTheme.isKeyMathSymbol])는 수학 글꼴로 바꾸고, 나머지는
+/// [style] 그대로다. 바꾸는 글자가 없으면 글자열 하나다.
+///
+/// 키 버튼의 `Text`(글자만 있는 각인)와 [KeyLegendView]의 글자 조각이 함께 쓴다 — 두 곳의 글자 모양이 같다.
+TextSpan keyLabelSpan(String text, TextStyle style) {
+  // 글자마다 쓸 스타일: null이면 [style] 그대로
+  TextStyle? styleAt(int i) {
+    if (CalcTheme.isKeyVariableLetter(text, i)) {
+      return CalcTheme.keyVariableStyle(style);
+    }
+    if (CalcTheme.isKeyMathSymbol(text[i])) {
+      return CalcTheme.keyMathSymbolStyle(style);
+    }
+    return null;
+  }
+
+  final runs = <TextSpan>[];
+  var start = 0;
+  TextStyle? current;
+  for (var i = 0; i < text.length; i++) {
+    final here = styleAt(i);
+    if (i == 0) {
+      current = here;
+    } else if (here != current) {
+      runs.add(TextSpan(text: text.substring(start, i), style: current));
+      start = i;
+      current = here;
+    }
+  }
+  if (text.isNotEmpty) {
+    runs.add(TextSpan(text: text.substring(start), style: current));
+  }
+  if (runs.length <= 1 && (runs.isEmpty || runs.single.style == null)) {
+    return TextSpan(text: text, style: style);
+  }
+  return TextSpan(style: style, children: runs);
+}
+
+/// 키캡 각인의 줄 상자(strut) — 각인 글꼴이 아니라 [CalcTheme.keyStrutFontFamily]의 줄 높이·기준선으로 고정한다 (#156).
+///
+/// 대체 글꼴(Noto Sans Math — `∑`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 고정하지 않으면 그 글자가 섞인 라벨만 줄이
+/// 약 7% 높아진다(#16 실측: 20 → 21dp). 각인 글꼴 Saira도 위아래 여백이 커서 같은 문제가 생긴다. 키패드 글자 크기
+/// 계산(`KeypadMetrics`의 `fitFontSizeToHeight`)이 전제하는 줄 높이(글자 크기 × `height`)와 맞추고, 라벨 사이 기준선을 같게
+/// 한다. strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다.
+StrutStyle keyLabelStrut(TextStyle style) => StrutStyle.fromTextStyle(
+  style,
+  fontFamily: CalcTheme.keyStrutFontFamily,
+  fontFamilyFallback: const [],
+  forceStrutHeight: true,
+);

@@ -17,28 +17,53 @@ import 'high_text_contrast.dart';
 /// 4.5:1 이상을 유지해야 한다. 각인이 놓일 수 있는 본체 색([bodyBackground], [bodyFrame],
 /// [bodyBottomGradient]) 모두에 대해 `test/unit/calc_theme_test.dart`에서 검증한다.
 ///
-/// 어두운 키캡(함수·커서·DEL)은 본체와 명도가 비슷하므로, 키 경계는 [keyBorder]로
+/// 검정 키캡(함수부)은 본체와 명도가 비슷하므로(파란 키도 본체와 3:1이 안 된다), 키 경계는 [keyBorder]로
 /// 테두리를 그려 본체 대비 3:1(WCAG 1.4.11 비텍스트 대비) 이상을 확보한다.
+///
+/// ## 실물 외관 기준 (#156)
+/// 색·모양은 실물 fx-991EX 사진 두 장에서 정했다 (사진 파일은 저장소에 넣지 않는다).
+/// - Quick Start Guide 1쪽 제품 사진(`page-0001.jpg`, 고른 조명의 제품 렌더): 키 종류별 색 구성 — 숫자부·사칙연산·`=`가
+///   모두 흰 키, DEL·AC가 파랑, 함수부·OPTN·CALC가 검정 광택 키, SHIFT·ALPHA·MENU·ON이 원형 은색 버튼, 커서 패드가
+///   은색 금속, 본체가 잔무늬 있는 검정, LCD가 검은 베젤 안의 회녹색 액정이다. DEL·AC 파랑은 이 사진에서 뽑았다(#1A61AF 부근).
+/// - 실물 키패드 근접 사진(`licensed-image.jpg`): 키캡 입체감(윗면이 둥글게 빛을 받고 아래 옆면이 보인다)·본체 잔무늬
+///   (기울어진 작은 평행사변형이 엇갈리는 무늬)·각인 글꼴(모서리가 둥근 각진 산세리프, 변수 `x`·`y`·`e`는 세리프 이탤릭).
+///   이 사진은 노출이 어둡고 녹색으로 치우쳐 색 값은 쓰지 않았다(흰 키가 #C8CEC8 부근으로 찍힌다).
+/// 두 사진 모두 조명·노출에 따라 값이 달라, 뽑은 값을 그대로 쓰지 않고 위 대비 불변식(`test/unit/calc_theme_test.dart`)을
+/// 지키는 범위에서 가장 가까운 값을 골랐다. 고른 값과 사진 값의 차이는 각 상수 설명에 적는다.
 abstract final class CalcTheme {
   // ───────────────────────────────────────────
   // 본체 색상 (Body Colors)
   // ───────────────────────────────────────────
+  // 실물 본체는 검정에 가까운 짙은 회색 판에 기울어진 작은 평행사변형 잔무늬가 엇갈려 찍혀 있다(근접 사진). 앱은 바탕
+  // ([bodyBackground])에서 아래쪽([bodyBottomGradient])으로 옅은 세로 그라데이션을 깔고, 잔무늬를 [bodyFrame] 색으로
+  // 그린다(`CalcBodyBackground`). 각인·본체 인쇄 글자가 이 세 색 모두에 대비 기준을 지킨다(테스트).
 
-  /// 계산기 본체 배경 (진한 차콜 그레이)
-  static const Color bodyBackground = Color(0xFF2D2D2D);
+  /// 계산기 본체 배경 (짙은 차콜 — 사진의 키 사이 본체 #151C1E~#1E2124 부근)
+  static const Color bodyBackground = Color(0xFF202326);
 
-  /// 본체 상단 프레임 (약간 밝은 차콜)
-  static const Color bodyFrame = Color(0xFF3A3A3A);
+  /// 본체 잔무늬의 밝은 결 (#156 — #190 전에는 상단 띠 색이었다). 각인이 이 위에도 놓이므로 대비 기준을 함께 지킨다.
+  static const Color bodyFrame = Color(0xFF2B2F33);
 
-  /// 본체 하단 그라디언트 끝 색상
-  static const Color bodyBottomGradient = Color(0xFF1A1A1A);
+  /// 본체 세로 그라데이션의 아래 끝 색
+  static const Color bodyBottomGradient = Color(0xFF16181B);
+
+  /// 본체 가장자리 은색 테두리 선 — 실물은 검은 본체 판을 은백색 플라스틱 테가 감싼다. 앱은 화면을 본체로 쓰므로 테를
+  /// 그리지 않고, 본체 영역 둘레에 이 색의 얇은 선([bodyRimWidth])만 긋는다(고대비 모드에서는 긋지 않는다).
+  static const Color bodyRim = Color(0xFF5A6066);
+
+  /// 본체 가장자리 선 두께 (dp)
+  static const double bodyRimWidth = 1.0;
+
+  /// 본체 잔무늬 한 칸 크기 (dp) — 근접 사진에서 잔무늬 한 칸은 키 높이의 약 1/8이다. 폰 함수 키(약 40dp)에 맞춰 둔다.
+  static const double bodyTexturePitch = 5.0;
 
   // ───────────────────────────────────────────
   // LCD 화면 색상 (LCD Display Colors)
   // ───────────────────────────────────────────
 
-  /// LCD 배경 (연한 연두색 → 실제 fx-991EX 도트 매트릭스 배경)
-  static const Color lcdBackground = Color(0xFFD5E8D0);
+  /// LCD 배경 — 회녹색 액정 (#156). Quick Start Guide 렌더는 밝은 민트(#C9E1D4)지만 실물 액정은 그보다 회색에 가깝다.
+  /// 고대비 꺼진 표시기 대비([lcdStatusInactiveHighContrast]와 켜진 표시기 7:1)를 지키는 가장 어두운 쪽으로 골랐다.
+  static const Color lcdBackground = Color(0xFFCAD4C4);
 
   /// LCD 텍스트 (짙은 흑색)
   static const Color lcdText = Color(0xFF1A1A1A);
@@ -46,8 +71,19 @@ abstract final class CalcTheme {
   /// LCD 커서 블록 (깜빡이는 커서)
   static const Color lcdCursor = Color(0xFF333333);
 
-  /// LCD 프레임 테두리 (은색 베젤)
-  static const Color lcdFrame = Color(0xFF8A8A8A);
+  /// LCD 베젤 — 실물처럼 검은 유리 테 (#156, 사진의 베젤 #121B1D 부근)
+  static const Color lcdFrame = Color(0xFF0C0E10);
+
+  /// LCD 베젤 바깥 테두리 — 검은 베젤이 본체와 구분되도록 바깥에 긋는 얇은 선 (실물 베젤 둘레의 반사 띠)
+  static const Color lcdBezelEdge = Color(0xFF4A5056);
+
+  /// LCD 유리 윗부분 그늘 — 액정이 베젤 안으로 들어가 보이도록 유리 위쪽에 덧씌우는 옅은 그림자 (고대비 모드에서는 끈다).
+  /// 위끝에서 이 색이고 [lcdGlassShadeExtent]까지 투명해진다. 맨 위끝(상태 표시줄 자리)의 글자 대비는 LCD 글자
+  /// 11.4 → 10.5:1, 켜진 표시기 9.4 → 8.7:1로 약 8% 낮아진다(R1에서 7.8%이던 그늘을 3.9%로 줄였다 — 16% 손실이었다).
+  static const Color lcdGlassShade = Color(0x0A000000);
+
+  /// LCD 유리 윗부분 그늘이 퍼지는 높이 (LCD 안쪽 높이 대비)
+  static const double lcdGlassShadeExtent = 0.25;
 
   /// LCD 상태 표시줄 활성 텍스트 (S, A, DEG 등이 켜졌을 때)
   static const Color lcdStatusActive = Color(0xFF2A2A2A);
@@ -58,72 +94,124 @@ abstract final class CalcTheme {
   /// 고대비 모드에서는 [lcdStatusInactiveHighContrast]로 올린다(#54).
   static const Color lcdStatusInactive = Color(0x0A2A2A2A);
 
-  /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선)
+  /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선).
+  /// #156에서 액정을 회녹색으로 어둡게 하면서도 세기(검정 6%)는 그대로 두었다 — 덧칠 색이라 배경이 어두워진 만큼 격자도
+  /// 함께 어두워져 배경과의 대비(약 1.13:1)가 거의 같고, 실물 사진에서도 꺼진 도트는 정면에서 거의 보이지 않는다.
+  /// 더 진하게 하면 꺼진 표시기(#44, 격자보다 옅어야 한다 — 테스트)를 함께 올려야 한다.
   static const Color lcdDotGrid = Color(0x0F000000);
 
   // ───────────────────────────────────────────
   // 키캡 카테고리 색상 (Keycap Category Colors)
   // ───────────────────────────────────────────
 
-  /// 밝은 키캡 그룹 (0~9, 소수점, ×10ˣ, Ans) — 밝은 회색
-  static const Color keyNumber = Color(0xFFE8E8E8);
+  // 실물(Quick Start Guide 1쪽 제품 사진)의 키 색은 네 가지다: 흰 키(숫자부 전체 — 숫자·소수점·×10ˣ·Ans·사칙연산·`=`),
+  // 파란 키(DEL·AC), 검정 광택 키(함수부·OPTN·CALC), 은색(커서 패드·원형 버튼). #156 전에는 연산자가 회색, `=`가 파랑,
+  // AC가 주황, DEL이 갈색이었다(Material 계열 어림값).
 
-  /// 밝은 키캡 그룹 텍스트
+  /// 흰 키캡 (0~9, 소수점, ×10ˣ, Ans) — 사진은 순백(#FFFFFF)에 가깝지만, 그대로 두면 윗면 하이라이트가 보이지 않아
+  /// 아주 옅은 회백색으로 둔다
+  static const Color keyNumber = Color(0xFFEDEEEA);
+
+  /// 흰 키캡 텍스트 (사진의 검정 각인)
   static const Color keyNumberText = Color(0xFF1A1A1A);
 
-  /// 연산자 키 (+, −, ×, ÷) — 짙은 회색
-  static const Color keyOperator = Color(0xFF6B6B6B);
+  /// 연산자 키 (+, −, ×, ÷) — 실물은 숫자 키와 같은 흰 키다 (#156)
+  static const Color keyOperator = keyNumber;
 
   /// 연산자 키 텍스트
-  static const Color keyOperatorText = Color(0xFFFFFFFF);
+  static const Color keyOperatorText = keyNumberText;
 
-  /// 함수 키 (sin, cos, log◼◻ 등) — 중간 회색
-  static const Color keyFunction = Color(0xFF4A4A4A);
+  /// 함수 키 (sin, cos, log◼◻, OPTN, CALC 등) — 검정 광택 키 (#156, 사진의 키 윗면 #0D0E10~#2E343A, 광택 띠 제외)
+  static const Color keyFunction = Color(0xFF17181B);
 
   /// 함수 키 텍스트
   static const Color keyFunctionText = Color(0xFFFFFFFF);
 
-  /// 등호(=) 키 — 진한 파란색 (ClassWiz 계열)
-  static const Color keyEquals = Color(0xFF1565C0);
+  /// 등호(=) 키 — 실물은 숫자 키와 같은 흰 키다 (#156)
+  static const Color keyEquals = keyNumber;
 
   /// 등호 키 텍스트
-  static const Color keyEqualsText = Color(0xFFFFFFFF);
+  static const Color keyEqualsText = keyNumberText;
 
-  /// AC(All Clear) 키 — 진한 주황 계열
-  static const Color keyAC = Color(0xFFBF360C);
+  /// AC(All Clear) 키 — 파랑 (#156, 사진 #195FAE~#1A61AF)
+  static const Color keyAC = Color(0xFF1D5FAF);
 
   /// AC 키 텍스트
   static const Color keyACText = Color(0xFFFFFFFF);
 
-  /// DEL(Delete) 키 — 진한 갈색
-  static const Color keyDEL = Color(0xFF5D4037);
+  /// DEL(Delete) 키 — AC와 같은 파랑 (#156)
+  static const Color keyDEL = keyAC;
 
   /// DEL 키 텍스트
-  static const Color keyDELText = Color(0xFFFFFFFF);
+  static const Color keyDELText = keyACText;
 
-  /// 커서 패드 — 원형 4방향 패드 배경
-  static const Color keyCursor = Color(0xFF3E3E3E);
+  /// 커서 패드 방향 키 — 은색 금속 (#156). 사진의 방향 키는 밝은 은색(반사로 #FCFCFD까지)에 그늘진 면이 섞여 있다.
+  /// 윗면 그라데이션([keyCapSheen])이 금속 반사를 흉내 내도록 중간 밝기 은색을 바탕으로 둔다.
+  static const Color keyCursor = Color(0xFFB9BEC3);
 
-  /// 방향키 텍스트/아이콘
-  static const Color keyCursorText = Color(0xFFFFFFFF);
+  /// 방향키 텍스트/아이콘 — 은색 위 어두운 화살표. 실물 방향 키에는 글자가 없지만 앱은 방향을 알 수 있게 화살표를 남긴다.
+  static const Color keyCursorText = Color(0xFF1A1A1A);
 
   /// ON 키 카테고리의 키캡 색 — ON 키는 원형 은색 버튼([KeyFace.roundButton], #190)으로 그려 키캡 색을 쓰지 않는다.
   /// 카테고리 색 표(눌림·고대비 불변식)가 모든 카테고리를 다루도록 남겨 둔다.
-  static const Color keyON = Color(0xFF4A4A4A);
+  static const Color keyON = keyFunction;
 
   /// ON 키 카테고리의 키캡 글자 색 ([keyON]과 같은 이유로 남겨 둔다)
   static const Color keyONText = Color(0xFFFFFFFF);
 
-  // ── 원형 버튼 (#190) ──
+  // ── 키캡 입체감 (#156) ──
+  // 실물 키캡은 윗면이 둥글게 부풀어 위쪽이 빛을 받고, 아래쪽에 옆면이 살짝 보이며 본체에 그림자를 드리운다(근접 사진).
+  // 앱은 평평한 키캡 위에 세 가지를 더한다(모두 고대비 모드에서는 끈다 — 글자 대비를 떨어뜨리지 않게):
+  // - 윗면 광택([keyCapSheen]): 위쪽을 흰색으로 밝히고 아래쪽을 검정으로 어둡게 하는 세로 그라데이션. 글자가 놓이는 가운데
+  //   ([keyCapSheenClearStart]~[keyCapSheenClearEnd])는 투명이라 글자 대비가 바뀌지 않는다.
+  // - 옆면([keyCapSide]): 키캡 바로 아래 [keyCapSideDepth]만큼 같은 모양의 어두운 면 — 눌리면 키캡이 그만큼 내려가 사라진다.
+  // - 그림자: 옆면 아래로 번지는 그림자([keyShadow], 눌리면 사라진다 — #22의 눌림 단서 중 하나).
+  // 모서리 반경은 키 종류마다 다르다: 함수부 키는 둥글고(높이의 [keyCapCornerRadiusRatio]), 숫자부 키는 덜 둥글다
+  // ([keyCapNumberCornerRadiusRatio]) — 근접 사진에서 함수 키 반경 ≈ 키 높이의 0.2, 숫자 키 ≈ 0.12.
+
+  /// 함수부·조작부 키캡 모서리 반경 (키캡 높이 대비)
+  static const double keyCapCornerRadiusRatio = 0.22;
+
+  /// 숫자부 키캡 모서리 반경 (키캡 높이 대비)
+  static const double keyCapNumberCornerRadiusRatio = 0.14;
+
+  /// 키캡 모서리 반경 상한 (dp) — 큰 키(태블릿)에서 알약 모양이 되지 않게 한다
+  static const double keyCapMaxCornerRadius = 12.0;
+
+  /// 키캡 옆면 깊이 (dp) — 키캡 아래로 보이는 어두운 면. 눌림 이동([keyPressedOffset])과 같아, 눌린 키캡이 옆면을 덮는다.
+  /// 셀 안에 눌림 이동만큼 비워 둔 자리(`CalcKeyButton`)에 그려지므로 셀 밖으로 나가지 않는다.
+  static const double keyCapSideDepth = keyPressedOffset;
+
+  /// 키캡 옆면 색 — 키캡 색에 덧씌우는 검정 (밝은 키는 회색 옆면, 검은 키는 더 검은 옆면이 된다)
+  static const Color keyCapSide = Color(0x73000000);
+
+  /// 키캡 윗면 광택의 맨 위 색 (밝은 키) — 위쪽 가장자리가 빛을 받는다
+  static const Color keyCapSheen = Color(0x59FFFFFF);
+
+  /// 키캡 윗면 광택의 맨 위 색 (검정 광택 키·파란 키) — 어두운 키는 빛을 받은 위쪽이 더 또렷한 광택 띠가 된다
+  static const Color keyCapGloss = Color(0x2EFFFFFF);
+
+  /// 키캡 윗면 아래쪽 그늘 (모든 키) — 둥근 윗면이 아래로 꺾이는 곳
+  static const Color keyCapShade = Color(0x29000000);
+
+  /// 광택이 투명해지는 높이 (키캡 높이 대비, 위에서부터)
+  static const double keyCapSheenClearStart = 0.3;
+
+  /// 아래쪽 그늘이 시작되는 높이 (키캡 높이 대비, 위에서부터)
+  static const double keyCapSheenClearEnd = 0.72;
+
+  // ── 원형 버튼 (#190, #156) ──
   // 실물 SHIFT·ALPHA·MENU·ON은 작은 원형 은색 버튼이다(Quick Start Guide 1쪽 제품 사진, 원본 픽셀로 잼): 어두운
   // 테두리 고리(지름 약 41px) 안에 금속을 돌려 깎은 듯한 바람개비 무늬의 은색 원판(지름 약 35px)이 있고, 버튼 면에는
-  // 글자가 없다. 이름(`ON`, `MENU`)은 버튼 위 본체에 흰색으로 인쇄돼 있다. 지금은 ON 키만 이 모양이고(설정 키),
-  // SHIFT·ALPHA·MENU는 #156에서 같은 모양으로 바꾼다(`RoundKeyFace`).
+  // 글자가 없다. 이름(`SHIFT` 금색, `ALPHA` 자홍색, `MENU`·`ON` 흰색)은 버튼 위 본체에 인쇄돼 있다(`RoundKeyFace`,
+  // 인쇄 색은 [CalcPalette.bodyPrintOf]). #190에서 ON 키를, #156에서 SHIFT·ALPHA·MENU를 이 모양으로 바꿨다.
   // 실물 버튼은 옆 키캡(OPTN 높이 약 22px)보다 크지만, 앱은 셀 크기를 바꾸지 않고 키캡 자리 안에 고리를 내접시킨다 —
   // 터치 영역은 셀 전체다(`CalcKeyButton`).
+  // 고리·원판 색은 두 모드가 같다 — 은색 원판과 어두운 고리가 이미 3:1 이상 구분되고, 버튼 경계(고리 바깥 선)는 고대비
+  // 모드에서 고대비 테두리 색으로 바뀐다(#156에서 정함).
 
   /// 원형 버튼 테두리 고리 — 본체보다 어둡다(사진의 검은 고리)
-  static const Color roundKeyBezel = Color(0xFF121212);
+  static const Color roundKeyBezel = Color(0xFF0E0F11);
 
   /// 원형 버튼 은색 원판의 밝은 결
   static const Color roundKeySilverLight = Color(0xFFF2F2F2);
@@ -147,55 +235,60 @@ abstract final class CalcTheme {
 
   /// 본체에 인쇄된 흰 글자 — 원형 버튼 위 메인 각인(실물 `ON`·`MENU`, 앱은 ON 자리에 `SETTING`, #190).
   /// 본체 배경 대비 4.5:1 이상(테스트로 검증). 고대비는 [bodyPrintHighContrast].
+  /// SHIFT·ALPHA 버튼 위 이름은 각인 색([shiftLabel]·[alphaLabel])으로 인쇄한다(#156, [CalcPalette.bodyPrintOf]).
   static const Color bodyPrint = Color(0xFFE8E8E8);
 
   // ───────────────────────────────────────────
   // SHIFT / ALPHA 모디파이어 색상
   // ───────────────────────────────────────────
 
-  /// SHIFT 키 본체 — 황금색
+  /// SHIFT 카테고리의 키캡 색 — SHIFT는 원형 은색 버튼(#156)이라 키캡 색을 쓰지 않는다. 카테고리 색 표가 모든 카테고리를
+  /// 다루도록 남겨 둔다([keyON]과 같은 이유).
   static const Color keyShift = Color(0xFFE5A823);
 
-  /// SHIFT 키 텍스트 (금색 위 흰 글자는 대비가 낮아 흑색 사용)
+  /// SHIFT 카테고리의 키캡 글자 색 ([keyShift]와 같은 이유로 남겨 둔다)
   static const Color keyShiftText = Color(0xFF1A1A1A);
 
-  /// SHIFT 각인 텍스트 (키 위 본체에 인쇄되는 금색 라벨)
-  static const Color shiftLabel = Color(0xFFE5A823);
+  /// SHIFT 각인 텍스트 (키 위 본체에 인쇄되는 금색 라벨) — 실물은 채도가 낮은 금색이다(사진 #AA9F73~#BAAE82 부근,
+  /// 어두운 노출). 본체 잔무늬 위 대비를 지키도록 그보다 밝게 둔다.
+  static const Color shiftLabel = Color(0xFFD4B262);
 
-  /// ALPHA 키 본체 — 진한 빨간색
+  /// ALPHA 카테고리의 키캡 색 — ALPHA는 원형 은색 버튼(#156)이라 키캡 색을 쓰지 않는다([keyShift]와 같은 이유)
   static const Color keyAlpha = Color(0xFFC62828);
 
-  /// ALPHA 키 텍스트
+  /// ALPHA 카테고리의 키캡 글자 색 ([keyAlpha]와 같은 이유로 남겨 둔다)
   static const Color keyAlphaText = Color(0xFFFFFFFF);
 
-  /// ALPHA 각인 텍스트 (키 위 본체에 인쇄되는 빨간색 라벨, 어두운 배경용으로 밝게)
-  static const Color alphaLabel = Color(0xFFFF8080);
+  /// ALPHA 각인 텍스트 (키 위 본체에 인쇄되는 자홍색 라벨) — 실물은 빨강이 아니라 분홍빛 자홍색이다(사진 #9C4867 부근,
+  /// 어두운 노출). 본체 잔무늬 위 대비를 지키도록 밝게 둔다.
+  static const Color alphaLabel = Color(0xFFF0679F);
 
   // ───────────────────────────────────────────
   // 키 눌림 상태 (Pressed State)
   // ───────────────────────────────────────────
 
-  /// 키캡 테두리 — 어두운 키캡과 본체의 경계 표시용 (본체 대비 3:1 이상)
-  static const Color keyBorder = Color(0xFF808080);
+  /// 키캡 테두리 — 어두운 키캡과 본체의 경계 표시용 (본체 대비 3:1 이상). 실물의 검정 키는 둥근 옆면이 빛을 받아 가장자리가
+  /// 밝게 보이는데, 이 테두리가 그 역할을 겸한다.
+  static const Color keyBorder = Color(0xFF74797E);
 
   // 눌림 표시 (#22) — 두 단서를 함께 쓴다.
   // 1) 배경 명도 변화: 카테고리별로 평소 색에 흰색 또는 검정을 덧씌운다([KeyCategoryColors.pressedOverlay]).
   //    눌림 전후 명도 차(CIELAB L*)가 [keyPressedMinLightnessDelta] 이상, 눌린 상태의 메인 라벨이 4.5:1 이상,
   //    눌린 키가 본체와 [keyPressedMinBodyLightnessDelta] 이상 떨어지도록 방향·세기를 정했다(테스트로 검증).
-  //    - 가장 어두운 키(함수·MENU·ON·DEL·커서, L* 26~32, 흰 라벨): 흰색 20%로 **밝게**. 어둡게 해서 명도 차 12를
-  //      얻으려면 검정 36~42%가 필요한데, 그러면 L* 14~19가 되어 본체(L* 18.5)에 묻힌다.
-  //    - 중간 밝기 흰 라벨 키(연산자·=·AC·ALPHA, L* 43~45): 검정 30%로 **어둡게**. 밝히면 라벨 4.5:1을 지키는
-  //      한도(흰색 약 8~15%)에서 명도 차가 4~7에 그친다.
-  //    - 밝은 키(숫자·SHIFT, 어두운 라벨): 검정 20%로 **어둡게**.
+  //    #156 색으로 다시 잰 값:
+  //    - 검정 광택 키(함수·MENU·ON, L* 약 8, 흰 라벨): 흰색 20%로 **밝게**(ΔL* 21.5, 본체와 16). 어둡게 하면 본체(L* 13.5)
+  //      아래로 묻힌다.
+  //    - 파란 키(DEL·AC, L* 약 40, 흰 라벨)·ALPHA: 검정 30%로 **어둡게**(ΔL* 12.5, 본체와 14.5). 밝히면 라벨 4.5:1을 지키는
+  //      한도에서 명도 차가 모자란다.
+  //    - 밝은 키(흰 키 전부·은색 커서·SHIFT, 어두운 라벨): 검정 20%로 **어둡게**(흰 키 ΔL* 17, 커서 14).
   //    (L* 약 38~41의 흰 라벨 회색 키는 어느 방향으로도 세 조건을 함께 만족하지 못한다 — 이 구간의 키 색은 피한다.)
-  // 2) 테두리: 눌리면 카테고리와 무관하게 [keyBorder] → [keyPressedBorder]로 바뀐다. 회색 카테고리(L* 26·32·45)가
-  //    좁게 몰려 있어 눌린 색이 다른 카테고리의 평소 색과 겹칠 수 있으므로(눌린 연산자 ≈ 평소 함수 키,
-  //    눌린 함수 키 ≈ 평소 연산자), "종류가 바뀐 것"이 아니라 "눌린 것"으로 읽히게 하는 공통 단서다.
-  //    보이는 단서는 키캡 **바깥쪽** 경계(본체와 맞닿는 쪽)다 — 본체 대비가 평소 3.5:1 → 눌림 12:1로 커진다.
-  //    안쪽(키캡 배경 쪽) 대비는 밝은 키에서 오히려 낮아지지만(숫자 키 3.2 → 1.7:1), 그 키들은 배경 자체가
-  //    크게 어두워져 1)로 충분하다.
-  //    예외: 커서 패드는 방향 구역 모양으로 잘리고 그 위에 회색 경계선을 덧그려 눌림 테두리가 거의 보이지 않는다 —
-  //    커서 키는 1)(ΔL* 약 17)에만 의존한다.
+  // 2) 테두리: 눌리면 카테고리와 무관하게 [keyBorder] → [keyPressedBorder]로 바뀐다. 눌린 색이 다른 카테고리의 평소 색과
+  //    겹치더라도(눌린 흰 키 ≈ 평소 은색 커서) "종류가 바뀐 것"이 아니라 "눌린 것"으로 읽히게 하는 공통 단서다.
+  //    보이는 단서는 키캡 **바깥쪽** 경계(본체와 맞닿는 쪽)다 — 본체 대비가 평소 3.6:1 → 눌림 13.9:1로 커진다.
+  //    안쪽(키캡 배경 쪽) 대비는 밝은 키에서 오히려 낮아지지만, 그 키들은 배경 자체가 크게 어두워져 1)로 충분하다.
+  //    눌리면 그림자와 옆면이 사라지고 키캡이 옆면 깊이만큼 내려가는 것도 함께 보인다(#156).
+  //    예외: 커서 패드는 방향 구역 모양으로 잘리고 그 위에 홈([cursorPadGroove])을 덧그려 눌림 테두리가 거의 보이지 않는다 —
+  //    커서 키는 1)(ΔL* 약 14)에만 의존한다.
 
   /// 눌림 전후 키캡 배경의 최소 명도 차 (CIELAB L*, 0~100).
   /// 옛 표현(검정 20% 일괄)에서 "거의 안 보인다"고 보고된 키는 5.4~6.6, 보고되지 않은 키는 8.5 이상이었다.
@@ -233,55 +326,47 @@ abstract final class CalcTheme {
   //
   // 기준(`test/unit/calc_theme_test.dart`가 검증):
   // - 키 메인 라벨과 SHIFT/ALPHA 각인(평소 상태)은 [highContrastMinTextContrast](WCAG AAA 7:1) 이상이다.
-  //   일반 모드에서 5.3~5.8:1인 연산자·=·AC·ALPHA 키캡만 같은 색조로 어둡게 한다.
-  // - 아래 대비는 일반 팔레트 이상이다: 메인 라벨·각인·화면 안내 글자·본체 인쇄 글자, 본체·커서 패드 허브·방향 키캡과 맞닿는 테두리,
-  //   눌림 명도 차·눌린 라벨·눌린 키캡과 본체의 차, 눌림 테두리와 본체, LCD 배경과 꺼진 표시기.
+  //   일반 모드에서 7:1 미만인 파란 키(DEL·AC, 6.4:1)와 ALPHA 카테고리(원형 버튼이라 그리지 않는다) 키캡만 같은 색조로
+  //   어둡게 한다. 흰 키·검정 키·은색 커서는 일반 모드에서 이미 9:1 이상이다(#156 색).
+  // - 아래 대비는 일반 팔레트 이상이다: 메인 라벨·각인·화면 안내 글자·본체 인쇄 글자, 본체와 맞닿는 테두리, 커서 패드
+  //   홈과 방향 키캡·허브, 눌림 명도 차·눌린 라벨·눌린 키캡과 본체의 차, 눌림 테두리와 본체, LCD 배경과 꺼진 표시기.
   // - 일반 팔레트보다 낮아지는 것 (의도한 맞바꿈 — 테스트가 하한을 따로 지킨다):
-  //   · 밝은 키캡(숫자·SHIFT)과 테두리의 안쪽 경계(숫자 3.2 → 2.0:1, SHIFT 1.9 → 1.2:1). 밝은 키캡은 자기 색으로
-  //     본체와 크게 구분되므로(본체 대비 숫자 11:1·SHIFT 6.5:1) 테두리는 어두운 키캡의 경계를 위해 밝힌다.
-  //   · LCD 켜진 표시기와 꺼진 표시기의 대비(10.4 → 8.5:1) — 꺼진 표시기를 진하게 하는 대가다. 7:1 이상 남긴다.
-  //   · 연산자와 함수 키의 명도 차(ΔL* 13.8 → 5.5). 연산자를 7:1로 어둡게 하면서 차를 유지하려면 함수·MENU 키를
-  //     본체(L* 18.5) 가까이(L* 24 이하) 어둡게 해야 한다. 그러면 키캡 23개(함수 22·MENU — ON은 #190부터 원형 버튼)가 본체에 묻혀, 키 종류 구분(배치·라벨로도
-  //     알 수 있다)보다 잃는 것이 크다고 보았다.
+  //   · 밝은 키캡(흰 키·은색 커서·SHIFT)과 테두리의 안쪽 경계(흰 키 3.8 → 2.1:1, SHIFT 2.1 → 1.2:1). 밝은 키캡은 자기
+  //     색으로 본체와 크게 구분되므로(본체 대비 흰 키 13.6:1·커서 8.4:1) 테두리는 어두운 키캡의 경계를 위해 밝힌다.
+  //   · LCD 켜진 표시기와 꺼진 표시기의 대비(약 8.8 → 7.3:1) — 꺼진 표시기를 진하게 하는 대가다. 7:1 이상 남긴다.
+  // - 입체 장식(#156): 본체 잔무늬·그라데이션·가장자리 선, 키캡 윗면 광택·옆면, LCD 유리 그늘은 고대비 모드에서 그리지
+  //   않는다. 글자 뒤 색이 평평해져 위 대비 값이 그대로 화면의 대비가 된다. 키 그림자는 남긴다(키캡 바깥이라 글자 대비와 무관).
   // - 눌림: 흰 라벨 키는 **반전**한다(흰 키캡 [keyPressedInvertedBackground] + 어두운 라벨
-  //   [keyPressedInvertedText], 사용자 결정). 7:1 키캡(L* 38 이하)을 일반 모드처럼 명도만 바꾸면 눌린 라벨 대비가
-  //   일반 모드(눌린 연산자 8.7:1 등)보다 낮아진다. 일반 모드처럼 흰색 20%로 밝히면 #22 기준도 지키지 못하고
-  //   (눌린 연산자 라벨 4.35:1, ALPHA 명도 차 ΔL* 10.4), 명도 차를 딱 12로 맞춰 밝혀도 눌린 라벨이 4.6:1로 여유가 없다.
-  //   어둡게 하면 본체에 묻힌다. 반전하면 명도 차·눌린 라벨 대비·본체와의 차가 모두 일반 모드보다 커진다.
+  //   [keyPressedInvertedText], 사용자 결정 #54). 어두운 키캡을 일반 모드처럼 명도만 바꾸면 눌린 라벨 대비가 일반 모드보다
+  //   낮아지거나(밝힐 때) 본체에 묻힌다(어둡게 할 때). 반전하면 명도 차·눌린 라벨 대비·본체와의 차가 모두 일반 모드보다 커진다.
   //   반전한 키도 뗄 때는 배경과 라벨이 함께 [keyPressAnimationDuration] 동안 돌아온다.
   //   반전한 키캡은 눌림 테두리와 같은 흰색이라 #22의 공통 눌림 테두리는 보이지 않는다 — 키캡 전체가 흰색으로 바뀌는 것이
-  //   그보다 강한 단서이고, 바깥쪽 경계(본체와 13.8:1)는 그대로 남는다.
-  // - 어두운 라벨 키(숫자·SHIFT)는 일반 모드와 같은 방식(검정 20%)으로 어둡게 한다. 눌린 SHIFT 라벨은 일반 모드와 같은
-  //   5.3:1로 7:1에 못 미친다 — 밝은 금색 키캡을 7:1로 누르려면 명도 차가 5.3 이하가 되어 눌림이 잘 보이지 않는다.
-  // - 비활성 키 라벨([keyDisabledLabelOpacity])은 두 모드가 같다(고대비 2.9~3.2:1). 지금 앱에는 비활성 키가 없어
+  //   그보다 강한 단서이고, 바깥쪽 경계(본체와 15.8:1)는 그대로 남는다.
+  // - 어두운 라벨 키(흰 키·은색 커서·SHIFT)는 일반 모드와 같은 방식(검정 20%)으로 어둡게 한다. 눌린 SHIFT 라벨은 일반
+  //   모드와 같은 5.3:1, 눌린 커서 라벨은 6.0:1로 7:1에 못 미친다 — 밝은 키캡을 7:1로 누르려면 명도 차가 줄어 눌림이 잘
+  //   보이지 않는다(SHIFT는 #156부터 원형 버튼이라 키캡 색을 그리지 않는다).
+  // - 비활성 키 라벨([keyDisabledLabelOpacity])은 두 모드가 같다. 지금 앱에는 비활성 키가 없어
   //   고대비 값을 따로 두지 않았다 — 비활성 키를 쓰게 되면 그때 정한다.
   // - 팔레트 밖(두 모드 공통) 색: 본체·LCD 배경·LCD 글자·LCD 커서·켜진 표시기·LCD 베젤·도트 격자·커서 패드 허브·
-  //   키 그림자·원형 버튼 고리와 은색 원판(#190). 대비가 이미 충분하거나(LCD 글자 13.5:1·켜진 표시기 11.1:1·은색 원판과
-  //   고리 3:1 이상) 경계 대비를 다른 색(테두리)이 맡는다.
+  //   키 그림자·원형 버튼 고리와 은색 원판(#190). 대비가 이미 충분하거나(LCD 글자 11.4:1·켜진 표시기 9.4:1·은색 원판과
+  //   고리 3:1 이상) 경계 대비를 다른 색(테두리·홈)이 맡는다.
 
   /// 고대비 모드의 키 메인 라벨·SHIFT/ALPHA 각인 최소 명암비 (WCAG AAA 일반 텍스트)
   static const double highContrastMinTextContrast = 7.0;
 
-  /// 고대비 연산자 키 — [keyOperator]를 어둡게 (흰 라벨 7.2:1). 함수 키([keyFunction])보다는 밝게 두어 구분을 남긴다
-  /// (ΔL* 5.5 — 위 "일반 팔레트보다 낮아지는 것" 참조).
-  static const Color keyOperatorHighContrast = Color(0xFF575757);
+  /// 고대비 파란 키(AC·DEL) — [keyAC]를 같은 색조로 어둡게 (흰 라벨 8.5:1)
+  static const Color keyACHighContrast = Color(0xFF164C8E);
 
-  /// 고대비 등호 키 — [keyEquals]를 어둡게 (흰 라벨 7.5:1)
-  static const Color keyEqualsHighContrast = Color(0xFF0F52AA);
-
-  /// 고대비 AC 키 — [keyAC]를 어둡게 (흰 라벨 7.4:1)
-  static const Color keyACHighContrast = Color(0xFF9E2C09);
-
-  /// 고대비 ALPHA 키 — [keyAlpha]를 어둡게 (흰 라벨 7.4:1)
+  /// 고대비 ALPHA 카테고리 키캡 — [keyAlpha]를 어둡게 (흰 라벨 7.4:1). ALPHA는 원형 버튼이라 그리지 않는다.
   static const Color keyAlphaHighContrast = Color(0xFFA61E1E);
 
   /// 고대비 SHIFT 각인 — 본체 색 모두에 7:1 이상 (금색을 밝게)
-  static const Color shiftLabelHighContrast = Color(0xFFFFD060);
+  static const Color shiftLabelHighContrast = Color(0xFFFFD77A);
 
-  /// 고대비 ALPHA 각인 — 본체 색 모두에 7:1 이상 (빨강을 밝게)
-  static const Color alphaLabelHighContrast = Color(0xFFFFC0C0);
+  /// 고대비 ALPHA 각인 — 본체 색 모두에 7:1 이상 (자홍색을 밝게)
+  static const Color alphaLabelHighContrast = Color(0xFFFFB8D6);
 
-  /// 고대비 키캡 테두리 — 본체 대비 5.7:1 (일반 [keyBorder] 3.5:1). 커서 패드 홈·외곽선·허브 둘레에도 쓴다.
+  /// 고대비 키캡 테두리 — 본체 대비 6.5:1 (일반 [keyBorder] 3.6:1)
   static const Color keyBorderHighContrast = Color(0xFFA6A6A6);
 
   /// 고대비 눌린 키캡 테두리 — [keyBorderHighContrast]보다 L* 30 이상 밝다
@@ -298,7 +383,7 @@ abstract final class CalcTheme {
   /// [highContrastMinTextContrast] 이상 남겨 켜짐과 꺼짐을 헷갈리지 않게 한다.
   static const Color lcdStatusInactiveHighContrast = Color(0x262A2A2A);
 
-  /// 고대비 화면 안내 글자·아이콘 — 본체 배경 대비 8.2:1 ([noticeForeground]를 밝게). 7:1 이상이되 고대비 SHIFT·ALPHA
+  /// 고대비 화면 안내 글자·아이콘 — 본체 배경 대비 9.4:1 ([noticeForeground]를 밝게, #156 본체 색). 7:1 이상이되 고대비 SHIFT·ALPHA
   /// 각인보다 대비를 낮게 둔다.
   static const Color noticeForegroundHighContrast = Color(0xFFC8C8C8);
 
@@ -326,9 +411,9 @@ abstract final class CalcTheme {
   // 고대비 테마는 Flutter가 제공하는 M3 고대비 기준 색 구성(`ThemeData`의 `contrastLevel: ContrastLevel.high`)을
   // 쓴다. 대화상자 면 색은 일반 테마와 같고 글자·버튼만 밝아진다(제목·설명 14.4:1, 닫기 버튼·라디오 12.6:1,
   // SnackBar 글자 16.2:1·동작 10.1:1). 여기에 계산기 고대비 팔레트 색을 더한다.
-  // - 대화상자 가장자리: 고대비 키캡 테두리와 같은 색([keyBorderHighContrast]) 선 — 대화상자 면 5.9:1, 덮인 본체 7.5:1
+  // - 대화상자 가장자리: 고대비 키캡 테두리와 같은 색([keyBorderHighContrast]) 선 — 대화상자 면 5.9:1, 덮인 본체 7.5:1(#97 당시 본체 색 — 테스트가 3:1 이상을 지킨다)
   // - 키보드 포커스: 고대비 눌린 키캡 테두리와 같은 흰색([materialFocusRingHighContrast]) 테두리 — 대화상자 면 14.4:1,
-  //   포커스 겹침 위 9.8:1, 본체 13.8:1. 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 키(ON, #190)에 그린다
+  //   포커스 겹침 위 9.8:1, 본체 15.8:1(#156 본체 색). 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 키(ON, #190)에 그린다
   //   (ListTile은 상태별 모양을 받지 않고, 버튼의 focused 상태는 터치 조작 중에도 켜져 있다).
   //
   // 대화상자 모양은 두 테마 모두 M3 기본 모양(반경 [materialDialogBorderRadius])을 직접 지정한다 — 한쪽만 지정하면
@@ -349,7 +434,7 @@ abstract final class CalcTheme {
   /// 일반 모드 키보드 포커스 테두리 색 (#106) — 일반 눌린 키캡 테두리([keyPressedBorder])와 같은 색.
   /// 고대비와 같은 방식(눌림 단서와 같은 밝은 테두리)이라 모드를 바꿔도 포커스 모양이 같다.
   /// - WCAG 2.4.13(포커스 전후 같은 픽셀 3:1 이상): 테두리 자리는 포커스 전에 대화상자 면·본체이므로 그 대비 —
-  ///   대화상자 면 12.6:1, 본체 12.1:1.
+  ///   대화상자 면 12.6:1, 본체 13.9:1(#156 본체 색).
   /// - 추가 확인(테두리 안쪽에 맞닿는 Material 포커스 겹침과의 인접 대비): 선택지 8.6:1, 닫기 버튼 10.1:1, 설정 버튼(#190 전) 10.0:1.
   /// - 고대비 색(흰색)은 모든 면에서 이보다 높다.
   /// 일반 테마의 primary(연보라)는 대화상자 안에서는 어울리지만 본체 위 키(설정 키)에서는 계산기 색과 맞지 않고,
@@ -427,11 +512,11 @@ abstract final class CalcTheme {
   // 폰트 (Fonts)
   // ───────────────────────────────────────────
 
-  /// LCD·키캡 고정폭 폰트 패밀리 이름 (번들 글꼴 Noto Sans Mono, `assets/fonts/`).
+  /// LCD 고정폭 폰트 패밀리 이름 (번들 글꼴 Noto Sans Mono, `assets/fonts/`).
   ///
-  /// 모든 글자 폭이 0.6em인 고정폭 글꼴이라 LCD 칸 수([lcdLineCharWidthRatio])와 키 라벨 폭 측정이
-  /// 플랫폼과 무관하게 같다. LCD와 키캡은 같은 패밀리를 쓴다 — 키캡도 고정폭이어야 라벨 폭이 글자 수에
-  /// 비례해 각인 배분 규칙(`_LegendRow`)과 폭 측정(`KeypadMetrics`)이 단순해지기 때문이다.
+  /// 모든 글자 폭이 0.6em인 고정폭 글꼴이라 LCD 칸 수([lcdLineCharWidthRatio])가 플랫폼과 무관하게 같다.
+  /// 키캡 각인은 #156부터 비례폭 [keyFontFamily]를 쓰고, 그 글꼴에 없는 기호(`◼`·`◻`·`⇔`·`−`·`×`·`÷`·`+`·`=`·`°`·
+  /// `▲` 등)를 이 글꼴에서 찾는다([keyFontFallback]). 각인의 줄 상자(strut)도 이 글꼴의 줄 높이를 쓴다([keyStrutFontFamily]).
   /// 실물 LCD의 도트 매트릭스 글꼴을 따로 쓸지는 LCD 렌더링(M2)에서 정한다.
   static const String monoFontFamily = 'NotoSansMono';
 
@@ -442,8 +527,63 @@ abstract final class CalcTheme {
 
   /// [monoFontFamily]에 없는 글자를 찾을 대체 폰트 (모두 번들 글꼴이다).
   /// 라벨·LCD 템플릿의 모든 글자가 여기까지 안에서 찾아지는지 테스트로 검증한다
-  /// (`test/unit/font_glyph_coverage_test.dart`).
+  /// (`test/widget/font_glyph_coverage_test.dart`).
   static const List<String> monoFontFallback = [mathFontFamily];
+
+  /// 키캡 각인 글꼴 패밀리 이름 (번들 글꼴 Saira Medium·SemiBold, #156).
+  ///
+  /// 실물 각인은 모서리가 둥근 각진 비례폭 산세리프다(근접 사진의 `OPTN`·`CALC`·`sin`·숫자). 고정폭(Noto Sans Mono)으로
+  /// 그리면 `x²`·`sin⁻¹`·`S⇔D`가 띄엄띄엄 보여 코드 편집기처럼 보였다. SIL OFL 비례폭 글꼴 중 Exo 2·Oxanium·Chakra Petch·
+  /// Titillium Web·Rajdhani와 견주어 글자 모양(각진 `C`·`S`·`n`, 둥근 모서리, 굵기)이 가장 가까운 Saira를 골랐다.
+  /// 서브셋은 ASCII에서 `+`·`=`를 뺀 글자뿐이다 — 연산 기호(`+`·`=`·`−`·`×`·`÷`)·입력 칸·방향 화살표는 Noto Sans Mono에서
+  /// 찾는다(Saira의 `×`·`+`는 x높이 안의 작은 기호라 Mono가 실물에 더 가깝다. 다만 Mono의 `×`도 실물보다 숫자 대비 조금
+  /// 작다). `⇔`만 Noto Sans Math로 그린다([isKeyMathSymbol]). 출처·서브셋은 `assets/fonts/README.md`.
+  static const String keyFontFamily = 'Saira';
+
+  /// 키캡 각인에서 변수 글자(`x`·`y`·`π`, 한 글자 각인 `e`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156).
+  /// 실물은 변수를 교과서처럼 세리프 이탤릭으로 인쇄한다(근접 사진의 `x²`·`x!`·`×10ˣ`·ALPHA `y`·`e`). 어느 글자를 이탤릭으로
+  /// 그리는지는 [isKeyVariableLetter]가 정한다.
+  static const String keyVariableFontFamily = 'NotoSerifItalic';
+
+  /// 키캡 각인 글꼴의 대체 글꼴 — [keyFontFamily]에 없는 기호를 Noto Sans Mono, 그다음 Noto Sans Math에서 찾는다.
+  static const List<String> keyFontFallback = [monoFontFamily, mathFontFamily];
+
+  /// 키캡 각인의 줄 상자(strut)를 정하는 글꼴 — #156 전 각인 글꼴(Noto Sans Mono)의 줄 높이·기준선을 그대로 쓴다.
+  /// Saira는 위아래 여백(ascent 1.135·descent 0.439em)이 커서 그대로 쓰면 같은 글자 크기에서 기준선이 내려가고 2차원 각인
+  /// 배치·키패드 글자 크기 계산(#155·#169·#186에서 맞춘 값)이 모두 달라진다. 글자 모양만 바꾸고 줄 상자는 유지한다.
+  static const String keyStrutFontFamily = monoFontFamily;
+
+  /// [text]의 [index] 글자를 키캡 각인에서 변수 이탤릭([keyVariableFontFamily])으로 그리는지 (#156).
+  /// - 소문자 `x`·`y`는 늘 변수다(`x²`·`x!`·`dx`·`×10ˣ`·ALPHA `x`·`y` — 각인에 단어 속 x·y가 없다).
+  /// - `π`도 늘 이탤릭이다(SHIFT `π` — 근접 사진에서 `e`와 같은 세리프 이탤릭, #156 R1).
+  /// - `e`는 각인 전체가 그 한 글자일 때만이다(자연로그 밑 `e`·`e^◼`) — `Rec`·`SETUP` 같은 단어 속 글자는 바로 쓴다.
+  /// (ENG 키 ALPHA의 허수 `i`는 모드별 각인 #33에서 정한다.)
+  static bool isKeyVariableLetter(String text, int index) {
+    final ch = text[index];
+    if (ch == 'x' || ch == 'y' || ch == 'π') return true;
+    return ch == 'e' && text.length == 1;
+  }
+
+  /// 키캡 각인에서 수학 글꼴([mathFontFamily])로 그리는 기호인지 (#156 R2) — `⇔`(S⇔D 키, `a b/c⇔d/c` 각인).
+  /// Noto Sans Mono의 `⇔`는 x높이보다 낮은 작은 화살표(잉크 0.38em)에 좌우 여백이 커서 `S ⇔ D`처럼 벌어져 보였다.
+  /// 실물은 대문자 높이의 굵은 이중 화살표가 글자에 붙어 있다(근접 사진). Noto Sans Math의 `⇔`는 잉크 0.62em, 좌우 여백
+  /// 0.05em로 그에 가깝다. 다른 기호는 Noto Sans Mono 그대로다([keyFontFallback]).
+  static bool isKeyMathSymbol(String ch) => ch == '⇔';
+
+  /// 수학 기호 스타일 — [base]의 크기·색을 그대로 두고 글꼴만 [mathFontFamily]로 바꾼다 (Regular 하나뿐이다)
+  static TextStyle keyMathSymbolStyle(TextStyle base) => base.copyWith(
+    fontFamily: mathFontFamily,
+    fontFamilyFallback: keyFontFallback,
+    fontWeight: FontWeight.w400,
+  );
+
+  /// 변수 이탤릭 글자 스타일 — [base] 각인 스타일의 크기·색을 그대로 두고 글꼴만 바꾼다
+  static TextStyle keyVariableStyle(TextStyle base) => base.copyWith(
+    fontFamily: keyVariableFontFamily,
+    fontFamilyFallback: keyFontFallback,
+    fontStyle: FontStyle.italic,
+    fontWeight: FontWeight.w700,
+  );
 
   // ───────────────────────────────────────────
   // LCD 텍스트 스타일 (LCD Text Styles)
@@ -490,8 +630,8 @@ abstract final class CalcTheme {
   /// 키 라벨 스타일은 `letterSpacing`을 명시한다. 생략하면 테마의 [DefaultTextStyle] 자간을
   /// 물려받아, 키패드가 측정한 라벨 폭(`KeypadMetrics`)과 실제 렌더링 폭이 어긋난다.
   static const TextStyle keyMainLabelStyle = TextStyle(
-    fontFamily: monoFontFamily,
-    fontFamilyFallback: monoFontFallback,
+    fontFamily: keyFontFamily,
+    fontFamilyFallback: keyFontFallback,
     fontSize: 16,
     fontWeight: FontWeight.w600,
     letterSpacing: 0,
@@ -500,8 +640,8 @@ abstract final class CalcTheme {
 
   /// SHIFT 각인 (키캡 위 본체 영역 좌측, 금색) 텍스트 스타일.
   static const TextStyle keyShiftLabelStyle = TextStyle(
-    fontFamily: monoFontFamily,
-    fontFamilyFallback: monoFontFallback,
+    fontFamily: keyFontFamily,
+    fontFamilyFallback: keyFontFallback,
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: shiftLabel,
@@ -511,8 +651,8 @@ abstract final class CalcTheme {
 
   /// ALPHA 각인 (키캡 위 본체 영역 우측, 빨간색) 텍스트 스타일.
   static const TextStyle keyAlphaLabelStyle = TextStyle(
-    fontFamily: monoFontFamily,
-    fontFamilyFallback: monoFontFallback,
+    fontFamily: keyFontFamily,
+    fontFamilyFallback: keyFontFallback,
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: alphaLabel,
@@ -523,8 +663,8 @@ abstract final class CalcTheme {
   /// 원형 버튼 위 본체에 인쇄한 메인 각인 (흰색, 각인 띠 가운데) 텍스트 스타일 (#190).
   /// 크기는 SHIFT·ALPHA 각인과 같다 — 키패드가 통일한 각인 글자 크기(`KeypadMetrics.legendFontSize`)를 쓴다.
   static const TextStyle keyBodyPrintStyle = TextStyle(
-    fontFamily: monoFontFamily,
-    fontFamilyFallback: monoFontFallback,
+    fontFamily: keyFontFamily,
+    fontFamilyFallback: keyFontFallback,
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: bodyPrint,
@@ -544,7 +684,8 @@ abstract final class CalcTheme {
   /// 키 사이 수직 간격 비율 (키패드 높이 대비)
   static const double keyVerticalGapRatio = 0.015;
 
-  /// 키 모서리 둥글기 (dp)
+  /// 키 모서리 둥글기 (dp) — #156부터 키캡은 높이 비례 반경(`keyCapCornerRadius`, [keyCapCornerRadiusRatio])으로 그린다.
+  /// 이 값은 키캡 크기를 모르는 곳의 기본 반경으로만 남는다.
   static const double keyBorderRadius = 6.0;
 
   /// 키 그림자 높이 (dp)
@@ -556,7 +697,13 @@ abstract final class CalcTheme {
   /// 키 눌림 시 키캡이 아래로 이동하는 거리 (dp)
   static const double keyPressedOffset = 1.0;
 
-  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡)
+  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡).
+  ///
+  /// #156에서 실물 근접 사진과 대조했지만 바꾸지 않았다. 실물 키캡 가로/세로 비는 함수 키 약 1.85, 숫자 키 약 1.49이고
+  /// 각인 띠·간격이 행 높이에서 차지하는 비는 함수부 약 0.43, 숫자부 약 0.33이다. 앱(360×420 키패드)은 함수 키캡 약 2.25,
+  /// 숫자 키캡 약 2.2로 더 납작하다. 이 차이는 키패드 높이(화면 배치 #141~#144: 키패드 가로/세로 비 하한, 숫자부 행 높이
+  /// 비 [keypadNumberRowHeightRatio])가 정한다. 키캡만 실물 비로 줄이면 터치 높이·짧은 창 판정(#38)·각인 글자 크기 계산이
+  /// 함께 바뀐다. 그래서 키 비율은 화면 배치 쪽 후속 이슈 #220에서 정한다(#156 R1).
   static const double keyLegendHeightRatio = 0.28;
 
   /// 각인 띠 높이 대비 각인 글자 크기 비율
@@ -599,13 +746,38 @@ abstract final class CalcTheme {
   //   약 1.86 → 2.08em로 `SHIFT`보다 좁고, `log◼◻`는 약 2.83 → 2.62em로 좁아진다(테스트로 고정).
   //   크기는 사진과 다른 곳이 남는다: 첨자·작은 분수 속 칸은 첨자·분수 배율([keyLegendScriptScale] 등)을 따르므로
   //   같은 각인 안의 칸끼리 크기 비가 사진과 다르다(∫ 끝 칸:본문 칸 높이 사진 약 1:1 → 앱 0.32:0.36em, 대분수 정수
-  //   칸:분자 칸 사진 1:1 → 앱 0.48:0.31em, `◼√◻` 지수:피개법수 사진 약 0.9:1 → 앱 0.6:1). 빈 칸 테두리도 사진(칸
-  //   높이의 약 0.3)보다 가늘고(약 0.1, [keyLegendBoxStroke]), 분수 키 가로줄도 사진(약 0.14em — 칸 높이의 약 0.33)보다
-  //   가늘다([keyLegendFractionBarThickness] 0.06em) — 두 두께는 #206에서 정한다. ∫ 각인은 사진(약 1.94em)보다 약 7%
-  //   넓고(2.08em), ∫ 꼬리와 아래 끝 칸 사이가 사진(약 0.15em)보다 넓다 — 번들 ∫ 글리프가 사진의 ∫보다 아래쪽이 좁기
-  //   때문이다([keyLegendIntegralSubscriptShift]).
+  //   칸:분자 칸 사진 1:1 → 앱 0.48:0.31em, `◼√◻` 지수:피개법수 사진 약 0.9:1 → 앱 0.6:1). ∫ 각인은 사진(약 1.94em)보다
+  //   약 7% 넓고(2.08em), ∫ 꼬리와 아래 끝 칸 사이가 사진(약 0.15em)보다 넓다 — 번들 ∫ 글리프가 사진의 ∫보다 아래쪽이
+  //   좁기 때문이다([keyLegendIntegralSubscriptShift]).
+  // - 선 두께(#206, 사용자 결정 "사진 비율로"): 같은 근접 사진에서 원본 픽셀로 쟀다(밝기 중간값 경계 — #186과 같다, 메인
+  //   각인 글자 크기 약 33.5px = `l` 잉크 25.5px ÷ 0.76).
+  //   · 빈 칸 테두리: 3.1~4.2px — 칸 짧은 변의 0.24~0.31(분수 키 분모 25×14px 벽 3.4~4.0px → 0.26, ∫ 위·아래 끝 칸
+  //     13~14px 벽 3.7~4.2px → 0.28~0.31, log 진수 칸 13×26px 벽 3.1~3.3px → 0.24), 구멍은 칸의 0.38~0.51. 앱은 칸 짧은
+  //     변의 1/4([keyLegendBoxStrokeRatio]) — 구멍이 칸의 절반이다. 잰 빈 칸은 이 셋(메인 각인)뿐이고, SHIFT 각인의 빈 칸
+  //     (대분수 분자·분모, `◼√◻` 피개법수, ∑ 끝 칸)은 금색이라 대비가 낮고 번져 재지 못해 같은 비율을 쓴다.
+  //   · 분수 키 가로줄 4.9px(0.146em)·칸과의 간격 2.4~2.5px(0.073em)·칸 높이 14px(0.42em) — 각인 전체 1.13em
+  //     ([keyLegendDisplayFraction*]).
+  //   · 근호 가로줄 4.8px·비스듬한 획 약 4.6px(0.14em, [keyLegendRadicalStroke]). 근호 가로줄과 피개법수 칸 사이는 사진
+  //     약 6.2px(0.19em)로 앱([keyLegendRadicalGap] 0.10em)보다 넓다 — 두께와 별개라 바꾸지 않았다. 선을 굵게 하면서 근호
+  //     아래 꼭짓점의 잉크 깊이와 지수(`∛◼`의 3, `◼√◻`의 지수 칸)와 머리 사이 틈을 선 두께에 묶었다(`KeyLegendView`
+  //     `_radicalBottomInkDrop`·`_radicalIndexClearance`, #206 R1 — 그러지 않으면 지수가 굵은 머리에 붙는다).
+  //     근호 머리는 짧게 올라갔다 내려가던 모양에서, 사진의 메인 `√◼`처럼 시작점에서 곧게 내려가는 획으로 바꿨다(올라가는
+  //     길이 0.06em이 굵어진 선보다 짧아 머리가 뭉쳤다, #206 R1). 머리 높이는 사진(아래 끝에서 약 0.55~0.59)보다 낮은
+  //     0.42 그대로다 — 올리면 지수가 따라 올라가 `∛◼`가 `d/dx◼`의 잉크 위끝을 넘는다. 근호 모양 전체는 외관 작업(#156)에서 본다.
+  //   · 사진 글자 획(`l` 줄기 약 5.4px = 0.16em)은 앱 글꼴(메인 SemiBold 0.124em, SHIFT·ALPHA Medium 0.107em)보다 굵어,
+  //     앱에서는 선이 글자에 비해 사진보다 굵어 보인다. 선/같은 각인 글자 획 비: 사진 테두리 약 0.6~0.75·가로줄과 근호 약
+  //     0.85~0.9 → 앱 테두리 메인 0.64(∫ 끝 칸)~0.85(분수 키 분모)·SHIFT 0.63(∑ 끝 칸)~1.13(`◼√◻` 피개법수 칸), 분수 키
+  //     가로줄 1.18, 근호 메인 1.13·SHIFT 1.31. 칸·선끼리의 비를 사진에 맞추는 쪽을 골랐다(글꼴 굵기는 #156).
+  //   · 작은 분수(`d/dx◼`·대분수·`a b/c⇔d/c`)의 가로줄([keyLegendFractionBarThickness])은 그대로 0.06em이다. 가장 높은
+  //     SHIFT 각인 `d/dx◼`(1.141em)가 SHIFT 각인의 높이 맞춤(키패드 통일 각인 크기)을 정하므로, 그 가로줄·간격을 늘리면
+  //     모든 SHIFT·ALPHA 각인이 작아진다(1.15em 테스트 상한에도 0.009em만 남는다). 대분수(1.000em)·`a b/c⇔d/c`(1.066em)는
+  //     높이 여유가 있지만 같은 작은 분수끼리 두께를 맞추려고 함께 둔다 — 그래서 대분수 안에서 가로줄(0.06em)이 빈 칸
+  //     벽(약 0.078em)보다 가늘다. 사진의 SHIFT 각인(금색)은 대비가 낮고 번져 두께를 믿을 만하게 잴 수 없다(`d/dx`
+  //     가로줄 약 2~3px ≈ 0.1em).
   // - 작은 쌓은 분수의 크기: Android 에뮬레이터(1080×2400, 420dpi = 2.625배, 본체 폭 약 396dp)에 실제 앱을 띄워 기기
-  //   픽셀로 쟀다. 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려진다. 크기(기기 픽셀, 1px ≈ 0.06mm):
+  //   픽셀로 쟀다(#169 — #206에서 빈 칸 테두리·분수 키 가로줄·근호 선을 굵게 하기 **전** 두께로 잰 값이다. 칸·글자 크기는
+  //   분수 키 칸(배율 0.95 → 0.87)만 바뀌었고, 굵어진 선으로 획이 뭉치지 않는지는 #174에서 다시 본다).
+  //   그때 모든 모양이 기기 픽셀에서 획이 뭉치지 않고 그려졌다. 크기(기기 픽셀, 1px ≈ 0.06mm):
   //   · 글자 배율 100%: 분수 `d` 약 13px(≈ 0.8mm), `dx`·`c` 약 10px(≈ 0.6mm), 대분수·분수 칸 약 7~8px,
   //     ∑ 약 12px(≈ 0.7mm)·위아래 빈 칸 약 16×7px·본문 칸 약 15×7px
   //   · 글자 배율 130%: 약 1.3배(분수 `d` 약 17px, `dx` 약 13px)
@@ -648,10 +820,12 @@ abstract final class CalcTheme {
   /// 1/7(약 0.068em)이면 쌓은 높이가 약 1.16em으로 `d/dx◼`(약 1.14em)를 넘으므로 높이 예산 안에서 약 1/12로 둔다.
   static const double keyLegendLimitGap = 0.04;
 
-  /// 직접 그리는 빈 칸(`LegendBox`)의 테두리 두께 — 글꼴 `◻`의 획과 비슷하게. [keyLegendMinStroke]보다 가늘면 그
-  /// 두께로 칠하되, 칸의 짧은 변의 1/4을 넘지 않는다 — 테두리는 칸 안쪽에 칠하므로 구멍이 칸의 절반 이상 남아, 작은
-  /// 각인(짧은 창 하한 약 3.2dp)에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2, 테스트로 고정).
-  static const double keyLegendBoxStroke = 0.05;
+  /// 직접 그리는 빈 칸(`LegendBox`)의 테두리 두께 (칸의 짧은 변 대비, #206). 근접 사진의 빈 칸 테두리는 칸 짧은 변의
+  /// 0.24~0.31이다("2차원 각인 배치" 절). 테두리는 칸 안쪽에 칠하므로 구멍은 칸의 `1 − 2 × 이 값`이다 — 1/4이면 구멍이 칸의
+  /// 절반으로, #169 R2의 규칙(구멍이 칸의 절반 이상 남아 작은 각인에서도 빈 칸이 채운 칸처럼 메워지지 않는다)의 경계에
+  /// 맞다. 칸 크기에 비례하므로 글자 크기와 상관없이 모양이 같다(최소 선 두께 [keyLegendMinStroke]를 쓰지 않는다 — 1/4보다
+  /// 굵게 칠하면 구멍이 절반보다 작아진다. #206 전에도 작은 각인에서는 이 1/4 상한이 두께를 정했다).
+  static const double keyLegendBoxStrokeRatio = 0.25;
 
   /// 직접 그리는 칸(`LegendBox`)의 가로/세로 비 — 자리마다 실물 사진에서 잰 원본 픽셀 비 (#186, ∑ 칸은 #169).
   ///
@@ -702,16 +876,22 @@ abstract final class CalcTheme {
   /// 분자·분모 글자 크기 비율 (다른 조각 사이의 분수 — `d/dx◼`, `a b/c⇔d/c`, 대분수)
   static const double keyLegendFractionScale = 0.65;
 
-  /// 각인 전체가 분수 하나일 때(분수 키 `◼/◻`)의 분자·분모 글자 크기 비율 — 한 줄 높이를 채운다
-  static const double keyLegendDisplayFractionScale = 0.95;
+  /// 각인 전체가 분수 하나일 때(분수 키 `◼/◻`)의 분자·분모 글자 크기 비율 — 한 줄 높이를 채운다.
+  /// 칸 높이는 글꼴 `◼` 잉크 0.482em × 0.87 ≈ 0.42em으로 근접 사진(14px ÷ 33.5px)과 같다 — 굵어진 가로줄·간격(#206)과
+  /// 합친 각인 높이 ≈ 0.42 × 2 + 2 × 0.073 + 0.146 ≈ 1.1307em이 사진(37.9px ≈ 1.13em)과 같고, 가장 높은 메인 각인
+  /// `∫◻◻◼`(1.1310em)를 넘지 않아 메인 라벨의 높이 맞춤(키패드 통일 메인 글자 크기)이 그대로다(테스트로 고정 — 여유가
+  /// 0.0003em뿐이라 가로줄·간격·배율을 늘리면 메인 라벨이 작아진다). #206 전에는 0.95(가로줄 0.06em·간격 0.04em,
+  /// 각인 약 1.06em)였다.
+  static const double keyLegendDisplayFractionScale = 0.87;
 
   /// 분수 가로줄 가운데 높이 (기준선 위)
   static const double keyLegendFractionAxis = 0.28;
 
-  /// 분수 가로줄 두께
+  /// 다른 조각 사이의 작은 분수(`d/dx◼`, `a b/c⇔d/c`, 대분수) 가로줄 두께. 분수 키는
+  /// [keyLegendDisplayFractionBarThickness]를 쓴다 — 이 값은 각인 높이 예산 때문에 사진보다 가늘게 둔다("2차원 각인 배치" 절).
   static const double keyLegendFractionBarThickness = 0.06;
 
-  /// 분수 가로줄과 분자·분모 잉크 사이 간격
+  /// 작은 분수의 가로줄과 분자·분모 잉크 사이 간격 (분수 키는 [keyLegendDisplayFractionGap])
   static const double keyLegendFractionGap = 0.04;
 
   /// 분수 가로줄이 분자·분모 조각보다 좌우로 더 나가는 길이
@@ -720,14 +900,23 @@ abstract final class CalcTheme {
   /// 분수 키 각인(`◼/◻`, 디스플레이 분수)의 가로줄이 분자·분모 조각보다 좌우로 더 나가는 길이 (#186 R1).
   /// 근접 사진은 가로줄 37~38px, 칸 25~26px로 가로줄/칸 잉크 폭 ≈ 1.46이다. 칸 조각 폭에는 좌우 여백
   /// ([keyLegendBoxSideBearing] × [keyLegendDisplayFractionScale])이 들어 있어, 이 값과 합쳐 약 1.46이 되도록 정했다
-  /// (칸 잉크 0.818em → 가로줄 0.93 + 2 × 0.13 ≈ 1.19em). 여백을 바꾸면 이 값도 다시 맞춘다(테스트로 고정).
-  static const double keyLegendDisplayFractionOverhang = 0.13;
+  /// (칸 잉크 0.749em → 가로줄 0.851 + 2 × 0.121 ≈ 1.093em, #206에서 칸 배율 0.95 → 0.87로 다시 맞춤 — 전에는 0.13).
+  /// 여백이나 칸 배율을 바꾸면 이 값도 다시 맞춘다(테스트로 고정).
+  static const double keyLegendDisplayFractionOverhang = 0.121;
+
+  /// 분수 키 각인(`◼/◻`)의 가로줄 두께 (#206). 근접 사진 4.9px ÷ 메인 각인 글자 크기 33.5px ≈ 0.146em — 칸 높이(0.42em)의
+  /// 약 0.35다. 작은 분수는 [keyLegendFractionBarThickness].
+  static const double keyLegendDisplayFractionBarThickness = 0.146;
+
+  /// 분수 키 각인(`◼/◻`)의 가로줄과 분자·분모 칸 사이 간격 (#206). 근접 사진 2.4~2.5px ≈ 0.073em.
+  static const double keyLegendDisplayFractionGap = 0.073;
 
   /// 거듭제곱근 지수(`∛`의 3, `◼√◻`의 ◼) 글자 크기 비율
   static const double keyLegendRadicalIndexScale = 0.6;
 
-  /// 근호 선 두께
-  static const double keyLegendRadicalStroke = 0.07;
+  /// 근호 선 두께 (#206). 근접 사진의 `√◼` 가로줄 4.8px·비스듬한 획 약 4.6px ÷ 33.5px ≈ 0.14em — 피개법수 칸 높이(글꼴
+  /// `◼` 0.482em)의 약 0.29로, 사진(4.7px ÷ 칸 15.7px ≈ 0.30)과 같다. #206 전에는 0.07이었다.
+  static const double keyLegendRadicalStroke = 0.14;
 
   /// 근호 가로줄과 피개법수 잉크 위끝 사이 간격
   static const double keyLegendRadicalGap = 0.10;
@@ -797,6 +986,21 @@ abstract final class CalcTheme {
   /// 5/7이면 작은 크기(10dp·3x)에서 x 팔 끝이 테두리에 붙어 ⊠처럼 보인다(#160 리뷰 R1). 같은 이유로 x는 굵은 글씨
   /// 설정을 따르지 않는다(굵게 그리면 8dp×1.3에서 다시 붙는다, 리뷰 R2).
   static const double lcdStatusStoreXRatio = 0.55;
+
+  /// `→x` 잉크 전체 폭 (한 칸 글리프 폭 대비) — x 상자 한 칸 + 상자 밖 화살표 반 칸. 2칸 슬롯 가운데에 놓는다 (#183).
+  /// 근거는 스프라이트 잉크 폭(#58 표): →x 8도트, S 상자 7도트(높이도 7도트)다. 모든 세그먼트가 켜진 진단 화면
+  /// 영상도 흐림 범위(±1도트) 안에서 이와 모순되지 않는다. 앱은 x를 알아볼 수 있게 x 상자를 한 칸(S 상자와 같은 폭)으로
+  /// 두고 상자 밖 화살표만 줄였다. 남은 차이는 척도마다 다르다:
+  /// - 대문자 높이 대비: 앱 1.26배(1.5 × 0.6em ÷ 0.714em) 대 실물 8/7 = 1.14배 → 약 10% 넓다.
+  /// - 옆 반전 상자(S) 대비: 앱 1.5배 대 실물 1.14배 → 약 31% 넓다. 앱 S 상자(0.6em)가 실물(정사각형 7×7도트)보다
+  ///   좁아서 생기는 몫이 크다. 이전(#160)은 1.88칸 + 자간(S 대비 약 1.88배)이었다.
+  static const double lcdStatusStoreInkCells = 1.5;
+
+  /// `→x` 화살표 머리 길이 (한 칸 글리프 폭 대비) — 대문자 높이의 약 0.27(가이드 실측, #160)
+  static const double lcdStatusStoreHeadCells = 0.32;
+
+  /// `→x` 화살표 머리 끝이 x 상자 왼쪽 끝에서 상자 안으로 들어간 깊이 (한 칸 글리프 폭 대비, #160)
+  static const double lcdStatusStoreTipDepthCells = 0.12;
 
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
@@ -903,6 +1107,17 @@ abstract final class CalcTheme {
   /// 폰(본체 폭 424dp 이하)은 이보다 작아 걸리지 않는다(불변식 테스트).
   static const double keyMainLabelMaxFontSize = 16.5;
 
+  /// 숫자부 메인 라벨 글자 크기 목표 (함수부 메인 라벨 대비, #156) — 실물 숫자부 각인은 함수부보다 훨씬 크다(근접 사진에서
+  /// 숫자 높이 ≈ 숫자 키캡 높이의 0.69, 함수 키 대문자 높이 ≈ 함수 키캡 높이의 0.55, 숫자 키캡은 함수 키캡의 약 1.45배 높이 —
+  /// 글자 높이로 약 1.8배). 앱은 함수부 글자가 키캡에 비해 실물보다 작으므로(키패드 글자 크기 계산 #141 그대로) 숫자부만
+  /// 실물 비로 키우면 숫자가 키캡에 비해 너무 커 보여, 그 중간인 1.5배를 목표로 둔다. 키캡 높이·폭이 모자라면 줄어든다
+  /// (`KeypadMetrics.numberMainLabelFontSize`).
+  static const double keyNumberMainLabelScale = 1.5;
+
+  /// 숫자부 메인 라벨 글자 크기 상한 (dp, 배율 반영 전) — [keyMainLabelMaxFontSize] × [keyNumberMainLabelScale]
+  static const double keyNumberMainLabelMaxFontSize =
+      keyMainLabelMaxFontSize * keyNumberMainLabelScale;
+
   /// SHIFT·ALPHA 각인 글자 크기 상한 (dp, 시스템 글자 배율 반영 전) — [keyMainLabelMaxFontSize]와 같은 기준.
   /// 키패드 480×640dp의 각인은 폭에 묶여 10.69dp였다(긴 각인이 셀 폭에 들어가는 크기). 키가 넓어지면 폭 제한이 풀려
   /// 높이 기준(각인 띠 높이 비례, 태블릿 세로 약 16dp)까지 커진다. 상한은 그 480×640의 10.69dp를 올림한 값이다.
@@ -920,8 +1135,21 @@ abstract final class CalcTheme {
   /// 키패드 통일 글자 크기 하한 (높이 기준 크기 대비). 이보다 긴 라벨은 키마다 따로 줄어든다.
   static const double keypadUniformFontMinRatio = 0.75;
 
-  /// 커서 패드 X자 홈·외곽선·허브 테두리 두께 (dp). 색은 [keyBorder](본체 대비 3:1 이상).
+  /// 커서 패드 X자 홈·외곽선·허브 테두리 두께 (dp) — 그림의 최소 두께이자 방향 키 라벨 여백의 기준. 색은 [CalcPalette.cursorPadGroove].
   static const double cursorPadDividerWidth = 2.0;
+
+  /// 커서 패드 X자 홈을 그리는 두께 (패드 높이 대비, #156) — 실물 홈은 패드 높이의 약 9%인 어두운 틈이다(#65). 터치 경계는
+  /// 선 그대로이고(틈 없이 맞닿는다) 그림만 넓힌다. 9%로 그리면 ▲·▼ 키의 화살표 자리가 좁아져 약 6%로 둔다. 이 두께가
+  /// [cursorPadDividerWidth]보다 가늘면 그 두께로 그린다.
+  static const double cursorPadGrooveWidthRatio = 0.06;
+
+  /// 커서 패드 홈·외곽선·허브 둘레 색 (#156) — 은색 방향 키 사이의 어두운 틈. 은색 키캡([keyCursor])과 10:1 이상이라
+  /// 방향 키 경계가 또렷하다. #156 전에는 키캡 테두리 색([keyBorder])이었다 — 회색 키캡 사이에서는 밝은 선이 경계였지만,
+  /// 은색 키 사이에서는 실물처럼 어두운 틈이 더 또렷하다. 고대비는 [cursorPadGrooveHighContrast].
+  static const Color cursorPadGroove = Color(0xFF08090A);
+
+  /// 고대비 커서 패드 홈 색 — 검정 (은색 키캡과 11:1)
+  static const Color cursorPadGrooveHighContrast = Color(0xFF000000);
 
   // 커서 패드 모양 (#43) — 실물 fx-991EX처럼 가로로 긴 둥근 마름모를 X자 홈으로 4분할하고,
   // 가운데에 누를 수 없는 검은 허브를 둔다. 치수는 패드 크기 비례이고,
@@ -933,7 +1161,7 @@ abstract final class CalcTheme {
   // - "File:Fx-991EX.jpg"(932×1920, 정면 오려낸 사진): 패드 268×172px
   // - "File:Casio fx-991EX Scientific Calculator.jpg"(3120×4160): 패드 534×349px
   // 실물에서 키 사이 홈은 폭이 패드 높이의 약 9%인 어두운 틈이고, 허브는 별도 부품이 아니라 그 틈과 같은 어두운 바닥이다.
-  // 여기서는 홈을 [cursorPadDividerWidth] 선으로 그린다. 터치 경계가 틈 없이 맞닿아야 하기 때문이다.
+  // 터치 경계는 틈 없이 맞닿는 선이고, 그림만 패드 높이의 [cursorPadGrooveWidthRatio] 두께로 넓혀 그린다(#156).
 
   /// 커서 패드 상자 최소 가로/세로 비 — 세로로 긴 셀(일반 폰 약 1.3)에서도 납작한 마름모를 유지한다.
   static const double cursorPadMinAspectRatio = 1.4;
@@ -996,10 +1224,10 @@ abstract final class CalcTheme {
   /// 보이지 않는 홈 연장선(k)에 따라 방향이 갈린다.
   static const double cursorPadDeadZoneRadiusRatio = 0.1;
 
-  /// 커서 패드 허브 색 — 실물의 어두운 가운데(홈 바닥과 같은 색). 방향 키캡([keyCursor])보다 어둡고,
-  /// 둘레는 [keyBorder]로 긋는다. 사진(#65)에서도 가운데는 주변 본체보다 어둡고 홈과 같은 밝기였다.
+  /// 커서 패드 허브 색 — 실물의 어두운 가운데(홈 바닥과 같은 색). 방향 키캡([keyCursor])보다 어둡고(10:1 이상),
+  /// 둘레는 홈 색([CalcPalette.cursorPadGroove])으로 긋는다. 사진(#65)에서도 가운데는 주변 본체보다 어둡고 홈과 같은 밝기였다.
   /// 색 값은 사진 노출에 따라 달라 실측하지 않는다.
-  static const Color cursorPadHub = Color(0xFF151515);
+  static const Color cursorPadHub = Color(0xFF0E0F11);
 
   // ───────────────────────────────────────────
   // 화면 배치 (Screen Layout) — 세로형(세로 폰·태블릿 세로)의 LCD : 키패드 기준 (#23, #141)
@@ -1300,10 +1528,7 @@ abstract final class CalcTheme {
   //   배치의 하한(#25·#80 R1의 테이블톱 하한)과 같은 키 크기이고, 각인은 읽기 어려운 크기라 이 크기의 창은 "급히 쓸 수는
   //   있는" 최소로 본다.
   // 실측 (키 셀 높이, LCD 줄 글자 — 위아래 배치 → 그린 배치. 인셋은 괄호. #190에서 상단 띠 최소 높이 12dp가 빠진 뒤의 값):
-  //   · 미리보기 "분할 화면 위" 411×400(상태바 24): 키 20.4 → 21.7dp, LCD 14.3 → 31.6dp — 가로형. 넓은 배열이 폭에 묶여
-  //     남는 높이를 띠 폭 전체 LCD가 받는다.
-  //   · 폰 분할 화면 위 411×420(상태바 24): 위아래 배치가 22.1dp로 가로형(21.7dp)보다 커 위아래 배치다(#190 전 21.1dp로
-  //     가로형이었다). 411×440(아래 48)도 21.8 > 21.7dp로 위아래 배치다.
+  //   · 폰 분할 화면 — 아래 "에뮬레이터 실측"
   //   · 가로 폰 844×390(좌우 47·아래 21): 키 19.8 → 39.6dp, LCD 14.3dp(최소 높이)
   //   · 640×360(상태바 24): 키 17.0 → 34.0dp / 568×320: 15.6 → 30.4dp / 700×392(24/24): 17.7 → 35.4dp
   //   · 360×300: 키 13.9 → 18.9dp, LCD 14.3 → 22.7dp
@@ -1311,6 +1536,25 @@ abstract final class CalcTheme {
   //     남는 짧은 창이다.
   //   · 세로 폰은 위아래 배치 그대로다 — 390×844(47/34): 42.4dp, 가로형 20.6dp.
   //   · 320×240: 가로형 16.7dp라 계산기(#190 전 15.6dp로 안내). 300×240은 안내. 미리보기 "작은 팝업 창" 320×200: 가로형 10.9dp로 안내
+  // 에뮬레이터 실측 (#137 — Android 16 Google Play 이미지 폰 1080×2400·420dpi = 411.43×914.29dp, 진단 빌드 로그 `LayoutLog`).
+  // 분할 화면 경계는 1/3·1/2·2/3에서만 멈춘다. 창 크기는 제스처 내비게이션·3버튼이 같고 인셋만 다르다 — 위 창은 상태바 24,
+  // 아래 창은 제스처 24(제스처 영역 32)·3버튼 48. 그린 배치와 가장 낮은 키 터치 높이:
+  //   · 1/2 411.43×452.19: 위아래 배치 — 위 창·아래 창(제스처) 24.5dp, 아래 창(3버튼) 22.8dp. 가로형보다 커 위아래 배치다
+  //     (#38에서 가정한 411×420·411×440보다 높다).
+  //   · 1/3 411.43×304.76: 가로형 21.8dp / 아래 창(3버튼) 20.5dp. 2/3 411.43×599.62: 위아래 배치 33.6dp / 3버튼 32.1dp
+  //   · 폰을 가로로 돌린 좌우 분할(창 높이 411.43, 위·아래 인셋 24): 1/2 폭 452.19 가로형 24.0dp, 2/3 폭 607.62 가로형
+  //     32.5dp, 1/3 폭 296.76 위아래 배치 19.3dp
+  //   · 화면을 320×568dp로 줄인(`wm size 840x1491`) 1/2 분할 320×278.9: 가로형 16.7dp — 안내 바로 위
+  //   · 자유 형식 창(`enable_freeform_support`, 캡션 없음): 최소 크기 219.81×219.81dp는 안내, 381×285 가로형 20.1dp,
+  //     381×219.81 안내, 기본 296×658.29 위아래 배치 31.7dp. 안내 중 창을 다시 키우면 LCD 입력이 그대로다.
+  //   · TalkBack: 안내가 나타날 때 문구를 한 번 읽고(TalkBack "음성 출력 표시"로 확인), 안내 중 의미 트리에는 안내 노드만
+  //     있다(키 50개가 빠져 포커스가 갈 수 없다). 창을 다시 키우면 키 노드가 돌아온다.
+  //   · Android 14 폰 에뮬레이터(`AltCalc_Phone_API34`, google_apis 1080×2400·420dpi, 제스처 내비게이션 — #137 R1): 앱 창이
+  //     시스템 바를 빼고 와 인셋이 0이다. 아래 창 1/2 411.43×428.19 위아래 배치 24.5dp, 가장 작게 멈춘 창 411.43×235.43
+  //     가로형 16.9dp(레터박스 없음, 수정 뒤), 큰 창 411.43×620.95 위아래 배치 36.3dp — 멈추는 자리가 Android 16과 다르다.
+  //   방향 고정(#24)을 여러 창 모드에서도 요청하던 동안은 가로로 긴 분할 창이 Android 레터박스(`FIXED_ORIENTATION`)로
+  //   줄어 안내가 나왔다 — 1/3 411.43×304.76 → 301.71×304.76, 320×278.9 → 레터박스(#173 관찰). 지금은 여러 창 모드에서
+  //   방향을 고정하지 않는다(`FormFactor.queryMultiWindowMode`). 폰을 가로로 돌린 좌우 분할은 그때도 레터박스가 없었다.
   // LCD는 짧은 창에서도 [screenLcdMinHeight] 아래로 줄이지 않는다(#38 당시 측정): 411×420에서 위아래 배치의 LCD를
   // 112 → 72dp로 줄여도 키는 약 3.4dp만 커지고 LCD 줄 글자는 14.3 → 8.0dp가 된다.
   //
@@ -1359,16 +1603,16 @@ extension KeyCategoryColors on KeyCategory {
   /// 눌릴 때 키캡 배경에 덧씌우는 색 (#22) — 방향·세기 기준은 [CalcTheme] "눌림 표시" 주석 참조
   Color get pressedOverlay => switch (this) {
     KeyCategory.number ||
-    KeyCategory.shift => CalcTheme.keyPressedDarkenOverlay,
     KeyCategory.operator ||
     KeyCategory.equals ||
+    KeyCategory.cursor ||
+    KeyCategory.shift => CalcTheme.keyPressedDarkenOverlay,
     KeyCategory.ac ||
+    KeyCategory.del ||
     KeyCategory.alpha => CalcTheme.keyPressedDeepDarkenOverlay,
     KeyCategory.function ||
     KeyCategory.menu ||
-    KeyCategory.on ||
-    KeyCategory.del ||
-    KeyCategory.cursor => CalcTheme.keyPressedLightenOverlay,
+    KeyCategory.on => CalcTheme.keyPressedLightenOverlay,
   };
 
   /// 눌린 키캡 배경색 = 평소 색 + [pressedOverlay]. 평소 색을 바꾸면 함께 바뀐다(불변식 테스트가 다시 검사).
@@ -1400,7 +1644,7 @@ final class CalcPalette {
   /// 고대비 팔레트인지 여부
   final bool isHighContrast;
 
-  /// 키캡 테두리 (커서 패드 홈·외곽선·허브 둘레 포함)
+  /// 키캡·원형 버튼 고리 테두리 (커서 패드 홈은 [cursorPadGroove], #156)
   final Color keyBorder;
 
   /// 눌린 키캡 테두리
@@ -1418,11 +1662,19 @@ final class CalcPalette {
   /// 화면 안내(창이 너무 작다는 안내) 글자·아이콘 색
   final Color noticeForeground;
 
-  /// 본체에 인쇄된 흰 글자 색 — 원형 버튼 위 메인 각인(ON 자리의 `SETTING`, #190)
+  /// 본체에 인쇄된 흰 글자 색 — MENU·ON 자리(`SETTING`) 원형 버튼 위 이름 (#190, #156). SHIFT·ALPHA 버튼 위 이름은
+  /// 각인 색이다 — 원형 버튼 인쇄 색은 [bodyPrintOf]로 고른다.
   final Color bodyPrint;
 
   /// `FocusRing`이 그리는 키보드 포커스 테두리 색 (#97, 일반 모드는 #106)
   final Color materialFocusRing;
+
+  /// 커서 패드 홈·외곽선·허브 둘레 색 (#156)
+  final Color cursorPadGroove;
+
+  /// 입체 장식(본체 잔무늬·그라데이션·가장자리 선, 키캡 윗면 광택·옆면, LCD 유리 그늘)을 그리는지 (#156) — 고대비 모드에서는
+  /// 그리지 않는다([CalcTheme] "고대비 모드" 주석).
+  bool get drawsRelief => !isHighContrast;
 
   const CalcPalette._({
     required this.isHighContrast,
@@ -1434,6 +1686,7 @@ final class CalcPalette {
     required this.noticeForeground,
     required this.bodyPrint,
     required this.materialFocusRing,
+    required this.cursorPadGroove,
   });
 
   /// 일반 팔레트
@@ -1447,6 +1700,7 @@ final class CalcPalette {
     noticeForeground: CalcTheme.noticeForeground,
     bodyPrint: CalcTheme.bodyPrint,
     materialFocusRing: CalcTheme.materialFocusRingStandard,
+    cursorPadGroove: CalcTheme.cursorPadGroove,
   );
 
   /// 고대비 팔레트
@@ -1460,6 +1714,7 @@ final class CalcPalette {
     noticeForeground: CalcTheme.noticeForegroundHighContrast,
     bodyPrint: CalcTheme.bodyPrintHighContrast,
     materialFocusRing: CalcTheme.materialFocusRingHighContrast,
+    cursorPadGroove: CalcTheme.cursorPadGrooveHighContrast,
   );
 
   /// 기기의 고대비 설정에 맞는 팔레트. [MediaQuery.highContrastOf]나 Android "고대비 텍스트"([HighTextContrastScope])
@@ -1480,14 +1735,13 @@ final class CalcPalette {
   Color keyBackground(KeyCategory category) {
     if (!isHighContrast) return category.background;
     return switch (category) {
-      KeyCategory.operator => CalcTheme.keyOperatorHighContrast,
-      KeyCategory.equals => CalcTheme.keyEqualsHighContrast,
-      KeyCategory.ac => CalcTheme.keyACHighContrast,
+      KeyCategory.ac || KeyCategory.del => CalcTheme.keyACHighContrast,
       KeyCategory.alpha => CalcTheme.keyAlphaHighContrast,
       // 일반 모드에서 이미 라벨 7:1 이상인 키
       KeyCategory.number ||
+      KeyCategory.operator ||
+      KeyCategory.equals ||
       KeyCategory.function ||
-      KeyCategory.del ||
       KeyCategory.shift ||
       KeyCategory.cursor ||
       KeyCategory.on ||
@@ -1498,18 +1752,27 @@ final class CalcPalette {
   /// [category] 키캡 메인 라벨색 (두 모드가 같다)
   Color keyForeground(KeyCategory category) => category.foreground;
 
+  /// [category] 원형 버튼(#190) 위 본체에 인쇄한 이름의 색 (#156) — 실물처럼 SHIFT는 금색([shiftLabel]), ALPHA는
+  /// 자홍색([alphaLabel]), 나머지(MENU·ON 자리의 SETTING)는 흰색([bodyPrint])이다.
+  Color bodyPrintOf(KeyCategory category) => switch (category) {
+    KeyCategory.shift => shiftLabel,
+    KeyCategory.alpha => alphaLabel,
+    _ => bodyPrint,
+  };
+
   /// [category] 키가 눌릴 때 배경과 라벨을 반전하는지 여부 — 고대비 모드의 흰 라벨 키
   bool invertsOnPress(KeyCategory category) =>
       isHighContrast &&
       switch (category) {
-        KeyCategory.number || KeyCategory.shift => false,
+        KeyCategory.number ||
         KeyCategory.operator ||
-        KeyCategory.function ||
         KeyCategory.equals ||
+        KeyCategory.cursor ||
+        KeyCategory.shift => false,
+        KeyCategory.function ||
         KeyCategory.ac ||
         KeyCategory.del ||
         KeyCategory.alpha ||
-        KeyCategory.cursor ||
         KeyCategory.on ||
         KeyCategory.menu => true,
       };

@@ -143,3 +143,23 @@ GlyphXBounds? readGlyphXBounds(ByteData data, int codePoint) {
   if (end == start) return null;
   return (glyf + start, unitsPerEm);
 }
+
+/// [data] 글꼴에서 [codePoint] 글리프의 진행폭(`hmtx` advanceWidth ÷ unitsPerEm, em 단위)을 읽는다 (#156).
+/// 테스트 전용 최소 구현이다. 글리프가 없으면 [FormatException].
+double readAdvanceWidth(ByteData data, int codePoint) {
+  final glyph = readCmap(data)[codePoint];
+  if (glyph == null) {
+    throw FormatException('글리프 없음: U+${codePoint.toRadixString(16)}');
+  }
+  final head = _tableOffset(data, 'head');
+  final hhea = _tableOffset(data, 'hhea');
+  final hmtx = _tableOffset(data, 'hmtx');
+  if (head == null || hhea == null || hmtx == null) {
+    throw const FormatException('head·hhea·hmtx 테이블 없음');
+  }
+  final unitsPerEm = data.getUint16(head + 18);
+  final metrics = data.getUint16(hhea + 34); // numberOfHMetrics
+  // numberOfHMetrics 뒤의 글리프는 마지막 진행폭을 함께 쓴다
+  final index = glyph < metrics ? glyph : metrics - 1;
+  return data.getUint16(hmtx + index * 4) / unitsPerEm;
+}

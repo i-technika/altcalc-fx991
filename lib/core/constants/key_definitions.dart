@@ -185,7 +185,7 @@ enum KeyFace {
   keycap,
 
   /// 실물 SHIFT·ALPHA·MENU·ON처럼 작은 원형 은색 버튼 — 버튼 면에는 글자가 없고, 메인 각인은 버튼 위 본체에
-  /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). 지금은 ON 키만 쓴다 — SHIFT·ALPHA·MENU는 #156에서 바꾼다.
+  /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). #190에서 ON 키를, #156에서 SHIFT·ALPHA·MENU를 이 모양으로 바꿨다.
   roundButton,
 }
 
@@ -269,7 +269,8 @@ class CalcKeyDef {
 //   크기 규칙은 `KeyLegendView`·`CalcTheme` "2차원 각인 배치" 절에 있다 — 칸 높이는 지금까지의 글꼴 칸 높이를 지키고
 //   (그래서 각인 높이 예산이 그대로다) 폭만 사진 비율로 바꾼다. 예외는 ∑ 칸(∑ 기준, #169), log 진수 칸(`l` 높이),
 //   ∫ 본문 칸(사진 높이 약 0.36em)이다. 앞 칸과 맞닿는 자리(log 진수 칸, ∫ 본문 칸)는 왼쪽 여백이 없다.
-//   비는 맞추지만 사진과 다르게 남는 점(첨자·작은 분수 속 칸의 크기, 빈 칸 테두리 두께)은 `CalcTheme` 같은 절에 적었다.
+//   비는 맞추지만 사진과 다르게 남는 점(첨자·작은 분수 속 칸의 크기)과 빈 칸 테두리·가로줄·근호 두께(#206)는 `CalcTheme`
+//   같은 절에 적었다.
 
 /// `∫◻◻◼` — ∫ 오른쪽 아래·위 끝 칸(아래 칸은 ∫ 기울기를 따라 왼쪽으로 당긴다), 그다음 가로로 긴 본문 칸
 const _integralLimit = LegendBox(LegendBoxShape.integralLimit, filled: false);
@@ -404,11 +405,13 @@ const List<List<CalcKeyDef>> controlLeftRows = [
       id: CalcKeyId.shift,
       mainLegend: LegendText('SHIFT'),
       category: KeyCategory.shift,
+      face: KeyFace.roundButton,
     ),
     CalcKeyDef(
       id: CalcKeyId.alpha,
       mainLegend: LegendText('ALPHA'),
       category: KeyCategory.alpha,
+      face: KeyFace.roundButton,
     ),
   ],
   [
@@ -436,6 +439,7 @@ const List<List<CalcKeyDef>> controlRightRows = [
       mainLegend: LegendText('MENU'),
       shiftLegend: LegendText('SETUP'),
       category: KeyCategory.menu,
+      face: KeyFace.roundButton,
     ),
     // 실물은 버튼 위 본체에 흰 `ON`이 인쇄된 작은 원형 은색 버튼이다. 이 앱에는 전원이 없어 ON을 설정 키로 쓰고
     // (#190, 사용자 결정), 같은 자리에 `SETTING`을 인쇄한다 — [settingsKey].

@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'lcd_display.dart';
 
 /// 계산 기록 영역 (#142, #143) — 놓이는 곳:
 /// - 가로형 배치(`CalcLandscapeLayout`)와 가로 접힘선의 넓은 배열(`CalcTabletopLayout`): 위 띠(위 패널)에서 함수부 위,
@@ -30,18 +30,7 @@ class HistoryPanel extends StatelessWidget {
       container: true,
       label: CalcSemanticStrings.of(context).historyEmpty,
       child: const DecoratedBox(
-        decoration: BoxDecoration(
-          color: CalcTheme.lcdBackground,
-          border: Border.fromBorderSide(
-            BorderSide(
-              color: CalcTheme.lcdFrame,
-              width: CalcTheme.lcdFrameWidth,
-            ),
-          ),
-          borderRadius: BorderRadius.all(
-            Radius.circular(CalcTheme.lcdBorderRadius),
-          ),
-        ),
+        decoration: lcdBezelDecoration,
         child: SizedBox.expand(),
       ),
     );

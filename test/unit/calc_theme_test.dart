@@ -472,6 +472,25 @@ void main() {
                 lightness(CalcTheme.bodyBackground))
             .abs();
 
+    test(
+      '입체 장식은 일반 모드만 그리고, 원형 버튼 이름 인쇄 색은 SHIFT 금색·ALPHA 자홍색·나머지 흰색이다 (#156)',
+      () {
+        expect(normal.drawsRelief, isTrue);
+        expect(high.drawsRelief, isFalse);
+        for (final p in [normal, high]) {
+          for (final c in KeyCategory.values) {
+            expect(p.bodyPrintOf(c), switch (c) {
+              KeyCategory.shift => p.shiftLabel,
+              KeyCategory.alpha => p.alphaLabel,
+              _ => p.bodyPrint,
+            }, reason: '${p.isHighContrast} ${c.name}');
+          }
+        }
+        expect(normal.cursorPadGroove, CalcTheme.cursorPadGroove);
+        expect(high.cursorPadGroove, CalcTheme.cursorPadGrooveHighContrast);
+      },
+    );
+
     test('고대비 텍스트 기준 상수는 WCAG AAA(7:1)다', () {
       expect(CalcTheme.highContrastMinTextContrast, aaa);
     });
@@ -579,11 +598,10 @@ void main() {
     });
 
     test('테두리: 본체·커서 패드 허브 대비가 일반 팔레트 이상이고, 눌림 테두리는 L* 30 이상 밝다', () {
-      // (고대비 색, 일반 색, 맞닿는 색) — 테두리는 본체, 커서 패드 홈·허브 둘레는 허브·방향 키캡과 맞닿는다.
+      // (고대비 색, 일반 색, 맞닿는 색) — 테두리는 본체, 커서 패드 홈은 방향 키캡과 맞닿는다(#156부터 홈은 따로 정한 어두운 색).
       for (final (hc, std, against) in [
         (high.keyBorder, normal.keyBorder, CalcTheme.bodyBackground),
-        (high.keyBorder, normal.keyBorder, CalcTheme.cursorPadHub),
-        (high.keyBorder, normal.keyBorder, CalcTheme.keyCursor),
+        (high.cursorPadGroove, normal.cursorPadGroove, CalcTheme.keyCursor),
         (
           high.keyPressedBorder,
           normal.keyPressedBorder,
@@ -702,20 +720,67 @@ void main() {
   });
 
   group('텍스트 스타일', () {
-    test('모든 스타일은 고정폭 폰트와 대체 폰트를 지정한다', () {
+    test('LCD 스타일은 고정폭 폰트와 대체 폰트를 지정한다', () {
       for (final style in [
         CalcTheme.lcdInputStyle,
         CalcTheme.lcdResultStyle,
         CalcTheme.lcdStatusStyle,
-        CalcTheme.keyMainLabelStyle,
-        CalcTheme.keyShiftLabelStyle,
-        CalcTheme.keyAlphaLabelStyle,
       ]) {
         expect(style.fontFamily, CalcTheme.monoFontFamily);
         expect(style.fontFamilyFallback, CalcTheme.monoFontFallback);
         expect(style.fontSize, isNotNull);
         expect(style.fontSize!, greaterThan(0));
       }
+    });
+
+    test('키 각인 스타일은 비례폭 각인 글꼴과, 기호를 찾을 고정폭·수학 대체 글꼴을 지정한다 (#156)', () {
+      for (final style in [
+        CalcTheme.keyMainLabelStyle,
+        CalcTheme.keyShiftLabelStyle,
+        CalcTheme.keyAlphaLabelStyle,
+        CalcTheme.keyBodyPrintStyle,
+      ]) {
+        expect(style.fontFamily, CalcTheme.keyFontFamily);
+        expect(style.fontFamilyFallback, [
+          CalcTheme.monoFontFamily,
+          CalcTheme.mathFontFamily,
+        ]);
+        expect(style.fontSize, isNotNull);
+        expect(style.fontSize!, greaterThan(0));
+      }
+      // 줄 상자는 #156 전 각인 글꼴(고정폭)의 것을 그대로 쓴다 — 2차원 각인 배치·키패드 글자 크기 계산이 그대로다.
+      expect(CalcTheme.keyStrutFontFamily, CalcTheme.monoFontFamily);
+    });
+
+    test('변수 이탤릭 글자: x·y는 늘, e는 한 글자 각인일 때만 (#156)', () {
+      bool italic(String text, int i) => CalcTheme.isKeyVariableLetter(text, i);
+      expect(italic('x', 0), isTrue);
+      expect(italic('x!', 0), isTrue);
+      expect(italic('x!', 1), isFalse);
+      expect(italic('dx', 0), isFalse);
+      expect(italic('dx', 1), isTrue);
+      expect(italic('y', 0), isTrue);
+      expect(italic('π', 0), isTrue);
+      // ⇔만 수학 글꼴로 그린다 (#156 R2)
+      expect(CalcTheme.isKeyMathSymbol('⇔'), isTrue);
+      expect(CalcTheme.isKeyMathSymbol('×'), isFalse);
+      final symbol = CalcTheme.keyMathSymbolStyle(
+        CalcTheme.keyMainLabelStyle.copyWith(fontSize: 12),
+      );
+      expect(symbol.fontFamily, CalcTheme.mathFontFamily);
+      expect(symbol.fontWeight, FontWeight.w400);
+      expect(symbol.fontSize, 12);
+      expect(italic('e', 0), isTrue);
+      expect(italic('Rec', 1), isFalse);
+      expect(italic('SETUP', 1), isFalse);
+      expect(italic('X', 0), isFalse);
+      final style = CalcTheme.keyVariableStyle(
+        CalcTheme.keyShiftLabelStyle.copyWith(fontSize: 11),
+      );
+      expect(style.fontFamily, CalcTheme.keyVariableFontFamily);
+      expect(style.fontStyle, FontStyle.italic);
+      expect(style.fontSize, 11);
+      expect(style.color, CalcTheme.shiftLabel);
     });
 
     test('각인 스타일 색은 각인 팔레트와 일치한다', () {
@@ -748,6 +813,33 @@ void main() {
         CalcTheme.lcdStatusStoreXRatio,
         lessThan(CalcTheme.lcdStatusBoxedLetterRatio),
       );
+      // →x 화살표(#183): 머리 끝은 상자 안으로 들어가되 머리 전체가 상자 안에 있지는 않다.
+      expect(CalcTheme.lcdStatusStoreTipDepthCells, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusStoreHeadCells,
+        greaterThan(CalcTheme.lcdStatusStoreTipDepthCells),
+      );
+      // →x 잉크 = x 상자 한 칸 + 상자 밖 화살표(머리가 내민 부분 + 몸통). 몸통이 남으려면(없으면 경로가 뒤집힌다)
+      // 한 칸 + 머리가 내민 부분보다 넓어야 하고, 2칸 슬롯에 들어가야 한다. 몸통 0.1칸은 몸통 굵기(대문자 높이의
+      // 0.26 ≈ 0.22칸)의 절반쯤 — 이보다 짧으면 몸통 없는 삼각형으로 보인다고 보고 둔 하한이다(측정값이 아니다).
+      final headOutside =
+          CalcTheme.lcdStatusStoreHeadCells -
+          CalcTheme.lcdStatusStoreTipDepthCells;
+      expect(
+        CalcTheme.lcdStatusStoreInkCells,
+        greaterThan(1 + headOutside + 0.1),
+        reason: '몸통 0.1칸 이상',
+      );
+      expect(CalcTheme.lcdStatusStoreInkCells, lessThanOrEqualTo(2));
+      // 실물 →x 잉크 폭은 대문자 높이(7도트)의 8/7배다(스프라이트 8도트, #58 표). 상한은 회귀 방지용이다:
+      // 대문자 높이 대비 앱 폭(칸 × 0.6em ÷ 0.714em)이 지금(1.5칸 = 1.26배, 실물 +10%)에서 조금 여유를 둔 15%를
+      // 넘지 않게 한다(약 1.56칸까지). #160의 1.88칸 + 자간은 약 1.58배였다.
+      // 옆 반전 상자(S) 대비로는 1.5배 대 실물 1.14배다(앱 S 상자가 실물보다 좁은 탓 — CalcTheme 문서).
+      final storeCapRatio =
+          CalcTheme.lcdStatusStoreInkCells *
+          CalcTheme.lcdStatusCharWidthRatio /
+          CalcTheme.lcdStatusCapHeightRatio;
+      expect(storeCapRatio, lessThanOrEqualTo(8 / 7 * 1.15));
     });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
@@ -860,6 +952,9 @@ void main() {
         CalcTheme.keyLegendFractionBarThickness,
         CalcTheme.keyLegendFractionGap,
         CalcTheme.keyLegendFractionOverhang,
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        CalcTheme.keyLegendDisplayFractionGap,
+        CalcTheme.keyLegendBoxStrokeRatio,
         CalcTheme.keyLegendRadicalStroke,
         CalcTheme.keyLegendRadicalGap,
         CalcTheme.keyLegendRadicalSignWidth,
@@ -877,20 +972,34 @@ void main() {
       expect(CalcTheme.keyLegendMinStroke, inExclusiveRange(0, 1));
     });
 
-    test('최소 선 두께로 굵게 칠해도 각인 글자 4dp 이상에서 분수·근호 가로줄 옆 여백이 남는다 (#155 R2)', () {
+    test('최소 선 두께로 굵게 칠해도 분수·근호 가로줄 옆 여백이 남는다 — 작은 분수는 각인 4dp, 분수 키·근호는 3.2dp부터 (#155 R2, #206 R2)', () {
       // 배치는 비율 두께로 하고 칠은 최소 두께로 굵게 한다. 굵어진 만큼은 가로줄 옆 여백을 덮는다
       // (분수는 가운데 기준으로 위아래 절반씩, 근호 가로줄은 안쪽(아래)으로 전부 — key_legend_view.dart).
-      // 4dp는 짧은 창 하한(각인 약 3.2dp, CalcTheme "짧은 창" 절)보다 조금 큰 값으로, 평소 화면의 각인은 6dp 이상이다.
-      for (var f = 4.0; f <= 12; f += 0.1) {
-        final bar = f * CalcTheme.keyLegendFractionBarThickness;
-        final paintBar = bar > CalcTheme.keyLegendMinStroke
-            ? bar
-            : CalcTheme.keyLegendMinStroke;
-        expect(
-          f * CalcTheme.keyLegendFractionGap - (paintBar - bar) / 2,
-          greaterThan(0),
-          reason: '분수 $f',
-        );
+      // 평소 화면의 각인은 6dp 이상이다. 작은 분수(가로줄 0.06em)는 4dp(짧은 창 하한 각인 약 3.2dp보다 조금 큰 값)부터
+      // 여백이 남는다(#155 R2). 굵은 분수 키 가로줄(0.146em)·근호(0.14em)는 3.4~3.6dp 아래에서만 최소 두께가 걸리므로
+      // 짧은 창 하한 3.2dp부터 본다(#206 R2).
+      for (var f = 3.2; f <= 12; f += 0.1) {
+        for (final (barRatio, gapRatio) in [
+          if (f >= 4 - 1e-9)
+            (
+              CalcTheme.keyLegendFractionBarThickness,
+              CalcTheme.keyLegendFractionGap,
+            ),
+          (
+            CalcTheme.keyLegendDisplayFractionBarThickness,
+            CalcTheme.keyLegendDisplayFractionGap,
+          ),
+        ]) {
+          final bar = f * barRatio;
+          final paintBar = bar > CalcTheme.keyLegendMinStroke
+              ? bar
+              : CalcTheme.keyLegendMinStroke;
+          expect(
+            f * gapRatio - (paintBar - bar) / 2,
+            greaterThan(0),
+            reason: '분수 $f ($barRatio)',
+          );
+        }
         final stroke = f * CalcTheme.keyLegendRadicalStroke;
         final paintStroke = stroke > CalcTheme.keyLegendMinStroke
             ? stroke
@@ -918,7 +1027,6 @@ void main() {
           greaterThan(CalcTheme.keyLegendSumBoxHeightRatio),
         ); // 본문 칸도 납작하다
         expect(CalcTheme.keyLegendLimitGap, inExclusiveRange(0, 0.1));
-        expect(CalcTheme.keyLegendBoxStroke, inExclusiveRange(0, 0.1));
         // ∑ 잉크 범위 0.954em (Noto Sans Math, KeyLegendView.glyphInk) — 쌓은 잉크 높이식
         const sigma = 0.954 * CalcTheme.keyLegendLimitBaseScale;
         const stack =
@@ -976,39 +1084,70 @@ void main() {
         CalcTheme.keyLegendIntegralOperandHeight,
         inInclusiveRange(0.33, 0.40),
       );
-      // 분수 키 가로줄 나감: 다른 분수보다 길다(가로줄/칸 ≈ 1.46은 위젯 테스트가 그린 픽셀로 본다)
-      expect(
-        CalcTheme.keyLegendDisplayFractionOverhang,
-        inInclusiveRange(0.1, 0.16),
-      );
+      // 분수 키 가로줄 나감: 가로줄/칸 잉크 폭이 사진(37~38px / 25~26px ≈ 1.46)과 같다(#186 R1, #206에서 칸 배율을
+      // 바꾸며 다시 맞춤). 칸 잉크 폭 = ◼ 잉크 높이 0.482 × 칸 배율 × 25/14, 칸 조각 폭 = 잉크 + 좌우 여백.
+      const s = CalcTheme.keyLegendDisplayFractionScale;
+      final boxInk =
+          0.482 *
+          s *
+          CalcTheme.keyLegendBoxAspectRatio(LegendBoxShape.fractionPart);
+      final barWidth =
+          boxInk +
+          2 * CalcTheme.keyLegendBoxSideBearing * s +
+          2 * CalcTheme.keyLegendDisplayFractionOverhang;
+      expect(barWidth / boxInk, moreOrLessEquals(1.46, epsilon: 0.01));
       expect(
         CalcTheme.keyLegendDisplayFractionOverhang,
         greaterThan(CalcTheme.keyLegendFractionOverhang),
       );
     });
 
-    test(
-      '빈 칸 테두리는 최소 두께로 굵어져도 구멍이 칸의 절반 이상 남는다 — 짧은 창 하한 각인 3.2dp부터 (#169 R2)',
-      () {
-        const sigmaRatio = 0.954 * CalcTheme.keyLegendLimitBaseScale;
-        for (var f = 3.2; f <= 12; f += 0.1) {
-          final height = f * sigmaRatio * CalcTheme.keyLegendSumBoxHeightRatio;
-          final width = f * sigmaRatio * CalcTheme.keyLegendSumLimitWidthRatio;
-          final short = height < width ? height : width;
-          final raw = f * CalcTheme.keyLegendBoxStroke;
-          final painted = raw > CalcTheme.keyLegendMinStroke
-              ? raw
-              : CalcTheme.keyLegendMinStroke;
-          // key_legend_view.dart `_box`와 같은 상한: 짧은 변의 1/4
-          final stroke = painted < short / 4 ? painted : short / 4;
-          expect(
-            height - 2 * stroke,
-            greaterThanOrEqualTo(height / 2 - 1e-9),
-            reason: '$f',
-          );
-        }
-      },
-    );
+    test('빈 칸 테두리는 칸 짧은 변의 사진 비율이고, 구멍이 칸의 절반 이상 남는다 (#206, #169 R2)', () {
+      // 근접 사진의 빈 칸 테두리: 칸 짧은 변의 0.24~0.31 (분수 키 분모 0.26, ∫ 끝 칸 0.28~0.31, log 진수 칸 0.24).
+      expect(CalcTheme.keyLegendBoxStrokeRatio, inInclusiveRange(0.24, 0.31));
+      // 테두리는 칸 안쪽에 칠하므로 구멍 = 1 − 2 × 비율. 칸 크기에 비례하므로 글자 크기(짧은 창 하한 각인 약 3.2dp
+      // 포함)와 상관없이 구멍이 칸의 절반 이상이다 — 작은 각인에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2).
+      expect(
+        1 - 2 * CalcTheme.keyLegendBoxStrokeRatio,
+        greaterThanOrEqualTo(0.5 - 1e-9),
+      );
+    });
+
+    test('분수 키 가로줄·간격·칸은 사진 비율이고, 작은 분수보다 굵다 (#206)', () {
+      // 근접 사진(메인 각인 글자 크기 33.5px): 가로줄 4.9px, 간격 2.4~2.5px, 칸 높이 14px(분자 13.6·분모 14.4px)
+      expect(
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        moreOrLessEquals(4.9 / 33.5, epsilon: 0.01),
+      );
+      expect(
+        CalcTheme.keyLegendDisplayFractionGap,
+        moreOrLessEquals(2.45 / 33.5, epsilon: 0.01),
+      );
+      // 칸 높이 = 글꼴 ◼ 잉크 0.482em × 분수 키 배율
+      const box = 0.482 * CalcTheme.keyLegendDisplayFractionScale;
+      expect(box, moreOrLessEquals(14 / 33.5, epsilon: 0.01));
+      // 각인 높이 = 칸 둘 + 간격 둘 + 가로줄: 사진 37.9px ≈ 1.13em. 메인 라벨 높이 맞춤을 바꾸지 않는지(가장 높은 메인
+      // 각인 ∫◻◻◼ 이하)는 실제 배치로 위젯 테스트가 본다.
+      const height =
+          2 * box +
+          2 * CalcTheme.keyLegendDisplayFractionGap +
+          CalcTheme.keyLegendDisplayFractionBarThickness;
+      expect(height, moreOrLessEquals(37.9 / 33.5, epsilon: 0.02));
+      // 작은 분수는 높이 예산 때문에 가늘게 둔다(CalcTheme "2차원 각인 배치" 절)
+      expect(
+        CalcTheme.keyLegendDisplayFractionBarThickness,
+        greaterThan(CalcTheme.keyLegendFractionBarThickness),
+      );
+      expect(
+        CalcTheme.keyLegendDisplayFractionGap,
+        greaterThan(CalcTheme.keyLegendFractionGap),
+      );
+      // 근호: 사진 가로줄 4.8px·비스듬한 획 약 4.6px
+      expect(
+        CalcTheme.keyLegendRadicalStroke,
+        moreOrLessEquals(4.7 / 33.5, epsilon: 0.01),
+      );
+    });
 
     test('키 간격 비율은 0~0.1 사이의 양수다', () {
       expect(CalcTheme.keyHorizontalGapRatio, inExclusiveRange(0, 0.1));
@@ -1061,16 +1200,94 @@ void main() {
       );
     });
 
-    test('커서 패드 허브는 방향 키캡보다 어둡고, 둘레선은 허브 대비 3:1 이상이다', () {
+    test('커서 패드 허브·홈은 은색 방향 키캡보다 어둡고 3:1 이상 구분된다 (#156)', () {
       expect(
         lightness(CalcTheme.cursorPadHub),
         lessThan(lightness(CalcTheme.keyCursor)),
       );
+      for (final c in [
+        CalcTheme.cursorPadHub,
+        CalcTheme.cursorPadGroove,
+        CalcTheme.cursorPadGrooveHighContrast,
+      ]) {
+        expect(
+          contrastRatio(c, CalcTheme.keyCursor),
+          greaterThanOrEqualTo(3.0),
+          reason: '$c',
+        );
+      }
+      expect(CalcTheme.cursorPadGrooveWidthRatio, inExclusiveRange(0.0, 0.1));
+    });
+
+    test('키캡 입체감 상수 (#156): 모서리 반경 비는 숫자부가 덜 둥글고, 광택은 글자 자리(가운데)를 비운다', () {
       expect(
-        contrastRatio(CalcTheme.keyBorder, CalcTheme.cursorPadHub),
-        greaterThanOrEqualTo(3.0),
+        CalcTheme.keyCapNumberCornerRadiusRatio,
+        lessThan(CalcTheme.keyCapCornerRadiusRatio),
+      );
+      expect(CalcTheme.keyCapCornerRadiusRatio, inExclusiveRange(0.0, 0.5));
+      expect(CalcTheme.keyCapMaxCornerRadius, greaterThan(0));
+      // 옆면은 눌림 이동이 비워 둔 셀 안 자리에 그린다 — 깊이가 같아야 셀 밖으로 나가지 않고 눌린 키캡이 옆면을 덮는다.
+      expect(CalcTheme.keyCapSideDepth, CalcTheme.keyPressedOffset);
+      expect(CalcTheme.keyCapSheenClearStart, inExclusiveRange(0.0, 0.5));
+      expect(CalcTheme.keyCapSheenClearEnd, inExclusiveRange(0.5, 1.0));
+      // 광택·그늘은 반투명 덧칠이다
+      for (final c in [
+        CalcTheme.keyCapSheen,
+        CalcTheme.keyCapGloss,
+        CalcTheme.keyCapShade,
+        CalcTheme.keyCapSide,
+      ]) {
+        expect(c.a, inExclusiveRange(0.0, 1.0), reason: '$c');
+      }
+    });
+
+    test('숫자부 메인 라벨 배율·상한 (#156): 함수부보다 크고, 상한은 함수부 상한의 같은 배수다', () {
+      expect(CalcTheme.keyNumberMainLabelScale, greaterThan(1.0));
+      expect(
+        CalcTheme.keyNumberMainLabelMaxFontSize,
+        CalcTheme.keyMainLabelMaxFontSize * CalcTheme.keyNumberMainLabelScale,
       );
     });
+
+    test('본체 바탕 (#156): 그라데이션 아래 끝과 잔무늬 색이 각인 대비를 검사하는 본체 색 범위 안이다', () {
+      // 잔무늬 밝은 면 = bodyFrame, 어두운 면 = bodyBottomGradient — 둘 다 "모든 본체 색" 대비 검사 대상이다.
+      expect(
+        lightness(CalcTheme.bodyFrame),
+        greaterThan(lightness(CalcTheme.bodyBackground)),
+      );
+      expect(
+        lightness(CalcTheme.bodyBottomGradient),
+        lessThan(lightness(CalcTheme.bodyBackground)),
+      );
+      expect(CalcTheme.bodyTexturePitch, greaterThan(0));
+      expect(CalcTheme.bodyRimWidth, greaterThan(0));
+      expect(CalcTheme.bodyRimWidth, lessThan(CalcTheme.screenPadding / 2));
+    });
+
+    test(
+      'LCD 베젤 (#156): 검은 베젤은 바깥 테두리로 본체와 구분되고, 유리 그늘을 덧칠해도 LCD 글자는 4.5:1 이상이다',
+      () {
+        expect(
+          lightness(CalcTheme.lcdFrame),
+          lessThan(lightness(CalcTheme.bodyBackground)),
+        );
+        expect(
+          contrastRatio(CalcTheme.lcdBezelEdge, CalcTheme.lcdFrame),
+          greaterThanOrEqualTo(1.5),
+        );
+        final shaded = Color.alphaBlend(
+          CalcTheme.lcdGlassShade,
+          CalcTheme.lcdBackground,
+        );
+        for (final text in [CalcTheme.lcdText, CalcTheme.lcdStatusActive]) {
+          expect(
+            contrastRatio(text, shaded),
+            greaterThanOrEqualTo(minTextContrast),
+          );
+        }
+        expect(CalcTheme.lcdGlassShadeExtent, inExclusiveRange(0.0, 0.5));
+      },
+    );
 
     test('키 라벨 스타일은 자간을 명시해 테마 자간을 물려받지 않는다', () {
       for (final style in [
@@ -1193,7 +1410,7 @@ void main() {
       );
     });
 
-    test('본체 인쇄 글자 스타일은 각인과 같은 고정폭·줄 높이·자간이다 (키패드 각인 크기 계산을 공유한다)', () {
+    test('본체 인쇄 글자 스타일은 각인과 같은 글꼴·줄 높이·자간이다 (키패드 각인 크기 계산을 공유한다)', () {
       const print = CalcTheme.keyBodyPrintStyle;
       const shift = CalcTheme.keyShiftLabelStyle;
       expect(print.fontFamily, shift.fontFamily);
