@@ -482,6 +482,141 @@ void main() {
       }
     });
 
+    testWidgets(
+      '줄 글자에 필요한 높이보다 높은 LCD: 글자는 그대로이고 남는 높이를 입력·결과 줄이 똑같이 나눠, 식은 위·답은 아래 끝에 남는다 (#232)',
+      (tester) async {
+        // 폭 396(412dp 폰 — 줄 글자가 폭에 묶인다): 줄 글자(31.7dp)에 필요한 높이 약 221, 상한 높이 273.5, 키패드가 남긴 높이를 받은
+        // 291·315·600dp를 견준다.
+        const width = 396.0;
+        Future<
+          ({
+            double font,
+            Rect lcd,
+            Rect input,
+            Rect result,
+            Rect i,
+            Rect r,
+            Rect ia,
+            Rect ra,
+          })
+        >
+        drawAt(double height) async {
+          await _pump(
+            tester,
+            const LcdDisplay(
+              input: Text('1'),
+              result: Text('2'),
+              inputOverflow: LcdLineOverflow(left: true),
+              resultOverflow: LcdLineOverflow(left: true),
+              fitFontsToSize: true,
+            ),
+            width: width,
+            height: height,
+          );
+          Rect arrowIn(Finder line) => tester.getRect(
+            find.descendant(of: line, matching: find.text('◄')),
+          );
+          return (
+            font: DefaultTextStyle.of(tester.element(find.text('1')))
+                .style
+                .fontSize!,
+            lcd: tester.getRect(find.byType(LcdDisplay)),
+            input: tester.getRect(_inputLine),
+            result: tester.getRect(_resultLine),
+            i: tester.getRect(find.text('1')),
+            r: tester.getRect(find.text('2')),
+            ia: arrowIn(_inputLine),
+            ra: arrowIn(_resultLine),
+          );
+        }
+
+        final base = await drawAt(LcdFontSizes.heightAtMaxLineFont);
+        for (final height in const [291.0, 315.0, 600.0]) {
+          final tall = await drawAt(height);
+          final reason = 'LCD 높이 $height';
+          final extra = height - LcdFontSizes.heightAtMaxLineFont;
+          expect(tall.font, base.font, reason: reason);
+          // 입력·결과 줄이 남는 높이를 2 : 2로 나눠 받는다.
+          expect(
+            tall.input.height - base.input.height,
+            moreOrLessEquals(extra / 2, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.result.height,
+            moreOrLessEquals(tall.input.height, epsilon: 1e-6),
+            reason: reason,
+          );
+          // 식은 LCD 윗변에서, 답은 LCD 아랫변에서 같은 거리다 — 둘 사이만 벌어진다.
+          expect(
+            tall.i.top - tall.lcd.top,
+            moreOrLessEquals(base.i.top - base.lcd.top, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.lcd.bottom - tall.r.bottom,
+            moreOrLessEquals(base.lcd.bottom - base.r.bottom, epsilon: 1e-6),
+            reason: reason,
+          );
+          // ◄/►도 줄 내용과 같은 쪽에 붙어 식·답 곁에 남는다(R1 — 줄 높이 가운데에 두면 600dp LCD에서 식보다 약 160dp 아래로
+          // 떨어졌다).
+          expect(
+            tall.ia.center.dy - tall.lcd.top,
+            moreOrLessEquals(base.ia.center.dy - base.lcd.top, epsilon: 1e-6),
+            reason: reason,
+          );
+          expect(
+            tall.lcd.bottom - tall.ra.center.dy,
+            moreOrLessEquals(
+              base.lcd.bottom - base.ra.center.dy,
+              epsilon: 1e-6,
+            ),
+            reason: reason,
+          );
+        }
+        // 화살표 가운데는 줄 내용 2행(분수 1단) 띠의 가운데 — 입력 줄은 윗변에서, 결과 줄은 아랫변에서 띠 높이의 절반이다
+        // (분수 막대 높이, R2). 띠 높이는 독립 계산: 2 × (글자 × 1.3 + 1) + 글자 × 0.25 (배율 1).
+        final tall = await drawAt(600);
+        final band =
+            2 * (tall.font * CalcTheme.lcdInputStyle.height! + 1) +
+            tall.font * CalcTheme.lcdFractionBarRatio;
+        expect(LcdFontSizes.lineBandHeight(tall.font), moreOrLessEquals(band));
+        expect(
+          tall.ia.center.dy - tall.input.top,
+          moreOrLessEquals(band / 2, epsilon: 0.01),
+        );
+        expect(
+          tall.result.bottom - tall.ra.center.dy,
+          moreOrLessEquals(band / 2, epsilon: 0.01),
+        );
+      },
+    );
+
+    testWidgets('줄이 2행 높이에 맞는 LCD에서는 ◄/►가 줄 높이 가운데다 (#232 전과 같다)', (
+      tester,
+    ) async {
+      // 360×160 — 줄 글자가 높이에 묶여 줄 높이가 2행(분수 1단) 높이와 거의 같다.
+      await _pump(
+        tester,
+        const LcdDisplay(
+          input: Text('1'),
+          result: Text('2'),
+          inputOverflow: LcdLineOverflow(right: true),
+          resultOverflow: LcdLineOverflow(right: true),
+          fitFontsToSize: true,
+        ),
+      );
+      for (final line in [_inputLine, _resultLine]) {
+        final arrow = tester.getRect(
+          find.descendant(of: line, matching: find.text('►')),
+        );
+        expect(
+          arrow.center.dy,
+          moreOrLessEquals(tester.getRect(line).center.dy, epsilon: 1.0),
+        );
+      }
+    });
+
     testWidgets('상태 표시줄과 줄 내용은 모두 베젤 안쪽에 그려진다', (tester) async {
       await _pump(
         tester,
