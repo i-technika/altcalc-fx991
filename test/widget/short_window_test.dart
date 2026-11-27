@@ -672,7 +672,7 @@ void main() {
       expect(node.flagsCollection.isLiveRegion, isTrue);
       expect(node.label, message.windowTooSmall);
       expect(find.bySemanticsLabel(message.windowTooSmall), findsOneWidget);
-      // 숨긴 계산기(설정 키·LCD 알림 노드)는 의미 트리에 없다.
+      // 숨긴 계산기(설정 키)는 의미 트리에 없다.
       expect(
         find.bySemanticsLabel(const KoSemanticStrings().keyButton(settingsKey)),
         findsNothing,

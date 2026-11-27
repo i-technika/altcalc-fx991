@@ -16,6 +16,7 @@ import 'presentation/l10n/device_locale_scope.dart';
 import 'presentation/providers/device_provider.dart';
 import 'presentation/providers/settings_provider.dart';
 import 'presentation/screens/calculator_screen.dart';
+import 'presentation/widgets/screen_reader_announcer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -450,6 +451,8 @@ class _MetricsObserver with WidgetsBindingObserver {
 /// 앱 루트. 상태 관리를 위해 [ProviderScope] 아래에 둔다.
 ///
 /// [home]으로 첫 화면을 바꿔 끼울 수 있다 — 테스트·개발 도구가 앱과 같은 테마·로캘 범위에서 자기 화면을 띄울 때 쓴다.
+/// [home]과 관계없이 루트 Navigator 위에 계산기 상태 알림 노드([ScreenReaderAnnouncerLayer], #207)를 두므로, 늘
+/// [ProviderScope] 아래에 두어야 하고 다른 화면을 띄워도 계산기 상태 변화는 알린다.
 /// [frameBuilder]로 앱 화면(루트 Navigator)을 바깥에서 감싸 배치할 수 있다 — 개발용 미리보기가 루트 Navigator를
 /// 기기 틀 안에 두어, 화면이 띄우는 대화상자·Overlay가 실제 앱과 같은 구조로 그 틀 안에 뜨게 할 때 쓴다 (#72).
 class AltCalcApp extends StatelessWidget {
@@ -460,8 +463,8 @@ class AltCalcApp extends StatelessWidget {
   /// `null`이면 [SystemHighTextContrast.instance] — 테스트가 값을 바꿔 끼울 때만 넘긴다.
   final ValueListenable<bool>? highTextContrast;
 
-  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 테마로 감싼 것, [_ScreenTheme])을 감싸는
-  /// 도구용 틀. `null`이면 그대로 띄운다.
+  /// 앱 화면(루트 Navigator, [MaterialApp.builder]의 child — 대비 설정에 맞춘 테마([_ScreenTheme])와 스크린리더 알림 층
+  /// ([ScreenReaderAnnouncerLayer])으로 감싼 것)을 감싸는 도구용 틀. `null`이면 그대로 띄운다.
   /// 실제 앱은 쓰지 않는다.
   final Widget Function(BuildContext context, Widget screen)? frameBuilder;
 
@@ -491,8 +494,10 @@ class AltCalcApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: CalcPalette.of(context).materialTheme,
           builder: (context, child) {
-            final screen = _ScreenTheme(
-              child: child ?? const SizedBox.shrink(),
+            // 상태 변화 알림 노드는 루트 Navigator의 다음 형제로 둔다 — 설정 대화상자가 열려도 막히지 않게 (#207).
+            // 도구용 틀([frameBuilder])도 이 층째로 감싸, 미리보기에서도 알림 노드가 기기 화면 안에 있다 (#72).
+            final screen = ScreenReaderAnnouncerLayer(
+              child: _ScreenTheme(child: child ?? const SizedBox.shrink()),
             );
             // 스크린리더 문구가 기기 언어 변경을 따라가도록 기기 로캘을 알린다 (#20)
             return DeviceLocaleScope(
