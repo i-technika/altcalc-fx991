@@ -75,18 +75,22 @@ enum ComplexResultIndicator {
 ///     흐린 꺼진 세그먼트의 순서도 같다.
 ///   - 재대조(#183): YouTube "Casio calculator fx-991EX hidden diagnostic test mode functions" 1:22 화면(진단 모드라
 ///     모든 세그먼트가 켜짐, 사용자가 준 캡처)에서 18개 세그먼트 가운데를 쟀다. 사진 x를 직선 하나로 도트에 맞추면
-///     모두 1도트 안쪽으로 맞는다(슬롯이 없는 ⇩·◀·▶·☀ 포함, 표는 `test/unit/lcd_status_test.dart`).
-///   - 실물 순서: S, A, M, →x, √▭✎, D, R, G, FIX, SCI, E, i, ∠, (⇩), (◀), ▼, ▲, (▶), ‖, (☀).
+///     모두 1도트 안쪽으로 맞는다(슬롯이 없는 ⇩·◀·▶와, 그때 슬롯이 없던 ☀ 포함 — 표는 `test/unit/lcd_status_test.dart`).
+///   - 실물 순서: S, A, M, →x, √▭✎, D, R, G, FIX, SCI, E, i, ∠, (⇩), (◀), ▼, ▲, (▶), ‖, ☀.
 ///     #44에서 받은 순서(√▭✎가 SCI 뒤)는 사진과 달라 사용자 확인을 받아 사진 기준으로 고쳤다(2026-11-26).
 ///   - 이 순서로 #44의 잠정 자리를 확정했다. E는 SCI 바로 뒤, i·∠는 E 바로 뒤의 서로 다른 두 자리다.
 ///   - ▼·▲는 한 자리에 위아래로 겹친 것이 아니라 나란한 두 자리다(▼ 왼쪽). 세그먼트도 따로 있다.
-///   - 괄호 안 세그먼트는 넣지 않고 자리만 비워 둔다. ⇩·◀·▶는 가이드 표시기 표에 없고, ☀는 앱에 해당 상태가
-///     없다(#44 결정). ◀·▶는 입력 줄 가로 넘침을 상태줄에서 알리는 표시일 가능성이 있다. 그렇다면 줄 안에 ◄/►를
-///     그리는 지금 설계(`LcdLineOverflow`)와 다르다. 실물 계산기로 확인하지 못했으며, #36에서 함께 확인한다.
+///   - 괄호 안 세그먼트(⇩·◀·▶)는 넣지 않고 자리만 비워 둔다. 가이드 표시기 표에 없다. ◀·▶는 입력 줄 가로 넘침을
+///     상태줄에서 알리는 표시일 가능성이 있다. 그렇다면 줄 안에 ◄/►를 그리는 지금 설계(`LcdLineOverflow`)와 다르다.
+///     실물 계산기로 확인하지 못했으며, #36에서 함께 확인한다.
+///   - ☀ 자리 = 화면 켜짐 유지(앱 고유, [keepScreenOn]). 실물 ☀는 태양전지로 직접 전원을 받는 동안 켜지는
+///     태양광 표시기다(인쇄 4쪽 표시기 표, fx-991EX만). 앱에는 그 상태가 없어 #44에서 자리만 비워 두었다가, 2026-11-27
+///     사용자 결정으로 그 자리에 앱 설정 "화면 켜짐 유지"(앱 실행 중 화면 꺼짐 방지, #234)의 표시기를 둔다(#233).
+///     모양은 ☀(해)로 읽히지 않게 뜬 눈으로 그린다(아래 "모양" 참조).
 ///   - 사용자 정보의 "Disp"와 "‖"는 가이드 표의 "‖ = 다중 문장 중간 결과" 하나로 보고 슬롯 하나([disp])로 둔다.
 /// - 그리는 방식: 대부분은 글자로 그리고, 글꼴에 맞는 글자가 없는 슬롯은 **직접 그리는 아이콘**([icon])으로 그린다(#57).
 ///   - `→x`·`√▭✎`·`‖`는 글꼴 글자로는 기준선·크기가 맞지 않는다. `‖`는 기준선 아래로 내려가고, `√`의 윗선은
-///     칸을 덮지 않는다.
+///     칸을 덮지 않는다. `👁`(화면 켜짐 유지)는 번들 글꼴에 없고, 다른 표시기와 같은 선 굵기·높이로 맞춰야 한다.
 ///   - `▭`는 두 칸 폭이고, `✎`(U+270E)는 번들 글꼴에 없다(`assets/fonts/README.md`).
 ///   - [template]은 아이콘 슬롯에서도 표시 문자(식별자)로 쓰이고 화면에는 그려지지 않는다.
 /// - 모양(#160): 위 User's Guide 4쪽 표시기 표의 아이콘을 기준으로 삼았다.
@@ -99,6 +103,22 @@ enum ComplexResultIndicator {
 ///     (대문자 높이의 2.02배)으로 그린다(#217, `CalcTheme.lcdStatusMathInkCells`).
 ///   - 교차 확인: Commons 사진에서 켜진 D는 상자 안의 밝은 D이고, √▭✎는 "√E✎"처럼(윗선 + 칸의 위·아래 변) 보인다.
 ///     스프라이트(`interface.png` 같은 줄)도 다섯 글자와 `‖`가 상자다.
+///   - `👁`(화면 켜짐 유지, #233): 앱 고유 표시기라 실물 모양이 없다. 뜬 눈을 그린다 — 양 끝이 뾰족한 가로로 긴
+///     눈꺼풀 테두리와, 위아래 눈꺼풀에 닿는 눈동자(흰자는 눈동자 왼쪽·오른쪽에 남는다). 반전 상자가 아니다(실물 ☀도
+///     상자가 아니다).
+///     - 다른 표시기와 같은 것: 선 굵기(대문자 높이의 0.14), 대문자 높이 띠 안.
+///     - 다른 것: 곡선이다. 도트 LCD 아이콘은 모서리가 각지지만(이슈의 문법), 각진(육각) 눈은 너트·◈처럼 읽혀
+///       이 표시기만 곡선으로 둔다. 띠 가운데에 놓여 기준선·대문자 윗선에 닿지 않는다(눈은 가로로 길어야 한다).
+///     - 폭(`CalcTheme.lcdStatusEyeInkCells`): 1.4칸을 2칸 슬롯 가운데에 놓는다(`→x`와 같은 방식). 한 칸에 그리면
+///       가로:세로가 1.1:1로 거의 원이 되어, 작은 크기(6dp·2x)에서 ⊙(천문 기호 ☉ = 해)로 뭉개졌다(#233 리뷰 R1).
+///       1.4칸이면 가로:세로가 약 1.9:1이다. 대문자 높이 대비로는 실물 ☀ 잉크(6도트)보다 약 37% 넓다 — 의도한
+///       차이다(`CalcTheme.lcdStatusEyeInkCells` 문서).
+///     - 작은 크기 한계: 6dp·2x에서는 눈꺼풀 픽셀 위상에 따라 위아래 진하기가 달라 "아래가 채워진 그릇 + 점"처럼
+///       보일 수 있다. 6dp·1.5x(hdpi)에서는 눈꺼풀의 뾰족한 끝이 덮임 문턱 아래로 사라져 가로 6px 안팎의 점으로
+///       보인다(#233 리뷰 R2 — 같은 크기에서 다른 아이콘도 획이 1픽셀 안팎이다).
+///     - 후보 비교(#233): 빛줄기가 나오는 화면은 빛줄기가 ☀의 해 빛살과 겹쳐 태양광으로 읽히고, 전구는 한 칸 안에서
+///       Ω처럼, 컵(카페인)은 "ÜP"처럼 읽혔다. 눈은 "깨어 있음"을 뜻해 화면이 꺼지지 않는 상태와 맞고, 다른
+///       표시기·☀와 모양이 겹치지 않는다.
 ///   - 실물 대조(#183, 위 진단 화면 영상 — 흐려서 1도트 단위 모양은 보이지 않는다):
 ///     - S·A·D·R·G: 어두운 상자 안의 밝은 글자임을 확인했다. 상자 안 여백은 잴 수 없다(글자 크기 5/7은 가이드·
 ///       스프라이트 근거).
@@ -191,6 +211,14 @@ enum LcdIndicatorSlot {
     columns: 1,
     dotCenter: 176.5,
     icon: LcdIndicatorIcon.multiStatement,
+  ),
+
+  /// 👁 — 화면 켜짐 유지(앱 고유, #233). 실물 ☀(태양광 표시기) 자리에 뜬 눈 아이콘으로 그린다(2칸 슬롯 가운데에 1.4칸).
+  keepScreenOn(
+    '👁',
+    columns: 2,
+    dotCenter: 187,
+    icon: LcdIndicatorIcon.keepScreenOn,
   );
 
   /// 대표 표시 문자 — 글자 슬롯은 꺼진 상태에서 흐리게 그리는 글자, 아이콘 슬롯은 표시 문자(식별자)
@@ -234,11 +262,15 @@ enum LcdIndicatorIcon {
 
   /// `‖` — 어두운 상자 안의 밝은 세로 두 획 (다중 문장 중간 결과, 1칸, #160)
   multiStatement,
+
+  /// `👁` — 양 끝이 뾰족한 눈꺼풀 테두리와 그에 닿는 눈동자의 뜬 눈 (화면 켜짐 유지, 앱 고유, 2칸 슬롯 가운데에 1.4칸, #233)
+  keepScreenOn,
 }
 
 /// LCD 상태 표시줄에 표시할 상태의 불변 스냅샷.
 ///
-/// 계산기 전체 상태(`CalcState`, #11)에서 파생해 `LcdDisplay`에 넘긴다.
+/// 계산기 전체 상태(`CalcState`, #11)에서 파생하고, 앱 설정에서 오는 표시기(화면 켜짐 유지, #233)를 더해
+/// `LcdDisplay`에 넘긴다(`lcdStatusProvider`).
 @immutable
 class LcdStatus {
   /// SHIFT 1회성 대기 (S)
@@ -277,6 +309,9 @@ class LcdStatus {
   /// 아래쪽에 이력·데이터가 더 있음 (▼)
   final bool historyDown;
 
+  /// 화면 켜짐 유지 모드가 켜져 있음 (👁, 실물 ☀ 자리 — 앱 고유, #233). 앱 설정 값이다(#234). 기본 꺼짐.
+  final bool keepScreenOn;
+
   const LcdStatus({
     this.shift = false,
     this.alpha = false,
@@ -290,9 +325,10 @@ class LcdStatus {
     this.disp = false,
     this.historyUp = false,
     this.historyDown = false,
+    this.keepScreenOn = false,
   });
 
-  /// 실물 초기 설정(RESET 직후)과 같은 상태: Deg, Norm, MathI/MathO
+  /// 실물 초기 설정(RESET 직후)과 같은 상태: Deg, Norm, MathI/MathO (앱 고유 화면 켜짐 유지는 꺼짐)
   static const LcdStatus initial = LcdStatus();
 
   /// [slot]에 지금 켜져 있는 표시 문자. 꺼져 있으면 `null`.
@@ -317,6 +353,7 @@ class LcdStatus {
     LcdIndicatorSlot.historyDown => historyDown ? '▼' : null,
     LcdIndicatorSlot.historyUp => historyUp ? '▲' : null,
     LcdIndicatorSlot.disp => disp ? '‖' : null,
+    LcdIndicatorSlot.keepScreenOn => keepScreenOn ? '👁' : null,
   };
 
   /// 각도 단위가 [unit]이면 그 표시 문자 (D/R/G는 자리가 따로 있다)
@@ -345,6 +382,7 @@ class LcdStatus {
     bool? disp,
     bool? historyUp,
     bool? historyDown,
+    bool? keepScreenOn,
   }) => LcdStatus(
     shift: shift ?? this.shift,
     alpha: alpha ?? this.alpha,
@@ -358,6 +396,7 @@ class LcdStatus {
     disp: disp ?? this.disp,
     historyUp: historyUp ?? this.historyUp,
     historyDown: historyDown ?? this.historyDown,
+    keepScreenOn: keepScreenOn ?? this.keepScreenOn,
   );
 
   @override
@@ -374,7 +413,8 @@ class LcdStatus {
       other.complex == complex &&
       other.disp == disp &&
       other.historyUp == historyUp &&
-      other.historyDown == historyDown;
+      other.historyDown == historyDown &&
+      other.keepScreenOn == keepScreenOn;
 
   @override
   int get hashCode => Object.hash(
@@ -390,6 +430,7 @@ class LcdStatus {
     disp,
     historyUp,
     historyDown,
+    keepScreenOn,
   );
 
   @override

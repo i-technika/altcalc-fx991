@@ -7,7 +7,6 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../support/bundled_fonts.dart';
@@ -15,8 +14,8 @@ import '../support/ttf_cmap.dart';
 
 /// 숫자부 메인 각인 크기 (#225, [CalcTheme] "숫자부 메인 각인 크기 (#225)" 절):
 /// - 숫자는 숫자부 키캡 높이의 비율이고, 두 구역의 글자/키캡 비가 실물의 같은 배수다.
-/// - 글자 각인(DEL·AC·Ans·×10ˣ)은 숫자의 0.83배, 연산 기호(× ÷ + − =)는 Noto Sans Mono Medium을 숫자의 1.41배로 그리고, 잉크 가운데를 숫자에 맞춰
-///   내려 그린다.
+/// - 글자 각인(DEL·AC·Ans·×10ˣ)은 숫자의 0.83배, 연산 기호(× ÷ + − =)는 Noto Sans Mono Medium을 숫자의 1.41배로 그리고, 잉크 가운데가
+///   숫자의 잉크 가운데와 같은 높이다(둘 다 키캡 면 가운데 — #230, `main_legend_ink_center_test.dart`).
 /// - 글자 배율 1.0·1.3·2.0에서 숫자부 각인은 따로 줄지 않는다.
 
 // 실물 키패드 근접 사진에서 잰 값 (CalcTheme "숫자부 메인 각인 크기" 절)
@@ -109,12 +108,12 @@ double _inkCenter(ByteData font, String ch) {
   return (y.yMin + y.yMax) / 2;
 }
 
-/// 연산 기호 [operator]의 잉크 가운데 높이가 같은 행 숫자 [digit]의 잉크 가운데와 0.25dp 안인지 본다 (#225).
+/// 연산 기호 [operator]의 잉크 가운데 높이가 같은 행 숫자 [digit]의 잉크 가운데와 0.15dp 안인지 본다 (#225).
 ///
-/// 내리는 거리는 기호·숫자의 대표 잉크 가운데(0.35·0.346em)로 정했으므로 글리프마다(기호 0.346~0.3535em, 숫자
-/// 0.344~0.348em) 조금 남는다. 기호가 키캡 높이에 묶인 창은 숫자가 기호 ÷ 배율보다 커서 약 0.1dp 더 어긋난다.
-/// 줄 상자 높이는 글자 크기를 정수로 반올림한 값이라(TextPainter) 가운데 정렬한 라벨은 글자 크기마다 0.25dp 이하
-/// 오르내린다 — 크기가 다른 모든 각인에 공통인 반올림이므로 그 몫은 빼고(줄 상자 높이를 글자 크기로 보고) 비교한다.
+/// #230부터 기호는 자기 잉크 가운데(잉크 범위 표 — SemiBold·Medium 평균이라 Medium 글리프와 0.003em 안), 숫자는 대문자·숫자
+/// 잉크 가운데(0.344em — 둥근 숫자는 0.344~0.348em)를 그린 기준선에서 키캡 면 가운데에 맞춘다(#225 기준선 비 0.785em로
+/// 내려 그리던 방식은 앱 테마의 줄 간격 배분 `even`(기준선 0.888em)과 엔진의 기준선 반올림을 몰라 0.5~1.5dp 어긋났다).
+/// 그린 기준선은 그린 Text와 같은 글자·줄 상자·줄 간격 배분으로 잰 기준선을 정수 dp로 반올림한 곳이다(`InkCenteredLabel`).
 void _expectOperatorInkAlignedWithDigit(
   WidgetTester tester, {
   required CalcKeyDef operator,
@@ -127,29 +126,29 @@ void _expectOperatorInkAlignedWithDigit(
   double inkCenterY(CalcKeyDef def, ByteData font) {
     final ch = def.mainLabel;
     final finder = _mainText(def.id);
-    final text = tester.widget<Text>(finder);
-    final fontSize = text.style!.fontSize! * effectiveScale;
-    // 그린 Text와 같은 스타일·줄 상자로 기준선을 잰다
+    final paragraph = tester.renderObject<RenderParagraph>(finder);
+    final fontSize = paragraph.textScaler.scale(
+      paragraph.text.style!.fontSize!,
+    );
     final painter = TextPainter(
-      text: TextSpan(text: ch, style: text.style),
-      strutStyle: text.strutStyle,
-      textScaler: text.textScaler!,
+      text: paragraph.text,
+      strutStyle: paragraph.strutStyle,
+      textScaler: paragraph.textScaler,
+      textHeightBehavior: paragraph.textHeightBehavior,
       textDirection: TextDirection.ltr,
     )..layout();
-    final baseline = painter.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
-    final rounding = (painter.height - fontSize) / 2;
+    final baseline = painter
+        .computeDistanceToActualBaseline(TextBaseline.alphabetic)
+        .roundToDouble();
     painter.dispose();
     return tester.getRect(finder).top +
-        rounding +
         baseline -
         _inkCenter(font, ch) * fontSize;
   }
 
   expect(
     inkCenterY(operator, operatorFont),
-    closeTo(inkCenterY(digit, digitFont), 0.25),
+    closeTo(inkCenterY(digit, digitFont), 0.15),
     reason: reason,
   );
 }
@@ -217,29 +216,6 @@ void main() {
       );
     });
   });
-
-  testWidgets(
-    '줄 상자 기준선 비(CalcTheme.keyStrutBaselineRatio)가 실제 각인 배치와 같다 — 연산 기호를 내리는 거리의 전제',
-    (tester) async {
-      for (final base in [
-        CalcTheme.keyMainLabelStyle,
-        CalcTheme.keyNumberOperatorLabelStyle,
-      ]) {
-        final style = base.copyWith(fontSize: 100);
-        final painter = TextPainter(
-          text: TextSpan(text: '7', style: style),
-          strutStyle: keyLabelStrut(style),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        expect(
-          painter.computeDistanceToActualBaseline(TextBaseline.alphabetic) /
-              100,
-          closeTo(CalcTheme.keyStrutBaselineRatio, 1e-4),
-        );
-        painter.dispose();
-      }
-    },
-  );
 
   group('화면의 숫자부 각인 (#225)', () {
     // (창, 인셋) — 폰·작은 폰·21:9 폰·태블릿 세로·iPad·가로형·Fold 내부·짧은 창·초광폭
@@ -330,16 +306,13 @@ void main() {
                   reason: reason,
                 );
                 final cap = tester.getRect(_keycap(def.id));
-                // 연산 기호는 내려 그린 뒤의 위치(Transform 아래 글자 — 2차원 각인 ×10ˣ는 각인 위젯)로 본다
+                // 글자 상자(옮겨 그리기 전 배치 — 잉크 가운데로 옮긴 뒤의 잉크가 키캡 면 안인지는 #230
+                // `main_legend_ink_center_test.dart`가 본다. 줄 상자는 잉크보다 커서 옮기면 면 밖으로 조금 나갈 수 있다)
                 final label = tester.getRect(
-                  find
-                      .descendant(
-                        of: fitted,
-                        matching: find.byWidgetPredicate(
-                          (w) => w is RichText || w is KeyLegendView,
-                        ),
-                      )
-                      .first,
+                  find.descendant(
+                    of: fitted,
+                    matching: find.byType(InkCenteredLabel),
+                  ),
                 );
                 expect(cap.contains(label.topLeft), isTrue, reason: reason);
                 expect(cap.contains(label.bottomRight), isTrue, reason: reason);
@@ -358,7 +331,7 @@ void main() {
                   greaterThanOrEqualTo(m.numberMainLabelFontSize),
                   reason: reason,
                 );
-                // 잉크 가운데 높이가 같은 행 숫자(행 첫 키)의 잉크 가운데와 0.25dp 안이다 (내려 그리지 않으면 0.5~1.1dp)
+                // 잉크 가운데 높이가 같은 행 숫자(행 첫 키)의 잉크 가운데와 0.15dp 안이다 (줄 상자만 가운데에 두면 0.5~1.1dp)
                 _expectOperatorInkAlignedWithDigit(
                   tester,
                   operator: def,
