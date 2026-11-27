@@ -828,114 +828,87 @@ void _cursorPadR2Tests() {
       await tester.pump();
     });
 
-    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(허브 고리 일부, 또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
-      // 패드 비율 하한·상한 근처와 정사각형(비율 제한 밖 극단)까지
-      for (final size in const [
-        Size(90, 64),
-        Size(116, 78),
-        Size(200, 111),
-        Size(100, 100),
+    test('시맨틱 영역: 패드 상자 어디를 짚어도 한 방향이 읽히고, 그린 구역과 같은 방향이 읽히는 넓이가 넉넉하다 (#203)', () {
+      // 패드 비율 하한·상한 근처, 앱 세로 폰 패드(320×568·상태바 20dp, 412×915), 정사각형(비율 제한 밖 극단)
+      // 측정(0.25dp 격자): 같은 방향 비율 전체 85.6~85.8%, 방향별 81.5~90.1% — 정사각형만 전체 79.8%, ◀·▶ 63.3%.
+      for (final (size, minAll, minEach) in const [
+        (Size(90, 64), 0.83, 0.78),
+        (Size(116, 78), 0.83, 0.78),
+        (Size(200, 111), 0.83, 0.78),
+        (Size(97.7, 67.8), 0.83, 0.78),
+        (Size(136.2, 97.3), 0.83, 0.78),
+        (Size(100, 100), 0.77, 0.6),
       ]) {
-        final geometry = CursorPadGeometry(size);
+        final g = CursorPadGeometry(size);
+        final box = Offset.zero & size;
         final rects = {
           for (final s in CursorPadSector.values)
             s: CursorPad.semanticRect(s, size),
         };
-        for (final a in CursorPadSector.values) {
-          final rect = rects[a]!;
-          expect(rect.isEmpty, isFalse, reason: '$size ${a.name}');
-          expect(
-            (Offset.zero & size).intersect(rect),
-            rect,
-            reason: '$size ${a.name}',
-          );
-          for (final b in CursorPadSector.values) {
-            if (a == b) continue;
-            final overlap = rect.intersect(rects[b]!);
-            expect(
-              overlap.width <= 0 || overlap.height <= 0,
-              isTrue,
-              reason: '$size ${a.name} × ${b.name}',
-            );
+        for (final s in CursorPadSector.values) {
+          final r = rects[s]!;
+          expect(r.isEmpty, isFalse, reason: '$size ${s.name}');
+          expect(box.intersect(r), r, reason: '$size ${s.name}');
+        }
+        // 같은 층(▲·▼, ◀·▶)끼리는 겹치지 않는다 — 겹치는 것은 ◀·▶가 ▲·▼ 위에 놓인 곳뿐이다.
+        for (final (a, b) in const [
+          (CursorPadSector.up, CursorPadSector.down),
+          (CursorPadSector.left, CursorPadSector.right),
+        ]) {
+          final o = rects[a]!.intersect(rects[b]!);
+          expect(o.width <= 0 || o.height <= 0, isTrue, reason: '$size');
+        }
+        final drawn = {for (final s in CursorPadSector.values) s: 0};
+        final same = {for (final s in CursorPadSector.values) s: 0};
+        for (var x = 0.125; x < size.width; x += 0.25) {
+          for (var y = 0.125; y < size.height; y += 0.25) {
+            final p = Offset(x, y);
+            final read = g.semanticSectorAt(p);
+            expect(read, isNotNull, reason: '$size $p 빈 곳');
+            final at = g.sectorAt(p);
+            if (at == null) continue;
+            drawn[at] = drawn[at]! + 1;
+            if (read == at) same[at] = same[at]! + 1;
           }
-          // 영역 안 표본 점은 모두 자기 구역이거나 외곽 밖이다 (다른 구역·데드존 위가 없다).
-          // 그려진 허브의 고리는 누르면 그쪽 방향이라 자기 구역에 든다(#166).
-          var own = 0;
-          final inner = rect.deflate(0.01);
-          for (var x = inner.left; x <= inner.right; x += 0.5) {
-            for (var y = inner.top; y <= inner.bottom; y += 0.5) {
-              final p = Offset(x, y);
-              final at = geometry.sectorAt(p);
-              if (at == a) {
-                own++;
-                continue;
-              }
-              expect(at, isNull, reason: '$size ${a.name} $p → ${at?.name}');
-              expect(
-                (p - geometry.center).distance,
-                greaterThan(geometry.deadZoneRadius),
-                reason: '$size ${a.name} $p 데드존 위',
-              );
-            }
-          }
-          // 자기 구역 넓이의 40% 이상을 덮는다 (표본 점 하나 = 0.25dp²).
-          expect(
-            own * 0.25,
-            greaterThan(geometry.sectorArea(a) * 0.4),
-            reason: '$size ${a.name}',
-          );
+        }
+        final all =
+            same.values.reduce((a, b) => a + b) /
+            drawn.values.reduce((a, b) => a + b);
+        expect(all, greaterThan(minAll), reason: '$size 전체 $all');
+        for (final s in CursorPadSector.values) {
+          final each = same[s]! / drawn[s]!;
+          expect(each, greaterThan(minEach), reason: '$size ${s.name} $each');
         }
       }
     });
 
-    test('시맨틱 영역은 고리 일부까지 들어가고, 셀 여백이 없으면 ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
+    test('허브 고리·데드존도 비지 않고, 고리의 ▲·▼ 쪽은 그 방향으로 읽힌다 (#203)', () {
+      // #166의 겹치지 않는 사각형에서는 고리의 약 19~22%만 읽혔다(#173 에뮬레이터 실측). 지금은 고리 전체가 읽힌다.
+      // 고리 가운데 ◀·▶ 쪽은 ▲·▼로 읽힌다 — ◀·▶ 영역이 허브 가장자리에서 시작하기 때문이다(설계 대가, semanticRect 문서).
       for (final size in const [
         Size(90, 64),
-        Size(97.7, 67.8), // 320×568·상태바 20dp 화면의 패드
-        Size(136.2, 97.3), // 412×915 화면의 패드
+        Size(97.7, 67.8),
+        Size(136.2, 97.3),
         Size(200, 111),
         Size(100, 100),
       ]) {
         final g = CursorPadGeometry(size);
         final c = g.center;
-        // 셀 = 패드 상자 (앱에서 셀 여백이 없을 때와 같다)
-        final rects = {
-          for (final s in CursorPadSector.values)
-            s: CursorPad.semanticRect(s, size, Offset.zero & size),
-        };
-        final up = rects[CursorPadSector.up]!;
-        final left = rects[CursorPadSector.left]!;
-        // ▲·▼ 영역은 그려진 허브 안(허브 가장자리보다 가운데 쪽)까지 내려오고, 데드존 앞에서 멈춘다.
-        expect(up.bottom, greaterThan(c.dy - g.hubRadius), reason: '$size ▲');
-        expect(
-          up.bottom,
-          lessThanOrEqualTo(c.dy - g.deadZoneRadius),
-          reason: '$size ▲',
-        );
-        // ▲·▼ 영역 높이 = ◀·▶ 영역 높이 (짧은 변을 고르게 나눈다)
-        expect(
-          up.height,
-          moreOrLessEquals(left.height, epsilon: 1e-9),
-          reason: '$size',
-        );
-        // 고리의 일부를 덮는다. 사각형 네 개라 가운데 십자 사이(|dx| < X, |dy| < Y)는 비어
-        // 약 21~48%다(0.05dp 격자 측정, 200×111이 21.6%로 가장 낮다 — 이 테스트의 0.25dp 격자로는 22.7%).
-        // #43 규칙(허브를 덮지 않음)에서는 0%였다.
-        // 앱 배치는 셀이 패드보다 높아 Y가 커지므로 더 낮다: 셀 경계를 넣은 1px 계산으로 411×914 18.6%,
-        // Android 320×568 21.9%, 반 분할 창 19.4%(#173 — 이 하한 0.18과 거의 같다, 대응은 #203).
-        var ringPoints = 0;
-        var covered = 0;
-        for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
-          for (var y = -g.hubRadius; y <= g.hubRadius; y += 0.25) {
-            final d = Offset(x, y).distance;
-            if (d <= g.deadZoneRadius || d > g.hubRadius) continue;
-            ringPoints++;
-            if (rects.values.any((r) => r.contains(c + Offset(x, y)))) {
-              covered++;
+        for (final bounds in [null, Offset.zero & size]) {
+          for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
+            for (var y = -g.hubRadius; y <= g.hubRadius; y += 0.25) {
+              final d = Offset(x, y);
+              if (d.distance > g.hubRadius) continue;
+              final p = c + d;
+              final read = g.semanticSectorAt(p, bounds);
+              expect(read, isNotNull, reason: '$size $d 빈 곳');
+              final at = g.sectorAt(p);
+              if (at == CursorPadSector.up || at == CursorPadSector.down) {
+                expect(read, at, reason: '$size $d');
+              }
             }
           }
         }
-        expect(covered / ringPoints, greaterThan(0.18), reason: '$size');
       }
     });
 
@@ -988,6 +961,46 @@ void _cursorPadR2Tests() {
       );
     }
 
+    // 엔진 브리지의 터치 탐색 판정(_semanticsHitTest)을 실제 시맨틱 트리에 돌려, 겹친 노드의 쌓는 순서가
+    // semanticSectorAt(명세)과 같은지 본다 (#203). 순서가 뒤집히면 ◀·▶ 사각형 자리에서 ▲·▼가 읽힌다.
+    for (final area in const [Size(800, 300), Size(393, 560), Size(360, 420)]) {
+      testWidgets(
+        '${area.width}×${area.height}: 터치 탐색으로 짚으면 semanticSectorAt 방향의 노드에 닿는다 (#203)',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          useKoreanLocale(tester);
+          await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final bounds = cell.shift(-pad.topLeft);
+          final g = CursorPadGeometry(pad.size);
+          final labels = {
+            for (final s in CursorPadSector.values)
+              s: const KoSemanticStrings().keyButton(CursorPad.defOf(s).id),
+          };
+          var root = tester.getSemantics(find.byType(CursorPad));
+          while (root.parent != null) {
+            root = root.parent!;
+          }
+          final dpr = tester.view.devicePixelRatio;
+          final seen = <CursorPadSector>{};
+          // 격자를 셀 변·영역 경계에서 조금 비켜 둔다(경계 위 점은 부동소수 오차로 갈릴 수 있다).
+          for (var x = cell.left + 0.37; x < cell.right; x += 1.5) {
+            for (var y = cell.top + 0.41; y < cell.bottom; y += 1.5) {
+              final p = Offset(x, y);
+              final want = g.semanticSectorAt(p - pad.topLeft, bounds);
+              expect(want, isNotNull, reason: '$area $p');
+              seen.add(want!);
+              final node = _semanticsHitTest(root, p * dpr);
+              expect(node?.label, labels[want], reason: '$area $p');
+            }
+          }
+          expect(seen, CursorPadSector.values.toSet());
+          handle.dispose();
+        },
+      );
+    }
+
     testWidgets('방향마다 시맨틱 노드가 하나씩 있고, 시맨틱 탭으로 입력된다', (tester) async {
       final handle = tester.ensureSemantics();
       useKoreanLocale(tester);
@@ -1009,7 +1022,8 @@ void _cursorPadR2Tests() {
     });
 
     // 쓸어 넘기기(다음 항목) 순서는 ◀ ▲ ▼ ▶이다 — TalkBack 에뮬레이터에서 앞·뒤 쓸기로 확인한 순서(#173).
-    // 정렬 키 없이 Flutter 기본 순서(위치)로 정해지므로, 영역 나누기(semanticRect)를 바꿔도 이 순서가 남는지 지킨다.
+    // 영역이 겹쳐(#203) 위치순 정렬로는 순서가 정해지지 않으므로 정렬 키(CursorPad.semanticTraversalOrder)로 고정한다.
+    // 쌓는 순서(▲ ▼ ◀ ▶)와 달라도 이 순서가 나오는지, 이웃 키와 섞이지 않는지 지킨다.
     // 키패드 크기: 기본 테스트 영역, 세로 폰 키패드 근사, 셀이 가로로 넓은 경우(#159), 셀이 납작한 짧은 창 근사.
     // 넓은 배열(가로형·테이블톱)과 숫자부 왼쪽은 keypad_wide_arrangement_test.dart의 읽기 순서 테스트가 본다.
     for (final area in const [
@@ -1095,6 +1109,43 @@ void _cursorPadR2Tests() {
 
 /// 시맨틱 노드의 논리 좌표(dp) 전역 사각형 — 부모 노드 변환을 루트까지 거슬러 쌓은 물리 픽셀 좌표를
 /// 기기 배율([devicePixelRatio])로 나눈다.
+/// 엔진 브리지의 터치 탐색 판정을 흉내 낸다 — Android `AccessibilityBridge.SemanticsNode.hitTest`,
+/// iOS `SemanticsObject search:` (#203). [point]는 [node]의 부모 좌표다(루트면 물리 픽셀).
+/// 영역은 왼쪽·위 변을 넣고 오른쪽·아래 변을 뺀다. 자식을 히트 테스트 순서(위에 그린 것부터)로 찾고,
+/// 닿은 자식이 없으면 초점을 받을 수 있는 노드(라벨·값·힌트·동작이 있다)일 때 자신을 돌려준다.
+SemanticsNode? _semanticsHitTest(SemanticsNode node, Offset point) {
+  var local = point;
+  final transform = node.transform;
+  if (transform != null) {
+    final inverse = Matrix4.tryInvert(transform);
+    if (inverse == null) return null;
+    local = MatrixUtils.transformPoint(inverse, point);
+  }
+  final r = node.rect;
+  if (local.dx < r.left ||
+      local.dx >= r.right ||
+      local.dy < r.top ||
+      local.dy >= r.bottom) {
+    return null;
+  }
+  // inverseHitTest 순서(그리는 순서)를 뒤집으면 히트 테스트 순서다.
+  final children = node.debugListChildrenInOrder(
+    DebugSemanticsDumpOrder.inverseHitTest,
+  );
+  for (final child in children.reversed) {
+    if (child.getSemanticsData().flagsCollection.isHidden) continue;
+    final hit = _semanticsHitTest(child, local);
+    if (hit != null) return hit;
+  }
+  final data = node.getSemanticsData();
+  final focusable =
+      data.label.isNotEmpty ||
+      data.value.isNotEmpty ||
+      data.hint.isNotEmpty ||
+      data.actions != 0;
+  return focusable ? node : null;
+}
+
 Rect _semanticsGlobalRect(SemanticsNode node, double devicePixelRatio) {
   var rect = node.rect;
   for (SemanticsNode? n = node; n != null; n = n.parent) {
@@ -1314,7 +1365,7 @@ void _cursorPadHitTests() {
       }
     });
 
-    test('아주 작은 패드·높은 셀에서도 시맨틱 영역은 뒤집히지 않고 자기 방향의 터치 영역 안이다 (#166 R2)', () {
+    test('아주 작은 패드·높은 셀에서도 시맨틱 영역은 뒤집히지 않고 셀을 빈 곳 없이 덮는다 (#166 R2, #203)', () {
       for (final size in const [
         Size(4, 3),
         Size(3, 2.5),
@@ -1338,61 +1389,81 @@ void _cursorPadHitTests() {
               final name = '$size ×$tall ${s.name} $r';
               expect(r.left, lessThanOrEqualTo(r.right), reason: name);
               expect(r.top, lessThanOrEqualTo(r.bottom), reason: name);
+              expect(cell.intersect(r), r, reason: name);
             }
-            final r = small.semanticRect(s, cell);
-            if (r.isEmpty) continue;
-            final inner = r.deflate(math.min(r.shortestSide / 4, 0.05));
-            for (var i = 0; i <= 6; i++) {
-              for (var j = 0; j <= 6; j++) {
-                final p = Offset(
-                  inner.left + inner.width * i / 6,
-                  inner.top + inner.height * j / 6,
-                );
-                expect(
-                  small.hitSectorAt(p, cell),
-                  s,
-                  reason: '$size ×$tall ${s.name} $p',
-                );
-              }
+          }
+          for (var i = 0; i < 12; i++) {
+            for (var j = 0; j < 12; j++) {
+              final p = Offset(
+                cell.left + cell.width * (i + 0.5) / 12,
+                cell.top + cell.height * (j + 0.5) / 12,
+              );
+              expect(
+                small.semanticSectorAt(p, cell),
+                isNotNull,
+                reason: '$size ×$tall $p',
+              );
             }
           }
         }
       }
     });
 
-    test('셀까지 넓힌 시맨틱 영역은 서로 겹치지 않고 자기 방향의 터치 영역 안이다', () {
+    test('셀까지 넓힌 시맨틱 영역은 바깥쪽 변이 셀 변이고, 셀을 빈 곳 없이 덮으며, 터치 방향과 같게 읽히는 넓이가 넉넉하다 (#203)', () {
+      // 측정(0.25dp 격자, 터치 영역 중 같은 방향이 읽히는 넓이): 셀 = 패드 83.3%(▲·▼ 89.0%, ◀·▶ 78.2%),
+      // 가로 여백 83.0%, 세로 여백 82.3%(▲·▼ 83.2%, ◀·▶ 81.2%), 세로 여백 큼(×2) 78.4%(▲·▼ 75.3%),
+      // 매우 큼(×3) 75.5%(▲·▼ 71.3%). ◀·▶ 높이를 셀 높이에 맞춰 늘리지 않으면 ×3에서 ◀·▶가 43.8%로 떨어진다.
+      // 앱 배치의 셀은 패드 높이의 1.08배 이하다(세로 여백 1.27배보다 낮다).
       for (final MapEntry(key: name, value: bounds) in cases.entries) {
+        final tall = bounds.height > padSize.height * 1.5;
         final rects = {
           for (final s in CursorPadSector.values)
             s: CursorPad.semanticRect(s, padSize, bounds),
         };
         for (final MapEntry(key: s, value: r) in rects.entries) {
-          // 바깥쪽 변은 셀 변이다.
-          final edge = switch (s) {
-            CursorPadSector.up => (r.top, bounds.top),
-            CursorPadSector.down => (r.bottom, bounds.bottom),
-            CursorPadSector.left => (r.left, bounds.left),
-            CursorPadSector.right => (r.right, bounds.right),
+          // 바깥쪽 변은 셀 변이다. ▲·▼는 셀 폭 전체다.
+          final edges = switch (s) {
+            CursorPadSector.up => [
+              (r.top, bounds.top),
+              (r.left, bounds.left),
+              (r.right, bounds.right),
+            ],
+            CursorPadSector.down => [
+              (r.bottom, bounds.bottom),
+              (r.left, bounds.left),
+              (r.right, bounds.right),
+            ],
+            CursorPadSector.left => [(r.left, bounds.left)],
+            CursorPadSector.right => [(r.right, bounds.right)],
           };
-          expect(edge.$1, edge.$2, reason: '$name ${s.name}');
-          for (final o in CursorPadSector.values) {
-            if (o == s) continue;
-            expect(
-              r.intersect(rects[o]!).isEmpty,
-              isTrue,
-              reason: '$name ${s.name}/${o.name}',
-            );
+          for (final (got, want) in edges) {
+            expect(got, want, reason: '$name ${s.name}');
           }
-          final inner = r.deflate(0.5);
-          for (var i = 0; i <= 8; i++) {
-            for (var j = 0; j <= 8; j++) {
-              final p = Offset(
-                inner.left + inner.width * i / 8,
-                inner.top + inner.height * j / 8,
-              );
-              expect(g.hitSectorAt(p, bounds), s, reason: '$name ${s.name} $p');
-            }
+        }
+        final hit = {for (final s in CursorPadSector.values) s: 0};
+        final same = {for (final s in CursorPadSector.values) s: 0};
+        for (var x = bounds.left + 0.125; x < bounds.right; x += 0.25) {
+          for (var y = bounds.top + 0.125; y < bounds.bottom; y += 0.25) {
+            final p = Offset(x, y);
+            final read = g.semanticSectorAt(p, bounds);
+            expect(read, isNotNull, reason: '$name $p 빈 곳');
+            final h = g.hitSectorAt(p, bounds);
+            if (h == null) continue;
+            hit[h] = hit[h]! + 1;
+            if (read == h) same[h] = same[h]! + 1;
           }
+        }
+        final all =
+            same.values.reduce((a, b) => a + b) /
+            hit.values.reduce((a, b) => a + b);
+        expect(all, greaterThan(tall ? 0.73 : 0.8), reason: '$name 전체 $all');
+        for (final s in CursorPadSector.values) {
+          final each = same[s]! / hit[s]!;
+          expect(
+            each,
+            greaterThan(tall ? 0.68 : 0.76),
+            reason: '$name ${s.name} $each',
+          );
         }
       }
     });
