@@ -53,7 +53,7 @@ SemanticsNode? semanticsHitTest(SemanticsNode node, Offset point) {
 }
 
 /// 화면의 커서 패드(하나) 셀을 1.5dp 격자로 짚어, 터치 탐색이 닿는 노드가
-/// [CursorPadGeometry.semanticSectorAt] 방향의 노드인지 본다 (#203). 시맨틱이 켜져 있고 한국어 로캘이어야 한다.
+/// 화면 모양 명세([CursorPadGeometry.screenSemanticSectorAt]) 방향의 노드인지 본다 (#203·#259). 시맨틱이 켜져 있고 한국어 로캘이어야 한다.
 /// 네 방향이 모두 한 번 이상 나와야 한다.
 ///
 /// 셀 둘레 간격 몫(#236)도 짚는다. 그곳의 기대 방향은 셀 변에 닿은 변만 늘린 방향별 영역

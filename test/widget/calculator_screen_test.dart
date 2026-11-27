@@ -1475,6 +1475,8 @@ void main() {
         final g = CursorPadGeometry(pad.size);
         final bounds = cell.shift(-pad.topLeft);
         var all = 0, same = 0, ring = 0, misread = 0;
+        final hits = {for (final s in CursorPadSector.values) s: 0};
+        final sames = {for (final s in CursorPadSector.values) s: 0};
         for (var x = bounds.left + 0.25; x < bounds.right; x += 0.5) {
           for (var y = bounds.top + 0.25; y < bounds.bottom; y += 0.5) {
             final p = Offset(x, y);
@@ -1482,7 +1484,11 @@ void main() {
             final hit = g.hitSectorAt(p, bounds);
             if (hit != null) {
               all++;
-              if (read == hit) same++;
+              hits[hit] = hits[hit]! + 1;
+              if (read == hit) {
+                same++;
+                sames[hit] = sames[hit]! + 1;
+              }
             }
             final d = (p - g.center).distance;
             final drawn = g.sectorAt(p);
@@ -1496,6 +1502,16 @@ void main() {
           }
         }
         expect(same / all, greaterThanOrEqualTo(0.825), reason: name);
+        // 방향별: ◀·▶를 넓힌 만큼 ▲·▼가 내준다 — 측정 ▲·▼ 83.7~86.5%, ◀·▶ 80.2~82.0%(폰 폭 320~440dp 최저 83.6·75.2%)
+        for (final sector in CursorPadSector.values) {
+          final vertical =
+              sector == CursorPadSector.up || sector == CursorPadSector.down;
+          expect(
+            sames[sector]! / hits[sector]!,
+            greaterThanOrEqualTo(vertical ? 0.83 : 0.75),
+            reason: '$name ${sector.name}',
+          );
+        }
         expect(ring, greaterThan(0));
         expect(misread / ring, lessThanOrEqualTo(0.035), reason: name);
       });
@@ -1665,7 +1681,7 @@ void main() {
 
   group('커서 패드 터치 탐색 — 실제 화면 (#203)', () {
     // 키패드만 띄운 테스트(calc_keypad_test·keypad_wide_arrangement_test)와 달리 LCD·기록 영역 등 화면 전체 트리에서
-    // 커서 패드 셀을 짚어도 semanticSectorAt 방향의 노드에 닿는지 본다(키패드 위를 덮는 노드가 생기면 실패한다).
+    // 커서 패드 셀을 짚어도 screenSemanticSectorAt 방향의 노드에 닿는지 본다(키패드 위를 덮는 노드가 생기면 실패한다).
     for (final (size, padding) in const [
       (
         Size(411, 914),
