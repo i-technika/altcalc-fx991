@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_legend.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -22,3 +23,16 @@ TextStyle legendStyleOf(WidgetTester tester, Finder finder) =>
       final KeyLegendView view => view.style,
       final other => throw StateError('각인 위젯이 아니다: $other'),
     };
+
+/// [finder]가 가리키는 각인 위젯이 배치된 자리 (전역 dp).
+///
+/// 각인 띠의 `Text` 각인은 [DrawnBaselineLabel]이 감싸 글자를 보고한 기준선에 그리도록 최대 0.5dp 옮긴다(#252) — 그래서
+/// `Text` 상자는 띠 안의 자리에서 그만큼 벗어나 있고, 자리는 감싸는 위젯의 상자다. 감싸지 않은 각인은 그 위젯의 상자다.
+Rect legendSlotRect(WidgetTester tester, Finder finder) {
+  expect(finder, findsOneWidget);
+  final wrapper = find.ancestor(
+    of: finder,
+    matching: find.byType(DrawnBaselineLabel),
+  );
+  return tester.getRect(tester.any(wrapper) ? wrapper.first : finder);
+}

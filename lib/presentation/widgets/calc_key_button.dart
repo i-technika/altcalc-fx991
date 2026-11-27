@@ -945,7 +945,12 @@ class _LegendRow extends StatelessWidget {
       final label = FittedBox(
         fit: BoxFit.scaleDown,
         alignment: alignment,
-        child: _legendLabel(legend, sized, textScaler),
+        child: _legendLabel(
+          legend,
+          sized,
+          textScaler,
+          snapToDrawnBaseline: true,
+        ),
       );
       if (short) {
         return ConstrainedBox(
@@ -1055,6 +1060,7 @@ class _BodyPrintLabel extends StatelessWidget {
           fontSize: fontSize,
         ),
         textScaler,
+        snapToDrawnBaseline: true,
       ),
     );
   }
@@ -1266,31 +1272,120 @@ class KeycapSheenPainter extends CustomPainter {
 /// 각인 하나를 그린다. 글자만 있는 각인은 `Text`, 2차원 각인(분수·첨자·근호)은 [KeyLegendView]다 (#155).
 /// 글자에 변수 이탤릭 글자가 있으면 그 글자만 다른 글꼴로 그린다([keyLabelSpan], #156).
 ///
-/// 두 위젯은 같은 strut 한 줄 상자([keyLabelStrut])와 기준선을 쓰므로, 2차원 각인이 한 줄을 넘지 않으면 크기·기준선이 같다.
-Widget _legendLabel(KeyLegend legend, TextStyle style, TextScaler textScaler) {
+/// 두 위젯은 같은 strut 한 줄 상자([keyLabelStrut] — 줄 간격 배분까지 고정해 앱 테마와 상관없다, #252)와 기준선을 쓰므로,
+/// 2차원 각인이 한 줄을 넘지 않으면 크기·보고한 기준선이 같다. 단 `Text`는 보고한 기준선을 정수 dp로 반올림한 곳에 글자를
+/// 그린다([InkCenteredLabel] 설명). [snapToDrawnBaseline]이면 `Text`를 [DrawnBaselineLabel]로 감싸 보고한 기준선에 글자가
+/// 그려지게 한다 — 아래 정렬로 같은 행의 이웃 각인과 기준선을 함께 쓰는 각인 띠(SHIFT·ALPHA, 원형 버튼 위 인쇄)가 쓴다(#252).
+/// 메인 각인은 [InkCenteredLabel]이 그린 기준선으로 맞추므로 감싸지 않는다.
+Widget _legendLabel(
+  KeyLegend legend,
+  TextStyle style,
+  TextScaler textScaler, {
+  bool snapToDrawnBaseline = false,
+}) {
   if (legend case LegendText(:final text)) {
     final span = keyLabelSpan(text, style);
     final strut = keyLabelStrut(style);
-    if (span.children == null) {
-      return Text(
-        text,
-        maxLines: 1,
-        softWrap: false,
-        textScaler: textScaler,
-        style: style,
-        strutStyle: strut,
-      );
-    }
-    return Text.rich(
-      TextSpan(children: span.children),
-      maxLines: 1,
-      softWrap: false,
-      textScaler: textScaler,
-      style: style,
-      strutStyle: strut,
-    );
+    final Widget label = span.children == null
+        ? Text(
+            text,
+            maxLines: 1,
+            softWrap: false,
+            textScaler: textScaler,
+            style: style,
+            strutStyle: strut,
+          )
+        : Text.rich(
+            TextSpan(children: span.children),
+            maxLines: 1,
+            softWrap: false,
+            textScaler: textScaler,
+            style: style,
+            strutStyle: strut,
+          );
+    return snapToDrawnBaseline ? DrawnBaselineLabel(child: label) : label;
   }
   return KeyLegendView(legend: legend, style: style, textScaler: textScaler);
+}
+
+/// 자식 [RenderBox]가 글자를 실제로 그리는 기준선 — 보고한 알파벳 기준선 [baseline](자식 상자 위끝에서의 거리)에서 구한다.
+///
+/// `Text`(`RenderParagraph`)는 보고한 기준선을 정수 dp로 반올림한 곳에 글자를 그린다([InkCenteredLabel] 설명). 그 밖의
+/// 자식([KeyLegendView]·[DrawnBaselineLabel])은 보고한 기준선에 그린다.
+///
+/// `Text`는 상황에 따라 `RenderParagraph`를 다른 렌더 객체로 감싼다 — 위에 선택 영역이 있으면 `MouseRegion`, `semanticsLabel`을
+/// 주면 `Semantics`·`ExcludeSemantics`(#252 R1). 그 감싸개(`RenderMouseRegion`·`RenderSemanticsAnnotations`·`RenderExcludeSemantics`)는 자식을 제자리(오프셋 0, 크기
+/// 그대로)에 두므로 그 사슬만 따라 내려가 `RenderParagraph`를 찾는다 — 그래야 감싸개가 끼어도 반올림 보정이 조용히 빠지지 않는다.
+/// 자식을 옮기거나 줄이는 [RenderProxyBox](`RenderTransform`·`RenderFittedBox` 등)는 따라가지 않는다(#252 R2) — 그런 렌더 객체는
+/// 자식 기준선을 변환 없이 보고하므로 반올림한 거리가 그린 곳이 아니다.
+double drawnBaselineOf(RenderBox child, double baseline) {
+  RenderObject? node = child;
+  while (node is RenderMouseRegion ||
+      node is RenderSemanticsAnnotations ||
+      node is RenderExcludeSemantics) {
+    node = (node! as RenderProxyBox).child;
+  }
+  return node is RenderParagraph ? baseline.roundToDouble() : baseline;
+}
+
+/// `Text` 각인([child])을 보고한 기준선에 글자가 그려지도록 세로로만 옮겨 그린다 (#252).
+///
+/// `Text`는 보고한 기준선(글자 상자 위끝에서 소수 거리)을 정수 dp로 반올림한 곳에 글자를 그린다([drawnBaselineOf]). 그래서
+/// 같은 줄 상자·기준선을 보고하는 [KeyLegendView](글자 조각을 계산한 기준선에 그린다)와 나란히 놓으면 그린 기준선이 최대
+/// 0.5dp 어긋난다(#252 실측 — 줄 간격 배분을 고친 뒤 800×1280 태블릿 SHIFT `sin⁻¹`·ALPHA `D` 0.37dp, 가로 폰 800×360 글자 배율 1.3에서
+/// 0.50dp). 이 위젯은 크기·보고한 기준선은 [child] 그대로 두고
+/// 반올림 차만큼 [child]를 옮겨(−0.5~+0.5dp), 보고한 기준선 = 그린 기준선이 되게 한다. 그래서 감싸는 아래 정렬·기준선 정렬
+/// 배치가 그린 기준선을 맞춘다. 기준선이 없는 자식은 옮기지 않는다.
+class DrawnBaselineLabel extends SingleChildRenderObjectWidget {
+  const DrawnBaselineLabel({super.key, required Widget super.child});
+
+  @override
+  RenderDrawnBaselineLabel createRenderObject(BuildContext context) =>
+      RenderDrawnBaselineLabel();
+}
+
+/// [DrawnBaselineLabel]의 렌더 객체 — 크기·보고한 기준선은 자식 그대로이고, 자식을 세로로만 옮겨 둔다.
+class RenderDrawnBaselineLabel extends RenderShiftedBox {
+  RenderDrawnBaselineLabel() : super(null);
+
+  /// 자식을 아래로 옮긴 거리 (dp, 위로 옮기면 음수) — 마지막 배치의 값
+  double get shift =>
+      child == null ? 0 : (child!.parentData! as BoxParentData).offset.dy;
+
+  /// 보고한 알파벳 기준선 [baseline]인 자식을 옮길 거리 — 그린 기준선을 보고한 기준선으로 옮긴다 (기준선이 없으면 0)
+  static double _shiftFor(RenderBox child, double? baseline) =>
+      baseline == null ? 0 : baseline - drawnBaselineOf(child, baseline);
+
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) =>
+      child?.getDryLayout(constraints) ?? constraints.smallest;
+
+  // 크기·보고한 기준선은 자식 그대로다 — 옮긴 자식의 그린 기준선이 그 자리에 온다.
+  @override
+  double? computeDryBaseline(
+    covariant BoxConstraints constraints,
+    TextBaseline baseline,
+  ) => child?.getDryBaseline(constraints, baseline);
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      child?.getDistanceToActualBaseline(baseline);
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(constraints, parentUsesSize: true);
+    size = constraints.constrain(child.size);
+    final dy = _shiftFor(
+      child,
+      child.getDistanceToBaseline(TextBaseline.alphabetic, onlyReal: true),
+    );
+    (child.parentData! as BoxParentData).offset = Offset(0, dy);
+  }
 }
 
 /// 메인 각인 [legend]([style]로 그린다)를 키캡 면 세로 가운데에 맞출 때 면 가운데에 두는 높이 — 기준선 위, 글자 크기 대비
@@ -1312,8 +1407,9 @@ double mainLegendInkCenter(KeyLegend legend, TextStyle style) {
 ///
 /// 크기는 [child] 그대로라 감싸는 `Center`·`FittedBox`의 배치(글자 줄이기 포함)는 바뀌지 않고, 그 상자 안에서 [child]만
 /// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). 옮기는 거리는 [child]가 글자를 실제로 그리는 기준선으로
-/// 정한다 — 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 간격 배분(앱 테마의 `TextLeadingDistribution.even`이면 기준선이
-/// 줄 상자 위에서 약 0.888em, 아니면 0.785em)·2차원 각인의 큰 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
+/// 정한다 — 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 상자 안 기준선 위치(#252부터 [keyLabelStrut]이 줄 간격 배분을
+/// 고정해 약 0.785em — 그 전에는 앱 테마의 `TextLeadingDistribution.even`을 받은 `Text`만 약 0.888em이었다)·2차원 각인의 큰
+/// 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
 /// 기준선이 없는 자식은 옮기지 않는다.
 ///
 /// `Text`(`RenderParagraph`)는 보고한 기준선이 아니라 그 거리(글자 상자 위끝에서 소수 거리)를 정수 dp로 반올림한 곳에 글자를
@@ -1373,10 +1469,7 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
   double _shiftFor(RenderBox child, double height, double? baseline) {
     if (baseline == null) return 0;
     // `Text`는 기준선 거리를 반올림한 곳에 글자를 그린다 (클래스 설명)
-    final drawn = child is RenderParagraph
-        ? baseline.roundToDouble()
-        : baseline;
-    return height / 2 - (drawn - _inkCenter);
+    return height / 2 - (drawnBaselineOf(child, baseline) - _inkCenter);
   }
 
   @override

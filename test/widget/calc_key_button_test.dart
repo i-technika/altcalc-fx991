@@ -118,8 +118,8 @@ void main() {
         CalcTheme.alphaLabel,
       );
 
-      final shiftRect = tester.getRect(sinShift);
-      final alphaRect = tester.getRect(find.text('D'));
+      final shiftRect = legendSlotRect(tester, sinShift);
+      final alphaRect = legendSlotRect(tester, find.text('D'));
       final capRect = tester.getRect(_keycap(CalcKeyId.sin));
       expect(shiftRect.center.dx, lessThan(alphaRect.center.dx));
       expect(shiftRect.bottom, lessThanOrEqualTo(capRect.top + 0.01));
@@ -424,7 +424,7 @@ void main() {
           reason: reason,
         );
         final cap = tester.getRect(_keycap(on.id));
-        final text = tester.getRect(label);
+        final text = legendSlotRect(tester, label);
         expect(text.bottom, lessThanOrEqualTo(cap.top + 0.01), reason: reason);
         expect(
           text.center.dx,
