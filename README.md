@@ -120,7 +120,11 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
 - **TalkBack**: 시스템 앱으로 들어 있다(설치 확인 2대). Play 이미지 36.1에서 켜서 커서 패드를 확인했다(#173, PR #204).
   - 켜기: `adb shell settings put secure enabled_accessibility_services com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`
     뒤 `settings put secure accessibility_enabled 1`. 첫 실행의 알림 권한 창은 `pm grant com.google.android.marvin.talkback android.permission.POST_NOTIFICATIONS`로 넘긴다.
-  - **`adb shell input tap`·`swipe`는 TalkBack을 거치지 않고 키를 바로 누른다**(실측) — 터치 탐색·두 번 탭·쓸어 넘기기를 시험할 수 없다.
+    끌 때는 `settings put secure enabled_accessibility_services ""`(다른 서비스가 켜져 있으면 TalkBack만 뺀 값)로 되돌린다.
+  - #173은 `Medium_Phone_API_36.1`과 같은 시스템 이미지로 따로 만든 AVD에서 했고, 끝난 뒤 그 AVD는 지웠다.
+    다른 세션과 겹치지 않게 하려면 같은 방법으로 만든다(`avdmanager create avd -n <이름> -d medium_phone -k "system-images;android-36.1;google_apis_playstore;x86_64"`).
+  - **TalkBack이 켜져 있어도 `adb shell input tap`·`swipe`는 TalkBack을 거치지 않는다**(실측) — 터치 탐색·두 번 탭·쓸어 넘기기를 시험할 수 없다.
+    `input tap`은 커서 키를 바로 눌렀고, `input swipe`는 분할 화면 분할선을 바로 끌었다.
     대신 `adb shell uinput -`(셸 사용자가 `uhid` 그룹이다)로 가상 터치스크린을 등록하고 손가락 이벤트를 넣으면 TalkBack을 거친다.
     등록·주입 스크립트와 판정 방법(화면 캡처의 초록 초점 테두리 + `uiautomator dump` 노드 경계)은 PR #204 본문과 #203 코멘트에 있다.
   - 분할 화면: `adb shell dumpsys activity service SystemUIService WMShell splitscreen moveToSideStage <다른 앱 taskId> 0`
