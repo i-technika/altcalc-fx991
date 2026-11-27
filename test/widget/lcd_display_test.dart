@@ -574,14 +574,21 @@ void main() {
             reason: reason,
           );
         }
-        // 화살표는 줄 내용 2행(분수 1단) 높이 안에 있다 — 입력 쪽은 첫 행 글자와 겹치는 높이에서 시작하고, 결과 쪽은 마지막
-        // 행 글자와 겹치는 높이에서 끝난다.
+        // 화살표 가운데는 줄 내용 2행(분수 1단) 띠의 가운데 — 입력 줄은 윗변에서, 결과 줄은 아랫변에서 띠 높이의 절반이다
+        // (분수 막대 높이, R2). 띠 높이는 독립 계산: 2 × (글자 × 1.3 + 1) + 글자 × 0.25 (배율 1).
         final tall = await drawAt(600);
-        final row = tall.i.height;
-        expect(tall.ia.top, lessThan(tall.input.top + 2 * row + 1));
-        expect(tall.ia.bottom, greaterThan(tall.i.top));
-        expect(tall.ra.bottom, greaterThan(tall.result.bottom - 2 * row - 1));
-        expect(tall.ra.top, lessThan(tall.r.bottom));
+        final band =
+            2 * (tall.font * CalcTheme.lcdInputStyle.height! + 1) +
+            tall.font * CalcTheme.lcdFractionBarRatio;
+        expect(LcdFontSizes.lineBandHeight(tall.font), moreOrLessEquals(band));
+        expect(
+          tall.ia.center.dy - tall.input.top,
+          moreOrLessEquals(band / 2, epsilon: 0.01),
+        );
+        expect(
+          tall.result.bottom - tall.ra.center.dy,
+          moreOrLessEquals(band / 2, epsilon: 0.01),
+        );
       },
     );
 

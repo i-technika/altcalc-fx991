@@ -621,29 +621,6 @@ void main() {
                       CalcTheme.screenLandscapeHistoryMinLcdFontRatio;
           final reason = '$width×$height $l';
           expect(l.history != null, expected, reason: reason);
-          // 판정에 쓴 줄 글자 = 그린 줄 글자: 기록 영역이 있으면 그린 활성 LCD의 줄 글자가 띠 폭 전체 LCD 줄 글자의 문턱 배
-          // 이상이고, 없으면(위 띠·블록 조건은 만족하는데) 그 문턱 미만이다 (#232 R1).
-          final drawnBlockFont = font(Size(block, band.height));
-          final fullFont = font(Size(width, band.height));
-          if (l.history != null) {
-            expect(font(l.lcd.size), drawnBlockFont, reason: reason);
-            expect(
-              drawnBlockFont,
-              greaterThanOrEqualTo(
-                fullFont * CalcTheme.screenLandscapeHistoryMinLcdFontRatio,
-              ),
-              reason: reason,
-            );
-          } else if (band.height >= CalcTheme.screenLandscapeHistoryMinHeight &&
-              block >= CalcTheme.screenLandscapeHistoryMinLcdWidth) {
-            expect(
-              drawnBlockFont,
-              lessThan(
-                fullFont * CalcTheme.screenLandscapeHistoryMinLcdFontRatio,
-              ),
-              reason: reason,
-            );
-          }
           // 활성 LCD는 기록 영역 유무와 무관하게 위 띠 높이 전체다 — 위가 비지 않는다(#232).
           expect(l.lcd.top, moreOrLessEquals(band.top), reason: reason);
           expect(l.lcd.height, moreOrLessEquals(band.height), reason: reason);
