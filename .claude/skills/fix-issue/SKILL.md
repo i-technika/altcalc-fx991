@@ -170,6 +170,7 @@ gh pr create --base milestone/m<N> --head issue/<번호>-<키워드> \
   TITLE='<제목>'   # 제목에 작은따옴표가 있으면 '\'' 로 바꿔 쓴다
   TITLE=$(printf '%s' "$TITLE" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')   # GitHub이 앞뒤 공백을 다듬어 저장하므로 미리 맞춘다
   # 이슈 목록("번호<TAB>제목"). 검색(--search)은 한국어·특수문자 제목과 색인 지연 때문에 못 찾으므로 목록에서 정확히 비교한다.
+  # 비용: 이슈 100개당 GraphQL 1점(2026-11-27 이슈 156개에 2점, #250 실측)이라 -L 1000이어도 한도 걱정은 없다.
   # 조회 실패와 "목록에 없음"을 구별해야 하므로 파이프로 바로 잇지 않고 변수로 받아 상태를 확인한다(파이프는 gh 실패를 삼킨다).
   rows() { gh issue list --state all -L "$1" --json number,title --jq '.[] | "\(.number)\t\(.title)"'; }
   match() { printf '%s\n' "$1" | T="$TITLE" awk -F'\t' 'substr($0, length($1) + 2) == ENVIRON["T"] { print $1; exit }'; }
