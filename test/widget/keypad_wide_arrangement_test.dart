@@ -543,7 +543,7 @@ void main() {
         expect(order.sublist(firstNumber), [
           for (final r in numberRows) ...r.map((d) => d.id),
         ]);
-        // 터치 탐색: 커서 패드 셀 어디를 짚어도 semanticSectorAt 방향의 노드에 닿는다 (#203)
+        // 터치 탐색: 커서 패드 셀 어디를 짚어도 screenSemanticSectorAt 방향의 노드에 닿는다 (#203)
         expectCursorPadTouchExplorationMatchesSpec(
           tester,
           reason: '${arrangement.name} $numbersOnLeft',

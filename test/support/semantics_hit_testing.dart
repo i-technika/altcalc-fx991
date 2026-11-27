@@ -53,7 +53,7 @@ SemanticsNode? semanticsHitTest(SemanticsNode node, Offset point) {
 }
 
 /// 화면의 커서 패드(하나) 셀을 1.5dp 격자로 짚어, 터치 탐색이 닿는 노드가
-/// [CursorPadGeometry.semanticSectorAt] 방향의 노드인지 본다 (#203). 시맨틱이 켜져 있고 한국어 로캘이어야 한다.
+/// 화면 모양 명세([CursorPadGeometry.screenSemanticSectorAt]) 방향의 노드인지 본다 (#203·#259). 시맨틱이 켜져 있고 한국어 로캘이어야 한다.
 /// 네 방향이 모두 한 번 이상 나와야 한다.
 ///
 /// 셀 둘레 간격 몫(#236)도 짚는다. 그곳의 기대 방향은 셀 변에 닿은 변만 늘린 방향별 영역
@@ -78,11 +78,17 @@ void expectCursorPadTouchExplorationMatchesSpec(
   }
   final dpr = tester.view.devicePixelRatio;
   final seen = <CursorPadSector>{};
+  // 화면 커서 패드와 같은 값(셀 둘레 간격 몫 #236, ◀·▶ 폭 목표 #259)으로 판정한다
+  final pad0 = tester.widget<CursorPad>(find.byType(CursorPad));
   // 격자를 셀 변·영역 경계에서 조금 비켜 둔다(경계 위 점은 부동소수 오차로 갈릴 수 있다).
   for (var x = cell.left + 0.37; x < cell.right; x += 1.5) {
     for (var y = cell.top + 0.41; y < cell.bottom; y += 1.5) {
       final p = Offset(x, y);
-      final want = g.semanticSectorAt(p - pad.topLeft, bounds);
+      final want = g.screenSemanticSectorAt(
+        p - pad.topLeft,
+        bounds,
+        pad0.gapInsets,
+      );
       expect(want, isNotNull, reason: '$reason $p');
       seen.add(want!);
       final node = semanticsHitTest(root, p * dpr);
@@ -92,14 +98,11 @@ void expectCursorPadTouchExplorationMatchesSpec(
   expect(seen, CursorPadSector.values.toSet(), reason: reason);
 
   // 셀 둘레 간격 몫 (#236)
-  final pad0 = tester.widget<CursorPad>(find.byType(CursorPad));
   final touch = pad0.gapInsets.inflateRect(cell);
   Rect areaOf(CursorPadSector s) => CursorPad.inflateOnCellEdges(
-    CursorPad.semanticRect(
-      s,
-      pad.size,
-      bounds,
-    ).shift(pad.topLeft - cell.topLeft),
+    g
+        .screenSemanticRect(s, bounds, pad0.gapInsets)
+        .shift(pad.topLeft - cell.topLeft),
     cell.size,
     pad0.gapInsets,
   ).shift(cell.topLeft);
