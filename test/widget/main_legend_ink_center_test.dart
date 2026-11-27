@@ -224,7 +224,8 @@ _Drawn _measure(WidgetTester tester, CalcKeyDef def, _Fonts fonts) {
 }
 
 /// 키캡 면 [face] 안에서 그린 잉크의 세로 범위를 픽셀로 잰다 (전역 dp). 면 테두리 안쪽 가로 76% 폭을 훑어, 면 바탕과
-/// 밝기가 크게 다른(라벨 색) 픽셀이 있는 행의 처음·끝이다.
+/// 밝기가 크게 다른(라벨 색) 픽셀이 있는 행의 처음·끝이다. 면 바탕은 훑는 영역에서 가장 흔한 밝기다 — 한 점을 고르면
+/// 넓은 각인(OPTN 등)에서 그 점이 잉크 위에 떨어져 모든 행을 잉크로 볼 수 있다(#230 R2).
 (double, double)? _pixelInk(
   ByteData data,
   int width,
@@ -243,7 +244,15 @@ _Drawn _measure(WidgetTester tester, CalcKeyDef def, _Fonts fonts) {
   final x1 = px(face.right - face.width * 0.12);
   final y0 = px(face.top + CalcTheme.keyBorderWidth + 1);
   final y1 = px(face.bottom - CalcTheme.keyBorderWidth - 1);
-  final ground = lum(x0, px(face.center.dy));
+  final histogram = <int, int>{};
+  for (var y = y0; y < y1; y++) {
+    for (var x = x0; x < x1; x++) {
+      histogram.update(lum(x, y) ~/ 8, (n) => n + 1, ifAbsent: () => 1);
+    }
+  }
+  final ground =
+      histogram.entries.reduce((a, b) => a.value >= b.value ? a : b).key * 8 +
+      4;
   int? first;
   int? last;
   for (var y = y0; y < y1; y++) {
@@ -385,6 +394,25 @@ void main() {
               expect(drawn.inkTopY, greaterThan(inner.top), reason: reason);
               expect(drawn.inkBottomY, lessThan(inner.bottom), reason: reason);
             }
+            // 방향 키(커서 패드 반쪽 키캡)는 허브·외곽선 사이 라벨 자리(#65) 가운데에 잉크를 둔다
+            for (final row in [...controlLeftRows, ...controlRightRows]) {
+              for (final def in row) {
+                if (def.category != KeyCategory.cursor) continue;
+                final area = tester.getRect(
+                  find
+                      .ancestor(
+                        of: _label(def.id),
+                        matching: find.byType(Center),
+                      )
+                      .first,
+                );
+                expect(
+                  _measure(tester, def, fonts).referenceY,
+                  closeTo(area.center.dy, 0.01),
+                  reason: '${def.id.name} ($size, $scale)',
+                );
+              }
+            }
           },
         );
       }
@@ -513,9 +541,11 @@ void main() {
   });
 
   group('실물 사진 대조 — 그린 픽셀의 잉크 가운데 / 키캡 면 비 (#230)', () {
-    // 실물 사진처럼 그린 픽셀에서 면 안의 잉크 행을 찾아 잰다. 검사(앞의 셋은 #230 전 상태 — 숫자 약 0.528·연산 기호 약
-    // 0.541·log◼▯와 ln의 비 차 약 0.012 — 에서 실패한다):
-    // 1. 대문자·숫자·기호 각인은 0.5 − max(0.01, 1 물리 픽셀)~0.52 (사진 숫자·연산 기호·함수부 대문자 범위가 0.49~0.52)
+    // 실물 사진처럼 그린 픽셀에서 면 안의 잉크 행을 찾아 잰다. 검사 1은 #230 전 상태(360×800 픽셀 비 3·배율 1.0에서 숫자 약
+    // 0.528·연산 기호 약 0.541, 태블릿 × 약 0.529)를 모든 조건에서 잡는다. 2·3은 360×800 픽셀 비 3·배율 1.0에서 잡고(log◼▯ − ln
+    // 약 0.012), 다른 조건에서는 허용폭 안일 수 있다. 4는 회귀를 잡지 못하는 사진 점검이다(#230 전 최대 차 0.043).
+    // 1. 대문자·숫자·기호 각인은 0.5 − max(0.01, 1.5 물리 픽셀)~0.52 (사진 숫자·연산 기호·함수부 대문자 범위가 0.49~0.52 —
+    //    잉크 위·아래 행이 안티에일리어싱으로 한 줄씩 달라지는 몫을 하한에 둔다)
     // 2. 면 윤곽이 또렷한 흰 키의 구역 평균이 사진 평균과 0.02 안 — 숫자 0~9(사진 0.494), 연산 기호 다섯(사진 0.516)
     // 3. 같은 행에서 기준선을 함께 써 잉크 가운데가 갈리는 짝의 비 차가 사진과 0.025 안(두 키의 1 물리 픽셀씩 — 함수 키 면
     //    약 27dp, 픽셀 비 2.625에서 각 약 0.014) — cos − sin(사진 0.046), log◼▯ − ln(사진 0.046). 각인마다 잉크를 가운데에
@@ -567,7 +597,7 @@ void main() {
                 '${id.name} ($size, $scale): ${ratio.toStringAsFixed(3)}';
             // 잉크가 대문자·숫자 높이인 각인(기준선 각인)과 자기 잉크로 맞추는 각인 — 실물처럼 면 가운데다
             if (!_offCenterByDesign.contains(id)) {
-              final onePixel = 1 / (pixelRatio * faceHeights[id]!);
+              final onePixel = 1.5 / (pixelRatio * faceHeights[id]!);
               expect(
                 ratio,
                 inInclusiveRange(0.5 - math.max(0.01, onePixel), 0.52),
