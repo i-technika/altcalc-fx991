@@ -155,6 +155,31 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
 - 다른 세션이 쓰는 에뮬레이터는 건드리지 않는다. 확인용으로 따로 띄울 때는 `-read-only`로 띄워 AVD 상태를 바꾸지 않는다
   (예: `emulator -avd Medium_Phone_API_36.1 -port 5580 -read-only`).
 
+### 폴더블 에뮬레이터로 배치 확인 (#140)
+
+접힘선 기준 배치(책 자세·가로 접힘선·Flip)를 실제 앱으로 본 방법이다. 결과는 `CalcTheme` "접힘선 기준 배치" 절의 "에뮬레이터 실측 (#140)"에 있고,
+그 배치 줄은 `test/widget/foldable_emulator_layout_test.dart`가 재현한다.
+
+- AVD: Android 16(`android-36.1/google_apis_playstore`) 이미지로 `pixel_fold`와 `6.7in Foldable` 기기 정의 AVD를 따로 만들어 썼다
+  (`avdmanager create avd -n <이름> -d pixel_fold -k "system-images;android-36.1;google_apis_playstore;x86_64"`, 끝난 뒤 지웠다).
+  `-gpu host`로 띄운다 — 기본(SwiftShader)으로 띄운 Pixel Fold는 회전 중 에뮬레이터가 죽었다(종료 코드 139).
+- 배치는 진단 릴리스 빌드(`flutter build apk --release --dart-define=ALTCALC_LAYOUT_LOG=true`)의 "배치" 줄로 읽고,
+  키 크기는 `uiautomator dump`의 키 노드 높이(px ÷ 밀도)로 잰다.
+- Pixel Fold
+  - 회전: `settings put system accelerometer_rotation 0` 뒤 `settings put system user_rotation 0|1`.
+  - 접기·펴기: `adb emu fold`·`adb emu unfold`. 반 접힘: `adb emu posture 2`(펼침 3). 화면이 2개라 캡처는 `screencap -d <id>`
+    (`dumpsys SurfaceFlinger --display-id` — 첫 번째가 내부 화면).
+  - 실제 분할 화면은 접힘선을 가로지르는 창을 만들지 않는다(가로 화면은 좌우, 세로 화면은 위아래로 나눠 접힘선이 창 경계다).
+    접힘선을 지나는 창은 자유 형식 창(위 "자유 형식 창")을 `am task resize`로 접힘선에 걸쳐 만든다.
+- `6.7in Foldable`(Flip): 화면이 하나뿐이라 커버 화면이 없다. **반 접힘(`emu posture 2`)에서만** 접힘 정보(폭 1px `hinge`)를 보고하고
+  완전히 펼치면(`posture 3`) 보고하지 않는다 — `display_features`를 덮어써도 같다. 완전히 펼친 Flip은 Pixel Fold에
+  `wm size 1080x2636`·`wm density 480`·`settings put global display_features "'fold-[0,1318,1080,1318]'"`로 흉내 낸다(#144의 방법).
+  - Flip AVD에서 `settings delete global display_features`를 하면 반 접힘에서도 접힘 정보가 오지 않았다.
+    원래 값 `hinge-[0,1318,1080,1319]`을 다시 넣어 되돌렸다.
+- TalkBack 쓸어 넘기기는 `adb shell uinput -` 가상 터치(위 TalkBack 항목)로 넣는다. 가상 터치 좌표는 화면 기본 방향 기준이라,
+  돌린 화면(Pixel Fold `user_rotation 1`)에서는 원시 좌표의 y축으로 쓸어야 다음 항목으로 간다(+y가 다음).
+  초점 테두리 색은 LCD 위에서 더 밝은 초록으로 보이므로 색 판정을 넉넉히 둔다.
+
 ## 개발용 미리보기 (`preview/`)
 
 실제 계산기 화면(`CalculatorScreen`)을 데스크톱 브라우저 창에 띄워, 휴대폰·에뮬레이터 없이
