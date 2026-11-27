@@ -18,9 +18,11 @@ import '../../core/theme/calc_theme.dart';
 /// - 크기는 [textScaler]를 반영한 글자 크기로 배치한 각인의 폭과, **한 줄 상자**(같은 글자 크기의
 ///   strut 한 줄)와 모든 잉크(첨자·분수·근호 선 포함)를 합친 높이다. 그래서 잉크가 상자 밖에 그려지지 않는다.
 ///   키 버튼은 `Text`와 같은 방식(`FittedBox`)으로 줄인다.
-/// - 글자만 있는 각인([LegendText])은 한 줄 상자만 쓴다 — 같은 스타일의 `Text`(strut 고정)와 크기·기준선이 같다
-///   (`g` 같은 내림 글자도 `Text`처럼 상자 밖으로 조금 나가 그려진다). 단 앱 화면의 `Text`는 테마 글자 스타일의 줄 간격 배분
-///   (`even`)을 받아 기준선이 약 0.1em 낮다 — 키 버튼은 두 위젯 모두 그린 기준선으로 맞춰 그린다(#230 `InkCenteredLabel`).
+/// - 글자만 있는 각인([LegendText])은 한 줄 상자만 쓴다 — 같은 스타일의 `Text`(strut 고정 — [keyLabelStrut])와 크기·기준선이
+///   같다. 줄 상자 안 기준선(위에서 약 0.785em)은 strut의 줄 간격 배분([TextLeadingDistribution.proportional])으로 고정하므로
+///   앱 테마의 글자 스타일(Material 3의 `even` — 받으면 약 0.888em)과 상관없다(#252). 단 `Text`는 그 기준선을 정수 dp로 반올림한
+///   곳에 글자를 그린다 — 키 버튼은 메인 각인을 그린 기준선으로 맞추고(#230 `InkCenteredLabel`), 각인 띠의 `Text`는 보고한 기준선에
+///   그리게 옮긴다(#252 `DrawnBaselineLabel`).
 /// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
 ///   각인 띠에서는 기준선이 그만큼(가장 많은 `d/dx◼`도 0.08em 미만, 테스트로 고정) 이웃 각인보다 올라간다.
 ///
@@ -962,9 +964,16 @@ TextSpan keyLabelSpan(String text, TextStyle style) {
 /// 약 7% 높아진다(#16 실측: 20 → 21dp). 각인 글꼴 Saira도 위아래 여백이 커서 같은 문제가 생긴다. 키패드 글자 크기
 /// 계산(`KeypadMetrics`의 `fitFontSizeToHeight`)이 전제하는 줄 높이(글자 크기 × `height`)와 맞추고, 라벨 사이 기준선을 같게
 /// 한다. strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다.
+///
+/// 줄 간격 배분도 [TextLeadingDistribution.proportional]로 고정한다 (#252). 정하지 않으면 strut가 문단의 줄 간격 배분을 따른다 —
+/// 앱 화면의 `Text`는 Material 3 테마의 기본 글자 스타일에서 `even`을 받아 기준선이 줄 상자 위에서 약 0.888em이고,
+/// 테마를 받지 않는 [KeyLegendView](`TextPainter`)는 0.785em이어서, 아래 정렬한 각인 띠의 글자 각인과 2차원 각인 기준선이
+/// 태블릿에서 약 1.4dp 어긋났다. `proportional`은 [KeyLegendView]·`KeypadMetrics`가 재던 값(0.785em) 그대로라 각인 크기·글자
+/// 크기 계산이 바뀌지 않는다. 내림 글자(`g` 잉크 아래끝 −0.206em)도 줄 상자 안(기준선 아래 0.215em)에 든다.
 StrutStyle keyLabelStrut(TextStyle style) => StrutStyle.fromTextStyle(
   style,
   fontFamily: CalcTheme.keyStrutFontFamily,
   fontFamilyFallback: const [],
+  leadingDistribution: TextLeadingDistribution.proportional,
   forceStrutHeight: true,
 );
