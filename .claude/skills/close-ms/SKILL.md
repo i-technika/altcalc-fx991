@@ -30,10 +30,11 @@ gh issue list --milestone "<마일스톤 이름>" --state open --json number,tit
     - M1~M10(v1.0 전)을 닫을 때 실기기 확인 이슈는 M11·에픽 #6(#185·#249). M11 에픽 체크리스트의 "실물 대조 100종"·스토어 빌드 항목에 해당하는 이슈도 M11.
     - 그 밖(개별 기능의 실물 대조·에뮬레이터 확인 등, M11~M19를 닫을 때의 실기기 이슈 포함)은 그 과제가 속할 마일스톤·에픽이다 — 보통 다음 M이지만,
       모드별 마일스톤(M7~M9·M12~M19)은 모드가 서로 달라 다음 M이 맞지 않을 수 있다(예: Complex 모드 과제는 M8 Equation/Func로 옮기지 않는다). 대응 표의 내용 칸으로 고른다.
+    - M11(v1.0 출시 QA)을 닫을 때 남은 v1.0 기능의 실기기 확인 이슈는 속할 모드 마일스톤이 없다 — 옮길 곳을 사용자에게 묻는다(단일 선택, 첫 선택지는 M12에 배포 전 점검으로 옮기기).
     - M1은 에픽 #1의 서브이슈 한도 때문에 일부 이슈가 묶음 이슈 #237 아래에 있다. 위 `gh issue list --milestone`이 그 이슈들도 보여 주며,
-      #237 자체도 M1의 열린 이슈다 — 하위 이슈가 모두 닫히면 #237을 닫는다.
-  - 옮기는 순서: ① 마일스톤 바꾸기(`gh issue edit <이슈> --milestone "<새 마일스톤 이름>"`) ② 옛 에픽에서 떼기
-    (`gh api graphql -f query='mutation($p:ID!,$c:ID!){removeSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' -f p=<옛 에픽 id> -f c=<이슈 id>`)
+      #237 자체도 M1의 열린 이슈다 — #237은 옮기지 않는다. 하위 이슈를 처리하거나 옮긴 뒤 하위가 모두 닫혔거나 떠났으면 #237을 닫는다.
+  - 옮기는 순서: ① 마일스톤 바꾸기(`gh issue edit <이슈> --milestone "<새 마일스톤 이름>"`) ② 옛 상위(에픽, 또는 M1 묶음 이슈 #237)에서 떼기
+    (`gh api graphql -f query='mutation($p:ID!,$c:ID!){removeSubIssue(input:{issueId:$p,subIssueId:$c}){issue{number}}}' -f p=<옛 상위 id> -f c=<이슈 id>`)
     ③ `/fix-issue` 9단계 B 블록을 새 에픽 번호로 실행 — `TYPE`은 그 이슈의 기존 `issueType` id(`gh issue view <이슈> --json issueType --jq .issueType.id`)를 쓴다.
 
 ## 2. 마일스톤 브랜치 최종 점검
