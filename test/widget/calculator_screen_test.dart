@@ -995,6 +995,113 @@ void main() {
     }
   });
 
+  group('커서 패드 ▲·▼ 기준 — 넓은 키패드 셀 (#159)', () {
+    // #159에서 패드 모양(비율 상한 [CalcTheme.cursorPadMaxAspectRatio])과 터치 경계를 그대로 두기로 정했고, 아래 기준을 고정한다.
+    // - 내접원(손가락이 들어가는 크기): 함수 키(sin) 터치 높이 대비 ▲·▼ 0.95배, ◀·▶ 1.0배 이상이다. 보통 셀과 넓은 셀에
+    //   같은 기준을 쓴다(test/support/touch_metrics.dart). 측정 ▲·▼는 보통 셀 0.956~0.982배, 넓은 셀 0.981~0.985배,
+    //   큰 키 1.33~1.36배다.
+    // - 넓이(넓은 셀만): 함수 키 셀 대비 ◀·▶는 1.1배 이상이다. ▲·▼는 창마다 측정값보다 약 0.02 아래를 하한으로 둔다
+    //   (결정 ③ — 지금 값에서 더 나빠지지 않게). 함수 키가 옆으로만 넓어져 ▲·▼ 넓이 비율은 셀 비가 커질수록 계속 내려간다.
+    //   패드를 비율 2.5까지 넓히면 600×610 등은 1.06배로 돌아오지만 내접원은 거의 그대로다(600×610 34.0 → 34.4dp).
+    //
+    // 배치나 셀 비가 바뀌면(#143 접힘선 재정의, #18 광고, #145 기록 영역 등) 아래 전제 검사가 먼저 실패한다.
+    // 그때는 그 창을 다시 재어 목록(배치·하한)을 갱신한다.
+    const stale = '배치·셀 비가 바뀌었다 — 이 창을 다시 재어 목록(배치·하한)을 갱신한다 (#159)';
+
+    // 보통 셀(패드가 비율 상한에 닿지 않는 셀) — 내접원만 본다. 넓이는 세로 폰 화면 테스트("세로 폰 화면의 키 크기 하한")와
+    // 키패드 테스트가 본다. 가장 낮은 곳은 셀 비 1.3인 셀이다.
+    for (final (size, arrangement) in const [
+      (Size(320, 568), DrawnArrangement.stacked), // 0.957
+      (Size(412, 915), DrawnArrangement.stacked), // 0.956
+      (Size(410, 400), DrawnArrangement.landscape), // 작은 가로형 창, 0.957
+      (Size(360, 300), DrawnArrangement.landscape), // 0.956
+      (Size(844, 390), DrawnArrangement.landscape), // 가로 폰, 0.963
+      (Size(841, 701), DrawnArrangement.landscape), // 폴더블 내부 가로, 0.956
+    ]) {
+      testWidgets(
+        '보통 셀 ${size.width}×${size.height} (${arrangement.name}): 내접원 하한',
+        (tester) async {
+          await _pumpScreen(tester, size: size);
+          expect(drawnArrangementOf(tester), arrangement, reason: stale);
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          expect(
+            pad.width / pad.height,
+            lessThan(CalcTheme.cursorPadMaxAspectRatio - 1e-6),
+            reason: stale,
+          );
+          expectCursorPadInscribedVersusFunctionKey(tester, reason: '$size');
+        },
+      );
+    }
+
+    // 넓은 셀 (창, 배치, ▲·▼ 넓이 비율 하한) — 주석: 셀 비, 측정값
+    for (final (size, arrangement, minUpDownAreaRatio) in const [
+      (
+        Size(673, 841),
+        DrawnArrangement.stacked,
+        0.97,
+      ), // 폴더블 내부 세로, 1.98, 0.997
+      (Size(768, 1024), DrawnArrangement.stacked, 0.99), // 태블릿 세로, 1.92, 1.015
+      (
+        Size(1024, 1366),
+        DrawnArrangement.stacked,
+        1.0,
+      ), // 큰 태블릿 세로(큰 키), 1.89, 1.023
+      (Size(800, 900), DrawnArrangement.stacked, 0.91), // 2.20, 0.936
+      (Size(412, 450), DrawnArrangement.stacked, 0.89), // 분할 화면, 2.32, 0.915
+      (Size(600, 610), DrawnArrangement.stacked, 0.86), // 2.47, 0.881
+      (Size(768, 768), DrawnArrangement.stacked, 0.85), // 정사각형 창, 2.49, 0.874
+      (
+        Size(1280, 400),
+        DrawnArrangement.landscape,
+        0.94,
+      ), // 데스크톱 창, 2.12, 0.959
+      (Size(2000, 400), DrawnArrangement.landscape, 0.73), // 3.32, 0.755
+      (Size(2000, 300), DrawnArrangement.landscape, 0.60), // 5.50, 0.622
+    ]) {
+      testWidgets(
+        '넓은 셀 ${size.width}×${size.height} (${arrangement.name}): 내접원·넓이 하한',
+        (tester) async {
+          await _pumpScreen(tester, size: size);
+          expect(drawnArrangementOf(tester), arrangement, reason: stale);
+          final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+          final cell = tester.getRect(find.byType(CursorPad));
+          final cellAspect = cell.width / cell.height;
+          // 이 창들이 넓은 셀(패드가 비율 상한에서 멈춘 경우)이어야 넓이 하한이 뜻이 있다.
+          expect(
+            cell.width,
+            greaterThan(pad.width + 1),
+            reason: '$stale (셀 비 $cellAspect)',
+          );
+          expect(
+            pad.width / pad.height,
+            moreOrLessEquals(CalcTheme.cursorPadMaxAspectRatio, epsilon: 1e-6),
+            reason: '$stale (셀 비 $cellAspect)',
+          );
+          expectCursorPadInscribedVersusFunctionKey(tester, reason: '$size');
+          final sin = tester.getSize(
+            find.byWidgetPredicate(
+              (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+            ),
+          );
+          final g = CursorPadGeometry(pad.size);
+          final bounds = cell.shift(-pad.topLeft);
+          for (final sector in CursorPadSector.values) {
+            final vertical =
+                sector == CursorPadSector.up || sector == CursorPadSector.down;
+            expect(
+              g.hitArea(sector, bounds) / (sin.width * sin.height),
+              greaterThanOrEqualTo(vertical ? minUpDownAreaRatio : 1.1),
+              reason:
+                  '${sector.name} 넓이 (sin $sin, 셀 비 $cellAspect) — 퇴행인지, '
+                  '의도한 배치 변경이면 다시 재어 하한을 갱신할지 판단한다',
+            );
+          }
+        },
+      );
+    }
+  });
+
   group('화면 배치 기준 (CalcScreenLayout)', () {
     void expectSumsToBody(Size body, CalcScreenLayout l) {
       for (final v in [l.top, l.lcdHeight, l.gap, l.keypadHeight]) {
