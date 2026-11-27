@@ -897,7 +897,7 @@ class _ShapeClipper extends CustomClipper<Path> {
 ///
 /// 세로로는 띠 아래끝에 정렬해 모든 키의 각인이 기준선을 함께 쓴다(#252). 한 줄 아래로 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)이 있는
 /// 키만 실물처럼 그 잉크 아래끝이 띠 기준선에 오게, 짝 각인(`:`)과 함께 띠 높이 [height] 안에서 올린다
-/// ([KeyLegendView.bandBottomInsets], #260).
+/// ([KeyLegendView.bandLifts], #260 — 그리는 자리만 옮긴다. 폭 배분·줄임 배율은 그대로다).
 class _LegendRow extends StatelessWidget {
   final KeyLegend? shiftLegend;
   final KeyLegend? alphaLegend;
@@ -942,9 +942,9 @@ class _LegendRow extends StatelessWidget {
         alphaRunes < shiftRunes &&
         alphaRunes <= CalcTheme.keyLegendPriorityMaxRunes;
     final shortMaxWidth = math.max(0.0, (width - gap) / 2);
-    // 한 줄 아래로 넘치는 각인이 있는 키는 각인들을 띠 아래끝에서 띄운다 (#260) — 그리는 글자 크기(배율 반영)로 잰다
+    // 한 줄 아래로 넘치는 각인이 있는 키는 각인들을 띠 아래끝에서 올린다 (#260) — 그리는 글자 크기(배율 반영)로 잰다
     final scaledFontSize = textScaler.scale(fontSize);
-    final insets = KeyLegendView.bandBottomInsets([
+    final lifts = KeyLegendView.bandLifts([
       if (shift != null)
         (
           shift,
@@ -963,25 +963,23 @@ class _LegendRow extends StatelessWidget {
       Alignment alignment, {
       required bool short,
       required bool priorityLayout,
-      required double bottomInset,
+      required double lift,
     }) {
       final sized = style.copyWith(fontSize: fontSize);
-      final Widget fitted = FittedBox(
+      final drawn = _legendLabel(
+        legend,
+        sized,
+        textScaler,
+        snapToDrawnBaseline: true,
+      );
+      final label = FittedBox(
         fit: BoxFit.scaleDown,
         alignment: alignment,
-        child: _legendLabel(
-          legend,
-          sized,
-          textScaler,
-          snapToDrawnBaseline: true,
-        ),
+        // 올리는 거리는 그리는 자리만 옮긴다 — 여백으로 띄우면 띠 높이에 꼭 맞는 각인이 부동소수 오차만큼 줄어든다(#260 R1)
+        child: lift > 0
+            ? Transform.translate(offset: Offset(0, -lift), child: drawn)
+            : drawn,
       );
-      final label = bottomInset > 0
-          ? Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: fitted,
-            )
-          : fitted;
       if (short) {
         return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: shortMaxWidth),
@@ -1010,7 +1008,7 @@ class _LegendRow extends StatelessWidget {
             Alignment.bottomLeft,
             short: shiftIsShort,
             priorityLayout: priority,
-            bottomInset: insets.first,
+            lift: lifts.first,
           ),
         if (both) SizedBox(width: gap),
         if (alpha != null)
@@ -1020,7 +1018,7 @@ class _LegendRow extends StatelessWidget {
             Alignment.bottomRight,
             short: alphaIsShort,
             priorityLayout: priority,
-            bottomInset: insets.last,
+            lift: lifts.last,
           ),
       ],
     );

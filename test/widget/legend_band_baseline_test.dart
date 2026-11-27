@@ -27,8 +27,9 @@ import '../support/bundled_fonts.dart';
 ///
 /// 한 줄 상자 아래로 잉크가 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)은 이웃과 기준선을 함께 쓰지 않는다 (#260). 실물은 그 각인의 잉크
 /// 아래끝(분모 `dx`·아래 끝 칸)을 이웃 각인 기준선에 두고 같은 키의 짝 각인 `:`도 함께 올려 인쇄한다([CalcTheme] "2차원 각인 배치"
-/// 절의 사진 실측). 앱은 띠 위쪽 여유만큼 그렇게 올린다([KeyLegendView.bandBottomInsets]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
-/// (360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다.
+/// 절의 사진 실측). 앱은 띠 위쪽 여유만큼 그렇게 올린다([KeyLegendView.bandLifts]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
+/// (360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다. 띠 위쪽
+/// 여유가 없는 창(큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창)은 지금도 그렇다([_Raise.none]).
 
 /// 각인 띠에 그린 각인 하나 (전역 좌표, dp)
 typedef _BandLegend = ({
@@ -185,8 +186,11 @@ enum _Raise {
   /// 잉크 아래끝이 띠 기준선(이웃 각인 기준선)에 있다 — 실물과 같은 자리
   full,
 
-  /// 띠 위쪽 여유가 모자라 각인 위끝이 띠 위끝에 닿을 때까지만 올렸다
-  clamped,
+  /// 띠 위쪽 여유가 모자라 각인 위끝이 띠 위끝에 닿을 때까지만 올렸다 — 잉크 아래끝은 띠 기준선과 띠 아래끝 사이다
+  partial,
+
+  /// 각인이 띠를 꽉 채워 올리지 못했다 — 아래 정렬 그대로(#260 전과 같다. 넘친 깊이만큼만 이웃보다 위)
+  none,
 }
 
 /// 지금 화면의 모든 키 각인 띠를 검사하고, 띠 각인 글자 크기와 넘치는 각인(한 줄 표기)별 올린 결과를 돌려준다.
@@ -199,7 +203,8 @@ enum _Raise {
 /// 3. 넘치는 각인은 [_overflowingLegends]뿐이다. 그 각인이 있는 키는(#260):
 ///    - 키의 모든 각인(짝 각인 `:` 포함)이 그린 기준선을 함께 쓰고, 띠 기준선보다 위다.
 ///    - 넘치는 각인의 잉크 아래끝(잉크 범위 표로 잰 em 치수 × 글자 크기)이 띠 기준선에 있거나([_Raise.full]), 띠 위쪽 여유가
-///      모자라 각인 위끝이 띠 위끝에 닿아 있고 잉크 아래끝은 띠 기준선과 띠 아래끝 사이에 있다([_Raise.clamped]).
+///      모자라 각인 위끝이 띠 위끝에 닿아 있고 잉크 아래끝은 띠 기준선과 띠 아래끝 사이에 있다([_Raise.partial] — 자리 아래끝까지
+///      띠 아래끝이면 [_Raise.none]).
 ///    - 어느 각인도 띠 밖으로 나가지 않는다.
 /// 띠 각인은 줄어들지 않는다 — 줄이면 아래 정렬에서 기준선이 올라가므로, 줄어드는 창이 생기면 기대값을 정해 이 검사를 넓힌다.
 (double, Map<String, _Raise>) _expectBandBaselines(WidgetTester tester) {
@@ -306,7 +311,9 @@ enum _Raise {
       if ((inkBottom - baseline).abs() <= 0.01) {
         raised[o.text] = _Raise.full;
       } else {
-        raised[o.text] = _Raise.clamped;
+        raised[o.text] = bottom - o.slot.bottom <= 0.01
+            ? _Raise.none
+            : _Raise.partial;
         expect(
           o.slot.top,
           moreOrLessEquals(o.bandTop, epsilon: 0.01),
@@ -410,29 +417,39 @@ void main() {
   setUpAll(loadBundledFonts);
 
   group('실제 앱의 각인 띠 기준선', () {
-    // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지, 넘치는 각인을 올린 결과) — 세로 폰·태블릿과 가로형(넓은 배열 — 가로 폰은 옮긴
-    // 거리가 반올림 경계 0.5dp에 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2).
-    // 넘치는 각인(#260): 폰 크기 창은 각인 글자가 띠 높이의 0.8배(배율 1.3이면 `d/dx◼`가 띠를 거의 채운다)라 띠 위 여유(약
-    // 0.13em·0.05em)가 올릴 거리(한 줄 상자 깊이 약 0.215em)보다 작아 여유만큼만 올린다. 태블릿은 각인 글자가 상한(11dp)에
-    // 묶여 띠에 여유가 많아 잉크 아래끝이 띠 기준선에 온다.
-    for (final (name, size, scales, raise) in const [
-      ('폰 360×800', Size(360, 800), true, _Raise.clamped),
-      ('태블릿 800×1280', Size(800, 1280), true, _Raise.full),
-      ('가로 폰 800×360', Size(800, 360), false, _Raise.clamped),
-      ('가로 태블릿 1280×800', Size(1280, 800), false, _Raise.full),
+    // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지, `d/dx◼`를 올린 결과 — 글자 배율 1.0·1.3) — 세로 폰·태블릿과 가로형(넓은 배열
+    // — 가로 폰은 옮긴 거리가 반올림 경계 0.5dp에 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2).
+    // 넘치는 각인(#260)을 사진과 같은 자리까지 올리려면 띠 위쪽 여유가 한 줄 상자 깊이(약 0.215em — 그린 크기에서는 줄 상자
+    // 높이 반올림으로 0.15~0.27em) 이상이어야 한다.
+    // - 태블릿: 각인 글자가 상한(11dp)에 묶이고 띠가 높아 여유가 넉넉하다 — 잉크 아래끝이 띠 기준선에 온다.
+    // - 폰: 각인 글자가 띠 높이의 0.8배라 여유가 약 0.13em뿐이다 — 여유만큼만 올린다(360×800 `d/dx◼` 잉크 아래끝이 띠
+    //   기준선보다 0.98dp 아래, 글자 배율 1.3은 여유 약 0.05em·1.18dp 아래).
+    // - 가로 폰 글자 배율 1.3: 큰 글자로 `d/dx◼`가 띠를 꽉 채워 여유가 없다 — 아래 정렬 그대로다(#260 전과 같다).
+    for (final (name, size, scales, raise, scaledRaise) in const [
+      ('폰 360×800', Size(360, 800), true, _Raise.partial, _Raise.partial),
+      ('태블릿 800×1280', Size(800, 1280), true, _Raise.full, _Raise.full),
+      ('가로 폰 800×360', Size(800, 360), false, _Raise.partial, _Raise.none),
+      ('가로 태블릿 1280×800', Size(1280, 800), false, _Raise.full, _Raise.full),
     ]) {
       testWidgets('$name 글자 배율 1.0·1.3: 같은 행 각인 띠의 글자 각인과 2차원 각인은 그린 기준선이 같고, '
-          '한 줄 아래로 넘치는 각인은 짝 각인과 함께 올라가 있다', (tester) async {
+          '한 줄 아래로 넘치는 각인은 짝 각인과 함께 띠 위쪽 여유만큼 올라가 있다', (tester) async {
+        // `d/dx◼`(가장 높은 SHIFT 각인)의 결과를 고정한다. `∑◻◻◼`는 조금 낮아 여유가 조금 더 있다 — 사진과 같은 자리인지만
+        // `d/dx◼`와 같아야 한다.
+        void expectRaise(Map<String, _Raise> raised, _Raise expected) {
+          expect(raised['d/dx◼'], expected, reason: '$raised');
+          expect(
+            raised['∑◻◻◼'] == _Raise.full,
+            expected == _Raise.full,
+            reason: '$raised',
+          );
+        }
+
         await _pumpApp(tester, size, 1.0);
         final (base, baseRaised) = _expectBandBaselines(tester);
-        expect(baseRaised.values.toSet(), {
-          raise,
-        }, reason: '배율 1.0 $baseRaised');
+        expectRaise(baseRaised, raise);
         await _pumpApp(tester, size, 1.3);
         final (scaled, scaledRaised) = _expectBandBaselines(tester);
-        expect(scaledRaised.values.toSet(), {
-          raise,
-        }, reason: '배율 1.3 $scaledRaised');
+        expectRaise(scaledRaised, scaledRaise);
         // 세로 창은 글자 배율이 띠 글자 크기를 실제로 바꿔야 배율 검사가 뜻이 있다
         if (scales) expect(scaled, greaterThan(base + 0.1));
       });
@@ -596,6 +613,124 @@ void main() {
         );
       },
     );
+
+    // 폰(띠 위쪽 여유가 모자란 창): 각인 위끝이 띠 위끝에 닿을 때까지만 올라간다. 넘치는 각인은 상자 아래끝이 잉크 아래끝이므로,
+    // 그린 `dx` 아래끝이 각인 상자 아래끝(잉크 범위 표가 아니라 배치에서 잰 값)에 있는지 픽셀로 본다 — 잉크 범위 표가 틀리면
+    // 띠 기준선 검사(표로 잰 잉크 아래끝)는 함께 틀려도 이 검사는 어긋난다.
+    testWidgets(
+      '360×800·픽셀 비 3: d/dx◼의 dx 잉크 아래끝이 각인 상자 아래끝이고, SOLVE 기준선과 키캡 위끝 사이에 있다',
+      (tester) async {
+        const pixelRatio = 3.0;
+        await _pumpApp(
+          tester,
+          const Size(360, 800),
+          1.0,
+          pixelRatio: pixelRatio,
+        );
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find
+              .descendant(
+                of: find.byType(AltCalcApp),
+                matching: find.byType(RepaintBoundary),
+              )
+              .first,
+        );
+        final origin = boundary.localToGlobal(Offset.zero);
+        final image = (await tester.runAsync(
+          () => boundary.toImage(pixelRatio: pixelRatio),
+        ))!;
+        final data = (await tester.runAsync(
+          () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+        ))!;
+        final palette = CalcPalette.of(tester.element(_button(CalcKeyId.calc)));
+        final solve = _bandLegends(
+          tester,
+          CalcKeyId.calc,
+        ).singleWhere((l) => l.text == 'SOLVE');
+        final derivative = _bandLegends(
+          tester,
+          CalcKeyId.integral,
+        ).singleWhere((l) => l.text == 'd/dx◼');
+        double bottom(_BandLegend l) =>
+            _pixelInkBottom(
+              data,
+              image.width,
+              pixelRatio,
+              Rect.fromLTRB(
+                l.slot.left,
+                l.slot.top,
+                l.slot.right,
+                l.bandBottom,
+              ).shift(-origin),
+              palette.shiftLabel,
+            ) +
+            origin.dy;
+        final solveBottom = bottom(solve);
+        final derivativeBottom = bottom(derivative);
+        image.dispose();
+        expect(
+          derivative.slot.top,
+          moreOrLessEquals(derivative.bandTop, epsilon: 0.01),
+        );
+        expect(
+          derivativeBottom,
+          moreOrLessEquals(derivative.slot.bottom, epsilon: 0.2),
+          reason: 'dx $derivativeBottom · 상자 아래끝 ${derivative.slot.bottom}',
+        );
+        // 실측: SOLVE 기준선보다 0.98dp 아래, 키캡 위끝(띠 아래끝)보다 1.17dp 위
+        expect(derivativeBottom, greaterThan(solveBottom + 0.5));
+        expect(derivativeBottom, lessThan(derivative.bandBottom - 0.8));
+      },
+    );
+  });
+
+  group('키패드 밖의 키 버튼 (#260 R1)', () {
+    // 키패드는 각인이 줄지 않는 글자 크기를 주지만, 따로 쓰는 키 버튼(미리보기 등)은 좁으면 `FittedBox`가 각인을 줄인다.
+    // 올린 거리도 각인과 함께 줄어야 줄어든 각인이 띠 위로 나가지 않는다.
+    testWidgets('좁은 ∫ 키: 줄어든 d/dx◼·:도 띠 안에 있고 d/dx◼는 띠 아래끝에서 올라가 있다', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 14,
+              height: 90,
+              child: CalcKeyButton(
+                keyDef: keyDefOf(CalcKeyId.integral),
+                onPressed: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      final legends = _bandLegends(tester, CalcKeyId.integral);
+      expect(legends.map((l) => l.text), ['d/dx◼', ':']);
+      final derivative = legends.first;
+      expect(derivative.scale, lessThan(0.9), reason: '줄어드는 폭이어야 한다');
+      for (final l in legends) {
+        expect(
+          l.slot.top,
+          greaterThanOrEqualTo(l.bandTop - 0.01),
+          reason: l.text,
+        );
+        expect(
+          l.slot.bottom,
+          lessThanOrEqualTo(l.bandBottom + 0.01),
+          reason: l.text,
+        );
+      }
+      // 띠(90 × 0.28 = 25.2dp)에 여유가 넉넉하다 — 줄어든 각인의 한 줄 상자 깊이(줄이기 전 깊이 × 줄인 비율)만큼 올라가 있다
+      final lifted = derivative.bandBottom - derivative.slot.bottom;
+      expect(
+        lifted,
+        moreOrLessEquals(
+          _lineDescent(derivative.style, derivative.fontSize) *
+              derivative.scale,
+          epsilon: 0.01,
+        ),
+      );
+    });
   });
 
   group('DrawnBaselineLabel', () {

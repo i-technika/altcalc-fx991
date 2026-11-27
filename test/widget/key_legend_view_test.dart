@@ -179,7 +179,7 @@ void main() {
     });
 
     test('한 줄 상자 아래로 잉크가 넘치는 SHIFT·ALPHA 각인은 d/dx◼와 ∑◻◻◼뿐이다 (#260)', () {
-      // 넘치는 각인은 각인 띠에서 이웃과 기준선을 함께 쓰지 않고 올린다(KeyLegendView.bandBottomInsets). 사진과 대조한 각인은 이
+      // 넘치는 각인은 각인 띠에서 이웃과 기준선을 함께 쓰지 않고 올린다(KeyLegendView.bandLifts). 사진과 대조한 각인은 이
       // 둘뿐이므로, 각인 배치 상수를 바꿔 다른 각인(대분수·a b/c⇔d/c — 사진에서도 분모가 기준선 아래로 조금 내려간다)이 넘치게
       // 되면 그 각인의 실물 자리를 확인해야 한다.
       final overhanging = {
@@ -202,8 +202,9 @@ void main() {
       );
     });
 
-    group('각인 띠에서 넘치는 각인 올리기 (bandBottomInsets, #260)', () {
-      // 11dp: 태블릿의 각인 글자 크기(상한), 9.35dp: 360×800 폰 글자 배율 1.3 (줄 상자 높이가 반올림되는 크기)
+    group('각인 띠에서 넘치는 각인 올리기 (bandLifts, #260)', () {
+      // 11dp: 태블릿의 각인 글자 크기(상한), 9.35dp: 360×800 폰 글자 배율 1.3, 7.41dp: 320×568 폰 (줄 상자 높이를 정수 dp로
+      // 반올림해 한 줄 상자 깊이가 글자 크기마다 다른 크기들)
       for (final fontSize in [11.0, 9.35, 7.41]) {
         final shiftStyle = CalcTheme.keyShiftLabelStyle.copyWith(
           fontSize: fontSize,
@@ -232,16 +233,13 @@ void main() {
         test('글자 크기 $fontSize: 넘치는 각인이 없는 키는 띄우지 않는다', () {
           final sin = keyDefOf(CalcKeyId.sin);
           expect(
-            KeyLegendView.bandBottomInsets([
+            KeyLegendView.bandLifts([
               (sin.shiftLegend!, shiftStyle),
               (sin.alphaLegend!, alphaStyle),
             ], fontSize * 3),
             [0.0, 0.0],
           );
-          expect(
-            KeyLegendView.bandBottomInsets(const [], fontSize * 3),
-            isEmpty,
-          );
+          expect(KeyLegendView.bandLifts(const [], fontSize * 3), isEmpty);
         });
 
         test('글자 크기 $fontSize: 띠에 여유가 있으면 넘치는 각인의 잉크 아래끝이 띠 기준선에 오고, '
@@ -252,7 +250,7 @@ void main() {
               -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
               fontSize;
           expect(inkDepth, greaterThan(descent));
-          final insets = KeyLegendView.bandBottomInsets([
+          final insets = KeyLegendView.bandLifts([
             (derivative, shiftStyle),
             (colon, alphaStyle),
           ], fontSize * 3);
@@ -262,10 +260,9 @@ void main() {
           expect(insets[1], moreOrLessEquals(inkDepth, epsilon: 1e-9));
           // 혼자 있는 넘치는 각인(∑)도 같다
           final sum = keyDefOf(CalcKeyId.variableX).shiftLegend!;
-          expect(
-            KeyLegendView.bandBottomInsets([(sum, shiftStyle)], fontSize * 3),
-            [moreOrLessEquals(descent, epsilon: 1e-9)],
-          );
+          expect(KeyLegendView.bandLifts([(sum, shiftStyle)], fontSize * 3), [
+            moreOrLessEquals(descent, epsilon: 1e-9),
+          ]);
         });
 
         test(
@@ -282,7 +279,7 @@ void main() {
             // 아래 정렬만으로 기준선이 올라가는 거리 (넘친 깊이)
             final natural = inkDepth - descent;
             for (final room in [0.0, descent * 0.4]) {
-              final insets = KeyLegendView.bandBottomInsets([
+              final insets = KeyLegendView.bandLifts([
                 (derivative, shiftStyle),
                 (colon, alphaStyle),
               ], height + room);
@@ -300,12 +297,43 @@ void main() {
             }
             // 띠가 각인보다 낮아도(FittedBox가 줄이는 경우) 음수가 되지 않는다
             expect(
-              KeyLegendView.bandBottomInsets([
+              KeyLegendView.bandLifts([
                 (derivative, shiftStyle),
                 (colon, alphaStyle),
               ], height - 2),
               everyElement(greaterThanOrEqualTo(0.0)),
             );
+          },
+        );
+
+        test(
+          '글자 크기 $fontSize: 넘치는 각인이 둘이어도 기준선이 같고, 어느 각인도 띠 위로 나가지 않는다 (#260 R1)',
+          () {
+            // 지금 그런 키는 없다(d/dx◼의 짝은 `:`, ∑◻◻◼는 혼자다). 각자 여유로 올리면 높이가 다른 두 각인의 기준선이 어긋난다.
+            final sum = keyDefOf(CalcKeyId.variableX).shiftLegend!;
+            final (_, descent) = line();
+            // 아래 정렬만으로 기준선이 올라가는 거리 (넘친 깊이)
+            double natural(KeyLegend legend) =>
+                -KeyLegendView.emMetrics(legend, shiftStyle).inkBottom *
+                    fontSize -
+                descent;
+            double heightOf(KeyLegend legend) =>
+                KeyLegendView.layoutSize(legend, shiftStyle).height;
+            expect(heightOf(derivative), greaterThan(heightOf(sum)));
+            for (final room in [0.0, 0.5, 1.5, fontSize]) {
+              final band = heightOf(derivative) + room;
+              final lifts = KeyLegendView.bandLifts([
+                (derivative, shiftStyle),
+                (sum, shiftStyle),
+              ], band);
+              expect(
+                lifts[0] + natural(derivative),
+                moreOrLessEquals(lifts[1] + natural(sum), epsilon: 1e-9),
+                reason: '여유 $room: $lifts',
+              );
+              expect(lifts[0], lessThanOrEqualTo(room + 1e-9));
+              expect(lifts[1] + heightOf(sum), lessThanOrEqualTo(band + 1e-9));
+            }
           },
         );
       }

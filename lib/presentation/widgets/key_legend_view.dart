@@ -28,7 +28,8 @@ import '../../core/theme/calc_theme.dart';
 ///   만큼, 최대 0.5dp 더 넘친다).
 /// - 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼` — [overhangsLine])은 아래 정렬한 각인 띠에서 실물처럼 더 올린다(#260): 잉크
 ///   아래끝(분모·아래 끝 칸)이 이웃 각인의 기준선에 오도록, 같은 키의 짝 각인(`:`)과 함께 올린다. 띠 위쪽 여유가 모자라면 여유만큼만
-///   올린다 — 아래 여백은 [bandBottomInsets]가 구하고 사진 근거는 [CalcTheme] "2차원 각인 배치" 절에 있다.
+///   올린다(여유가 없는 창은 아래 정렬 그대로다) — 올릴 거리는 [bandLifts]가 구하고 사진 근거는 [CalcTheme] "2차원 각인 배치"
+///   절에 있다.
 ///
 /// [KeypadMetrics] 같은 측정 쪽은 그리지 않고 [emSize]로 크기를 잰다.
 class KeyLegendView extends LeafRenderObjectWidget {
@@ -158,16 +159,17 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// [legend]의 잉크(분모·아래 끝 칸)가 한 줄 상자 아래로 넘치는지 — em 치수로 판정한다 (#260).
   ///
   /// 그린 크기의 줄 상자는 높이를 정수 dp로 반올림해 깊이가 글자 크기마다 조금 다르다. 그 값으로 판정하면 넘친 깊이가 얕은
-  /// `∑◻◻◼`가 창에 따라 넘치기도 넘치지 않기도 해, 각인 띠에서 올리는 규칙([bandBottomInsets])이 창마다 달라진다. 그래서 큰 글자
-  /// 크기로 잰 비율([emMetrics])로 판정한다 — 글자만 있는 각인([LegendText])은 한 줄 상자만 쓰므로 넘치지 않는다.
+  /// `∑◻◻◼`가 창에 따라 넘치기도 넘치지 않기도 해, 각인 띠에서 올리는 규칙([bandLifts])이 창마다 달라진다. 그래서 큰 글자
+  /// 크기로 잰 비율([emMetrics])로 판정한다 — 글자만 있는 각인([LegendText])은 한 줄 상자만 쓰므로 넘치지 않는다(각인 대부분이라
+  /// 재지 않고 바로 답한다 — 키 버튼이 build마다 묻는다).
   static bool overhangsLine(KeyLegend legend, TextStyle style) {
+    if (legend is LegendText) return false;
     final m = emMetrics(legend, style);
-    if (m.plain) return false;
     final line = emMetrics(const LegendText(' '), style);
     return -m.inkBottom > line.size.height - line.baseline + 1e-9;
   }
 
-  /// 아래 정렬한 각인 띠(높이 [bandHeight] dp)에서 같은 키의 각인들 [legends]를 띠 아래끝에서 띄울 거리 (dp, 같은 순서) (#260).
+  /// 아래 정렬한 각인 띠(높이 [bandHeight] dp)에서 같은 키의 각인들 [legends]를 위로 올릴 거리 (dp, 같은 순서) (#260).
   ///
   /// [legends]는 각인과 그 스타일이고, 스타일의 `fontSize`는 **배율을 반영한** 글자 크기다(그리는 크기 — 줄 상자 높이 반올림을
   /// 그 크기로 잰다).
@@ -177,14 +179,17 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// 배치" 절의 사진 실측). 그래서:
   /// - 넘치는 각인([overhangsLine])이 없으면 모두 0이다 — 띠 아래끝에 정렬해 기준선을 함께 쓴다(#252).
   /// - 넘치는 각인이 있으면 그 잉크 아래끝이 띠 기준선(띠 아래끝에서 한 줄 상자 깊이만큼 위 — 이웃 키 각인의 기준선)에 오게
-  ///   올린다. 각인 위끝이 띠 위끝을 넘지 않는 만큼만 올린다 — 띠 높이는 그대로이고 각인 글자 크기도 줄지 않는다(`KeypadMetrics`의
-  ///   높이 기준은 각인이 띠에 들어가는지만 본다). 여유는 글자 크기가 띠 높이 비율([CalcTheme.keyLegendFontRatio])이나 상한
-  ///   ([CalcTheme.keyLegendMaxFontSize])으로 정해질 때 생기고, 글자 배율로 `d/dx◼`가 띠를 꽉 채우면 없다.
-  /// - 같은 키의 다른 각인은 넘치는 각인과 기준선이 같아지게 함께 올린다(자기 위끝이 띠 위끝을 넘지 않는 만큼).
+  ///   그 키의 각인을 모두 같은 기준선으로 올린다.
+  /// - 어느 각인도 위끝이 띠 위끝을 넘지 않는 만큼만 올린다 — 띠 높이는 그대로이고 각인 글자 크기도 줄지 않는다(`KeypadMetrics`의
+  ///   높이 기준은 각인이 띠에 들어가는지만 본다. 올릴 자리를 미리 떼어 두면 모든 SHIFT·ALPHA 각인이 그만큼 작아진다). 그래서
+  ///   띠 위쪽 여유가 한 줄 상자 깊이보다 작은 창은 여유만큼만 올라가고, 큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창은 아래 정렬
+  ///   그대로다(넘친 깊이만큼만 이웃보다 위 — #260 전과 같다). 창별 결과는 [CalcTheme] "2차원 각인 배치" 절에 있다.
   ///
-  /// `FittedBox`가 각인을 줄이는 창에서는 줄이기 전 크기로 구한 값이라 기준선이 조금 어긋날 수 있다(각인이 줄어드는 창은 없다 —
+  /// 올리는 거리는 그리는 자리만 옮긴다(키 버튼의 각인 줄이 `FittedBox` 안에서 옮긴다) — 배치 제약을 건드리지 않아 `FittedBox`가
+  /// 각인을 줄이지 않고, 줄어드는 각인(키패드 밖에서 좁게 쓰는 키 버튼)은 올린 거리도 같은 비율로 줄어든다. 줄어드는 비율이
+  /// 각인마다 다르면 기준선이 그만큼 어긋난다(아래 정렬의 기준선도 그렇다 — 키패드에는 각인이 줄어드는 창이 없다,
   /// `test/widget/legend_band_baseline_test.dart`).
-  static List<double> bandBottomInsets(
+  static List<double> bandLifts(
     List<(KeyLegend, TextStyle)> legends,
     double bandHeight,
   ) {
@@ -196,23 +201,25 @@ class KeyLegendView extends LeafRenderObjectWidget {
     final boxes = [
       for (final (legend, style) in legends) _bandBox(legend, style),
     ];
-    double room(double height) => math.max(0.0, bandHeight - height);
-    // 띠 기준선에서 이 키 각인들의 기준선까지 올릴 거리 — 넘치는 각인의 잉크 깊이(여유가 모자라면 여유까지)
-    var raise = 0.0;
+    // 이 키 각인들이 함께 쓸 기준선 — 띠 기준선에서 올라간 거리.
+    // · 목표: 넘치는 각인의 잉크 깊이(잉크 아래끝이 띠 기준선에 온다)
+    // · 상한: 어느 각인도 위끝이 띠 위끝을 넘지 않는다(각인마다 아래 정렬 자리 + 띠 위쪽 여유)
+    // · 하한: 아래 정렬만으로 가장 높이 올라간 각인의 기준선(각인을 내릴 수는 없다)
+    var target = 0.0;
+    var highest = double.infinity;
+    var lowest = 0.0;
     for (final (i, (height, natural, inkDepth)) in boxes.indexed) {
-      if (!overhanging[i]) continue;
-      raise = math.max(
-        raise,
-        natural + math.min(math.max(0.0, inkDepth - natural), room(height)),
-      );
+      if (overhanging[i]) target = math.max(target, inkDepth);
+      highest = math.min(highest, natural + math.max(0.0, bandHeight - height));
+      lowest = math.max(lowest, natural);
     }
+    final raise = math.max(lowest, math.min(target, highest));
     return [
-      for (final (height, natural, _) in boxes)
-        (raise - natural).clamp(0.0, room(height)),
+      for (final (_, natural, _) in boxes) math.max(0.0, raise - natural),
     ];
   }
 
-  /// [bandBottomInsets]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
+  /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
   static (double, double, double) _bandBox(KeyLegend legend, TextStyle style) {
     final fontSize = style.fontSize ?? 14;
@@ -607,8 +614,8 @@ class _Builder {
   /// 두께에 묶어야 근호를 굵게 해도 지수가 머리에 붙지 않는다 — #206 전에는 머리 끝점에서 0.10em 위(선 0.07em일 때 틈 약
   /// 0.005em)로 고정해, 선을 0.14em으로 굵게 하자 `∛◼`의 3·`◼√◻`의 지수 칸이 근호에 붙었다. 근접 사진의 SHIFT 각인은 지수와
   /// 머리 사이가 약 2~3px(각인 글자 크기 약 22px 대비 0.09~0.14em)이다. 지수 잉크 위끝이 가장 높은 SHIFT 각인 `d/dx◼`의
-  /// 잉크 위끝(0.85em)보다 낮아야 작은 글자의 줄 상자 반올림에서도 `d/dx◼`가 SHIFT 각인 높이 맞춤을 정하므로(테스트로 고정),
-  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.837em — `d/dx◼` 0.8505em까지 여유 약 0.013em).
+  /// 잉크 위끝(0.838em)보다 낮아야 작은 글자의 줄 상자 반올림에서도 `d/dx◼`가 SHIFT 각인 높이 맞춤을 정하므로(테스트로 고정),
+  /// 그 안에서 0.05em으로 둔다(`∛◼` 잉크 위끝 약 0.819em — `d/dx◼` 0.838em까지 여유 약 0.019em. #260에서 다시 잰 값).
   static const double _radicalIndexClearance = 0.05;
 
   StrutStyle _strut(double fontSize) =>
