@@ -23,6 +23,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
+import '../support/semantics_hit_testing.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
 
@@ -868,6 +869,8 @@ void main() {
     for (final (size, padding, minTouchHeight, minLegendFont) in const [
       (Size(320, 568), EdgeInsets.zero, floor, 5.0),
       (Size(320, 568), EdgeInsets.only(top: 20), floor, 5.0),
+      // Android 320×568 에뮬레이터(상태바·제스처 막대 각 24dp, #173·#203)
+      (Size(320, 568), EdgeInsets.only(top: 24, bottom: 24), floor, 5.0),
       (Size(360, 640), EdgeInsets.zero, floor, 5.0),
       (Size(360, 640), EdgeInsets.only(top: 24, bottom: 48), floor, 5.0),
       (Size(390, 844), EdgeInsets.zero, floor, 5.0),
@@ -967,33 +970,62 @@ void main() {
               greaterThanOrEqualTo(cellArea * (vertical ? 1.0 : 1.1)),
               reason: '${sector.name} 넓이 ${pad.size}',
             );
-            // 스크린리더 시맨틱 영역(#166): 허브 고리 일부까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
-            // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 측정은 568×320 창 약 18.7dp, 360×300 분할 화면 약 13.5dp)
-            // (측정 22.6~34.9dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
-            // 이 목록에 없는 Android 320×568(위·아래 인셋 각 24dp)은 에뮬레이터에서 21.3dp로 하한 아래였다(#173).
-            // 하한과 인셋 조합은 #203에서 정한다.
+            // 스크린리더 시맨틱 영역(#166, #203): 그 방향만 읽히는 사각형의 짧은 변이 키 터치 높이 하한(28dp) 이상이다.
+            // ◀·▶는 노드 영역 전체(가장 위에 놓인다), ▲·▼는 허브 폭(중심에서 가로 허브 반지름 안)의 세로 띠다 —
+            // ▲·▼ 노드는 셀 반쪽 전체지만 옆은 ◀·▶ 노드가 덮는다.
+            // 측정 31.8~47.7dp — 가장 작은 곳은 Android 320×568(인셋 24/24)의 ▲·▼ 31.8dp다.
+            // #166의 겹치지 않는 사각형에서는 22.6~34.9dp였고, 그 인셋에서는 에뮬레이터 실측 21.3dp로 22dp 하한 아래였다(#173).
+            // 세로 폰 화면만 본다 — 짧은 창·가로 창은 패드가 작아 더 낮다.
             final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
+            final readable = vertical
+                ? Rect.fromLTRB(
+                    g.center.dx - g.hubRadius,
+                    semantic.top,
+                    g.center.dx + g.hubRadius,
+                    semantic.bottom,
+                  )
+                : semantic;
+            for (var i = 0; i <= 8; i++) {
+              for (var j = 0; j <= 8; j++) {
+                final p = Offset(
+                  readable.left + 0.01 + (readable.width - 0.02) * i / 8,
+                  readable.top + 0.01 + (readable.height - 0.02) * j / 8,
+                );
+                expect(
+                  g.semanticSectorAt(p, bounds),
+                  sector,
+                  reason: '${sector.name} $p',
+                );
+              }
+            }
             expect(
-              semantic.shortestSide,
-              greaterThanOrEqualTo(22.0),
-              reason: '${sector.name} 시맨틱 영역 $semantic',
+              readable.shortestSide,
+              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
+              reason: '${sector.name} 시맨틱 영역 $readable',
             );
           }
-          // 셀 여백은 ▲·▼와 ◀·▶가 고르게 나눠 갖는다 — 두 영역 높이가 같다(#166 R2: 패드에만 묶으면
-          // 셀이 패드보다 조금 높은 390×844 등에서 ◀·▶가 2dp쯤 낮아진다).
-          expect(
-            CursorPad.semanticRect(CursorPadSector.up, pad.size, bounds).height,
-            moreOrLessEquals(
-              CursorPad.semanticRect(
-                CursorPadSector.left,
-                pad.size,
-                bounds,
-              ).height,
-              epsilon: 1e-6,
-            ),
-          );
         });
       }
+    }
+  });
+
+  group('커서 패드 터치 탐색 — 실제 화면 (#203)', () {
+    // 키패드만 띄운 테스트(calc_keypad_test·keypad_wide_arrangement_test)와 달리 LCD·기록 영역 등 화면 전체 트리에서
+    // 커서 패드 셀을 짚어도 semanticSectorAt 방향의 노드에 닿는지 본다(키패드 위를 덮는 노드가 생기면 실패한다).
+    for (final (size, padding) in const [
+      (
+        Size(411, 914),
+        EdgeInsets.only(top: 24, bottom: 24),
+      ), // Android 기본 인셋 세로 폰(#173 에뮬레이터)
+      (Size(2000, 400), EdgeInsets.zero), // 가로형·넓은 셀
+    ]) {
+      testWidgets('${size.width}×${size.height}', (tester) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester, size: size, padding: padding);
+        expectCursorPadTouchExplorationMatchesSpec(tester, reason: '$size');
+        handle.dispose();
+      });
     }
   });
 
