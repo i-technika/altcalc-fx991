@@ -215,7 +215,6 @@ void main() {
 
     test('모든 언어: 문구가 비어 있지 않고, 손잡이 선택지끼리 구분된다', () {
       for (final s in SettingsStrings.all) {
-        expect(s.settingsButton.trim(), isNotEmpty);
         expect(s.handednessTitle.trim(), isNotEmpty);
         expect(s.handednessNote.trim(), isNotEmpty);
         expect(s.close.trim(), isNotEmpty);

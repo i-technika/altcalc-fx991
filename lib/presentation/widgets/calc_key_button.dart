@@ -9,7 +9,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/key_definitions.dart';
 import '../../core/theme/calc_theme.dart';
 import '../l10n/calc_semantic_strings.dart';
+import 'focus_ring.dart';
 import 'key_legend_view.dart';
+import 'round_key_face.dart';
 import 'screen_coordinate_root.dart';
 
 /// fx-991EX 스타일의 단일 키 버튼.
@@ -21,6 +23,15 @@ import 'screen_coordinate_root.dart';
 ///  │ ┌──────────────────┐ │
 ///  │ │       CALC       │ │  ← 키캡: 카테고리 색 + 메인 라벨 (터치 영역)
 ///  │ └──────────────────┘ │
+///  └──────────────────────┘
+/// ```
+/// 원형 버튼 키([KeyFace.roundButton], #190 — 지금은 ON 자리의 설정 키)는 키캡 자리 가운데에 원형 은색 버튼
+/// ([RoundKeyFace])을 그리고 버튼 면에는 글자를 쓰지 않는다. 메인 각인은 실물처럼 버튼 위 본체(각인 띠 가운데)에
+/// 흰색으로 인쇄한다:
+/// ```
+///  ┌──────────────────────┐
+///  │       SETTING        │  ← 각인 띠: 메인 각인(흰색, 가운데)
+///  │         (◉)          │  ← 원형 버튼 (터치 영역은 셀 전체)
 ///  └──────────────────────┘
 /// ```
 ///
@@ -43,7 +54,8 @@ import 'screen_coordinate_root.dart';
 ///   [ScreenCoordinateRoot]가 원점을 알려준다. 키 위쪽에서 MediaQuery의 `size`·`systemGestureInsets`를
 ///   영역 기준으로 덮어쓰면 판정이 틀어지므로, 분할 배치 등에서도 View의 값을 그대로 물려준다.
 /// - 한 키에서는 첫 번째 손가락만 인식한다. 마우스는 주 버튼만, 스타일러스 지우개 끝은 무시한다.
-/// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다.
+/// - 터치 영역은 기본적으로 키캡뿐이며, [extendHitAreaToLegend]이면 각인 띠까지 넓힌다. 원형 버튼 키는 그린 버튼이
+///   작아도 늘 셀 전체(각인 띠 포함)가 터치 영역이다(#190).
 ///   [hitShape]가 있으면 그림([shape])과 별도로 버튼 상자 ∩ [hitShape]가 터치 영역이다(커서 패드, #64).
 /// - 포인터를 직접 처리하므로 스크롤 컨테이너 안에 두면 스크롤 시작 터치도 입력된다.
 ///   키패드는 스크롤 영역 밖에 배치한다.
@@ -54,6 +66,12 @@ import 'screen_coordinate_root.dart';
 ///   [keyDef]가 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
 ///
 /// SHIFT/ALPHA 래치 상태는 실물처럼 LCD 상태 표시줄(S/A)로 보여주며, 키 자체에는 표시하지 않는다.
+///
+/// ## 키보드 (#190)
+/// [focusable]이면 키보드 포커스를 받고, 포커스가 있을 때 Enter·Space(앱 기본 단축키의 활성화 동작)로 누른 것과 같이
+/// [onPressed]를 부른다. 포커스 테두리는 [FocusRing]이 키캡(원형 버튼은 고리) 모양으로 그린다. 계산기 키의 하드웨어
+/// 키보드 입력은 #39에서 정하므로 지금은 설정 키(ON)만 포커스를 받는다 — 없어진 설정 버튼의 키보드 경로(#106)를
+/// 잇는다. 비활성 키는 포커스를 받지 않는다.
 ///
 /// 색은 기기의 고대비 설정에 맞는 [CalcPalette]에서 가져온다(#54).
 class CalcKeyButton extends StatefulWidget {
@@ -111,6 +129,9 @@ class CalcKeyButton extends StatefulWidget {
   /// 예: 커서 패드 방향 키는 가운데 쪽 허브만큼 뺀다(#65). 음수일 수 없다.
   final EdgeInsets labelInsets;
 
+  /// 키보드 포커스를 받을지 (위 "키보드" 절)
+  final bool focusable;
+
   const CalcKeyButton({
     super.key,
     required this.keyDef,
@@ -127,6 +148,7 @@ class CalcKeyButton extends StatefulWidget {
     this.hitShape,
     this.hitOutset = EdgeInsets.zero,
     this.labelInsets = EdgeInsets.zero,
+    this.focusable = false,
   });
 
   /// 기본 반복 시작 지연
@@ -295,6 +317,45 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   /// 접근성(스크린리더) 활성화 시 호출 — 포인터 다운이 없으므로 햅틱 후 바로 입력한다.
   void _handleSemanticTap() => _commitPress();
 
+  /// 키보드 활성화(Enter·Space)로 누름 — 스크린리더 활성화와 같이 바로 입력한다.
+  late final Map<Type, Action<Intent>> _keyboardActions = {
+    ActivateIntent: CallbackAction<ActivateIntent>(
+      onInvoke: (_) => _activateByKeyboard(),
+    ),
+    ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+      onInvoke: (_) => _activateByKeyboard(),
+    ),
+  };
+
+  Object? _activateByKeyboard() {
+    if (_enabled) _commitPress();
+    return null;
+  }
+
+  /// [CalcKeyButton.focusable]이면 [keycap]에 포커스 노드·활성화 동작·포커스 테두리를 씌운다. 포커스 노드의 영역이
+  /// 키캡(원형 버튼은 고리를 품은 자리)이라 테두리가 그 모양에 맞는다.
+  Widget _wrapFocus(Widget keycap, {required bool round}) {
+    if (!widget.focusable) return keycap;
+    return FocusRing(
+      shape: round
+          ? const CircleBorder()
+          : const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(
+                Radius.circular(CalcTheme.keyBorderRadius),
+              ),
+            ),
+      child: Actions(
+        actions: _keyboardActions,
+        child: Focus(
+          canRequestFocus: _enabled,
+          // 키 버튼의 시맨틱은 바깥 Semantics 하나다.
+          includeSemantics: false,
+          child: keycap,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = CalcSemanticStrings.of(context);
@@ -360,7 +421,11 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         .clamp(maxScaleFactor: CalcTheme.keyMaxTextScaleFactor);
 
     final shapePath = _shapePath.resolve(widget.shape, Size(width, height));
-    final extendToLegend = !hitMode && widget.extendHitAreaToLegend;
+    // 원형 버튼은 그린 버튼이 작아 터치 영역을 늘 셀 전체로 둔다 (#190).
+    final round = widget.keyDef.face == KeyFace.roundButton;
+    final extendToLegend =
+        !hitMode &&
+        (widget.extendHitAreaToLegend || (round && widget.showLegendBand));
     _hitSize = hitMode
         ? outer
         : extendToLegend
@@ -372,42 +437,63 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
     Widget keycap = Padding(
       padding: EdgeInsets.only(bottom: pressRoom),
-      child: _Keycap(
-        keyDef: widget.keyDef,
-        pressed: _pressed,
-        enabled: _enabled,
-        fontSize:
-            widget.mainLabelFontSize ??
-            math.min(
-              capHeight * CalcTheme.keyMainLabelFontRatio,
-              CalcTheme.keyMainLabelMaxFontSize,
-            ),
-        horizontalPadding: width * CalcTheme.keyCapHorizontalPaddingRatio,
-        labelInsets: widget.labelInsets,
-        textScaler: textScaler,
+      child: _wrapFocus(
+        round
+            ? _RoundKeycap(
+                id: widget.keyDef.id,
+                pressed: _pressed,
+                enabled: _enabled,
+              )
+            : _Keycap(
+                keyDef: widget.keyDef,
+                pressed: _pressed,
+                enabled: _enabled,
+                fontSize:
+                    widget.mainLabelFontSize ??
+                    math.min(
+                      capHeight * CalcTheme.keyMainLabelFontRatio,
+                      CalcTheme.keyMainLabelMaxFontSize,
+                    ),
+                horizontalPadding:
+                    width * CalcTheme.keyCapHorizontalPaddingRatio,
+                labelInsets: widget.labelInsets,
+                textScaler: textScaler,
+              ),
+        round: round,
       ),
     );
     if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
 
+    final legendFontSize =
+        widget.legendFontSize ??
+        math.min(
+          legendHeight * CalcTheme.keyLegendFontRatio,
+          CalcTheme.keyLegendMaxFontSize,
+        );
     final column = Column(
       children: [
         if (widget.showLegendBand)
           SizedBox(
             height: legendHeight,
             width: width,
-            child: _LegendRow(
-              shiftLegend: widget.keyDef.shiftLegend,
-              alphaLegend: widget.keyDef.alphaLegend,
-              width: width,
-              fontSize:
-                  widget.legendFontSize ??
-                  math.min(
-                    legendHeight * CalcTheme.keyLegendFontRatio,
-                    CalcTheme.keyLegendMaxFontSize,
+            child: round
+                ? _BodyPrintRow(
+                    keyDef: widget.keyDef,
+                    fontSize: legendFontSize,
+                    gap: math.min(
+                      legendFontSize * CalcTheme.keyLegendGapRatio,
+                      width * CalcTheme.keyLegendGapMaxWidthRatio,
+                    ),
+                    textScaler: textScaler,
+                  )
+                : _LegendRow(
+                    shiftLegend: widget.keyDef.shiftLegend,
+                    alphaLegend: widget.keyDef.alphaLegend,
+                    width: width,
+                    fontSize: legendFontSize,
+                    maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
+                    textScaler: textScaler,
                   ),
-              maxGap: width * CalcTheme.keyLegendGapMaxWidthRatio,
-              textScaler: textScaler,
-            ),
           ),
         SizedBox(height: capHeight, width: width, child: keycap),
       ],
@@ -611,6 +697,87 @@ class _LegendRow extends StatelessWidget {
             priorityLayout: priority,
           ),
       ],
+    );
+  }
+}
+
+/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인(흰색)을 가운데에, SHIFT·ALPHA 각인이 있으면
+/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼 — #156에서 쓴다). 띠 폭을 넘으면 함께 줄인다.
+/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
+class _BodyPrintRow extends StatelessWidget {
+  final CalcKeyDef keyDef;
+  final double fontSize;
+  final double gap;
+  final TextScaler textScaler;
+
+  const _BodyPrintRow({
+    required this.keyDef,
+    required this.fontSize,
+    required this.gap,
+    required this.textScaler,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = CalcPalette.of(context);
+    final parts = [
+      (
+        keyDef.mainLegend,
+        CalcTheme.keyBodyPrintStyle.copyWith(color: palette.bodyPrint),
+      ),
+      if (keyDef.shiftLegend case final shift?)
+        (
+          shift,
+          CalcTheme.keyShiftLabelStyle.copyWith(color: palette.shiftLabel),
+        ),
+      if (keyDef.alphaLegend case final alpha?)
+        (
+          alpha,
+          CalcTheme.keyAlphaLabelStyle.copyWith(color: palette.alphaLabel),
+        ),
+    ];
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.bottomCenter,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          for (final (i, (legend, style)) in parts.indexed) ...[
+            if (i > 0) SizedBox(width: gap),
+            _legendLabel(
+              legend,
+              style.copyWith(fontSize: fontSize),
+              textScaler,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 원형 버튼 키의 키캡 자리 — 가운데에 [RoundKeyFace]를 그린다. 눌리면 키캡처럼 아래로 조금 내려간다.
+class _RoundKeycap extends StatelessWidget {
+  final CalcKeyId id;
+  final bool pressed;
+  final bool enabled;
+
+  const _RoundKeycap({
+    required this.id,
+    required this.pressed,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.expand(
+      key: CalcKeyButton.keycapKeyOf(id),
+      child: Transform.translate(
+        offset: Offset(0, pressed ? CalcTheme.keyPressedOffset : 0),
+        child: RoundKeyFace(pressed: pressed, enabled: enabled),
+      ),
     );
   }
 }

@@ -272,6 +272,31 @@ void main() {
       }
     });
 
+    test(
+      '설정 키는 ON 자리의 원형 버튼이고, 원형 버튼은 설정 키뿐이다 (#190 — SHIFT·ALPHA·MENU는 #156)',
+      () {
+        expect(settingsKey, CalcKeyId.on);
+        expect(
+          [
+            for (final key in allKeys)
+              if (key.face == KeyFace.roundButton) key.id,
+          ],
+          [settingsKey],
+        );
+        final on = keyDefOf(settingsKey);
+        expect(on.mainLabel, 'SETTING');
+        expect(on.hasShift || on.hasAlpha, isFalse);
+      },
+    );
+
+    test('전원 각인(ON·OFF)은 어느 층에도 없다 (#190)', () {
+      for (final key in allKeys) {
+        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+          expect(label, isNot(anyOf('ON', 'OFF')), reason: key.id.name);
+        }
+      }
+    });
+
     test('컬렉션은 수정할 수 없다', () {
       expect(() => allKeys.add(allKeys.first), throwsUnsupportedError);
       expect(() => keyById.remove(CalcKeyId.ac), throwsUnsupportedError);
@@ -294,7 +319,9 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.shift: ('SHIFT', null, null),
   CalcKeyId.alpha: ('ALPHA', null, null),
   CalcKeyId.menu: ('MENU', 'SETUP', null), // G3
-  CalcKeyId.on: ('ON', null, null),
+  // 실물 각인은 `ON`(버튼 위 본체에 인쇄) — 이 앱에는 전원이 없어 ON을 설정 키로 쓰고 같은 자리에 `SETTING`을
+  // 인쇄한다 (#190, 사용자 결정 — 실물 대조에서 의도적으로 다른 행)
+  CalcKeyId.on: ('SETTING', null, null),
   CalcKeyId.optn: ('OPTN', 'QR', null), // G7
   CalcKeyId.calc: ('CALC', 'SOLVE', '='),
   CalcKeyId.integral: ('∫◻◻◼', 'd/dx◼', ':'), // G15 d/dx, G11 :
@@ -334,7 +361,8 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.num8: ('8', 'CONV', null),
   CalcKeyId.num9: ('9', 'RESET', null), // G7
   CalcKeyId.del: ('DEL', 'INS', 'UNDO'),
-  CalcKeyId.ac: ('AC', 'OFF', null), // G3 전원
+  // 실물 SHIFT 각인 `OFF`(G3 전원 끄기)는 뺐다 — 전원이 없다 (#190, 실물 대조에서 의도적으로 다른 행)
+  CalcKeyId.ac: ('AC', null, null),
   CalcKeyId.num4: ('4', null, null),
   CalcKeyId.num5: ('5', null, null),
   CalcKeyId.num6: ('6', null, null),

@@ -107,11 +107,47 @@ abstract final class CalcTheme {
   /// 방향키 텍스트/아이콘
   static const Color keyCursorText = Color(0xFFFFFFFF);
 
-  /// ON 키 — 작은 사각형
+  /// ON 키 카테고리의 키캡 색 — ON 키는 원형 은색 버튼([KeyFace.roundButton], #190)으로 그려 키캡 색을 쓰지 않는다.
+  /// 카테고리 색 표(눌림·고대비 불변식)가 모든 카테고리를 다루도록 남겨 둔다.
   static const Color keyON = Color(0xFF4A4A4A);
 
-  /// ON 키 텍스트
+  /// ON 키 카테고리의 키캡 글자 색 ([keyON]과 같은 이유로 남겨 둔다)
   static const Color keyONText = Color(0xFFFFFFFF);
+
+  // ── 원형 버튼 (#190) ──
+  // 실물 SHIFT·ALPHA·MENU·ON은 작은 원형 은색 버튼이다(Quick Start Guide 1쪽 제품 사진, 원본 픽셀로 잼): 어두운
+  // 테두리 고리(지름 약 41px) 안에 금속을 돌려 깎은 듯한 바람개비 무늬의 은색 원판(지름 약 35px)이 있고, 버튼 면에는
+  // 글자가 없다. 이름(`ON`, `MENU`)은 버튼 위 본체에 흰색으로 인쇄돼 있다. 지금은 ON 키만 이 모양이고(설정 키),
+  // SHIFT·ALPHA·MENU는 #156에서 같은 모양으로 바꾼다(`RoundKeyFace`).
+  // 실물 버튼은 옆 키캡(OPTN 높이 약 22px)보다 크지만, 앱은 셀 크기를 바꾸지 않고 키캡 자리 안에 고리를 내접시킨다 —
+  // 터치 영역은 셀 전체다(`CalcKeyButton`).
+
+  /// 원형 버튼 테두리 고리 — 본체보다 어둡다(사진의 검은 고리)
+  static const Color roundKeyBezel = Color(0xFF121212);
+
+  /// 원형 버튼 은색 원판의 밝은 결
+  static const Color roundKeySilverLight = Color(0xFFF2F2F2);
+
+  /// 원형 버튼 은색 원판의 어두운 결
+  static const Color roundKeySilverDark = Color(0xFF9C9C9C);
+
+  /// 원형 버튼 은색 원판 바람개비 무늬의 결 수 (밝은 결·어두운 결 한 쌍을 한 번으로 센다)
+  static const int roundKeySilverStreaks = 6;
+
+  /// 테두리 고리 지름 대비 은색 원판 지름 — 사진 35 / 41px
+  static const double roundKeyDiscRatio = 0.85;
+
+  /// 눌린 은색 원판에 덧씌우는 색 — 검정 30%. 은색(L* 약 70~95)이 어두워져 눌림이 보이고, 고리 바깥 경계는 키캡처럼
+  /// [keyPressedBorder]로 바뀐다(#22의 공통 눌림 단서).
+  static const Color roundKeyPressedOverlay = Color(0x4D000000);
+
+  // ───────────────────────────────────────────
+  // 본체 인쇄 (Body Print)
+  // ───────────────────────────────────────────
+
+  /// 본체에 인쇄된 흰 글자 — 원형 버튼 위 메인 각인(실물 `ON`·`MENU`, 앱은 ON 자리에 `SETTING`, #190).
+  /// 본체 배경 대비 4.5:1 이상(테스트로 검증). 고대비는 [bodyPrintHighContrast].
+  static const Color bodyPrint = Color(0xFFE8E8E8);
 
   // ───────────────────────────────────────────
   // SHIFT / ALPHA 모디파이어 색상
@@ -261,9 +297,12 @@ abstract final class CalcTheme {
   /// [highContrastMinTextContrast] 이상 남겨 켜짐과 꺼짐을 헷갈리지 않게 한다.
   static const Color lcdStatusInactiveHighContrast = Color(0x262A2A2A);
 
-  /// 고대비 설정 버튼 아이콘 — 본체 배경 대비 8.2:1 ([settingsIcon]을 밝게). 7:1 이상이되 고대비 SHIFT·ALPHA 각인보다
-  /// 대비를 낮게 두어 키 각인보다 눈에 덜 띄게 한다.
-  static const Color settingsIconHighContrast = Color(0xFFC8C8C8);
+  /// 고대비 화면 안내 글자·아이콘 — 본체 배경 대비 8.2:1 ([noticeForeground]를 밝게). 7:1 이상이되 고대비 SHIFT·ALPHA
+  /// 각인보다 대비를 낮게 둔다.
+  static const Color noticeForegroundHighContrast = Color(0xFFC8C8C8);
+
+  /// 고대비 본체 인쇄 글자 ([bodyPrint]를 더 밝게) — 본체 배경 대비 7:1 이상
+  static const Color bodyPrintHighContrast = Color(0xFFFFFFFF);
 
   // ───────────────────────────────────────────
   // Material 화면 테마 (대화상자·SnackBar) — #97
@@ -278,7 +317,7 @@ abstract final class CalcTheme {
   // - 대화상자 면과 그 뒤(어둡게 덮인 본체)의 대비가 1.3:1이다. 어두운 화면에서는 M3 그림자도 보이지 않아
   //   대화상자 가장자리가 거의 구분되지 않는다.
   // - Material 기본 키보드 포커스 표시가 거의 보이지 않는다: 선택지 타일(흰색 12% 겹침)은 대화상자 면과 1.5:1, 닫기 버튼(primary
-  //   10% 겹침)은 1.3:1, 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이다. 키보드 사용자는 고대비를 켜지 않아도 포커스 위치를
+  //   10% 겹침)은 1.3:1, 예전 설정 버튼(아이콘색 10% 겹침)은 본체와 1.3:1이었다. 키보드 사용자는 고대비를 켜지 않아도 포커스 위치를
   //   찾아야 하므로, 아래 고대비 테마의 포커스 테두리를 일반 모드에도 그린다(#106, 색 [materialFocusRingStandard]).
   // - SnackBar 동작 버튼 글자가 5.0:1이다 (지금 앱은 SnackBar를 쓰지 않지만 쓰게 되면 바로 7:1 이상이 되게 맞춘다).
   // 툴팁은 M3 기본값이 색 구성과 관계없이 밝기만 보고(어두운 테마: 흰색 90% 바탕·검은 글자) 17.5:1이라 바꾸지 않는다.
@@ -288,7 +327,7 @@ abstract final class CalcTheme {
   // SnackBar 글자 16.2:1·동작 10.1:1). 여기에 계산기 고대비 팔레트 색을 더한다.
   // - 대화상자 가장자리: 고대비 키캡 테두리와 같은 색([keyBorderHighContrast]) 선 — 대화상자 면 5.9:1, 덮인 본체 7.5:1
   // - 키보드 포커스: 고대비 눌린 키캡 테두리와 같은 흰색([materialFocusRingHighContrast]) 테두리 — 대화상자 면 14.4:1,
-  //   포커스 겹침 위 9.8:1, 본체 13.8:1. 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 버튼에 그린다
+  //   포커스 겹침 위 9.8:1, 본체 13.8:1. 테마로는 줄 수 없어 `FocusRing` 위젯이 선택지·닫기 버튼·설정 키(ON, #190)에 그린다
   //   (ListTile은 상태별 모양을 받지 않고, 버튼의 focused 상태는 터치 조작 중에도 켜져 있다).
   //
   // 대화상자 모양은 두 테마 모두 M3 기본 모양(반경 [materialDialogBorderRadius])을 직접 지정한다 — 한쪽만 지정하면
@@ -310,12 +349,15 @@ abstract final class CalcTheme {
   /// 고대비와 같은 방식(눌림 단서와 같은 밝은 테두리)이라 모드를 바꿔도 포커스 모양이 같다.
   /// - WCAG 2.4.13(포커스 전후 같은 픽셀 3:1 이상): 테두리 자리는 포커스 전에 대화상자 면·본체이므로 그 대비 —
   ///   대화상자 면 12.6:1, 본체 12.1:1.
-  /// - 추가 확인(테두리 안쪽에 맞닿는 Material 포커스 겹침과의 인접 대비): 선택지 8.6:1, 닫기 버튼 10.1:1, 설정 버튼 10.0:1.
+  /// - 추가 확인(테두리 안쪽에 맞닿는 Material 포커스 겹침과의 인접 대비): 선택지 8.6:1, 닫기 버튼 10.1:1, 설정 버튼(#190 전) 10.0:1.
   /// - 고대비 색(흰색)은 모든 면에서 이보다 높다.
-  /// 일반 테마의 primary(연보라)는 대화상자 안에서는 어울리지만 본체 위 설정 버튼에서는 계산기 색과 맞지 않고,
+  /// 일반 테마의 primary(연보라)는 대화상자 안에서는 어울리지만 본체 위 키(설정 키)에서는 계산기 색과 맞지 않고,
   /// 선택지 겹침과의 대비도 5.7:1로 낮아 쓰지 않았다.
-  /// 키캡 눌림 단서와 같은 색이므로, 나중에 키패드 키캡에 키보드 포커스를 주게 되면 키캡 포커스 표시에는 이 색을
-  /// 그대로 쓰지 말고 눌림과 구분되는 표시를 따로 정한다(고대비 [materialFocusRingHighContrast]도 같다).
+  /// 키캡 눌림 단서와 같은 색이므로, 나중에 키패드 키캡 전체에 키보드 포커스를 주게 되면(#39) 키캡 포커스 표시에는 이
+  /// 색을 그대로 쓰지 말고 눌림과 구분되는 표시를 따로 정한다(고대비 [materialFocusRingHighContrast]도 같다).
+  /// 지금 포커스를 받는 키는 설정 키(ON, #190) 하나다. 그 키의 포커스 테두리(2dp 원)는 눌림 단서(원형 버튼 고리 가장자리
+  /// 1dp)와 같은 자리·색이지만, 포커스 테두리는 키보드 조작 중에만, 눌림은 터치 중에만 보여 함께 나타나는 일이 드물고
+  /// 키보드로 누르면 눌림 표시 없이 바로 설정이 열린다 — 그래서 따로 정하지 않았다.
   static const Color materialFocusRingStandard = keyPressedBorder;
 
   /// 키보드 포커스 테두리 굵기 (두 모드 공통)
@@ -473,6 +515,18 @@ abstract final class CalcTheme {
     fontSize: 9,
     fontWeight: FontWeight.w500,
     color: alphaLabel,
+    letterSpacing: 0,
+    height: 1.0,
+  );
+
+  /// 원형 버튼 위 본체에 인쇄한 메인 각인 (흰색, 각인 띠 가운데) 텍스트 스타일 (#190).
+  /// 크기는 SHIFT·ALPHA 각인과 같다 — 키패드가 통일한 각인 글자 크기(`KeypadMetrics.legendFontSize`)를 쓴다.
+  static const TextStyle keyBodyPrintStyle = TextStyle(
+    fontFamily: monoFontFamily,
+    fontFamilyFallback: monoFontFallback,
+    fontSize: 9,
+    fontWeight: FontWeight.w500,
+    color: bodyPrint,
     letterSpacing: 0,
     height: 1.0,
   );
@@ -855,54 +909,43 @@ abstract final class CalcTheme {
   // 광고 없는 배치가 기준이다 (#141, 사용자 결정 — 과금 사용자가 가장 쾌적해야 한다). 화면 맨 아래 광고 슬롯은 없고,
   // 무과금 사용자의 광고는 이 배치에서 LCD 쪽 한 영역을 줄여 넣는다(화면 맨 위·기록 영역, #18).
   // - 본체: 시스템 인셋(SafeArea) 안에서 화면 가장자리 여백([screenPadding])을 위·왼쪽·오른쪽에서, 아래 여백
-  //   ([screenBottomMargin] — 보통 같은 값, #63)을 아래에서 뺀 영역이다. 위쪽 여백은 상단 띠가 함께 쓴다("상단 띠" 절).
-  //   본체를 LCD와 키패드가 나눈다.
+  //   ([screenBottomMargin] — 보통 같은 값, #63)을 아래에서 뺀 영역이다.
+  //   본체를 LCD와 키패드가 나눈다. LCD는 본체 윗변부터다 — LCD 위 상단 띠(장식·설정 버튼, #41)는 #190에서 없앴다
+  //   (사용자 결정). 설정은 키패드의 ON 키로 연다(`settingsKey`).
   // - 폭: LCD와 키패드 모두 본체 폭 전체다 (#141). 예전에는 둘 다 480dp에서 멈춰(#24·#92) 태블릿 세로에서 가운데에
   //   놓이고 양옆이 비었다. 키가 가로로 넓어지는 것은 받아들이고 각인 글자 크기에만 상한을 둔다
   //   ([keyMainLabelMaxFontSize], 사용자 결정).
   // - LCD: 본체 높이의 [screenLcdHeightRatio]를 목표로 하되
   //   [screenLcdMinHeight] ~ (LCD 폭 / [screenLcdMinAspectRatio]) 범위로 제한한다.
   // - 키패드: 나머지 높이. 단 키패드 가로/세로 비 하한([keypadMinAspectRatio] — 키가 세로로 길어지지 않게) 때문에
-  //   키패드가 다 쓰지 못하는 높이는 LCD 최대 높이까지 LCD에 주고, 그래도 남으면 LCD 위 상단 띠로 둔다
-  //   (실물의 로고·태양전지 자리 — 아래 "상단 띠" 절, #41). 키패드는 항상 본체 아래에 붙어 엄지가 닿기 쉽다.
-  // - 상단 띠: 남는 높이가 없어도 [screenTopStripMinHeight]만큼은 LCD·키패드보다 먼저 떼어 둔다 — 설정 진입
-  //   버튼을 어느 폰에서나 보이게 두기 위해서다(#41, 사용자 결정). LCD 목표 높이·키패드는 그 나머지로 정한다.
-  // - 큰 세로 창의 높이 나누기 (#141에서 다시 정함): 위 규칙을 그대로 쓰되, 띠만 내용 줄 전체 높이까지 늘린다.
-  //   폭 상한이 없으니 키패드 최대 높이(폭 / [keypadMinAspectRatio])가 태블릿 세로 본체보다 높아 남는 높이가 생기지
-  //   않는다 — LCD는 목표 비율, 키패드는 나머지 전부다. 그대로면 띠가 최소 높이(줄 20dp)라 설정 아이콘이 줄고 터치 영역이
-  //   LCD에 겹치며 태양전지가 숨는데, 폰처럼 높이가 모자라서 정한 규칙(#41)이라 큰 화면에는 맞지 않는다(#141 R1).
-  //   그래서 위 규칙으로 정한 키패드가 [screenTopStripFullRowKeypadMinHeight](실물 크기 키패드 높이 640dp)보다 높으면,
-  //   그 아래로 내려가지 않는 만큼 키패드에서 떼어 띠를 줄 전체 높이(화면 여백 포함 [topStripRowMaxHeight] 48dp — 본체 안
-  //   40dp)까지 늘린다. LCD는 그대로다 — LCD까지 다시 나누면 키패드가 폭에 묶인 창(폭 약 480~570dp)에서 폭이 늘 때 LCD가
-  //   한 번에 줄어드는 불연속이 생긴다(#141 R2). 키는 약 2dp 작아진다. 띠가 줄 전체 높이에 닿은 뒤 폭이 늘어 LCD가 폭 기준
-  //   최대 높이까지 자라는 구간에서는 그 몫을 키패드가 내준다(키패드는 640dp 이상 — 폭 1dp에 약 0.57dp). 설계 시안(2026-11-26 확정안, 10인치 800×1280
-  //   띠 44·LCD 768×330·키패드 768×838)에 가깝다(아래 실측: 띠 40·LCD 330.4·키패드 813.6).
-  //   LCD가 더 높아도 글자만 커지고(줄 글자는 폭이 아니라 높이에 묶인다) 키는 작아지므로 LCD 비율은 폰과 같게 둔다.
-  //   실측(인셋 위/아래, 본체 → 띠·LCD·키패드 높이, 키 터치 높이, LCD 줄 글자):
-  //   · 10인치 Android 800×1280(24/48, 본체 784×1192): 띠 40·LCD 784×330.4·키패드 784×813.6, 키 48.4 → 49.8dp,
-  //     줄 글자 39.1 → 49.0dp (#141 전: LCD 480×274·키패드 480×640 가운데, 띠 약 208dp)
-  //   · 12.9인치 iPad 1024×1366(24/20, 본체 1008×1306): 띠 40·LCD 362.3·키패드 895.7, 키 48.4 → 54.8dp,
-  //     줄 글자 39.1 → 54.1dp (#141 전 띠 약 322dp)
-  //   · iPad 768×1024(24/20, 본체 752×964): 띠 40·LCD 266.6·키패드 649.4, 줄 글자 36.1 → 38.9dp
-  //     (키 터치 53.8 → 49.1dp는 키캡이 48dp를 넘어 각인 띠를 터치 영역에서 빼기 시작한 탓이다 — 키 자체는 커진다)
-  //   · 정사각형 창 768×768(본체 752×752): 키패드 524.8dp라 띠는 최소 높이 그대로다.
+  //   키패드가 다 쓰지 못하는 높이는 모두 LCD가 받는다 — LCD 최대 높이를 넘을 수 있다(#190: 그 전에는 최대 높이를 넘는 몫이
+  //   LCD 위 상단 띠였다. 남는 높이는 계산 기록(#145)이 쓸 LCD 쪽에 준다). 키패드는 항상 본체 아래에 붙어 엄지가 닿기 쉽다.
+  //   LCD가 높아져도 줄 글자는 폭에 묶여 커지지 않고(세로로 긴 폰) 줄 사이만 넓어진다.
+  // - 큰 세로 창: 폭 상한이 없으니 키패드 최대 높이(폭 / [keypadMinAspectRatio])가 태블릿 세로 본체보다 높아 남는 높이가 생기지
+  //   않는다 — LCD는 목표 비율, 키패드는 나머지 전부다. LCD가 더 높아도 글자만 커지고(줄 글자는 높이에 묶인다) 키는 작아지므로
+  //   LCD 비율은 폰과 같게 둔다. 설계 시안(2026-11-26 확정안, 10인치 800×1280 띠 44·LCD 768×330·키패드 768×838)에 가깝다.
+  //   키패드가 폭에 묶인 세로 창에서 폭이 늘면 LCD가 폭 기준 최대 높이까지 자라는 몫을 키패드가 내준다(폭 1dp에 약 0.57dp,
+  //   #188).
+  //   실측(인셋 위/아래, 본체 → LCD·키패드 높이, 키 셀 높이, LCD 줄 글자. #190 상단 띠 제거 뒤):
+  //   · 10인치 Android 800×1280(24/48, 본체 784×1192): LCD 784×333.8·키패드 784×850.2, 셀 72.3dp, 줄 글자 49.6dp
+  //     (#141 전: LCD 480×274·키패드 480×640 가운데, 띠 약 208dp / #190 전: 띠 40·LCD 330.4·키패드 813.6)
+  //   · 12.9인치 iPad 1024×1366(24/20, 본체 1008×1306): LCD 365.7·키패드 932.3, 셀 79.3dp, 줄 글자 54.7dp
+  //   · iPad 768×1024(24/20, 본체 752×964): LCD 269.9·키패드 686.1, 셀 58.3dp, 줄 글자 39.4dp
+  //   · 정사각형 창 768×768(본체 752×752): LCD 210.6·키패드 533.4, 셀 45.3dp
   //   태블릿 세로의 키는 폭 약 116~190dp(함수부~숫자부)까지 넓어지고, 메인 라벨·각인 글자는 상한(16.5·11dp)에서 멈춘다.
-  //   폰은 맨 아래 광고 슬롯(50dp + 안전 여백 10dp)이 빠지고 아래 화면 여백 8dp가 생겨 본체가 52dp 높아진다(아래
-  //   제스처 영역이 깊은 기기는 아래 여백이 더 크다 — [screenBottomMargin], #63) — 대부분
-  //   키패드가 폭 기준 최대 높이에 닿고
-  //   나머지는 LCD(최대 높이까지)와 상단 띠가 받는다:
-  //   · 320×568 상태바 20(iPhone SE 1세대): 키 터치 27.96 → 31.1dp(하한 [keyTouchHeightFloor] 28dp를 넘는다),
-  //     LCD 줄 글자 약 17.3 → 19.7dp. 인셋 0: 키 29.2 → 32.4dp. 360×640(24/48)도 본체 높이가 같아 32.4dp다.
-  //   · 390×844(47/34): 띠 12 → 26.6·LCD 191 → 214dp(줄 글자 26.9 → 29.8dp)·키 41.1 → 42.4dp
-  //   · 360×800(24/48): 키 39.0dp 그대로(이미 폭 기준 최대 높이) — 늘어난 높이는 LCD(181 → 197)와 띠(12 → 48.8)로
-  //   · 412×915(24/48): 키 44.9dp 그대로, 띠 12.7 → 64.7dp. 440×956(62/34): 키 47.1 → 48.1dp
+  //   폰은 대부분 키패드가 폭 기준 최대 높이에 닿고 나머지는 LCD가 받는다(괄호는 #190 전 — 상단 띠 최소 12dp가 있었다):
+  //   · 320×568 상태바 20(iPhone SE 1세대): 셀 31.9dp(31.1), LCD 149.0dp·줄 글자 20.2dp(19.7). 인셋 0: 셀 33.1dp.
+  //     360×640(24/48)도 본체 높이가 같아 33.1dp다.
+  //   · 390×844(47/34): LCD 240.3dp(띠 26.6·LCD 214)·줄 글자 29.8dp·셀 42.4dp 그대로(이미 폭 기준 최대 높이)
+  //   · 360×800(24/48): 셀 39.0dp 그대로, LCD 245.3dp(띠 48.8·LCD 197) / 412×915(24/48): 셀 44.9dp, LCD 291.0dp
+  //   · 440×956(62/34): 셀 48.1dp, LCD 270.7dp
   // 짧은 창(분할 화면 등)에서도 LCD는 최소 높이 아래로 줄이지 않는다 — 대신 가로형으로 바꾼다(아래 "가로형 배치", #142).
   // 가로로 넓은 창의 배치는 아래 "가로형 배치"(#142), 폴더블 접힘선 기준 배치는 "접힘선 기준 배치"(#25).
   // 접힘선 배치 재정의(#143)가 들어오기 전까지 접힘선 배치는 다음과 같다.
   // - 책 자세(세로 접힘선): #141 전 좌우 분할(#24)의 접힘선 규칙에서 폭 상한만 뺐다 — 키패드가 손 쪽 절반 폭을 다 쓰고,
   //   LCD도 키패드 폭까지 넓어진다(`CalcHingeSplitLayout`). 절반이 480dp보다 좁아(Fold 내부 약 330dp) 달라지지 않는다.
-  // - 테이블톱(가로 접힘선): 키패드·LCD 폭 상한을 그대로 둔다([screenTabletopKeypadMaxBlockWidth]) —
-  //   키패드 옆 설정 버튼 자리와 그에 맞춘 대화상자 위치(#80·#94·#125)가 그 상한을 전제한다.
+  // - 테이블톱(가로 접힘선): 키패드·LCD 폭 상한을 그대로 둔다([screenTabletopKeypadMaxBlockWidth]) — 예전에는 키패드 옆
+  //   설정 버튼 자리(#80)가 그 상한을 전제했다. 설정 버튼은 #190에서 없앴고 상한은 #143에서 다시 정한다.
 
   /// 화면 가장자리 여백 (dp)
   static const double screenPadding = 8.0;
@@ -943,9 +986,9 @@ abstract final class CalcTheme {
   /// LCD와 키패드 사이 간격 (dp)
   static const double screenLcdKeypadGap = 8.0;
 
-  /// LCD 목표 높이 (본체 높이에서 [screenTopStripMinHeight]를 뺀 높이 대비). 실물 fx-991EX 앞면의 LCD 창 : 키 영역 높이(대략 1 : 3, 정밀
+  /// LCD 목표 높이 (본체 높이 대비). 실물 fx-991EX 앞면의 LCD 창 : 키 영역 높이(대략 1 : 3, 정밀
   /// 실측값 아님)보다 조금 크게 잡았다 — 앱 LCD는 입력·결과 줄이 각각 분수를 담는 4행 구성이고,
-  /// 16:9 소형 폰(320×568)에서도 줄 글자 약 18dp를 확보한다(최소 띠 #41 전에는 약 19dp). 그보다 크게 잡으면 소형 폰 키 각인 글자가
+  /// 16:9 소형 폰(320×568)에서도 줄 글자 약 20dp를 확보한다. 그보다 크게 잡으면 소형 폰 키 각인 글자가
   /// 키 크기 하한(calculator_screen_test) 아래로 내려간다. 세로로 긴 폰에서는 LCD 최대 높이에 먼저 걸린다.
   static const double screenLcdHeightRatio = 0.28;
 
@@ -972,16 +1015,15 @@ abstract final class CalcTheme {
   /// 남겼다 — 세로형의 상한은 #141에서 풀었다.
   ///
   /// 테이블톱의 넓은 키패드 배열(#80)은 이보다 넓어지지만(블록 2개, Fold 가로 반 접힘 825dp) LCD 상한은 그대로
-  /// 둔다. 넓은 배열은 아래 절반 폭을 다 써 설정 버튼이 위 절반 모서리로 가므로, LCD를 키패드 폭까지 넓히면 버튼
-  /// 아래로 줄어 오히려 글자가 작아진다(Fold 가로 반 접힘 실측: 480×274 → 줄 글자 39.1dp, 825×240 → 34.7dp).
-  /// 그래서 LCD는 키패드보다 좁은 채 손 쪽 끝만 키패드와 맞고, 반대쪽 여백에 설정 버튼이 놓인다.
+  /// 둔다(#80 당시 근거: 넓은 배열이 아래 절반 폭을 다 써 설정 버튼이 위 절반 모서리로 갔고, LCD를 키패드 폭까지 넓히면 버튼
+  /// 아래로 줄어 오히려 글자가 작아졌다 — Fold 가로 반 접힘 실측: 480×274 → 줄 글자 39.1dp, 825×240 → 34.7dp). 설정 버튼은
+  /// #190에서 없앴다 — LCD는 키패드보다 좁은 채 손 쪽 끝만 키패드와 맞고 반대쪽은 빈 여백이다. 다시 정하는 것은 #143이다.
   static const double screenTabletopLcdMaxWidth =
       screenTabletopKeypadMaxBlockWidth * screenLcdMaxWidthRatio;
 
   /// 테이블톱 배치의 키패드 블록 최대 폭 (dp) — #141 전 키패드 최대 폭(#24, 480dp ≈ 실물 본체 폭 76mm)을 #143까지
   /// 테이블톱에만 남긴 임시 상한이다(`CalcTabletopLayout`). 다른 배치는 #141에서 폭 상한을 풀었다.
-  /// 테이블톱은 키패드가 아래 절반 폭을 다 쓰지 않을 때 그 옆에 설정 버튼을 두고(#80), 대화상자 위치(#94·#125)도
-  /// 그 자리에 맞춰 정했다. 이 배치를 다시 정하는 #143(키패드가 아래 패널 폭 전체를 쓴다)에서 함께 없앤다.
+  /// 이 배치를 다시 정하는 #143(키패드가 아래 패널 폭 전체를 쓴다)에서 함께 없앤다.
   static const double screenTabletopKeypadMaxBlockWidth = 480.0;
 
   /// 테이블톱 배치의 키패드 블록 최대 가로/세로 비 — #141 전 키패드 최대 가로/세로 비를 #143까지 남긴 임시 상한
@@ -995,22 +1037,19 @@ abstract final class CalcTheme {
   //   10행인 실물 배열보다 키가 크다. 숫자부는 주로 쓰는 손 쪽이다(왼손잡이면 좌우 대칭).
   // - 위 띠: 키패드 블록에 맞춰 둘로 나눈다. 숫자부 위가 활성 LCD, 함수부 위가 계산 기록 영역(M1에서는 비어 있다, 내용은
   //   #145). LCD 하나를 전체 폭으로 늘이면 식은 왼쪽 끝, 답은 오른쪽 끝으로 멀어진다.
-  // - 높이 나누기는 세로형("화면 배치" 절)과 같은 규칙을 위 띠 폭 전체(본체 폭)로 쓴다. 키패드가 넓은 배열의 세로 한계에
-  //   닿아 남는 높이는 위 띠가 받고, 위 띠가 목표 높이보다 커진 몫에서 상단 띠를 내용 줄 전체 높이([topStripRowMaxHeight])
-  //   까지 늘린다(키패드에서는 떼지 않는다). 위 띠 높이는 기록 영역 유무와 무관하다 — 기록 영역이 생기고 없어지는 경계에서
+  // - 높이 나누기는 세로형("화면 배치" 절)과 같은 규칙을 위 띠 폭 전체(본체 폭)로 쓴다. 위 띠는 본체 윗변부터이고, 키패드가
+  //   넓은 배열의 세로 한계에 닿아 남는 높이는 모두 위 띠가 받는다(#190 — 상단 띠가 없다). 위 띠 높이는 기록 영역 유무와 무관하다 — 기록 영역이 생기고 없어지는 경계에서
   //   높이가 튀지 않는다(#142 R1: 블록 폭으로 위 띠 최대 높이를 정했을 때는 본체 폭 461 → 461.5dp(창 477 → 477.5dp)에서 활성
   //   LCD가 228.8 → 128dp로 줄고 빈 띠가 약 100dp 생겼다).
   // - 기록 영역이 있으면 기록 영역은 위 띠 전체, 활성 LCD는 블록 폭의 실물 비율 높이(블록 / [screenLcdMinAspectRatio])까지만
   //   위 띠 아래쪽(키패드 바로 위)에 둔다(#142 R2 — 그보다 높이면 글자는 폭에 묶여 그대로이고 식과 답만 세로로 멀어진다.
-  //   2000×1400에서 약 520dp). 위 띠가 그보다 높으면 활성 LCD 위가 빈다(12.9인치 iPad 가로 약 105dp).
+  //   2000×1400에서 약 520dp). 위 띠가 그보다 높으면 활성 LCD 위가 빈다(12.9인치 iPad 가로 약 145dp).
   // - 기록 영역은 위 띠가 [screenLandscapeHistoryMinHeight] 이상이고, 블록이 [screenLandscapeHistoryMinLcdWidth] 이상이고, 블록
   //   폭 활성 LCD의 줄 글자가 띠 폭 전체 LCD의 [screenLandscapeHistoryMinLcdFontRatio]배 이상일 때만 둔다. 없으면 활성 LCD가
-  //   띠 폭 전체를 쓴다. 기록 영역이 생기고 없어지는 경계에서 활성 LCD 줄 글자는 30%보다 많이 줄지 않는다(landscape_layout_test가
+  //   띠 폭 전체를 쓴다. 기록 영역이 생기고 없어지는 경계에서 활성 LCD 줄 글자는 35%보다 많이 줄지 않는다(landscape_layout_test가
   //   폭·높이 0.5dp 간격으로 고정). 기록 영역이 없는 가로형의 무과금 광고 자리는 #18에서 정한다.
-  // - 상단 띠: 내용 줄이 위 띠 폭 전체다 — 세로형과 같이 워드마크는 왼쪽 끝, 설정 버튼은 오른쪽 끝이고 손잡이와 무관하다.
-  //   왼손잡이는 버튼이 기록 영역 위에 놓인다. 띠가 낮으면 버튼 터치 영역이 그 아래 LCD(오른손잡이)·기록 영역(왼손잡이)
-  //   위쪽에 겹친다 — 기록을 누를 수 있게 만들면(#145) 겹치는 곳을 다시 정한다.
-  // - 스크린리더 읽기 순서: 활성 LCD → 기록 → 키패드(함수부 → 숫자부) → 설정 버튼. 화면 위치와 무관하다.
+  // - 스크린리더 읽기 순서: 활성 LCD → 기록 → 키패드(함수부 → 숫자부). 설정 키(ON)는 함수부 구역(상단 조작부)에 있다.
+  //   화면 위치와 무관하다.
   //
   // 접힘선 없는 창은 세로형과 가로형 중 키가 큰 쪽으로 그린다(`CalculatorScreen`, `FormFactor.picksFormByKeySize`).
   // 키 크기는 가장 낮은 키의 셀 높이(`KeypadMetrics.minKeyCellHeightOf` — 각인 띠 + 키캡)로 비교하고, 같으면 키가 더
@@ -1024,14 +1063,14 @@ abstract final class CalcTheme {
   // 높이가 된다 — 키·위 띠 연속성을 지키고 LCD 크기의 바뀜은 받아들인다(#142 R2). 다만 세로형 자체는
   // 폭에 대해 단조가 아니다: 키패드가 실물 크기(640dp)를 넘는 세로 창(본체 약 489~515 × 978~1024)에서 폭이 늘면 LCD가 폭
   // 기준 최대 높이까지 자라는 몫을 키패드가 내줘 키 셀이 약 1.2% 줄어든다(#141부터의 동작, #188).
-  // 실측 (창, 인셋 위/아래 — 가장 낮은 키 셀 높이 세로형 → 가로형, 그린 배치, 활성 LCD, LCD 줄 글자 세로형 → 그린 배치):
-  //   · 10인치 Android 1280×800(24/48, 본체 1264×712): 셀 42.2 → 69.5dp, 가로형(키 터치 50.1dp). 띠 40, 활성 LCD
-  //     614×254.9·기록 614×254.9, 키패드 1264×409.1(세로 한계). 줄 글자 27.7 → 37.0dp
-  //   · 12.9인치 iPad 1366×1024(24/20): 셀 55.2 → 74.3dp, 가로형. 키패드 1350×436.9(세로 한계), 띠 40, 위 띠 479.1(기록 영역),
-  //     활성 LCD 655×374.5(줄 글자 54.7dp — 띠 폭 전체라면 72.7dp, 비율 0.75). iPad 1024×768: 셀 41.9 → 55.5dp, 위 띠 333.8,
-  //     활성 LCD 489×279.6(줄 글자 40.0dp)
-  //   · 데스크톱 창 1000×800: 셀 46.6 → 54.1dp 가로형, 기록 없음(블록 폭 LCD 글자가 띠 폭 전체의 0.7배 미만) — 활성 LCD 984×417.6
-  //   · 데스크톱 창 1280×600: 셀 34.3 → 68.7dp, 기록 있음(위 띠 160.2dp). 1280×500: 56.4dp, 위 띠 132.2dp로 기록 있음.
+  // 실측 (창, 인셋 위/아래 — 가장 낮은 키 셀 높이 세로형 → 가로형, 그린 배치, 활성 LCD, LCD 줄 글자. 위 띠는 #190 상단 띠 제거 뒤):
+  //   · 10인치 Android 1280×800(24/48, 본체 1264×712): 셀 42.2 → 69.5dp, 가로형(키 터치 50.1dp). 위 띠 294.9, 활성 LCD
+  //     614×294.9·기록 614×294.9, 키패드 1264×409.1(세로 한계). 줄 글자 43.4dp
+  //   · 12.9인치 iPad 1366×1024(24/20): 셀 55.2 → 74.3dp, 가로형. 키패드 1350×436.9(세로 한계), 위 띠 519.1(기록 영역),
+  //     활성 LCD 655×374.5(줄 글자 54.7dp — 띠 폭 전체라면 79.1dp, 비율 0.69). iPad 1024×768: 셀 41.9 → 55.5dp, 위 띠 373.8,
+  //     활성 LCD 489×279.6(줄 글자 40.0dp, 비율 0.72)
+  //   · 데스크톱 창 1000×800: 셀 46.6 → 54.1dp 가로형, 기록 없음(블록 폭 LCD 글자가 띠 폭 전체의 0.56배) — 활성 LCD 984×457.6
+  //   · 데스크톱 창 1280×600: 셀 34.3 → 69.5dp, 기록 있음(위 띠 166.9dp). 1280×500: 57.9dp, 위 띠 135.5dp로 기록 있음.
   //     1280×400: 42.8dp, 위 띠 112dp(LCD 최소 높이)라 기록 없음 — 활성 LCD 1264×112
   //   · 정사각형 창 768×768: 셀 44.6 > 41.4dp라 세로형. 600×610: 34.9 > 32.1dp 세로형. 700×599.9: 34.3 → 37.6dp 가로형
   //   · 태블릿 세로 800×1280·iPad 세로: 세로형 그대로(셀 69.2 > 43.1dp, 76.1 > 55.5dp)
@@ -1061,155 +1100,28 @@ abstract final class CalcTheme {
   /// 가로형 배치에서 기록 영역을 둘 때 활성 LCD 줄 글자가 지켜야 하는 비율 (기록 영역 없이 띠 폭 전체일 때 줄 글자 대비, #142 R2).
   /// 기록 영역을 두면 활성 LCD가 블록 폭으로 좁아진다. 위 띠가 높은 창에서는 블록 폭 LCD의 글자가 폭에 묶여 크게 줄어드는데
   /// (본체 폭 626 → 626.5, 높이 584: 49.5 → 23.6dp), 그런 창에서는 블록이 더 넓어질 때까지 기록 영역을 미룬다. 그래서 기록
-  /// 영역이 생기고 없어지는 경계에서 활성 LCD 줄 글자는 이 비율(15%)보다 많이 줄지 않는다.
-  static const double screenLandscapeHistoryMinLcdFontRatio = 0.7;
+  /// 영역이 생기고 없어지는 경계에서 활성 LCD 줄 글자는 이 비율 아래로(35%보다 많이) 줄지 않는다.
+  ///
+  /// 띠 폭 전체 LCD의 글자는 위 띠 높이에 묶여 위 띠가 높을수록 커지므로, 큰 창일수록 비율이 낮아진다. #190에서 상단 띠를
+  /// 없애 위 띠가 그만큼 높아지자 12.9인치 iPad 가로(위 띠 479.1 → 519.1dp)의 비율이 0.75 → 0.69가 되어, 처음 정한 0.7로는
+  /// 기록 영역이 사라졌다. 태블릿 가로가 기록 영역을 지키도록 0.65로 낮췄다(iPad 1024×768은 0.72) — R2 재현 창(0.48)은 그대로
+  /// 걸러진다. 큰 창에서 LCD 줄 글자에 상한을 두면(#189) 띠 폭 전체 LCD의 글자가 더 커지지 않아 이 비율이 창 크기에 덜
+  /// 흔들린다.
+  static const double screenLandscapeHistoryMinLcdFontRatio = 0.65;
 
-  /// 나란히 놓은 두 영역 사이 간격 (dp) — 테이블톱 배치에서 키패드 옆에 설정 버튼을 둘 자리(#80), 손잡이를 바꿔도
-  /// 키패드가 같은 자리로 보이는 이동 폭(#80 R2). 접힘선 양쪽 여백의 합([screenHingeMargin] × 2)과 같다.
+  /// 손잡이를 바꿔도 키패드가 같은 자리로 보이는 가로 이동 폭 (dp, #80 R2) — 접힘선 양쪽 여백의 합([screenHingeMargin] × 2)과
+  /// 같다.
   static const double screenPanelGap = 16.0;
 
-  /// LCD와 그 옆·아래에 놓은 설정 버튼 사이 간격 (dp) — 접힘선 기준 배치(`CalcHingeSplitLayout`·`CalcTabletopLayout`)
-  static const double screenSettingsGap = 8.0;
-
-  /// 설정 버튼 크기 (dp) — 접근성 권장 터치 대상 48dp
-  static const double settingsButtonSize = 48.0;
-
-  /// 설정 버튼 아이콘 색 — 본체 배경([bodyBackground]) 대비 4.5:1 이상, 키 각인보다 눈에 덜 띄게 회색
-  static const Color settingsIcon = Color(0xFFB0B0B0);
-
-  // ── 상단 띠 (#41) ──
-  // LCD 위에 남는 높이(실물의 로고·모델명·태양전지 자리)에 장식과 설정 진입 버튼을 둔다. 배치 계산은
-  // `CalcTopStripLayout`, 그리기는 `TopStripDecoration`·`SettingsButton`이 한다.
-  //
-  // 띠 = LCD 윗변 위쪽 전부다. 본체 위 화면 여백([screenPadding])도 띠에 넣는다 — 띠가 낮은 폰에서 그 8dp까지
-  // 써야 아이콘이 들어간다. 띠 안에서 LCD 바로 위에 붙인 "내용 줄" 하나에 모두 놓고(높이는 띠 높이,
-  // [topStripRowMaxHeight]까지), 그 위로 남는 높이는 비워 둔다(21:9 폰·폴더블 커버 약 130~190dp).
-  //
-  //   ┌ AltCalc ············ ▮▮▮▮ ⚙ ┐ ← 내용 줄 (LCD와 같은 폭)
-  //   └────────── LCD ──────────────┘
-  //
-  // - **설정 버튼** (위아래 배치·가로형 — 접힘선 기준 배치의 버튼 위치는 #25 그대로):
-  //   LCD 위에 겹친 터치 영역은 "LCD는 누를 것이 없다"는 전제에 기댄다. LCD에 터치 조작(스크롤·이력 등, M2 이후)이
-  //   생기면 오른쪽 위 약 48×28dp가 설정으로 가로채이므로 그때 이 배치를 다시 정한다.
-  //   내용 줄의 오른쪽 끝. 터치 영역은 언제나 [settingsButtonSize] 정사각형이다. 줄이 그보다 낮으면 아이콘은 줄
-  //   가운데에 그리고, 터치 영역만 줄 윗변에서 아래로 LCD 위쪽에 겹친다(LCD는 누를 것이 없다 — 겹친 곳의 스크린리더
-  //   영역은 LCD 상태 표시기가 그대로 갖는다). 아이콘 크기는 줄 높이에서 위아래 [topStripIconMargin]을 뺀 값을
-  //   [settingsIconMinSize]~[settingsIconSize]로 제한한다.
-  // - **띠 최소 높이**: 위아래 배치는 남는 높이가 없어도 [screenTopStripMinHeight]를 떼어 둔다(위 "화면 배치").
-  //   그래서 줄 높이는 어느 폰에서나 [screenPadding] + [screenTopStripMinHeight] = 20dp 이상이다.
-  //   실제 인셋으로 잰 남는 높이(#41 당시 — 맨 아래 광고 슬롯이 있던 배치): 아이폰 전 기종 0dp, 360×800 0~21dp,
-  //   412×915 13~37dp, 21:9 폰 84dp, Fold 커버 133dp, 태블릿 세로 약 220~330dp(폭 상한 480dp 때문)
-  //   — 떼어 두지 않으면 대부분의 폰에 버튼 자리가 없다.
-  //   #141(광고 슬롯 제거·폭 상한 해제) 뒤: 390×844 14.6dp, 440×956 16.4dp, 360×800 36.8~60.8dp, 412×915 52.7~76.7dp,
-  //   가장 작은 폰(320×568·360×640)과 태블릿 세로는 0dp다(태블릿은 키패드가 폭 기준 최대 높이에 닿지 않는다). 태블릿 세로는
-  //   키패드가 실물 크기(640dp)보다 높아 띠를 줄 전체 높이까지 늘린다([screenTopStripFullRowKeypadMinHeight], #141 R1).
-  //   아래 비용은 #41 당시 값이다. 남는 높이가 12dp 이상인 화면은 배치가 그대로다:
-  //   · iPhone 390×844(인셋 47/34): 키 터치 41.9 → 41.1dp(−1.8%)·LCD 줄 글자 27.4 → 26.9dp
-  //   · 가장 작은 폰 320×568은 테스트 하한 아래로 내려갔다(#141에서 본체가 52dp 높아져 키 터치 31.1dp로 하한을 넘는다
-  //     — calculator_screen_test가 크기별 하한으로 고정한다).
-  //     - 상태바 20dp(iPhone SE 1세대): 키 터치 28.70 → 27.96dp로 하한 [keyTouchHeightFloor](28dp) **미만**,
-  //       키 각인 글자 약 4.82 → 4.70dp(이 PR 전부터 5.0dp 미만), LCD 줄 글자 17.9 → 17.3dp.
-  //     - 인셋 0: 키 각인 글자 5.03 → 4.90dp, 배율 1.3의 LCD 줄 글자 18.3 → 17.7dp(하한 18dp 미만).
-  //     LCD·키패드 어느 한쪽이 12dp를 다 내도 인셋 0에서 두 하한을 함께 지킬 수 없다(배율 1.3 기준 필요 높이
-  //     약 508.5 > 본체 500dp). 360×640(인셋 24/48)도 본체가 같아 배율 1.3의 LCD 줄 글자가 17.7dp다.
-  //   · 짧은 가로·분할 창(이미 하한 28dp 미만)도 위아래 배치에서는 그만큼 키가 작아진다 — 키 터치 844×390(인셋 좌우 47·
-  //     아래 21) 15.4 → 14.4dp, 640×360(상태바 24) 12.6 → 11.6dp, 568×320 11.2 → 10.2dp, 360×380 14.3 → 13.3dp.
-  //     이런 창은 #38에서 좌우 분할(#142부터 가로형)로 그리기로 해(아래 "짧은 창") 최소 띠의 비용이 없어졌다. 위아래
-  //     배치로 남는 짧은 창(412×520 등)은 최소 띠를 그대로 둔다 — 키패드에 줘도 키가 약 1dp 커질 뿐이다.
-  // - **워드마크**(앱 이름 — CASIO 상표·모델명은 쓰지 않는다): 줄 왼쪽. 줄 높이가 [topStripWordmarkMinHeight]
-  //   이상이고 자리 폭이 [topStripWordmarkMinWidth] 이상일 때 그린다. 글자 크기는 줄 높이 ×
-  //   [topStripWordmarkFontRatio], [topStripWordmarkMaxFontSize]까지.
-  // - **태양전지 장식**(기능 없음): 설정 버튼 왼쪽(버튼이 없는 배치는 줄 오른쪽 끝). 줄 높이가
-  //   [topStripSolarMinHeight] 이상이고 워드마크 자리와 [topStripGap] 이상 떨어질 때만 그린다.
-  //   모자라면 태양전지 → 워드마크 순으로 숨긴다(워드마크가 없으면 태양전지도 없다).
-  // - 가로형은 내용 줄이 위 띠(활성 LCD + 기록 영역) 폭 전체다(위 "가로형 배치" 절). 접힘선 기준 배치도 LCD 위 띠에 같은
-  //   규칙으로 장식만 둔다. 장식 줄이 다른 곳에 놓인 설정 버튼(테이블톱 위 절반 모서리)과 겹치면 장식을 모두 숨긴다.
-  // - 장식은 터치를 받지 않고 스크린리더에 읽히지 않는다. 글자 배율은 키 각인처럼 [keyMaxTextScaleFactor]까지.
-
-  /// 큰 세로 창에서 상단 띠를 내용 줄 전체 높이까지 늘리는 키패드 높이 하한 (dp, #141 R1) — 키패드가 이보다 높으면
-  /// 이 높이 아래로 내려가지 않는 만큼 띠를 늘린다([CalcScreenLayout], 위 "화면 배치" 절). #141 전 키패드 최대 크기
-  /// 480×640dp(#24 — 실물 fx-991EX 본체 폭과 비슷한 실물 크기)의 높이다. 가장 큰 폰의 키패드(본체 폭 424dp → 최대
-  /// 565dp)보다 높아 폰에는 걸리지 않는다(불변식 테스트).
-  static const double screenTopStripFullRowKeypadMinHeight = 640.0;
-
-  /// 위아래 배치에서 LCD 위에 항상 떼어 두는 상단 띠 최소 높이 (dp, 사용자 결정 #41).
-  /// 본체 위 화면 여백([screenPadding])과 합쳐 설정 아이콘 줄이 된다.
-  static const double screenTopStripMinHeight = 12.0;
-
-  /// 상단 띠 내용 줄의 최대 높이 (dp) — 설정 버튼 터치 영역과 같다
-  static const double topStripRowMaxHeight = settingsButtonSize;
-
-  /// 내용 줄 좌우 안쪽 여백 (dp) — 워드마크·태양전지를 LCD 베젤 안쪽 선에 맞춘다
-  static const double topStripInset = 4.0;
-
-  /// 내용 줄 안 요소 사이 최소 간격 (dp)
-  static const double topStripGap = 8.0;
-
-  /// 설정 아이콘 크기 (dp) — Material 기본 아이콘 크기
-  static const double settingsIconSize = 24.0;
-
-  /// 낮은 줄에서 줄어든 설정 아이콘의 최소 크기 (dp) — Material 조밀(dense) 아이콘 크기
-  static const double settingsIconMinSize = 18.0;
-
-  /// 낮은 줄에서 설정 아이콘 위아래에 남기는 여백 (dp, 한쪽)
-  static const double topStripIconMargin = 1.0;
-
-  /// 워드마크를 그리는 줄 최소 높이 (dp) = 최소 띠에서의 줄 높이
-  static const double topStripWordmarkMinHeight =
-      screenPadding + screenTopStripMinHeight;
-
-  /// 워드마크 글자 크기 (줄 높이 대비)
-  static const double topStripWordmarkFontRatio = 0.5;
-
-  /// 워드마크 글자 크기 상한 (dp)
-  static const double topStripWordmarkMaxFontSize = 20.0;
-
-  /// 워드마크 자리 최대 폭 (줄 폭 대비)
-  static const double topStripWordmarkMaxWidthRatio = 0.4;
-
-  /// 워드마크 자리 최소 폭 (dp) — 이보다 좁으면 그리지 않는다
-  static const double topStripWordmarkMinWidth = 48.0;
-
-  /// 태양전지 장식을 그리는 줄 최소 높이 (dp)
-  static const double topStripSolarMinHeight = 32.0;
-
-  /// 태양전지 장식 높이 (줄 높이 대비)
-  static const double topStripSolarHeightRatio = 0.5;
-
-  /// 태양전지 장식 가로/세로 비
-  static const double topStripSolarAspectRatio = 3.0;
-
-  /// 태양전지 장식의 칸 수 (실물 fx-991EX 태양전지처럼 4칸)
-  static const int topStripSolarCellCount = 4;
-
-  /// 태양전지 장식 안쪽 여백·칸 사이 간격 (장식 높이 대비)
-  static const double topStripSolarCellGapRatio = 0.1;
-
-  /// 태양전지 장식 모서리 반경 (dp)
-  static const double topStripSolarBorderRadius = 2.0;
-
-  /// 태양전지 장식 바탕(칸 사이 홈) — 본체보다 어둡다
-  static const Color solarPanelBackground = Color(0xFF151515);
-
-  /// 태양전지 장식 칸 — 실물 비정질 태양전지의 어두운 갈색
-  static const Color solarPanelCell = Color(0xFF4A342E);
-
-  /// 워드마크 글자 스타일 (기준 크기 — `TopStripDecoration`이 줄 높이에 맞춰 `fontSize`를 덮어쓴다).
-  /// 색은 설정 아이콘과 같다([CalcPalette.settingsIcon]).
-  static const TextStyle topStripWordmarkStyle = TextStyle(
-    fontFamily: monoFontFamily,
-    fontFamilyFallback: monoFontFallback,
-    fontSize: topStripWordmarkMaxFontSize,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-    height: 1.0,
-  );
+  /// 화면 안내(창이 너무 작다는 안내, #38) 글자·아이콘 색 — 본체 배경([bodyBackground]) 대비 4.5:1 이상, 키 각인보다 눈에
+  /// 덜 띄게 회색. 고대비는 [noticeForegroundHighContrast].
+  static const Color noticeForeground = Color(0xFFB0B0B0);
 
   // ── 접힘선 기준 배치 (#25) ──
   // 폴더블 내부 화면처럼 접힘선(fold·hinge)이 창을 가로지르면 접힘선을 경계로 나눈다(`FormFactor.arrangementOf`).
-  // - 세로 접힘선(책 자세): 주로 쓰는 손 쪽 절반에 키패드, 다른 절반에 LCD·설정 버튼 — 예전 좌우 분할(#24)의 접힘선
+  // - 세로 접힘선(책 자세): 주로 쓰는 손 쪽 절반에 키패드(설정 키 포함), 다른 절반에 LCD — 예전 좌우 분할(#24)의 접힘선
   //   규칙이다(`CalcHingeSplitLayout`, #143에서 다시 정한다).
-  // - 가로 접힘선(반 접은 테이블톱 자세·물리 힌지만): 위 절반에 LCD, 아래 절반에 키패드(주로 쓰는 손 쪽)·설정 버튼.
+  // - 가로 접힘선(반 접은 테이블톱 자세·물리 힌지만): 위 절반 높이 전체에 LCD(#190), 아래 절반에 키패드(주로 쓰는 손 쪽).
   //   LCD 폭은 [screenTabletopLcdMaxWidth] 이하이고(#143까지), 상한에 걸리면 키패드와 같은 쪽(주로 쓰는 손 쪽) 가장자리에 붙인다 (#92).
   //   아래 절반은 낮고 넓어, 넓은 키패드 배열(`KeypadArrangement.wide` — 숫자부를 함수부 오른쪽에 둔다)의 키가 실물
   //   배열보다 크면 그 배열을 쓴다(#80, 사용자 결정). 넓은 배열만으로 전체 화면 기기의 키가 일반 하한을 넘는다(아래 실측).
@@ -1248,7 +1160,7 @@ abstract final class CalcTheme {
   static const double screenHingeMargin = 8.0;
 
   // ── 짧은 창 (#38, 사용자 결정 — 비교 대상은 #142에서 가로형으로 바꿨다) ──
-  // 분할 화면·팝업 창·가로로 돈 폰처럼 창이 낮으면 위아래 배치의 키패드가 LCD·상단 띠에 높이를 뺏겨 아주 작아진다.
+  // 분할 화면·팝업 창·가로로 돈 폰처럼 창이 낮으면 위아래 배치의 키패드가 LCD에 높이를 뺏겨 아주 작아진다.
   // - 배치: 접힘선 없는 창은 크기와 무관하게 위아래 배치와 가로형 중 키가 큰 쪽으로 그린다(위 "가로형 배치" 절).
   //   가로형은 넓은 배열(5행)이라 낮은 창일수록 이득이 크다. 세로로 긴 창(세로 폰 등)은 가로형이 늘 더 작아 위아래 배치
   //   그대로다. 예전 좌우 분할은 짧은 변 600dp에서 비교를 멈춰(정사각형 대화면 768×768이 좌우 분할이 되지 않게) 경계에서
@@ -1268,19 +1180,20 @@ abstract final class CalcTheme {
   // - 글자 하한: 따로 두지 않는다. 키 글자는 키 크기에 비례해 정해지므로(`KeypadMetrics`) 터치 높이 하한이 글자 하한을
   //   겸한다. 안내 직전(키 약 16dp)의 글자 크기는 short_window_test가 실제 글꼴로 고정한다. 사용자가 받아들인 테이블톱
   //   하한과 같은 키 크기이고, 각인은 읽기 어려운 크기라 이 크기의 창은 "급히 쓸 수는 있는" 최소로 본다.
-  // 실측 (키 셀 높이, LCD 줄 글자 — 위아래 배치 → 그린 배치. 인셋은 괄호. 괄호 안 "좌우"는 #142 전 좌우 분할의 키 터치 높이):
-  //   · 폰 분할 화면 위 411×420(상태바 24): 키 21.1 → 21.7dp(좌우 21.5), LCD 14.3 → 29.0dp — 가로형. 넓은 배열이 폭에
-  //     묶여(키패드 395×127.8) 남는 높이를 띠 폭 전체 LCD(395×204)가 받는다. 미리보기 "분할 화면 위" 411×400: 19.4 → 21.7dp
-  //   · 가로 폰 844×390(좌우 47·아래 21): 키 18.8 → 37.6dp(좌우 30.0), LCD 14.3 → 14.3dp(좌우 28.4)
-  //   · 640×360(상태바 24): 키 16.0 → 32.0dp(좌우 27.2) / 568×320: 14.6 → 29.2dp(좌우 25.8) — LCD는 둘 다 최소 높이 14.3dp
-  //   · 360×300: 키 12.9 → 18.9dp(좌우 18.6), LCD 14.3 → 16.3dp
-  //   · 412×520(상태바 24): 키 27.96dp (위아래 유지 — 가로형 21.8dp)
+  // 실측 (키 셀 높이, LCD 줄 글자 — 위아래 배치 → 그린 배치. 인셋은 괄호. #190에서 상단 띠 최소 높이 12dp가 빠진 뒤의 값):
+  //   · 미리보기 "분할 화면 위" 411×400(상태바 24): 키 20.4 → 21.7dp, LCD 14.3 → 31.6dp — 가로형. 넓은 배열이 폭에 묶여
+  //     남는 높이를 띠 폭 전체 LCD가 받는다.
+  //   · 폰 분할 화면 위 411×420(상태바 24): 위아래 배치가 22.1dp로 가로형(21.7dp)보다 커 위아래 배치다(#190 전 21.1dp로
+  //     가로형이었다). 411×440(아래 48)도 21.8 > 21.7dp로 위아래 배치다.
+  //   · 가로 폰 844×390(좌우 47·아래 21): 키 19.8 → 39.6dp, LCD 14.3dp(최소 높이)
+  //   · 640×360(상태바 24): 키 17.0 → 34.0dp / 568×320: 15.6 → 30.4dp / 700×392(24/24): 17.7 → 35.4dp
+  //   · 360×300: 키 13.9 → 18.9dp, LCD 14.3 → 22.7dp
+  //   · 412×520(상태바 24): 키 28.7dp로 일반 하한 이상 — 짧은 창이 아니다(#190 전 27.96dp). 320×480(상태바 20)은 위아래 배치로
+  //     남는 짧은 창이다.
   //   · 세로 폰은 위아래 배치 그대로다 — 390×844(47/34): 42.4dp, 가로형 20.6dp.
-  //   · 320×240: 가로형도 15.6dp라 안내(좌우 분할은 16.3dp로 계산기였다). 미리보기 "작은 팝업 창" 320×200: 8.8dp
+  //   · 320×240: 가로형 16.7dp라 계산기(#190 전 15.6dp로 안내). 300×240은 안내. 미리보기 "작은 팝업 창" 320×200: 가로형 10.9dp로 안내
   // LCD는 짧은 창에서도 [screenLcdMinHeight] 아래로 줄이지 않는다(#38 당시 측정): 411×420에서 위아래 배치의 LCD를
   // 112 → 72dp로 줄여도 키는 약 3.4dp만 커지고 LCD 줄 글자는 14.3 → 8.0dp가 된다.
-  // 상단 띠 최소 높이([screenTopStripMinHeight])도 그대로다 — 위아래 배치로 남는 짧은 창(412×520 등)에서 12dp를 키패드에
-  // 줘도 키는 약 1dp 커진다.
   //
   // 네이티브 설정 — 창 크기는 시스템에 맡기고, 앱은 위 규칙으로 맞추거나 안내한다:
   // - Android: `resizeableActivity="false"`(분할 화면·팝업 창 금지)는 사용자에게 불리한 제한이라 쓰지 않는다.
@@ -1382,8 +1295,11 @@ final class CalcPalette {
   /// LCD 비활성 상태 표시기 색
   final Color lcdStatusInactive;
 
-  /// 설정 버튼 아이콘 색
-  final Color settingsIcon;
+  /// 화면 안내(창이 너무 작다는 안내) 글자·아이콘 색
+  final Color noticeForeground;
+
+  /// 본체에 인쇄된 흰 글자 색 — 원형 버튼 위 메인 각인(ON 자리의 `SETTING`, #190)
+  final Color bodyPrint;
 
   /// `FocusRing`이 그리는 키보드 포커스 테두리 색 (#97, 일반 모드는 #106)
   final Color materialFocusRing;
@@ -1395,7 +1311,8 @@ final class CalcPalette {
     required this.shiftLabel,
     required this.alphaLabel,
     required this.lcdStatusInactive,
-    required this.settingsIcon,
+    required this.noticeForeground,
+    required this.bodyPrint,
     required this.materialFocusRing,
   });
 
@@ -1407,7 +1324,8 @@ final class CalcPalette {
     shiftLabel: CalcTheme.shiftLabel,
     alphaLabel: CalcTheme.alphaLabel,
     lcdStatusInactive: CalcTheme.lcdStatusInactive,
-    settingsIcon: CalcTheme.settingsIcon,
+    noticeForeground: CalcTheme.noticeForeground,
+    bodyPrint: CalcTheme.bodyPrint,
     materialFocusRing: CalcTheme.materialFocusRingStandard,
   );
 
@@ -1419,7 +1337,8 @@ final class CalcPalette {
     shiftLabel: CalcTheme.shiftLabelHighContrast,
     alphaLabel: CalcTheme.alphaLabelHighContrast,
     lcdStatusInactive: CalcTheme.lcdStatusInactiveHighContrast,
-    settingsIcon: CalcTheme.settingsIconHighContrast,
+    noticeForeground: CalcTheme.noticeForegroundHighContrast,
+    bodyPrint: CalcTheme.bodyPrintHighContrast,
     materialFocusRing: CalcTheme.materialFocusRingHighContrast,
   );
 

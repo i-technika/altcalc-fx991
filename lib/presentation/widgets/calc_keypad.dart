@@ -447,6 +447,28 @@ class _LabelLimits {
           ? numberKeyWidth
           : functionKeyWidth;
 
+      // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인을 SHIFT·ALPHA 각인과 함께 각인 띠에 한 줄로 인쇄한다
+      // (CalcKeyButton의 `_BodyPrintRow`). 띠 폭에 그 줄이 들어가는 각인 크기까지 줄인다.
+      if (def.face == KeyFace.roundButton) {
+        final parts = [
+          (def.mainLegend, CalcTheme.keyBodyPrintStyle),
+          if (def.shiftLegend case final l?) (l, CalcTheme.keyShiftLabelStyle),
+          if (def.alphaLegend case final l?) (l, CalcTheme.keyAlphaLabelStyle),
+        ];
+        var em = 0.0;
+        for (final (l, style) in parts) {
+          em += _emWidth(l, style);
+          if (!l.isPlain) tallLegends.add(KeyLegendView.emMetrics(l, style));
+        }
+        final usable = math.max(
+          0.0,
+          width -
+              (parts.length - 1) * width * CalcTheme.keyLegendGapMaxWidthRatio,
+        );
+        legend = math.min(legend, usable / em);
+        continue;
+      }
+
       // 메인 라벨: 키캡 좌우 여백과 테두리를 뺀 폭 (CalcKeyButton의 키캡 배치와 같다)
       final capInner =
           width * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
@@ -519,10 +541,16 @@ class _LabelLimits {
 /// ## 입력 계약
 /// - 키를 누르면 [onKeyPressed], [autoRepeatKeys]를 누르고 있는 동안 [onKeyRepeat]을 호출한다.
 ///   모디파이어 해석(1회성 SHIFT/ALPHA)은 호출자(상태 머신)가 맡는다.
-/// - [onKeyPressed]가 `null`이면 모든 키가 비활성이다.
+/// - 설정 키([settingsKey] — ON, #190)는 [onSettingsPressed]가 있으면 [onKeyPressed] 대신 그것을 부른다. 설정 키는
+///   키보드 포커스를 받는다(`CalcKeyButton.focusable` — 없어진 설정 버튼의 키보드 경로, #106).
+/// - [onKeyPressed]가 `null`이면 모든 키가 비활성이다(설정 키 포함).
 class CalcKeypad extends StatelessWidget {
   /// 키 입력 콜백
   final ValueChanged<CalcKeyId>? onKeyPressed;
+
+  /// 설정 키([settingsKey])를 눌렀을 때 [onKeyPressed] 대신 부르는 콜백. 인자는 설정 키 버튼의 context다 — 설정
+  /// 대화상자를 그 키 쪽에 띄우는 기준 위치로 쓴다(`SettingsLauncher`). `null`이면 설정 키도 [onKeyPressed]로 간다.
+  final ValueChanged<BuildContext>? onSettingsPressed;
 
   /// 반복 입력 콜백 ([autoRepeatKeys]에만 연결)
   final ValueChanged<CalcKeyId>? onKeyRepeat;
@@ -544,6 +572,7 @@ class CalcKeypad extends StatelessWidget {
     super.key,
     this.onKeyPressed,
     this.onKeyRepeat,
+    this.onSettingsPressed,
     this.enableHaptics = true,
     this.arrangement = KeypadArrangement.standard,
     this.numbersOnLeft = false,
@@ -586,6 +615,7 @@ class CalcKeypad extends StatelessWidget {
               numbersOnLeft: numbersOnLeft,
               onKeyPressed: onKeyPressed,
               onKeyRepeat: onKeyRepeat,
+              onSettingsPressed: onSettingsPressed,
               enableHaptics: enableHaptics,
             ),
           ),
@@ -600,6 +630,7 @@ class _KeypadBody extends StatelessWidget {
   final bool numbersOnLeft;
   final ValueChanged<CalcKeyId>? onKeyPressed;
   final ValueChanged<CalcKeyId>? onKeyRepeat;
+  final ValueChanged<BuildContext>? onSettingsPressed;
   final bool enableHaptics;
 
   const _KeypadBody({
@@ -607,6 +638,7 @@ class _KeypadBody extends StatelessWidget {
     required this.numbersOnLeft,
     required this.onKeyPressed,
     required this.onKeyRepeat,
+    required this.onSettingsPressed,
     required this.enableHaptics,
   });
 
@@ -624,19 +656,58 @@ class _KeypadBody extends StatelessWidget {
     EdgeInsets hitOutset = EdgeInsets.zero,
     EdgeInsets labelInsets = EdgeInsets.zero,
   }) {
+    final settings = onSettingsPressed;
+    if (def.id == settingsKey && settings != null && onKeyPressed != null) {
+      // 설정 키는 자기 context(대화상자 기준 위치)를 넘겨야 하므로 Builder로 감싼다.
+      return Builder(
+        builder: (keyContext) => _keyButton(
+          def,
+          onPressed: (_) => settings(keyContext),
+          showLegendBand: showLegendBand,
+          extendHitArea: extendHitArea,
+          shape: shape,
+          hitShape: hitShape,
+          hitOutset: hitOutset,
+          labelInsets: labelInsets,
+        ),
+      );
+    }
+    return _keyButton(
+      def,
+      onPressed: onKeyPressed,
+      showLegendBand: showLegendBand,
+      extendHitArea: extendHitArea,
+      shape: shape,
+      hitShape: hitShape,
+      hitOutset: hitOutset,
+      labelInsets: labelInsets,
+    );
+  }
+
+  Widget _keyButton(
+    CalcKeyDef def, {
+    required ValueChanged<CalcKeyId>? onPressed,
+    required bool showLegendBand,
+    required bool extendHitArea,
+    required Path Function(Size size)? shape,
+    required Path Function(Size size)? hitShape,
+    required EdgeInsets hitOutset,
+    required EdgeInsets labelInsets,
+  }) {
     return CalcKeyButton(
       keyDef: def,
       shape: shape,
       hitShape: hitShape,
       hitOutset: hitOutset,
       labelInsets: labelInsets,
-      onPressed: onKeyPressed,
+      onPressed: onPressed,
       onRepeat: autoRepeatKeys.contains(def.id) ? onKeyRepeat : null,
       enableHaptics: enableHaptics,
       showLegendBand: showLegendBand,
       extendHitAreaToLegend: showLegendBand && extendHitArea,
       legendFontSize: metrics.legendFontSize,
       mainLabelFontSize: metrics.mainLabelFontSize,
+      focusable: def.id == settingsKey,
     );
   }
 

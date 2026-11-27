@@ -30,7 +30,7 @@ enum KeyLayer {
 /// 모디파이어 해석이 끝난 단일 키 입력.
 ///
 /// [layer]에 기능이 있는 입력만 만들 수 있다(생성자 assert). 즉 [label]은 항상 존재한다.
-/// 모디파이어 키(SHIFT/ALPHA) 자체는 입력이 아니다.
+/// 모디파이어 키(SHIFT/ALPHA) 자체와 설정 키([settingsKey] — ON, #190)는 입력이 아니다.
 @immutable
 class KeyInput {
   /// 눌린 물리 키
@@ -47,6 +47,7 @@ class KeyInput {
         id != CalcKeyId.shift && id != CalcKeyId.alpha,
         '모디파이어 키는 입력이 아니다: $id',
       ),
+      assert(id != settingsKey, '설정 키(ON)는 계산기 입력이 아니다 (#190)'),
       assert(labelOf(id, layer) != null, '$id 키에는 $layer 기능이 없다'),
       assert(
         !isRepeat || (layer == KeyLayer.main && autoRepeatKeys.contains(id)),
@@ -91,7 +92,9 @@ class KeyInput {
 /// - SHIFT를 누르면 SHIFT 대기(S), 대기 중 다시 누르면 해제한다. ALPHA도 같다.
 /// - 한 모디파이어 대기 중 다른 모디파이어를 누르면 그쪽으로 바뀐다(SHIFT → ALPHA = A만 켜짐).
 /// - 모디파이어가 아닌 키를 누르면 대기 중인 층의 기능을 입력하고 대기를 **항상** 해제한다.
-///   그 층에 기능이 없는 키(예: SHIFT + 4)는 아무것도 입력하지 않고 대기만 해제한다.
+///   그 층에 기능이 없는 키(예: SHIFT + 4, SHIFT + AC — 실물 OFF는 뺐다)는 아무것도 입력하지 않고 대기만 해제한다.
+/// - 설정 키([settingsKey] — ON)는 계산기 입력이 아니다(#190). 화면이 설정을 열고, 상태 머신은 기능 없는 층의
+///   키처럼 대기만 해제한다 — 실물 ON 키도 대기를 지운다.
 ///
 /// 위 규칙과 아래 "모디파이어 기능은 반복하지 않는다"는 #15에서 확정했다.
 /// - 키를 누르면 대기가 해제된다: User's Guide 인쇄 4쪽 "S … will disappear when you press a key"
@@ -157,6 +160,9 @@ class CalcState {
         return _withModifier(
           modifier == KeyModifier.alpha ? KeyModifier.none : KeyModifier.alpha,
         );
+      case settingsKey:
+        // 기능 없는 층과 같다: 입력 없이 대기만 해제한다. 반복 대상도 끊는다.
+        return CalcState(lastInput: lastInput, inputCount: inputCount);
       default:
         break;
     }

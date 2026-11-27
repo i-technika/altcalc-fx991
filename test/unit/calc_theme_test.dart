@@ -264,8 +264,8 @@ void main() {
     });
 
     // 키보드 포커스 테두리가 겹쳐 그려지는 면. 대화상자 면·본체는 WCAG 2.4.13(포커스 전후 같은 픽셀)의 기준이고,
-    // 포커스 겹침은 테두리 안쪽에 맞닿는 면과의 인접 대비(추가 확인)다. 닫기 버튼(primary 10%)·설정 버튼(아이콘색 10%)은
-    // M3 버튼 기본 포커스 겹침이다 — 실제 위젯이 이 값을 쓰는지는 `test/widget/material_theme_test.dart`가 확인한다.
+    // 포커스 겹침은 테두리 안쪽에 맞닿는 면과의 인접 대비(추가 확인)다. 닫기 버튼(primary 10%)은
+    // M3 버튼 기본 포커스 겹침이다. 설정 키(ON, #190)의 테두리는 원형 버튼 고리 가장자리에 그린다 — 실제 위젯이 이 값을 쓰는지는 `test/widget/material_theme_test.dart`가 확인한다.
     Map<String, Color> focusSurfaces(CalcPalette palette) {
       final theme = palette.materialTheme;
       final surface = theme.colorScheme.surfaceContainerHigh;
@@ -277,10 +277,8 @@ void main() {
           surface,
         ),
         '본체': CalcTheme.bodyBackground,
-        '설정 버튼 포커스 겹침': Color.alphaBlend(
-          palette.settingsIcon.withValues(alpha: 0.1),
-          CalcTheme.bodyBackground,
-        ),
+        // 설정 키(ON)의 테두리는 원형 버튼 고리 가장자리에 그린다 (#190)
+        '원형 버튼 고리': CalcTheme.roundKeyBezel,
       };
     }
 
@@ -486,7 +484,8 @@ void main() {
       expect(normal.shiftLabel, CalcTheme.shiftLabel);
       expect(normal.alphaLabel, CalcTheme.alphaLabel);
       expect(normal.lcdStatusInactive, CalcTheme.lcdStatusInactive);
-      expect(normal.settingsIcon, CalcTheme.settingsIcon);
+      expect(normal.noticeForeground, CalcTheme.noticeForeground);
+      expect(normal.bodyPrint, CalcTheme.bodyPrint);
       for (final c in KeyCategory.values) {
         expect(normal.keyBackground(c), c.background, reason: c.name);
         expect(normal.keyForeground(c), c.foreground, reason: c.name);
@@ -650,8 +649,8 @@ void main() {
       }
     });
 
-    test('설정 아이콘은 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이며, 고대비 각인보다는 덜 띈다', () {
-      final hc = contrastRatio(high.settingsIcon, CalcTheme.bodyBackground);
+    test('화면 안내 글자는 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이며, 고대비 각인보다는 덜 띈다', () {
+      final hc = contrastRatio(high.noticeForeground, CalcTheme.bodyBackground);
       expect(hc, greaterThanOrEqualTo(aaa));
       for (final legend in [high.shiftLabel, high.alphaLabel]) {
         expect(
@@ -663,9 +662,25 @@ void main() {
       expect(
         hc,
         greaterThanOrEqualTo(
-          contrastRatio(normal.settingsIcon, CalcTheme.bodyBackground),
+          contrastRatio(normal.noticeForeground, CalcTheme.bodyBackground),
         ),
       );
+    });
+
+    test('본체 인쇄 글자(원형 버튼 위 SETTING, #190)는 본체 배경 대비 7:1 이상이고 일반 팔레트 이상이다', () {
+      for (final body in [
+        CalcTheme.bodyBackground,
+        CalcTheme.bodyFrame,
+        CalcTheme.bodyBottomGradient,
+      ]) {
+        final hc = contrastRatio(high.bodyPrint, body);
+        expect(hc, greaterThanOrEqualTo(aaa), reason: '$body');
+        expect(
+          hc,
+          greaterThanOrEqualTo(contrastRatio(normal.bodyPrint, body)),
+          reason: '$body',
+        );
+      }
     });
 
     test('LCD 비활성 표시기: 일반보다 진하되(배경 대비) 켜진 표시기 색과는 7:1 이상 떨어진다', () {
@@ -1029,9 +1044,8 @@ void main() {
   });
 
   group('가로형·접힘선 기준 배치 (#142, #25)', () {
-    test('간격 상수: 나란히 놓은 영역 사이 간격은 양수, 설정 버튼 간격은 0 이상', () {
+    test('간격 상수: 손잡이를 바꿔도 같은 자리로 보는 이동 폭은 양수다', () {
       expect(CalcTheme.screenPanelGap, greaterThan(0));
-      expect(CalcTheme.screenSettingsGap, greaterThanOrEqualTo(0));
     });
 
     test(
@@ -1066,19 +1080,6 @@ void main() {
       expect(
         CalcTheme.screenTabletopKeypadMaxAspectRatio,
         greaterThan(CalcTheme.keypadMinAspectRatio),
-      );
-    });
-
-    test('큰 세로 창 띠 늘리기의 키패드 하한 (#141 R1): 가장 넓은 폰의 키패드 최대 높이보다 높다', () {
-      const widestPhoneBody = 440 - 2 * CalcTheme.screenPadding;
-      expect(
-        CalcTheme.screenTopStripFullRowKeypadMinHeight,
-        greaterThan(widestPhoneBody / CalcTheme.keypadMinAspectRatio),
-      );
-      // 늘린 띠의 본체 안 몫은 최소 띠보다 높다.
-      expect(
-        CalcTheme.topStripRowMaxHeight - CalcTheme.screenPadding,
-        greaterThan(CalcTheme.screenTopStripMinHeight),
       );
     });
 
@@ -1142,134 +1143,59 @@ void main() {
       expect(2 * CalcTheme.screenHingeMargin, CalcTheme.screenPanelGap);
     });
 
-    test('설정 버튼은 접근성 권장 터치 대상(48dp) 이상이고 아이콘은 본체 배경 대비 4.5:1 이상이다', () {
+    test('화면 안내 글자는 본체 배경 대비 4.5:1 이상이다', () {
       expect(
-        CalcTheme.settingsButtonSize,
-        greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
-      );
-      expect(
-        contrastRatio(CalcTheme.settingsIcon, CalcTheme.bodyBackground),
+        contrastRatio(CalcTheme.noticeForeground, CalcTheme.bodyBackground),
         greaterThanOrEqualTo(minTextContrast),
       );
     });
+  });
 
-    group('상단 띠 (#41)', () {
-      // 최소 띠에서의 내용 줄 높이 = 본체 위 화면 여백 + 띠 최소 높이
-      const minRow =
-          CalcTheme.screenPadding + CalcTheme.screenTopStripMinHeight;
+  group('원형 버튼 (#190)', () {
+    test('원판은 고리 안에 들고, 결은 밝은 결·어두운 결이 구분되며, 눌림은 원판을 어둡게 한다', () {
+      expect(CalcTheme.roundKeyDiscRatio, inExclusiveRange(0.5, 1));
+      expect(CalcTheme.roundKeySilverStreaks, greaterThanOrEqualTo(2));
+      expect(
+        contrastRatio(
+          CalcTheme.roundKeySilverLight,
+          CalcTheme.roundKeySilverDark,
+        ),
+        greaterThan(1.5),
+      );
+      expect(CalcTheme.roundKeyPressedOverlay.a, greaterThan(0));
+      expect(CalcTheme.roundKeyPressedOverlay.r, 0);
+    });
 
-      test('최소 띠에서도 설정 아이콘(최소 크기 + 위아래 여백)이 내용 줄에 들어간다', () {
-        expect(CalcTheme.screenTopStripMinHeight, greaterThan(0));
+    test('은색 원판은 어두운 고리와 3:1 이상 구분되고, 고리는 본체보다 어둡다', () {
+      for (final silver in [
+        CalcTheme.roundKeySilverLight,
+        CalcTheme.roundKeySilverDark,
+      ]) {
         expect(
-          CalcTheme.settingsIconMinSize + 2 * CalcTheme.topStripIconMargin,
-          lessThanOrEqualTo(minRow),
+          contrastRatio(silver, CalcTheme.roundKeyBezel),
+          greaterThanOrEqualTo(3),
+          reason: '$silver',
         );
-        expect(
-          CalcTheme.settingsIconMinSize,
-          lessThanOrEqualTo(CalcTheme.settingsIconSize),
-        );
-        // 내용 줄은 설정 버튼 터치 영역보다 높아지지 않는다 — 그 이상이면 아이콘이 터치 영역 가운데에 온다.
-        expect(CalcTheme.topStripRowMaxHeight, CalcTheme.settingsButtonSize);
-        expect(
-          CalcTheme.settingsIconSize,
-          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
-        );
-      });
+      }
+      expect(
+        CalcTheme.roundKeyBezel.computeLuminance(),
+        lessThan(CalcTheme.bodyBackground.computeLuminance()),
+      );
+    });
 
-      test('낮은 띠에서 LCD 위로 넓힌 설정 터치 영역은 LCD 안에서 끝난다 (키패드까지 내려가지 않는다)', () {
-        // 최소 띠에서 터치 영역이 LCD 위에 겹치는 높이 = 버튼 − 줄 높이
-        expect(
-          CalcTheme.screenLcdMinHeight,
-          greaterThan(CalcTheme.settingsButtonSize - minRow),
-        );
-      });
-
-      test('간격·여백·반경은 양수다', () {
-        for (final v in [
-          CalcTheme.topStripInset,
-          CalcTheme.topStripGap,
-          CalcTheme.topStripIconMargin,
-          CalcTheme.topStripSolarBorderRadius,
-          CalcTheme.topStripSolarCellGapRatio,
-          CalcTheme.topStripWordmarkMinWidth,
-        ]) {
-          expect(v, greaterThan(0));
-        }
-      });
-
-      test('숨기는 순서: 워드마크는 최소 띠부터, 태양전지는 그보다 높은 줄부터 그린다', () {
-        expect(CalcTheme.topStripWordmarkMinHeight, minRow);
-        expect(
-          CalcTheme.topStripSolarMinHeight,
-          greaterThan(CalcTheme.topStripWordmarkMinHeight),
-        );
-        expect(
-          CalcTheme.topStripSolarMinHeight,
-          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
-        );
-      });
-
-      test('워드마크 글자는 배율 상한을 반영해도 내용 줄 높이 안에 들어간다', () {
-        for (final ratio in [
-          CalcTheme.topStripWordmarkFontRatio,
-          CalcTheme.topStripSolarHeightRatio,
-          CalcTheme.topStripWordmarkMaxWidthRatio,
-        ]) {
-          expect(ratio, inExclusiveRange(0, 1));
-        }
-        expect(
-          CalcTheme.topStripWordmarkFontRatio *
-              CalcTheme.keyMaxTextScaleFactor *
-              CalcTheme.topStripWordmarkStyle.height!,
-          lessThanOrEqualTo(1.0),
-        );
-        expect(
-          CalcTheme.topStripWordmarkMaxFontSize *
-              CalcTheme.keyMaxTextScaleFactor,
-          lessThanOrEqualTo(CalcTheme.topStripRowMaxHeight),
-        );
-        expect(
-          CalcTheme.topStripWordmarkStyle.fontSize,
-          CalcTheme.topStripWordmarkMaxFontSize,
-        );
-      });
-
-      test('가장 좁은 폰(320dp)에도 워드마크 자리와 설정 버튼이 함께 들어간다', () {
-        const row = 320 - 2 * CalcTheme.screenPadding;
-        final wordmark = row * CalcTheme.topStripWordmarkMaxWidthRatio;
-        expect(
-          wordmark,
-          greaterThanOrEqualTo(CalcTheme.topStripWordmarkMinWidth),
-        );
-        expect(
-          CalcTheme.topStripInset +
-              wordmark +
-              CalcTheme.topStripGap +
-              CalcTheme.settingsButtonSize,
-          lessThanOrEqualTo(row),
-        );
-      });
-
-      test('태양전지 장식: 가로로 길고 칸이 2개 이상이며, 칸은 바탕·본체와 구분된다', () {
-        expect(CalcTheme.topStripSolarAspectRatio, greaterThan(1));
-        expect(CalcTheme.topStripSolarCellCount, greaterThanOrEqualTo(2));
-        // 안쪽 여백 2 + 칸 사이 간격(칸 수 − 1)이 장식 폭보다 좁아 칸에 폭이 남는다.
-        expect(
-          (CalcTheme.topStripSolarCellCount + 1) *
-              CalcTheme.topStripSolarCellGapRatio,
-          lessThan(CalcTheme.topStripSolarAspectRatio),
-        );
-        expect(2 * CalcTheme.topStripSolarCellGapRatio, lessThan(1));
-        expect(CalcTheme.solarPanelCell, isNot(CalcTheme.solarPanelBackground));
-        expect(CalcTheme.solarPanelBackground, isNot(CalcTheme.bodyBackground));
-        expect(
-          contrastRatio(
-            CalcTheme.solarPanelCell,
-            CalcTheme.solarPanelBackground,
-          ),
-          greaterThan(1.2),
-        );
-      });
+    test('본체 인쇄 글자 스타일은 각인과 같은 고정폭·줄 높이·자간이다 (키패드 각인 크기 계산을 공유한다)', () {
+      const print = CalcTheme.keyBodyPrintStyle;
+      const shift = CalcTheme.keyShiftLabelStyle;
+      expect(print.fontFamily, shift.fontFamily);
+      expect(print.fontFamilyFallback, shift.fontFamilyFallback);
+      expect(print.height, shift.height);
+      expect(print.letterSpacing, 0);
+      expect(print.fontSize, shift.fontSize);
+      expect(print.color, CalcTheme.bodyPrint);
+      expect(
+        contrastRatio(CalcTheme.bodyPrint, CalcTheme.bodyBackground),
+        greaterThanOrEqualTo(minTextContrast),
+      );
     });
   });
 

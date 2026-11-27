@@ -20,7 +20,6 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_button.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../preview/key_preview_main.dart';
@@ -51,6 +50,9 @@ Future<void> _pumpPreview(
 }
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
+
+/// 설정 키(ON, #190) — 누르면 설정 대화상자가 열린다
+final _settingsKey = _keycap(settingsKey);
 
 Future<void> _press(WidgetTester tester, CalcKeyId id) async {
   await tester.tap(_keycap(id));
@@ -100,7 +102,7 @@ Future<void> _setHandedness(WidgetTester tester, Handedness handedness) async {
     tester.element(find.byType(CalculatorScreen)),
   );
   if (container.read(handednessProvider) == handedness) return;
-  await tester.tap(find.byKey(SettingsButton.buttonKey));
+  await tester.tap(_settingsKey);
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(HandednessDialog.optionKeyOf(handedness)));
   await tester.pumpAndSettle();
@@ -1366,7 +1368,7 @@ void main() {
         outer.inflate(0.01).contains(inner.bottomRight);
 
     Future<void> openSettings(WidgetTester tester) async {
-      await tester.tap(find.byKey(SettingsButton.buttonKey));
+      await tester.tap(_settingsKey);
       await tester.pumpAndSettle();
       expect(dialog, findsOneWidget);
     }
@@ -1562,30 +1564,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CalculatorScreen), findsOneWidget);
     });
-
-    testWidgets('툴팁도 기기 틀 안에 기기 축소 배율로 그려진다', (tester) async {
-      await _pumpPreview(tester);
-      final index = tabletLandscape();
-      await _selectDevice(tester, index);
-      final screen = tester.getRect(_deviceScreen);
-      final scale = screen.width / previewDevices[index].size.width;
-      expect(scale, lessThan(1));
-
-      await tester.longPress(find.byKey(SettingsButton.buttonKey));
-      await tester.pump(const Duration(milliseconds: 100));
-      final tooltip = find.text('Settings');
-      expect(tooltip, findsOneWidget);
-      // 요소 트리상 위치(OverlayPortal 자식은 포털 아래)가 아니라 실제로 그려진 곳으로 판정한다:
-      // 기기 Overlay에 그려지면 기기 틀의 축소가 함께 적용되고, 기기 화면 안에 있다.
-      final drawn = tester.getRect(tooltip);
-      final local = tester.getSize(tooltip);
-      expect(
-        drawn.height / local.height,
-        moreOrLessEquals(scale, epsilon: 1e-6),
-      );
-      expect(inside(screen, drawn), isTrue);
-      await tester.pumpAndSettle(const Duration(seconds: 3));
-    });
   });
 
   group('폴더블 접힘선 주입 (#51)', () {
@@ -1690,15 +1668,11 @@ void main() {
             );
           }
 
-          // 설정 버튼은 LCD 쪽 절반에 있고, 대화상자는 그 절반에 뜨며 접힘선을 넘지 않는다.
-          final button = toScreen(
-            tester,
-            device,
-            tester.getRect(find.byKey(SettingsButton.buttonKey)),
-          );
-          final buttonOnLeft = handedness == Handedness.right;
+          // 설정 키(ON, #190)는 키패드 쪽 절반에 있고, 대화상자는 그 절반에 뜨며 접힘선을 넘지 않는다.
+          final button = toScreen(tester, device, tester.getRect(_settingsKey));
+          final buttonOnLeft = handedness == Handedness.left;
           expect(button.center.dx < hingeX, buttonOnLeft);
-          await tester.tap(find.byKey(SettingsButton.buttonKey));
+          await tester.tap(_settingsKey);
           await tester.pumpAndSettle();
           final card = cardRect(tester, device);
           if (buttonOnLeft) {
@@ -1772,8 +1746,7 @@ void main() {
       final index = foldInner();
       final device = previewDevices[index];
       await _selectDevice(tester, index);
-      // 접힘선 기준 배치에서만 보이는 설정 버튼이 있다.
-      expect(find.byKey(SettingsButton.buttonKey), findsOneWidget);
+      expect(_settingsKey, findsOneWidget);
       expect(
         overlay(tester).foregroundPainter,
         isA<PreviewDisplayFeaturePainter>(),
@@ -2120,10 +2093,17 @@ void main() {
                       reason: reason,
                     );
                   }
-                  final settings = find.byKey(SettingsButton.buttonKey);
+                  // 설정 키(ON, #190)는 어느 배치에서나 키패드 안에 있다.
+                  final s = rectOf(_settingsKey);
+                  expect(
+                    keypad.inflate(e).contains(s.topLeft) &&
+                        keypad.inflate(e).contains(s.bottomRight),
+                    isTrue,
+                    reason: '$reason 설정 키 $s',
+                  );
                   switch (arrangement) {
                     case ScreenArrangement.hingeSplit:
-                      // 키패드는 주로 쓰는 손 쪽 절반, LCD는 다른 절반. 설정 버튼도 접힘선을 넘지 않는다.
+                      // 키패드는 주로 쓰는 손 쪽 절반, LCD는 다른 절반.
                       final x = hinge.left;
                       final onRight = h == Handedness.right;
                       expect(
@@ -2135,12 +2115,6 @@ void main() {
                         onRight ? lcd.right : keypad.right,
                         lessThanOrEqualTo(x + e),
                         reason: reason,
-                      );
-                      final s = rectOf(settings);
-                      expect(
-                        s.right <= x + e || s.left >= x - e,
-                        isTrue,
-                        reason: '$reason 설정 버튼 $s',
                       );
                     case ScreenArrangement.hingeStacked:
                       // 위 절반 LCD, 아래 절반 키패드(주로 쓰는 손 쪽). 키 터치 하한 때문에 위아래 배치로
@@ -2156,12 +2130,6 @@ void main() {
                         greaterThanOrEqualTo(y - e),
                         reason: reason,
                       );
-                      final s = rectOf(settings);
-                      expect(
-                        s.bottom <= y + e || s.top >= y - e,
-                        isTrue,
-                        reason: '$reason 설정 버튼 $s',
-                      );
                       // 키패드는 주로 쓰는 손 쪽 가장자리(인셋·화면 여백 안쪽)에 붙는다. 폭이 좁은 화면(Flip
                       // 내부, #104)은 키패드가 아래 절반 폭을 다 써서 양쪽 가장자리에 모두 닿는다.
                       final edge = h == Handedness.right
@@ -2174,30 +2142,16 @@ void main() {
                         moreOrLessEquals(edge, epsilon: e),
                         reason: reason,
                       );
-                      // 설정 버튼은 반대쪽 가장자리 — 손잡이를 바꾸면 키패드가 움직이지 않는 Flip에서도 버튼은 옮겨 간다.
-                      final opposite = h == Handedness.right
-                          ? posed.padding.left + CalcTheme.screenPadding
-                          : posed.size.width -
-                                posed.padding.right -
-                                CalcTheme.screenPadding;
-                      expect(
-                        h == Handedness.right ? s.left : s.right,
-                        moreOrLessEquals(opposite, epsilon: e),
-                        reason: '$reason 설정 버튼 $s',
-                      );
                     case ScreenArrangement.stacked:
-                      // 접힘선을 배치에 쓰지 않는다: 위 LCD·아래 키패드가 본체 폭을 다 쓰고, 설정 버튼은
-                      // LCD 위 상단 띠의 오른쪽 끝에 있다 (#41).
+                      // 접힘선을 배치에 쓰지 않는다: 위 LCD·아래 키패드가 본체 폭을 다 쓴다.
                       expect(
                         lcd.bottom,
                         lessThanOrEqualTo(keypad.top + e),
                         reason: reason,
                       );
                       expect(keypad.top, lessThan(hinge.top), reason: reason);
-                      final s = rectOf(settings);
-                      expect(s.top, lessThan(lcd.top), reason: reason);
                       expect(
-                        s.right,
+                        keypad.right,
                         moreOrLessEquals(lcd.right, epsilon: e),
                         reason: reason,
                       );
@@ -2655,7 +2609,7 @@ void main() {
         expect(find.bySemanticsLabel('초기화'), findsOneWidget);
         expect(find.bySemanticsLabel('Shift'), findsOneWidget);
 
-        await tester.tap(find.byKey(SettingsButton.buttonKey));
+        await tester.tap(_settingsKey);
         await tester.pumpAndSettle();
         expect(find.bySemanticsLabel('초기화'), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp('Keypad position')), findsWidgets);

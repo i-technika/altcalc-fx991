@@ -26,15 +26,12 @@ abstract class SettingsStrings {
   static SettingsStrings of(BuildContext context) =>
       forLocale(DeviceLocaleScope.of(context));
 
-  /// 설정 버튼 이름 (툴팁·스크린리더)
-  String get settingsButton;
-
   /// 키패드 위치(손잡이) 선택 대화상자 제목
   String get handednessTitle;
 
-  /// 지금 화면에서는 키패드 위치가 바뀌지 않는다는 안내 (#41) — 설정 버튼이 폰에도 보이므로 손잡이를 골라도
+  /// 지금 화면에서는 키패드 위치가 바뀌지 않는다는 안내 (#41) — 설정(ON 키, #190)은 폰에서도 열리므로 손잡이를 골라도
   /// 키패드가 그대로인 이유를 알린다. 위아래 배치(키패드 가운데)와, 키패드가 아래 절반 폭을 다 쓰는 테이블톱(#80 —
-  /// 그때도 설정 버튼, 폭 상한에 걸린 LCD는 좌우로 옮겨 간다)에서 보인다. 기기 종류가 아니라 숫자 키를 한쪽 가장자리에
+  /// 그때도 폭 상한에 걸린 LCD는 좌우로 옮겨 간다)에서 보인다. 기기 종류가 아니라 숫자 키를 한쪽 가장자리에
   /// 두는지로 말한다: 같은 폴더블도 펼친 방향·접은 정도에 따라 배치가 다르다. 적용되는 화면의 예는 가로형(#142 — 숫자부와
   /// 활성 LCD가 손 쪽으로 옮겨 간다)이다. "키패드 위치" 대신 "키 배치"로 말한다(#142 R1) — 넓은 배열 테이블톱(#80)은 숫자
   /// 키가 이미 오른쪽 가장자리에 있어 "가장자리에 두는 화면에서 적용"이라고 하면 화면과 어긋난다.
@@ -58,9 +55,6 @@ abstract class SettingsStrings {
 /// 한국어 설정 문구
 class KoSettingsStrings extends SettingsStrings {
   const KoSettingsStrings();
-
-  @override
-  String get settingsButton => '설정';
 
   @override
   String get handednessTitle => '키패드 위치';
@@ -92,9 +86,6 @@ class KoSettingsStrings extends SettingsStrings {
 /// 영어 설정 문구
 class EnSettingsStrings extends SettingsStrings {
   const EnSettingsStrings();
-
-  @override
-  String get settingsButton => 'Settings';
 
   @override
   String get handednessTitle => 'Keypad position';

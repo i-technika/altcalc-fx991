@@ -167,7 +167,7 @@ enum KeyCategory {
   /// 커서 패드 방향 (▲, ▼, ◄, ►)
   cursor,
 
-  /// ON 키
+  /// ON 키 — 이 앱에서는 앱 설정 키다 ([settingsKey], #190)
   on,
 
   /// MENU(모드 선택) 키
@@ -177,6 +177,16 @@ enum KeyCategory {
 // ═══════════════════════════════════════════════════════════════
 // 키 정의 모델
 // ═══════════════════════════════════════════════════════════════
+
+/// 키를 그리는 모양 (#190).
+enum KeyFace {
+  /// 둥근 사각형 키캡 — 메인 각인은 키캡 면에, SHIFT·ALPHA 각인은 키캡 위 본체에 있다.
+  keycap,
+
+  /// 실물 SHIFT·ALPHA·MENU·ON처럼 작은 원형 은색 버튼 — 버튼 면에는 글자가 없고, 메인 각인은 버튼 위 본체에
+  /// 인쇄돼 있다(Quick Start Guide 1쪽 제품 사진). 지금은 ON 키만 쓴다 — SHIFT·ALPHA·MENU는 #156에서 바꾼다.
+  roundButton,
+}
 
 /// 단일 키의 3단 각인(메인·SHIFT·ALPHA) 및 카테고리를 정의하는 불변 모델.
 @immutable
@@ -196,12 +206,16 @@ class CalcKeyDef {
   /// 키 시각적 카테고리 (색상 테마 결정)
   final KeyCategory category;
 
+  /// 키 모양 — [KeyFace.roundButton]이면 메인 각인을 버튼 면이 아니라 버튼 위 본체(각인 띠)에 인쇄한다.
+  final KeyFace face;
+
   const CalcKeyDef({
     required this.id,
     required this.mainLegend,
     this.shiftLegend,
     this.alphaLegend,
     required this.category,
+    this.face = KeyFace.keycap,
   });
 
   /// 메인 각인의 한 줄 표기 ([KeyLegend.plainText] — 화면 각인에는 쓰지 않는다)
@@ -377,10 +391,13 @@ const List<List<CalcKeyDef>> controlRightRows = [
       shiftLegend: LegendText('SETUP'),
       category: KeyCategory.menu,
     ),
+    // 실물은 버튼 위 본체에 흰 `ON`이 인쇄된 작은 원형 은색 버튼이다. 이 앱에는 전원이 없어 ON을 설정 키로 쓰고
+    // (#190, 사용자 결정), 같은 자리에 `SETTING`을 인쇄한다 — [settingsKey].
     CalcKeyDef(
       id: CalcKeyId.on,
-      mainLegend: LegendText('ON'),
+      mainLegend: LegendText('SETTING'),
       category: KeyCategory.on,
+      face: KeyFace.roundButton,
     ),
   ],
   [
@@ -616,10 +633,12 @@ const List<List<CalcKeyDef>> numberRows = [
       alphaLegend: LegendText('UNDO'),
       category: KeyCategory.del,
     ),
+    // 실물의 SHIFT 각인 `OFF`(전원 끄기)는 뺐다 — 이 앱에는 전원이 없다(#190). 기능 없는 각인을 남기면 누를 수
+    // 있는 것처럼 보이므로, ON 각인을 `SETTING`으로 바꾼 것과 같은 이유로 지운다. SHIFT + AC는 기능 없는 층이라
+    // 아무것도 입력하지 않는다.
     CalcKeyDef(
       id: CalcKeyId.ac,
       mainLegend: LegendText('AC'),
-      shiftLegend: LegendText('OFF'),
       category: KeyCategory.ac,
     ),
   ],
@@ -743,6 +762,11 @@ List<CalcKeyDef> _buildAllKeys() {
     for (final row in numberRows) ...row,
   ]);
 }
+
+/// 앱 설정을 여는 키 (#190, 사용자 결정) — 실물 ON 키 자리다. 이 앱에는 전원이 없으므로 ON 키를 누르면
+/// 계산기 입력 대신 설정이 열린다(`CalculatorScreen`). 계산기 상태 머신은 이 키를 입력으로 받지 않는다
+/// (`CalcState.pressKey` — 모디파이어 대기만 푼다).
+const CalcKeyId settingsKey = CalcKeyId.on;
 
 /// 길게 누르면 반복 입력되는 키 (커서 패드 4방향, DEL).
 const Set<CalcKeyId> autoRepeatKeys = {

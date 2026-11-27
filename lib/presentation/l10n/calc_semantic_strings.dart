@@ -205,7 +205,8 @@ const Map<CalcKeyId, KeySpeech> _koKeys = {
   CalcKeyId.shift: KeySpeech('시프트'),
   CalcKeyId.alpha: KeySpeech('알파'),
   CalcKeyId.menu: KeySpeech('메뉴', shift: '설정'),
-  CalcKeyId.on: KeySpeech('전원 켜기'),
+  // ON 키는 앱 설정 키다 (#190) — 각인 `SETTING`
+  CalcKeyId.on: KeySpeech('설정'),
   CalcKeyId.optn: KeySpeech('옵션', shift: 'QR 코드'),
   CalcKeyId.calc: KeySpeech('변수 대입 계산', shift: '방정식 풀기', alpha: '등호 입력'),
   CalcKeyId.integral: KeySpeech('정적분', shift: '미분계수', alpha: '콜론'),
@@ -249,7 +250,7 @@ const Map<CalcKeyId, KeySpeech> _koKeys = {
   CalcKeyId.num8: KeySpeech('8', shift: '단위 변환'),
   CalcKeyId.num9: KeySpeech('9', shift: '초기화'),
   CalcKeyId.del: KeySpeech('지우기', shift: '삽입', alpha: '실행 취소'),
-  CalcKeyId.ac: KeySpeech('모두 지우기', shift: '전원 끄기'),
+  CalcKeyId.ac: KeySpeech('모두 지우기'),
   CalcKeyId.num4: KeySpeech('4'),
   CalcKeyId.num5: KeySpeech('5'),
   CalcKeyId.num6: KeySpeech('6'),
@@ -334,7 +335,8 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   CalcKeyId.shift: KeySpeech('Shift'),
   CalcKeyId.alpha: KeySpeech('Alpha'),
   CalcKeyId.menu: KeySpeech('Menu', shift: 'Setup'),
-  CalcKeyId.on: KeySpeech('Power on'),
+  // The ON key opens the app settings (#190) — printed `SETTING`
+  CalcKeyId.on: KeySpeech('Settings'),
   CalcKeyId.optn: KeySpeech('Options', shift: 'QR code'),
   CalcKeyId.calc: KeySpeech(
     'Calculate with variables',
@@ -410,7 +412,7 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   CalcKeyId.num8: KeySpeech('8', shift: 'Unit conversion'),
   CalcKeyId.num9: KeySpeech('9', shift: 'Reset'),
   CalcKeyId.del: KeySpeech('Delete', shift: 'Insert', alpha: 'Undo'),
-  CalcKeyId.ac: KeySpeech('All clear', shift: 'Power off'),
+  CalcKeyId.ac: KeySpeech('All clear'),
   CalcKeyId.num4: KeySpeech('4'),
   CalcKeyId.num5: KeySpeech('5'),
   CalcKeyId.num6: KeySpeech('6'),

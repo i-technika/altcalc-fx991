@@ -139,11 +139,14 @@ void main() {
           final reason = '${modifier.name} + ${def.id.name}';
           expect(next.modifier, KeyModifier.none, reason: reason);
 
-          final expectedLabel = switch (modifier) {
-            KeyModifier.none => def.mainLabel,
-            KeyModifier.shift => def.shiftLabel,
-            KeyModifier.alpha => def.alphaLabel,
-          };
+          // 설정 키(ON)는 계산기 입력이 아니다 (#190) — 기능 없는 층처럼 대기만 푼다.
+          final expectedLabel = def.id == settingsKey
+              ? null
+              : switch (modifier) {
+                  KeyModifier.none => def.mainLabel,
+                  KeyModifier.shift => def.shiftLabel,
+                  KeyModifier.alpha => def.alphaLabel,
+                };
           if (expectedLabel == null) {
             expect(next.inputCount, 0, reason: reason);
             expect(next.lastInput, isNull, reason: reason);
@@ -155,6 +158,40 @@ void main() {
           }
         }
       }
+    });
+  });
+
+  group('설정 키 (#190)', () {
+    test('ON(설정 키)은 입력이 아니다: 대기·반복 대상만 풀고 마지막 입력·입력 수는 그대로다', () {
+      final typed = _press([CalcKeyId.num7]);
+      for (final modifier in KeyModifier.values) {
+        final from = CalcState(
+          modifier: modifier,
+          lastInput: typed.lastInput,
+          inputCount: typed.inputCount,
+          repeatableKey: CalcKeyId.del,
+        );
+        final next = from.pressKey(settingsKey);
+        expect(next.modifier, KeyModifier.none, reason: modifier.name);
+        expect(next.lastInput, typed.lastInput, reason: modifier.name);
+        expect(next.inputCount, typed.inputCount, reason: modifier.name);
+        expect(next.repeatableKey, isNull, reason: modifier.name);
+      }
+      expect(settingsKey, CalcKeyId.on);
+    });
+
+    test('ON(설정 키)으로 입력을 만들 수 없다', () {
+      expect(
+        () => KeyInput(settingsKey, KeyLayer.main),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('SHIFT + AC(실물 OFF)는 기능 없는 층이라 아무것도 입력하지 않는다', () {
+      final next = _press([CalcKeyId.shift, CalcKeyId.ac]);
+      expect(next.modifier, KeyModifier.none);
+      expect(next.inputCount, 0);
+      expect(next.lastInput, isNull);
     });
   });
 
