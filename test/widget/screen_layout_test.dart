@@ -1595,19 +1595,24 @@ void _hingeLayoutTests() {
     // 펼친 폭 0 가로 접힘선도 앱이 나누므로(#143) 대화상자도 설정 키(ON)가 있는 아래 절반에 가둔다 — Flutter는 펼친 폭 0
     // 접힘선을 나누지 않으므로 앱이 한 번 더 나눈다(`SettingsLauncher`). Fold 가로는 두 절반 모두 대화상자 최소 높이(328)에
     // 못 미쳐 설정 키 쪽 절반 그대로다(반 접힘과 같다).
-    for (final (name, size, hingeY) in [
-      ('Flip 내부', const Size(411, 1006), 503.0),
-      ('Fold 가로', const Size(841, 673), 336.5),
+    for (final (name, size, hingeY, textScale) in [
+      ('Flip 내부', const Size(411, 1006), 503.0, 1.0),
+      ('Fold 가로', const Size(841, 673), 336.5, 1.0),
+      // 아래 절반 312.5dp(인셋 제외) — 카드 높이 약 264dp에서 큰 글자 배율에도 넘치지 않는다
+      ('Fold 가로·글자 배율 2.0', const Size(841, 673), 336.5, 2.0),
     ]) {
       testWidgets('펼친 폭 0 가로 접힘선($name): 앱처럼 나눠 대화상자가 아래 절반에 뜬다 (#143)', (
         tester,
       ) async {
         const padding = EdgeInsets.only(top: 24, bottom: 24);
         _setViewPadding(tester, padding);
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         await _pump(
           tester,
           size: size,
           padding: padding,
+          textScale: textScale,
           displayFeatures: [_foldAt(Rect.fromLTWH(0, hingeY, size.width, 0))],
         );
         expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
@@ -2740,10 +2745,10 @@ void _hingeLayoutTests() {
         for (final h in Handedness.values) {
           final l = CalcHingeSplitLayout.of(body, hinge, h);
           final reason = '$body $hinge $h $l';
-          expectSane(body, [l.lcd, l.keypad, l.history], reason);
+          expectSane(body, [l.lcd, l.keypad, ?l.history], reason);
           final hingeInBody = hinge.left >= 0 && hinge.right <= body.width;
           if (hingeInBody) {
-            for (final r in [l.lcd, l.keypad, l.history]) {
+            for (final r in [l.lcd, l.keypad, ?l.history]) {
               if (r.isEmpty) continue;
               expect(
                 _clearOfHinge(r, hinge, vertical: true),
@@ -2820,6 +2825,70 @@ void _hingeLayoutTests() {
       );
     });
 
+    test('세로 접힘선: 손 쪽 패널이 짧으면 활성 LCD를 반대쪽 패널 맨 위로 옮긴다 (#143 R1)', () {
+      // 640×360(상태바 24) 본체 624×320, 접힘선 x=312: 손 쪽 패널 304×320 — 세로형 키 17.0dp < 일반 하한 28dp.
+      const body = Size(624, 320);
+      const hinge = Rect.fromLTWH(312, 0, 0, 320);
+      for (final h in Handedness.values) {
+        final l = CalcHingeSplitLayout.of(body, hinge, h);
+        final reason = '$h $l';
+        expect(l.shortHandPanel, isTrue, reason: reason);
+        final other = h.keypadOnRight
+            ? const Rect.fromLTRB(0, 0, 304, 320)
+            : const Rect.fromLTRB(320, 0, 624, 320);
+        // 활성 LCD는 반대쪽 패널 맨 위 폭 전체(304 / 1.75 = 173.7), 그 아래 기록(138.3 ≥ 112)
+        expect(
+          l.lcd,
+          rectMoreOrLessEquals(Rect.fromLTWH(other.left, 0, 304, 304 / 1.75)),
+          reason: reason,
+        );
+        expect(
+          l.history,
+          rectMoreOrLessEquals(
+            Rect.fromLTRB(other.left, 304 / 1.75 + 8, other.right, 320),
+          ),
+          reason: reason,
+        );
+        // 키패드는 손 쪽 패널 높이 전체(폭에 묶이지 않는다)
+        expect(l.keypad.height, moreOrLessEquals(320), reason: reason);
+        expect(l.keypad.width, moreOrLessEquals(304), reason: reason);
+        expect(
+          KeypadMetrics.minKeyTouchHeightOf(
+            l.keypad.size,
+            KeypadArrangement.standard,
+          ),
+          moreOrLessEquals(27.2, epsilon: 0.05),
+        );
+      }
+      // 키 크기가 일반 하한 이상인 키 큰 패널은 세로형 그대로(Fold 내부 세로 본체 657×801)
+      expect(
+        CalcHingeSplitLayout.of(
+          const Size(657, 801),
+          const Rect.fromLTWH(328.5, 0, 0, 801),
+          Handedness.right,
+        ).shortHandPanel,
+        isFalse,
+      );
+      // 손 쪽 패널이 폭에 묶여 키가 커지지 않는 창(접힘선이 치우침 — 손 쪽 패널 184×769)은 세로형 그대로
+      expect(
+        CalcHingeSplitLayout.of(
+          const Size(657, 769),
+          const Rect.fromLTWH(192, 0, 0, 769),
+          Handedness.left,
+        ).shortHandPanel,
+        isFalse,
+      );
+      // 반대쪽 패널이 304dp보다 좁으면 LCD를 옮기지 않는다(본체 600×328, 접힘선 x=290: 반대쪽 패널 282dp)
+      expect(
+        CalcHingeSplitLayout.of(
+          const Size(600, 328),
+          const Rect.fromLTWH(290, 0, 0, 328),
+          Handedness.right,
+        ).shortHandPanel,
+        isFalse,
+      );
+    });
+
     test('세로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
         Size(double.nan, double.nan),
@@ -2831,7 +2900,7 @@ void _hingeLayoutTests() {
           const Rect.fromLTWH(double.nan, 0, 0, 500),
           Handedness.right,
         );
-        for (final r in [l.lcd, l.keypad, l.history]) {
+        for (final r in [l.lcd, l.keypad, ?l.history]) {
           expect(
             [
               r.left,
@@ -2853,7 +2922,7 @@ void _hingeLayoutTests() {
       final l = CalcHingeSplitLayout.of(body, hinge, Handedness.left);
       expect(l.lcd, mirrorIn(body, r.lcd));
       expect(l.keypad, mirrorIn(body, r.keypad));
-      expect(l.history, mirrorIn(body, r.history));
+      expect(l.history, mirrorIn(body, r.history!));
     });
 
     test('가로 접힘선: 본체 안, 겹침 없음, 접힘선 띠에 걸치지 않음 (극단 크기 포함)', () {

@@ -342,11 +342,12 @@ void main() {
 
   group('접힘선이 있는 짧은 창 (#38 R1)', () {
     // 세로 접힘선: 접힘선 기준 배치(책 자세)는 키가 쓸 수 있는 크기(16dp) 이상이면 일반 하한(28dp) 미만이어도 쓴다(#143 —
-    // 접힘선은 언제나 경계다). 손 쪽 패널이 세로형이라 짧은 창에서는 LCD 최소 높이가 패널 높이를 먼저 가져가, 키가 위아래
-    // 배치와 같다(둘 다 높이에 묶인다). #143 전에는 LCD가 반대쪽 절반에 있어 키가 패널 높이를 다 썼다(640×360: 27.2dp).
+    // 접힘선은 언제나 경계다). 손 쪽 패널이 짧아 세로형의 키가 일반 하한 미만이면 활성 LCD를 반대쪽 패널로 옮겨 키패드가
+    // 패널 높이를 다 쓴다(#143 R1 사용자 결정) — 세로형 그대로면 LCD 최소 높이가 패널 높이를 먼저 가져가 키가 위아래 배치와
+    // 같았다(640×360: 17.0dp, 700×392: 17.7dp).
     for (final (size, padding, hingeX, touch) in const [
-      (Size(640, 360), EdgeInsets.only(top: 24), 320.0, 17.0),
-      (Size(700, 392), EdgeInsets.only(top: 24, bottom: 24), 350.0, 17.68),
+      (Size(640, 360), EdgeInsets.only(top: 24), 320.0, 27.2),
+      (Size(700, 392), EdgeInsets.only(top: 24, bottom: 24), 350.0, 27.88),
     ]) {
       for (final handedness in Handedness.values) {
         testWidgets(
@@ -383,7 +384,20 @@ void main() {
             expect(drawnTouch, moreOrLessEquals(touch, epsilon: 0.01));
             expect(
               drawnTouch,
-              moreOrLessEquals(_stackedTouchOf(_bodyOf(size, padding))),
+              greaterThan(_stackedTouchOf(_bodyOf(size, padding))),
+            );
+            // 활성 LCD는 반대쪽 패널 맨 위(본체 윗변)다.
+            final lcd = tester.getRect(_lcd);
+            expect(
+              lcd.top,
+              moreOrLessEquals(padding.top + CalcTheme.screenPadding),
+            );
+            expect(
+              handedness.keypadOnRight
+                  ? lcd.right <= hingeX
+                  : lcd.left >= hingeX,
+              isTrue,
+              reason: '$lcd',
             );
             // LCD·키패드·설정 키 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 키패드는 손 쪽 절반이다.
             const m = CalcTheme.screenHingeMargin - 0.01;
@@ -408,6 +422,45 @@ void main() {
           },
         );
       }
+    }
+
+    // #143 R1: 세로 접힘선이 있는 창도 높이를 키울 때 키가 크게 튀지 않는다. 책 자세가 쓸 수 있는 크기(16dp) 경계에서
+    // 가로형(접힘선을 가로지름)과 바뀌던 것은 손 쪽 패널이 짧으면 LCD를 반대쪽 패널로 옮겨 없앴다(841×350 → 355: 31.6 → 16.2dp).
+    // 남는 경계는 세로형으로 돌아오는 일반 하한(28dp) 근처다 — 그 아래로는 줄지 않는다.
+    for (final width in [640.0, 841.0]) {
+      testWidgets('세로 접힘선 창 폭 $width: 높이를 키울 때 키가 일반 하한 아래로 튀지 않는다 (#143 R1)', (
+        tester,
+      ) async {
+        const padding = EdgeInsets.only(top: 28);
+        double? previous;
+        for (var height = 300.0; height <= 700; height += 5) {
+          final size = Size(width, height);
+          await _pump(
+            tester,
+            size: size,
+            padding: padding,
+            displayFeatures: [
+              DisplayFeature(
+                bounds: Rect.fromLTWH(width / 2, 0, 0, height),
+                type: DisplayFeatureType.fold,
+                state: DisplayFeatureState.postureFlat,
+              ),
+            ],
+          );
+          expect(tester.takeException(), isNull, reason: '$size');
+          final touch = _lowestDrawnTouch(tester);
+          final p = previous;
+          if (p != null && touch < p) {
+            // 줄어드는 것은 일반 하한 근처에서 세로형으로 돌아올 때뿐이고, 하한 아래로는 줄지 않는다.
+            expect(
+              touch,
+              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor - 0.01),
+              reason: '$size $p → $touch',
+            );
+          }
+          previous = touch;
+        }
+      });
     }
 
     testWidgets('접힘선 기준 배치를 쓰지 않는 가로 접힘선이어도 짧은 창이면 가로형과 비교한다', (tester) async {

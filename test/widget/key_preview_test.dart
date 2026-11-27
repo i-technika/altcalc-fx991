@@ -454,7 +454,7 @@ void main() {
     test(
       '화면 특징: 모든 자세·방향에서 영역은 유한하고 화면 안이며, 접힘선은 화면을 끝까지 가로질러 앱이 접힘선으로 인식한다',
       () {
-        // 배치에 쓰이지 않는 접힘선(펼친 가로 접힘선)도 앱은 접힘선으로 인식한다 — 배치에 쓸지는
+        // 배치에 쓰이지 않는 접힘선(트라이폴드의 두 접힘선)도 앱은 접힘선으로 인식한다 — 배치에 쓸지는
         // 아래 "자세·방향 조합마다 기대 배치" 표가 정한다. 일부러 인식되지 않게 만든 접힘선은 프리셋에 없다.
         for (final d in previewDevices.expand(_posesOf)) {
           final screen = Offset.zero & d.size;
@@ -762,8 +762,8 @@ void main() {
 
     test('폴더블 자세·방향 조합마다 기대 배치 (배치에 쓰지 않는 접힘선은 명시)', () {
       // (프리셋, 자세, 방향) → (기대 배치, 접힘선을 배치에 쓰는지)
-      // 펼친 가로 접힘선은 앱이 접힘선으로 인식하지만(hingeOf) 배치를 나누지 않는다 — 미리보기에는 회색 점선과
-      // 캡션 `(배치에 안 씀)`으로 나온다.
+      // 트라이폴드의 두 접힘선은 앱이 접힘선으로 인식하지만(crossingHingesOf) 배치를 나누지 않는다 — 미리보기에는 회색
+      // 점선과 캡션 `(배치에 안 씀)`으로 나온다. 펼친 가로 접힘선도 #143부터 배치에 쓴다.
       final expected = _foldPoseExpectations;
       final combos = <_Pose>{
         for (final d in previewDevices.where((d) => d.foldable))
@@ -838,7 +838,7 @@ void main() {
       expect(expected.values.where((e) => !e.usesHinge), isNotEmpty);
     });
 
-    // 배치에 쓰는 접힘선은 주황, 쓰지 않는 접힘선(펼친 가로 접힘선)은 회색 점선으로 그린다.
+    // 배치에 쓰는 접힘선은 주황, 쓰지 않는 접힘선(트라이폴드의 두 접힘선)은 회색 점선으로 그린다.
     for (final MapEntry(key: pose, value: e) in _foldPoseExpectations.entries) {
       testWidgets('${_poseName(pose)}: 접힘선 점선 색', (tester) async {
         tester.view.physicalSize = e.size * tester.view.devicePixelRatio;

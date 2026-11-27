@@ -164,9 +164,8 @@ void main() {
             );
             expect(tester.takeException(), isNull);
             expect(find.byType(CalcKeyButton), findsNWidgets(totalKeyCount));
-            // 펼침(postureFlat) 조합은 접힘선을 무시하지 않던 예전 규칙(첫 접힘선만 씀)으로도 위아래 배치가 된다 —
-            // 펼친 폭 0 가로 접힘선은 나누지 않기 때문이다. 이 테스트가 #144 회귀를 가르는 것은 반 접힘 조합(예전
-            // 규칙이면 테이블톱)이고, 펼침 조합의 판정은 `form_factor_test`가 `picksFormByKeySize`로 확인한다.
+            // 접힘선을 무시하지 않던 예전 규칙(첫 접힘선만 씀)이면 펼침·반 접힘 모두 가로 접힘선 기준 배치가 된다(#143부터
+            // 가로 접힘선은 자세와 무관하게 나눈다) — 그래서 두 자세 조합 모두 #144 회귀를 가른다.
             expect(drawnArrangementOf(tester), DrawnArrangement.stacked);
             final r = _rects(tester);
             expect(r.lcd, free.lcd);

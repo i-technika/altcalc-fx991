@@ -292,6 +292,33 @@ class CalcLandscapeLayout {
   );
 }
 
+/// 패널 [panel](본체 좌표) 맨 위에 패널 폭 전체 활성 LCD를 두고 그 아래에 계산 기록 영역을 둔다 (#143) — 가로 접힘선 실물
+/// 배열의 위 패널(Flip 내부)과, 손 쪽 패널이 짧은 책 자세의 반대쪽 패널이 같이 쓴다.
+/// - 활성 LCD 높이는 패널 폭의 최대 높이([_lcdMaxHeightOf], 하한 [CalcTheme.screenLcdMinHeight])까지다.
+/// - 그 아래 [CalcTheme.screenLcdHistoryGap]을 두고 패널 끝까지 기록 영역이다. 기록이
+///   [CalcTheme.screenHistoryBelowLcdMinHeight]보다 낮아지면 두지 않고, 활성 LCD가 패널을 줄 글자 상한 높이
+///   ([_lcdAbsorbMaxHeight])까지 쓴다(세로형처럼).
+({Rect lcd, Rect? history}) _lcdOverHistory(Rect panel) {
+  final lcdHeight = math.min(
+    panel.height,
+    math.max(CalcTheme.screenLcdMinHeight, _lcdMaxHeightOf(panel.width)),
+  );
+  final historyTop = panel.top + lcdHeight + CalcTheme.screenLcdHistoryGap;
+  final withHistory =
+      panel.bottom - historyTop >= CalcTheme.screenHistoryBelowLcdMinHeight;
+  return (
+    lcd: Rect.fromLTWH(
+      panel.left,
+      panel.top,
+      panel.width,
+      withHistory ? lcdHeight : math.min(panel.height, _lcdAbsorbMaxHeight),
+    ),
+    history: withHistory
+        ? Rect.fromLTRB(panel.left, historyTop, panel.right, panel.bottom)
+        : null,
+  );
+}
+
 /// 접힘선 기준 배치 후보 하나 ([CalcHingeSplitLayout]·[CalcTabletopLayout]을 화면이 같은 모양으로 다룬다)
 typedef _HingeRegions = ({
   Rect lcd,
@@ -315,28 +342,49 @@ typedef _HingeRegions = ({
 ///  └────────────────────┆┴─────────────────────┘┘ ← 본체 아래
 ///  └── 반대쪽 패널 ─────┘ 접힘선 └─ 손 쪽 패널 ──┘
 /// ```
+/// 손 쪽 패널이 짧은 창 (분할 화면 등 — [shortHandPanel]):
+/// ```
+///  ┌────────────────────┆──────────────────────┐
+///  │      활성 LCD       ┆│                     ││
+///  ├────────────────────┆│   50키 키패드        ││
+///  │  계산 기록 (있으면)  ┆│   (패널 높이 전체)    ││
+///  └────────────────────┆┴─────────────────────┘┘
+/// ```
 /// - 접힘선([hinge], 본체 좌표) 양쪽에 [CalcTheme.screenHingeMargin]씩 비운다. 주로 쓰는 손 쪽 패널이 손 쪽 패널, 다른
 ///   쪽이 반대쪽 패널이다.
 /// - 손 쪽 패널은 세로형([CalcScreenLayout], #141)을 그 패널 크기로 그대로 쓴다 — 위에 활성 LCD, 아래에 실물 배열 키패드,
 ///   둘 다 패널 폭 전체. 그래서 폰(커버 화면)과 키 위치가 같다. 설정 키(ON)도 키패드 안에 있다(#190). 세로형처럼 키패드가
 ///   세로 한계에 닿아 남는 높이는 LCD가 줄 글자 상한 높이까지 받고, 그래도 남으면 LCD 위가 빈다.
 /// - 반대쪽 패널은 높이 전체가 계산 기록 영역이다(`HistoryPanel`, 내용은 #145).
+/// - 손 쪽 패널이 짧아(#143 R1, 2026-11-27 사용자 결정) 세로형의 가장 낮은 키가 일반 하한([CalcTheme.keyTouchHeightFloor])보다
+///   낮고, 키패드가 패널 높이를 다 쓰면 키가 더 커지는 창은 활성 LCD를 반대쪽 패널 맨 위로 옮긴다([_lcdOverHistory] — 그 아래
+///   기록). 키패드는 손 쪽 패널에서 [KeypadMetrics.fitSize]로 맞춰 본체 아래에 붙인다. 세로형은 LCD 최소 높이(112dp)가 짧은
+///   패널 높이를 먼저 가져가 키가 위아래 배치와 같아지고(841×355: 16.2dp), 접힘선을 가로지르는 가로형(31.6dp)과 키 크기가
+///   크게 튀었다 — 옮기면 접힘선을 넘지 않고 키가 커진다. 패널 폭에 묶여 키가 커지지 않는 창(접힘선이 치우쳐 손 쪽 패널이
+///   좁은 창)과, 반대쪽 패널이 가장 좁은 폰의 LCD 폭([CalcTheme.screenLandscapeHistoryMinLcdWidth] 304dp)보다 좁은 창은
+///   세로형 그대로다. 기록 패널의 최소 폭은 두지 않는다 — 좁은 기록을 어떻게 보일지는 #145에서 정한다. 일반 하한 근처에서 창 높이가 늘면 LCD가 손 쪽 패널로 돌아오며 키가 하한까지 줄어든다
+///   (받아들인 경계).
 /// - LCD·기록·키패드 어느 것도 접힘선 위에 놓이지 않는다. 모든 영역은 본체 안에 있다(음수·비유한 크기는 0으로 본다).
 @immutable
 class CalcHingeSplitLayout {
   /// 활성 LCD 영역 (본체 좌표, dp) — 손 쪽 패널 위
   final Rect lcd;
 
-  /// 계산 기록 영역 (본체 좌표, dp) — 반대쪽 패널 전체
-  final Rect history;
+  /// 계산 기록 영역 (본체 좌표, dp) — 반대쪽 패널 전체. 손 쪽 패널이 짧으면([shortHandPanel]) 반대쪽 패널의 활성 LCD
+  /// 아래이고, 그 높이가 [CalcTheme.screenHistoryBelowLcdMinHeight]에 못 미치면 `null`이다.
+  final Rect? history;
 
   /// 키패드 영역 (본체 좌표, dp) — 손 쪽 패널 아래, 실물 배열
   final Rect keypad;
+
+  /// 손 쪽 패널이 짧아 활성 LCD를 반대쪽 패널로 옮겼는지 (#143 R1)
+  final bool shortHandPanel;
 
   const CalcHingeSplitLayout._({
     required this.lcd,
     required this.history,
     required this.keypad,
+    required this.shortHandPanel,
   });
 
   /// [body] (시스템 인셋·화면 여백을 뺀 본체 영역)를 세로 접힘선 [hinge](본체 좌표)로 나눠 [handedness] 쪽 패널에 세로형을
@@ -360,13 +408,43 @@ class CalcHingeSplitLayout {
         .clamp(leftEnd, width);
     final handLeft = onRight ? rightStart : 0.0;
     final handRight = onRight ? width : leftEnd;
-    final hand = _stackedRectsOf(Size(handRight - handLeft, height));
+    final handSize = Size(handRight - handLeft, height);
+    final other = onRight
+        ? Rect.fromLTRB(0, 0, leftEnd, height)
+        : Rect.fromLTRB(rightStart, 0, width, height);
+    final hand = _stackedRectsOf(handSize);
+    final portraitTouch = KeypadMetrics.minKeyTouchHeightOf(
+      hand.keypad.size,
+      KeypadArrangement.standard,
+    );
+    // 손 쪽 패널이 짧은 창 (#143 R1): 키패드가 패널 높이를 다 쓰면 키가 커질 때만 LCD를 반대쪽 패널로 옮긴다.
+    final fullKeypad = KeypadMetrics.fitSize(handSize);
+    // 반대쪽 패널이 가장 좁은 폰의 LCD 폭보다 좁으면(접힘선이 치우친 창) 활성 LCD를 옮기지 않는다 — 글자가 작아진다.
+    if (portraitTouch < CalcTheme.keyTouchHeightFloor &&
+        other.width >= CalcTheme.screenLandscapeHistoryMinLcdWidth &&
+        KeypadMetrics.minKeyTouchHeightOf(
+              fullKeypad,
+              KeypadArrangement.standard,
+            ) >
+            portraitTouch) {
+      final split = _lcdOverHistory(other);
+      return CalcHingeSplitLayout._(
+        lcd: split.lcd,
+        history: split.history,
+        keypad: Rect.fromLTWH(
+          handLeft,
+          height - fullKeypad.height,
+          fullKeypad.width,
+          fullKeypad.height,
+        ),
+        shortHandPanel: true,
+      );
+    }
     return CalcHingeSplitLayout._(
       lcd: hand.lcd.shift(Offset(handLeft, 0)),
-      history: onRight
-          ? Rect.fromLTRB(0, 0, leftEnd, height)
-          : Rect.fromLTRB(rightStart, 0, width, height),
+      history: other,
       keypad: hand.keypad.shift(Offset(handLeft, 0)),
+      shortHandPanel: false,
     );
   }
 
@@ -381,7 +459,8 @@ class CalcHingeSplitLayout {
 
   @override
   String toString() =>
-      'CalcHingeSplitLayout(lcd: $lcd, history: $history, keypad: $keypad)';
+      'CalcHingeSplitLayout(lcd: $lcd, history: $history, keypad: $keypad, '
+      'shortHandPanel: $shortHandPanel)';
 }
 
 /// 가로 접힘선 기준 위아래 배치 (#25, #143, [ScreenArrangement.hingeStacked]) — 접힘선이 가로인 폴더블 내부 화면(Fold를
@@ -488,21 +567,10 @@ class CalcTabletopLayout {
     }
 
     // 실물 배열: 위 패널 맨 위가 활성 LCD, 그 아래가 기록 영역이다.
-    final lcdHeight = math.min(
-      topEnd,
-      math.max(CalcTheme.screenLcdMinHeight, _lcdMaxHeightOf(width)),
-    );
-    final historyTop = lcdHeight + CalcTheme.screenLcdHistoryGap;
-    final withHistory =
-        topEnd - historyTop >= CalcTheme.screenHistoryBelowLcdMinHeight;
+    final split = _lcdOverHistory(upper);
     return CalcTabletopLayout._(
-      lcd: Rect.fromLTWH(
-        0,
-        0,
-        width,
-        withHistory ? lcdHeight : math.min(topEnd, _lcdAbsorbMaxHeight),
-      ),
-      history: withHistory ? Rect.fromLTRB(0, historyTop, width, topEnd) : null,
+      lcd: split.lcd,
+      history: split.history,
       keypad: keypad,
       keypadArrangement: arrangement,
       numbersOnLeft: false,
