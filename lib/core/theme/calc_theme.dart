@@ -17,7 +17,7 @@ import 'high_text_contrast.dart';
 /// 4.5:1 이상을 유지해야 한다. 각인이 놓일 수 있는 본체 색([bodyBackground], [bodyFrame],
 /// [bodyBottomGradient]) 모두에 대해 `test/unit/calc_theme_test.dart`에서 검증한다.
 ///
-/// 어두운 키캡(함수·DEL·AC)은 본체와 명도가 비슷하므로, 키 경계는 [keyBorder]로
+/// 검정 키캡(함수부)은 본체와 명도가 비슷하므로(파란 키도 본체와 3:1이 안 된다), 키 경계는 [keyBorder]로
 /// 테두리를 그려 본체 대비 3:1(WCAG 1.4.11 비텍스트 대비) 이상을 확보한다.
 ///
 /// ## 실물 외관 기준 (#156)
@@ -383,7 +383,7 @@ abstract final class CalcTheme {
   /// [highContrastMinTextContrast] 이상 남겨 켜짐과 꺼짐을 헷갈리지 않게 한다.
   static const Color lcdStatusInactiveHighContrast = Color(0x262A2A2A);
 
-  /// 고대비 화면 안내 글자·아이콘 — 본체 배경 대비 8.2:1 ([noticeForeground]를 밝게). 7:1 이상이되 고대비 SHIFT·ALPHA
+  /// 고대비 화면 안내 글자·아이콘 — 본체 배경 대비 9.4:1 ([noticeForeground]를 밝게, #156 본체 색). 7:1 이상이되 고대비 SHIFT·ALPHA
   /// 각인보다 대비를 낮게 둔다.
   static const Color noticeForegroundHighContrast = Color(0xFFC8C8C8);
 
@@ -535,8 +535,9 @@ abstract final class CalcTheme {
   /// 실물 각인은 모서리가 둥근 각진 비례폭 산세리프다(근접 사진의 `OPTN`·`CALC`·`sin`·숫자). 고정폭(Noto Sans Mono)으로
   /// 그리면 `x²`·`sin⁻¹`·`S⇔D`가 띄엄띄엄 보여 코드 편집기처럼 보였다. SIL OFL 비례폭 글꼴 중 Exo 2·Oxanium·Chakra Petch·
   /// Titillium Web·Rajdhani와 견주어 글자 모양(각진 `C`·`S`·`n`, 둥근 모서리, 굵기)이 가장 가까운 Saira를 골랐다.
-  /// 서브셋은 ASCII에서 `+`·`=`를 뺀 글자뿐이다 — 연산 기호·입력 칸·화살표는 Noto Sans Mono의 큰 기호가 실물에 더 가깝다
-  /// (Saira의 `×`·`+`는 x높이 안의 작은 기호다). 출처·서브셋은 `assets/fonts/README.md`.
+  /// 서브셋은 ASCII에서 `+`·`=`를 뺀 글자뿐이다 — 연산 기호(`+`·`=`·`−`·`×`·`÷`)·입력 칸·방향 화살표는 Noto Sans Mono에서
+  /// 찾는다(Saira의 `×`·`+`는 x높이 안의 작은 기호라 Mono가 실물에 더 가깝다. 다만 Mono의 `×`도 실물보다 숫자 대비 조금
+  /// 작다). `⇔`만 Noto Sans Math로 그린다([isKeyMathSymbol]). 출처·서브셋은 `assets/fonts/README.md`.
   static const String keyFontFamily = 'Saira';
 
   /// 키캡 각인에서 변수 글자(`x`·`y`·`π`, 한 글자 각인 `e`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156).
@@ -562,6 +563,19 @@ abstract final class CalcTheme {
     if (ch == 'x' || ch == 'y' || ch == 'π') return true;
     return ch == 'e' && text.length == 1;
   }
+
+  /// 키캡 각인에서 수학 글꼴([mathFontFamily])로 그리는 기호인지 (#156 R2) — `⇔`(S⇔D 키, `a b/c⇔d/c` 각인).
+  /// Noto Sans Mono의 `⇔`는 x높이보다 낮은 작은 화살표(잉크 0.38em)에 좌우 여백이 커서 `S ⇔ D`처럼 벌어져 보였다.
+  /// 실물은 대문자 높이의 굵은 이중 화살표가 글자에 붙어 있다(근접 사진). Noto Sans Math의 `⇔`는 잉크 0.62em, 좌우 여백
+  /// 0.05em로 그에 가깝다. 다른 기호는 Noto Sans Mono 그대로다([keyFontFallback]).
+  static bool isKeyMathSymbol(String ch) => ch == '⇔';
+
+  /// 수학 기호 스타일 — [base]의 크기·색을 그대로 두고 글꼴만 [mathFontFamily]로 바꾼다 (Regular 하나뿐이다)
+  static TextStyle keyMathSymbolStyle(TextStyle base) => base.copyWith(
+    fontFamily: mathFontFamily,
+    fontFamilyFallback: keyFontFallback,
+    fontWeight: FontWeight.w400,
+  );
 
   /// 변수 이탤릭 글자 스타일 — [base] 각인 스타일의 크기·색을 그대로 두고 글꼴만 바꾼다
   static TextStyle keyVariableStyle(TextStyle base) => base.copyWith(
@@ -670,7 +684,8 @@ abstract final class CalcTheme {
   /// 키 사이 수직 간격 비율 (키패드 높이 대비)
   static const double keyVerticalGapRatio = 0.015;
 
-  /// 키 모서리 둥글기 (dp)
+  /// 키 모서리 둥글기 (dp) — #156부터 키캡은 높이 비례 반경(`keyCapCornerRadius`, [keyCapCornerRadiusRatio])으로 그린다.
+  /// 이 값은 키캡 크기를 모르는 곳의 기본 반경으로만 남는다.
   static const double keyBorderRadius = 6.0;
 
   /// 키 그림자 높이 (dp)
@@ -1089,7 +1104,7 @@ abstract final class CalcTheme {
   // - "File:Fx-991EX.jpg"(932×1920, 정면 오려낸 사진): 패드 268×172px
   // - "File:Casio fx-991EX Scientific Calculator.jpg"(3120×4160): 패드 534×349px
   // 실물에서 키 사이 홈은 폭이 패드 높이의 약 9%인 어두운 틈이고, 허브는 별도 부품이 아니라 그 틈과 같은 어두운 바닥이다.
-  // 여기서는 홈을 [cursorPadDividerWidth] 선으로 그린다. 터치 경계가 틈 없이 맞닿아야 하기 때문이다.
+  // 터치 경계는 틈 없이 맞닿는 선이고, 그림만 패드 높이의 [cursorPadGrooveWidthRatio] 두께로 넓혀 그린다(#156).
 
   /// 커서 패드 상자 최소 가로/세로 비 — 세로로 긴 셀(일반 폰 약 1.3)에서도 납작한 마름모를 유지한다.
   static const double cursorPadMinAspectRatio = 1.4;
@@ -1543,7 +1558,7 @@ final class CalcPalette {
   /// 고대비 팔레트인지 여부
   final bool isHighContrast;
 
-  /// 키캡 테두리 (커서 패드 홈·외곽선·허브 둘레 포함)
+  /// 키캡·원형 버튼 고리 테두리 (커서 패드 홈은 [cursorPadGroove], #156)
   final Color keyBorder;
 
   /// 눌린 키캡 테두리
@@ -1561,7 +1576,8 @@ final class CalcPalette {
   /// 화면 안내(창이 너무 작다는 안내) 글자·아이콘 색
   final Color noticeForeground;
 
-  /// 본체에 인쇄된 흰 글자 색 — 원형 버튼 위 메인 각인(ON 자리의 `SETTING`, #190)
+  /// 본체에 인쇄된 흰 글자 색 — MENU·ON 자리(`SETTING`) 원형 버튼 위 이름 (#190, #156). SHIFT·ALPHA 버튼 위 이름은
+  /// 각인 색이다 — 원형 버튼 인쇄 색은 [bodyPrintOf]로 고른다.
   final Color bodyPrint;
 
   /// `FocusRing`이 그리는 키보드 포커스 테두리 색 (#97, 일반 모드는 #106)

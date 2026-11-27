@@ -108,7 +108,10 @@ void main() {
         for (final MapEntry(key: ch, value: ink)
             in KeyLegendView.glyphInk.entries) {
           final code = ch.runes.single;
-          final sources = readCmap(key['Medium']!).containsKey(code)
+          // `⇔`는 일부러 수학 글꼴로 그린다 (CalcTheme.isKeyMathSymbol, #156 R2)
+          final sources = CalcTheme.isKeyMathSymbol(ch)
+              ? {'Math': math}
+              : readCmap(key['Medium']!).containsKey(code)
               ? key
               : readCmap(mono['Medium']!).containsKey(code)
               ? mono
@@ -134,17 +137,15 @@ void main() {
       tester,
     ) async {
       const style = CalcTheme.keyShiftLabelStyle;
-      // `log`는 내림 글자 g가 한 줄 아래로 나가지만 Text처럼 한 줄 상자만 쓴다.
-      for (final text in ['SOLVE', 'A', '⇔', 'log']) {
+      // `log`는 내림 글자 g가 한 줄 아래로 나가지만 Text처럼 한 줄 상자만 쓴다. 키 버튼의 Text와 같이 글자 조각(변수 이탤릭·
+      // 수학 기호 `⇔`, #156)과 각인 strut로 그린다.
+      for (final text in ['SOLVE', 'A', '⇔', 'log', 'x!', 'S⇔D']) {
+        final sized = style.copyWith(fontSize: 100);
         await tester.pumpWidget(
           _host(
-            Text(
-              text,
-              style: style.copyWith(fontSize: 100),
-              strutStyle: StrutStyle.fromTextStyle(
-                style.copyWith(fontSize: 100),
-                forceStrutHeight: true,
-              ),
+            Text.rich(
+              keyLabelSpan(text, sized),
+              strutStyle: keyLabelStrut(sized),
             ),
           ),
         );

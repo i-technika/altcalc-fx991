@@ -244,14 +244,21 @@ void main() {
             for (final (i, ch) in piece.text.split('').indexed) {
               final code = ch.runes.single;
               final italic = CalcTheme.isKeyVariableLetter(piece.text, i);
+              final symbol = CalcTheme.isKeyMathSymbol(ch);
               final font = italic
                   ? variable
+                  : symbol
+                  ? chain[2]
                   : chain.firstWhere((f) => readCmap(f).containsKey(code));
               if (identical(font, chain[1])) fromMono.add(ch);
               expect(
                 _emWidth(
                   ch,
-                  italic ? CalcTheme.keyVariableStyle(style) : style,
+                  italic
+                      ? CalcTheme.keyVariableStyle(style)
+                      : symbol
+                      ? CalcTheme.keyMathSymbolStyle(style)
+                      : style,
                 ),
                 moreOrLessEquals(readAdvanceWidth(font, code), epsilon: 0.005),
                 reason: '$ch (${piece.text})',
@@ -261,7 +268,8 @@ void main() {
         }
       }
       // 연산 기호·입력 칸 기호는 각인 글꼴에서 뺐다 — 고정폭 글꼴의 큰 기호를 쓴다(assets/fonts/README.md).
-      expect(fromMono, containsAll(['+', '=', '−', '×', '÷', '⇔']));
+      expect(fromMono, containsAll(['+', '=', '−', '×', '÷', '◼']));
+      expect(fromMono, isNot(contains('⇔')), reason: '⇔는 수학 글꼴로 그린다 (#156 R2)');
     });
 
     test(

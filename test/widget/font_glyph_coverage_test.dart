@@ -75,6 +75,10 @@ void main() {
     if (CalcTheme.isKeyVariableLetter(text, index)) {
       return variable.contains(code) ? CalcTheme.keyVariableFontFamily : null;
     }
+    if (CalcTheme.isKeyMathSymbol(text[index])) {
+      final math = await _familyCodePoints(fonts[CalcTheme.mathFontFamily]!);
+      return math.contains(code) ? CalcTheme.mathFontFamily : null;
+    }
     for (final family in [
       CalcTheme.keyFontFamily,
       ...CalcTheme.keyFontFallback,
@@ -181,7 +185,8 @@ void main() {
     test(
       '각인 글자가 어느 글꼴로 그려지는지 고정한다 — 수학 글꼴은 ∑·∫뿐, 이탤릭은 변수 글자뿐 (#156)',
       () async {
-        // 대체 순서는 Saira → Noto Sans Mono → Noto Sans Math다(CalcTheme.keyFontFallback). Noto Sans Math는 Regular뿐이라
+        // 대체 순서는 Saira → Noto Sans Mono → Noto Sans Math다(CalcTheme.keyFontFallback). `⇔`만 일부러 Noto Sans Math로 그린다
+        // (CalcTheme.isKeyMathSymbol, #156 R2). Noto Sans Math는 Regular뿐이라
         // 그 글꼴로 그리는 글자가 늘면 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 그림으로 그린다.)
         final byFamily = <String, Set<String>>{};
         for (final k in allKeys) {
@@ -194,12 +199,12 @@ void main() {
             }
           }
         }
-        expect(byFamily[CalcTheme.mathFontFamily], {'∑', '∫'});
+        expect(byFamily[CalcTheme.mathFontFamily], {'∑', '∫', '⇔'});
         expect(byFamily[CalcTheme.keyVariableFontFamily], {'x', 'y', 'e', 'π'});
         // 연산 기호·입력 칸·화살표는 고정폭 글꼴의 큰 기호로 그린다(Saira 서브셋에서 뺐다)
         expect(
           byFamily[CalcTheme.monoFontFamily],
-          containsAll(['+', '=', '−', '×', '÷', '⇔', '▲', '◄', '°']),
+          containsAll(['+', '=', '−', '×', '÷', '◼', '▲', '◄', '°']),
         );
         expect(byFamily.keys, isNot(contains('없음')));
         // 글자·숫자는 각인 글꼴로 그린다

@@ -179,6 +179,8 @@ class BodyTexturePainter extends CustomPainter {
           TileMode.repeated,
           TileMode.repeated,
           Matrix4.diagonal3Values(toDp, toDp, 1).storage,
+          // 기기 화면에서는 1:1이라 결과가 같다. 개발용 미리보기처럼 화면을 줄여 그릴 때 최근접 샘플링의 모아레를 줄인다(#156 R2).
+          filterQuality: FilterQuality.low,
         ),
     );
     // 가장자리 선 — 화면 여백([CalcTheme.screenPadding])의 가운데, 시스템 인셋 안쪽

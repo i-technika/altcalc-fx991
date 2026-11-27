@@ -387,15 +387,18 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
   /// [CalcKeyButton.focusable]이면 [keycap]에 포커스 노드·활성화 동작·포커스 테두리를 씌운다. 포커스 노드의 영역이
   /// 키캡(원형 버튼은 고리를 품은 자리)이라 테두리가 그 모양에 맞는다.
-  Widget _wrapFocus(Widget keycap, {required bool round}) {
+  /// 사각 키캡의 포커스 테두리는 그린 키캡과 같은 모서리 반경([cornerRadius], #156)을 쓴다.
+  Widget _wrapFocus(
+    Widget keycap, {
+    required bool round,
+    required double cornerRadius,
+  }) {
     if (!widget.focusable) return keycap;
     return FocusRing(
       shape: round
           ? const CircleBorder()
-          : const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(
-                Radius.circular(CalcTheme.keyBorderRadius),
-              ),
+          : RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(cornerRadius)),
             ),
       child: Actions(
         actions: _keyboardActions,
@@ -498,6 +501,10 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
         ? Offset.zero
         : Offset(0, legendHeight);
 
+    final cornerRadius = keyCapCornerRadius(
+      widget.keyDef.category,
+      capHeight - pressRoom,
+    );
     Widget keycap = Padding(
       padding: EdgeInsets.only(bottom: pressRoom),
       child: _wrapFocus(
@@ -511,10 +518,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                 keyDef: widget.keyDef,
                 pressed: _pressed,
                 enabled: _enabled,
-                cornerRadius: keyCapCornerRadius(
-                  widget.keyDef.category,
-                  capHeight - pressRoom,
-                ),
+                cornerRadius: cornerRadius,
                 fontSize:
                     widget.mainLabelFontSize ??
                     math.min(
@@ -527,6 +531,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                 textScaler: textScaler,
               ),
         round: round,
+        cornerRadius: cornerRadius,
       ),
     );
     if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
@@ -768,10 +773,6 @@ class _LegendRow extends StatelessWidget {
   }
 }
 
-/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에, SHIFT·ALPHA 각인이 있으면
-/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼, #156). 띠 폭을 넘으면 함께 줄인다.
-/// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
-/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
 /// 키캡([KeyFace.keycap]) 모서리 반경 (#156) — 숫자부 키(흰 키·파란 키)는 [CalcTheme.keyCapNumberCornerRadiusRatio],
 /// 나머지(함수부·조작부·커서)는 [CalcTheme.keyCapCornerRadiusRatio]에 키캡 높이 [height]를 곱하고
 /// [CalcTheme.keyCapMaxCornerRadius]에서 멈춘다. 커서 패드 키는 방향 구역 모양으로 잘려 반경이 보이지 않는다.
@@ -791,6 +792,10 @@ double keyCapCornerRadius(KeyCategory category, double height) {
   );
 }
 
+/// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에, SHIFT·ALPHA 각인이 있으면
+/// 그 오른쪽에 이어 쓴다(실물 MENU 버튼 위 `MENU SETUP`처럼, #156). 띠 폭을 넘으면 함께 줄인다.
+/// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
+/// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 줄을 잰다.
 class _BodyPrintRow extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;

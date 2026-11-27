@@ -761,6 +761,15 @@ void main() {
       expect(italic('dx', 1), isTrue);
       expect(italic('y', 0), isTrue);
       expect(italic('π', 0), isTrue);
+      // ⇔만 수학 글꼴로 그린다 (#156 R2)
+      expect(CalcTheme.isKeyMathSymbol('⇔'), isTrue);
+      expect(CalcTheme.isKeyMathSymbol('×'), isFalse);
+      final symbol = CalcTheme.keyMathSymbolStyle(
+        CalcTheme.keyMainLabelStyle.copyWith(fontSize: 12),
+      );
+      expect(symbol.fontFamily, CalcTheme.mathFontFamily);
+      expect(symbol.fontWeight, FontWeight.w400);
+      expect(symbol.fontSize, 12);
       expect(italic('e', 0), isTrue);
       expect(italic('Rec', 1), isFalse);
       expect(italic('SETUP', 1), isFalse);

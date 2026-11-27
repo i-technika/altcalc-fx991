@@ -11,7 +11,7 @@ import '../../core/theme/calc_theme.dart';
 /// 분수는 위아래로 쌓고 가로줄을 긋고, 위첨자·아래첨자는 작게 올리거나 내리며, 근호는 가로줄이 피개법수를
 /// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 입력 칸([LegendBox])은 모두 글자 대신 자리별 비율의
 /// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(#156부터 번들 Saira, 기호는 대체 글꼴 Noto Sans Mono, ∫·∑는
-/// Noto Sans Math, 변수 `x`·`e`는 이탤릭 세리프 — [keyLabelSpan])로, 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를
+/// Noto Sans Math(`⇔`도), 변수 `x`·`y`·`π`·`e`는 이탤릭 세리프 — [keyLabelSpan])로, 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를
 /// 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
 ///
 /// ## 크기·기준선
@@ -45,7 +45,8 @@ class KeyLegendView extends LeafRenderObjectWidget {
   ///
   /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값을 적어 둔다 — 그 글자를 실제로 그리는 글꼴의
   /// 값이다: 글자·숫자는 각인 글꼴 Saira(SemiBold·Medium의 평균, #156), 기호(`◼`·`◻`·`−`·`×`·`⇔`)는 대체 글꼴 Noto Sans
-  /// Mono, ∫·∑는 Noto Sans Math. 변수 이탤릭 글자(`x`·`e`)는 [variableGlyphInk]에 따로 둔다. 실제 글꼴과 맞는지, 2차원
+  /// Mono, ∫·∑·⇔는 Noto Sans Math(`⇔`는 #156 R2 — [CalcTheme.isKeyMathSymbol]). 변수 이탤릭 글자(`x`·`y`·`e`)는
+  /// [variableGlyphInk]에 따로 둔다. 실제 글꼴과 맞는지, 2차원
   /// 각인의 모든 글자가 표에 있는지 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를
   /// 잉크로 본다.
   ///
@@ -71,7 +72,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
     't': (0.0, 0.658),
     '−': (0.294, 0.396),
     '×': (0.136, 0.57),
-    '⇔': (-0.02, 0.358),
+    '⇔': (-0.034, 0.59),
     '∫': (-0.238, 0.893),
     '∑': (-0.24, 0.714),
   };
@@ -870,31 +871,39 @@ class _Builder {
   }
 }
 
-/// 키캡 각인 글자열 [text]를 [style]로 그리는 글자 조각 (#156). 변수 글자([CalcTheme.isKeyVariableLetter])만
-/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로 바꾸고, 나머지는 [style] 그대로다. 변수 글자가 없으면 글자열 하나다.
+/// 키캡 각인 글자열 [text]를 [style]로 그리는 글자 조각 (#156). 변수 글자([CalcTheme.isKeyVariableLetter])는
+/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로, 수학 기호([CalcTheme.isKeyMathSymbol])는 수학 글꼴로 바꾸고, 나머지는
+/// [style] 그대로다. 바꾸는 글자가 없으면 글자열 하나다.
 ///
 /// 키 버튼의 `Text`(글자만 있는 각인)와 [KeyLegendView]의 글자 조각이 함께 쓴다 — 두 곳의 글자 모양이 같다.
 TextSpan keyLabelSpan(String text, TextStyle style) {
+  // 글자마다 쓸 스타일: null이면 [style] 그대로
+  TextStyle? styleAt(int i) {
+    if (CalcTheme.isKeyVariableLetter(text, i)) {
+      return CalcTheme.keyVariableStyle(style);
+    }
+    if (CalcTheme.isKeyMathSymbol(text[i])) {
+      return CalcTheme.keyMathSymbolStyle(style);
+    }
+    return null;
+  }
+
   final runs = <TextSpan>[];
-  void add(int from, int to, bool italic) => runs.add(
-    TextSpan(
-      text: text.substring(from, to),
-      style: italic ? CalcTheme.keyVariableStyle(style) : null,
-    ),
-  );
   var start = 0;
-  var italic = false;
+  TextStyle? current;
   for (var i = 0; i < text.length; i++) {
-    final here = CalcTheme.isKeyVariableLetter(text, i);
+    final here = styleAt(i);
     if (i == 0) {
-      italic = here;
-    } else if (here != italic) {
-      add(start, i, italic);
+      current = here;
+    } else if (here != current) {
+      runs.add(TextSpan(text: text.substring(start, i), style: current));
       start = i;
-      italic = here;
+      current = here;
     }
   }
-  if (text.isNotEmpty) add(start, text.length, italic);
+  if (text.isNotEmpty) {
+    runs.add(TextSpan(text: text.substring(start), style: current));
+  }
   if (runs.length <= 1 && (runs.isEmpty || runs.single.style == null)) {
     return TextSpan(text: text, style: style);
   }

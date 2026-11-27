@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_body_background.dart';
@@ -62,6 +64,79 @@ void main() {
       );
       expect(find.text('내용'), findsOneWidget);
     });
+
+    testWidgets('무늬 한 칸 그림은 배율이 바뀌면 새로 만들고 옛 그림을 버리며, 화면에서 빠지면 버린다 (#156 R2)', (
+      tester,
+    ) async {
+      Widget at(double scale) => MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: const Size(390, 844),
+            devicePixelRatio: scale,
+          ),
+          child: const CalcBodyBackground(child: SizedBox.expand()),
+        ),
+      );
+      await tester.pumpWidget(at(2.625));
+      final first = (paintOf(tester).painter! as BodyTexturePainter).tile;
+      expect(first.width, 13);
+      await tester.pumpWidget(at(2.625));
+      expect(
+        identical((paintOf(tester).painter! as BodyTexturePainter).tile, first),
+        isTrue,
+        reason: '같은 배율이면 다시 만들지 않는다',
+      );
+      await tester.pumpWidget(at(3));
+      final second = (paintOf(tester).painter! as BodyTexturePainter).tile;
+      expect(second.width, 15);
+      expect(first.debugDisposed, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      expect(second.debugDisposed, isTrue);
+    });
+
+    testWidgets(
+      '잔무늬는 그림 한 픽셀을 기기 한 픽셀로 반복한다 — 한 주기가 정확히 그림 크기(기기 픽셀)다 (#156 R1)',
+      (tester) async {
+        final image = BodyTexture.paintTile(3);
+        addTearDown(image.dispose);
+        final painter = BodyTexturePainter(
+          tile: image,
+          tileScale: 3,
+          insets: EdgeInsets.zero,
+        );
+        // 배율 3으로 60×60dp(180×180px)를 그려 픽셀을 읽는다.
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder)..scale(3);
+        painter.paint(canvas, const Size(60, 60));
+        final picture = recorder.endRecording();
+        final out = await tester.runAsync(() async {
+          final img = await picture.toImage(180, 180);
+          final data = await img.toByteData();
+          img.dispose();
+          return data!;
+        });
+        picture.dispose();
+        List<int> pixel(int x, int y) => [
+          for (var c = 0; c < 3; c++) out!.getUint8((y * 180 + x) * 4 + c),
+        ];
+        final period = image.width; // 15px
+        for (final (x, y) in [(20, 30), (47, 61), (90, 100), (3, 140)]) {
+          // 한 주기 옆·아래 픽셀은 같은 무늬 자리다. 밑의 세로 그라데이션·디더링만큼(2 이하) 다를 수 있다 — 주기가 어긋나면
+          // 무늬 밝은 면(bodyFrame)과 바탕의 차이(약 11)만큼 벌어진다.
+          for (final (dx, dy) in [(period, 0), (0, period)]) {
+            final a = pixel(x, y);
+            final b = pixel(x + dx, y + dy);
+            for (var c = 0; c < 3; c++) {
+              expect(
+                (a[c] - b[c]).abs(),
+                lessThanOrEqualTo(2),
+                reason: '($x, $y) +($dx, $dy)',
+              );
+            }
+          }
+        }
+      },
+    );
 
     testWidgets('고대비 모드: 바탕에 아무것도 더 그리지 않는다 (단색 본체)', (tester) async {
       await tester.pumpWidget(

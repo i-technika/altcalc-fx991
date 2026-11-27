@@ -974,6 +974,13 @@ class CursorPadGeometry {
   /// 누를 수 없는 가운데 원의 반지름 (dp, [hubRadius] 이하)
   final double deadZoneRadius;
 
+  /// 그리는 X자 홈의 두께 (dp, #156) — 패드 높이의 [CalcTheme.cursorPadGrooveWidthRatio]이되 [CalcTheme.cursorPadDividerWidth]
+  /// 보다 가늘지 않다. 그림만 이 두께이고 터치 경계는 선이다. 화살표 라벨 검사(테스트)도 이 값을 쓴다.
+  double get grooveStrokeWidth => math.max(
+    CalcTheme.cursorPadDividerWidth,
+    size.height * CalcTheme.cursorPadGrooveWidthRatio,
+  );
+
   factory CursorPadGeometry(Size size) {
     const inset = CalcTheme.cursorPadDividerWidth / 2;
     final rx = math.max(0.0, size.width / 2 - inset);
@@ -1627,15 +1634,12 @@ class _CursorPadDecorationPainter extends CustomPainter {
       ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = CalcTheme.cursorPadDividerWidth;
-    // X자 홈은 실물처럼 넓은 어두운 틈으로 그린다 (#156, [CalcTheme.cursorPadGrooveWidthRatio]) — 터치 경계는 선 그대로다.
+    // X자 홈은 실물처럼 넓은 어두운 틈으로 그린다 (#156) — 터치 경계는 선 그대로다.
     final groove = Paint()
       ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.butt
-      ..strokeWidth = math.max(
-        CalcTheme.cursorPadDividerWidth,
-        size.height * CalcTheme.cursorPadGrooveWidthRatio,
-      );
+      ..strokeWidth = geometry.grooveStrokeWidth;
     for (final (from, to) in geometry.grooves()) {
       canvas.drawLine(from, to, groove);
     }

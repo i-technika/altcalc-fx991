@@ -2266,7 +2266,14 @@ void _appearanceTests() {
       expect(italic.style!.fontFamily, CalcTheme.keyVariableFontFamily);
       expect(italic.style!.fontStyle, FontStyle.italic);
       expect((xBang.children![1] as TextSpan).style, isNull);
-      // 변수 글자가 없으면 글자열 하나다
+      // ⇔는 수학 글꼴 조각이다 (#156 R2)
+      final sd = keyLabelSpan('S⇔D', style);
+      expect(sd.children, hasLength(3));
+      expect(
+        (sd.children![1] as TextSpan).style!.fontFamily,
+        CalcTheme.mathFontFamily,
+      );
+      // 바꾸는 글자가 없으면 글자열 하나다
       final plain = keyLabelSpan('Rec', style);
       expect(plain.children, isNull);
       expect(plain.text, 'Rec');
@@ -2288,6 +2295,34 @@ void _appearanceTests() {
       // 각인 위젯 찾기(find.text)·스타일 읽기는 그대로 된다
       expect(findLegend(const LegendText('x')), findsWidgets);
       expect(text.style!.fontFamily, CalcTheme.keyFontFamily);
+    });
+
+    testWidgets('광택은 키캡 테두리 안쪽 상자에 그리고, 반경은 바깥 반경 − 테두리다 (#156 R1·R2)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sin))),
+      );
+      final paint = find.descendant(
+        of: _keycap(CalcKeyId.sin),
+        matching: find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is KeycapSheenPainter,
+        ),
+      );
+      final cap = tester.getSize(_keycap(CalcKeyId.sin));
+      expect(
+        tester.getSize(paint),
+        Size(
+          cap.width - 2 * CalcTheme.keyBorderWidth,
+          cap.height - 2 * CalcTheme.keyBorderWidth,
+        ),
+      );
+      final sheen = sheenOf(tester, CalcKeyId.sin)!;
+      final outer =
+          (_decoration(tester, CalcKeyId.sin).borderRadius! as BorderRadius)
+              .topLeft
+              .x;
+      expect(sheen.cornerRadius, outer);
     });
 
     testWidgets('키마다 따로 그리는 층이다 — 누른 키만 다시 그린다', (tester) async {
