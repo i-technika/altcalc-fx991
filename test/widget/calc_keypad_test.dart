@@ -828,7 +828,7 @@ void _cursorPadR2Tests() {
       await tester.pump();
     });
 
-    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(허브 고리 포함, 또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
+    test('시맨틱 영역은 서로 겹치지 않고, 자기 구역(허브 고리 일부, 또는 외곽 밖)에만 걸치며 구역을 넉넉히 덮는다', () {
       // 패드 비율 하한·상한 근처와 정사각형(비율 제한 밖 극단)까지
       for (final size in const [
         Size(90, 64),
@@ -888,7 +888,7 @@ void _cursorPadR2Tests() {
       }
     });
 
-    test('시맨틱 영역은 허브 고리까지 들어가고, 셀 여백이 없으면 ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
+    test('시맨틱 영역은 고리 일부까지 들어가고, 셀 여백이 없으면 ▲·▼와 ◀·▶ 영역 높이가 같다 (#166)', () {
       for (final size in const [
         Size(90, 64),
         Size(97.7, 67.8), // 320×568·상태바 20dp 화면의 패드
@@ -921,6 +921,8 @@ void _cursorPadR2Tests() {
         // 고리의 일부를 덮는다. 사각형 네 개라 가운데 십자 사이(|dx| < X, |dy| < Y)는 비어
         // 약 21~48%다(0.05dp 격자 측정, 200×111이 21.6%로 가장 낮다 — 이 테스트의 0.25dp 격자로는 22.7%).
         // #43 규칙(허브를 덮지 않음)에서는 0%였다.
+        // 앱 배치는 셀이 패드보다 높아 Y가 커지므로 더 낮다: 셀 경계를 넣은 1px 계산으로 411×914 18.6%,
+        // Android 320×568 21.9%, 반 분할 창 19.4%(#173 — 이 하한 0.18과 거의 같다, 대응은 #203).
         var ringPoints = 0;
         var covered = 0;
         for (var x = -g.hubRadius; x <= g.hubRadius; x += 0.25) {
@@ -1005,6 +1007,49 @@ void _cursorPadR2Tests() {
       }
       handle.dispose();
     });
+
+    // 쓸어 넘기기(다음 항목) 순서는 ◀ ▲ ▼ ▶이다 — TalkBack 에뮬레이터에서 앞·뒤 쓸기로 확인한 순서(#173).
+    // 정렬 키 없이 Flutter 기본 순서(위치)로 정해지므로, 영역 나누기(semanticRect)를 바꿔도 이 순서가 남는지 지킨다.
+    // 키패드 크기: 기본 테스트 영역, 세로 폰 키패드 근사, 셀이 가로로 넓은 경우(#159), 셀이 납작한 짧은 창 근사.
+    // 넓은 배열(가로형·테이블톱)과 숫자부 왼쪽은 keypad_wide_arrangement_test.dart의 읽기 순서 테스트가 본다.
+    for (final area in const [
+      Size(360, 420),
+      Size(393, 560),
+      Size(800, 300),
+      Size(411, 260),
+    ]) {
+      testWidgets('${area.width}×${area.height}: 쓸어 넘기기 순서는 ◀ ▲ ▼ ▶', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await tester.pumpWidget(_host(const CalcKeypad(), size: area));
+        const strings = KoSemanticStrings();
+        final labelToSector = {
+          for (final sector in CursorPadSector.values)
+            strings.keyButton(CursorPad.defOf(sector).id): sector,
+        };
+        final order = <CursorPadSector>[];
+        void visit(SemanticsNode node) {
+          final sector = labelToSector[node.label];
+          if (sector != null) order.add(sector);
+          for (final child in node.debugListChildrenInOrder(
+            DebugSemanticsDumpOrder.traversalOrder,
+          )) {
+            visit(child);
+          }
+        }
+
+        visit(tester.getSemantics(find.byKey(const ValueKey('calc-keypad'))));
+        expect(order, [
+          CursorPadSector.left,
+          CursorPadSector.up,
+          CursorPadSector.down,
+          CursorPadSector.right,
+        ]);
+        handle.dispose();
+      });
+    }
   });
 
   group('폭 제약 라벨의 렌더링', () {

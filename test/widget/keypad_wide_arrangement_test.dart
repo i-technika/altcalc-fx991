@@ -495,6 +495,14 @@ void main() {
         visit(tester.getSemantics(find.byKey(const ValueKey('calc-keypad'))));
         expect(order.toSet(), allKeys.map((d) => d.id).toSet());
         expect(order, hasLength(allKeys.length));
+        // 커서 패드는 ◀ ▲ ▼ ▶ 순서로 이어 읽는다 — TalkBack 에뮬레이터 확인 순서(#173), 넓은 배열·숫자부 왼쪽에서도 같다.
+        final firstCursor = order.indexOf(CalcKeyId.cursorLeft);
+        expect(order.sublist(firstCursor, firstCursor + 4), const [
+          CalcKeyId.cursorLeft,
+          CalcKeyId.cursorUp,
+          CalcKeyId.cursorDown,
+          CalcKeyId.cursorRight,
+        ], reason: '$order');
         final firstNumber = order.indexWhere(_numberIds.contains);
         final lastFunction = order.lastIndexWhere(_functionBlockIds.contains);
         expect(lastFunction, lessThan(firstNumber), reason: '$order');

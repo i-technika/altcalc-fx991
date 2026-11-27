@@ -967,9 +967,11 @@ void main() {
               greaterThanOrEqualTo(cellArea * (vertical ? 1.0 : 1.1)),
               reason: '${sector.name} 넓이 ${pad.size}',
             );
-            // 스크린리더 시맨틱 영역(#166): 허브 고리까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
+            // 스크린리더 시맨틱 영역(#166): 허브 고리 일부까지 들어가 짧은 변이 22dp 이상이다(세로 폰 화면에서만 검사한다 —
             // 짧은 창·가로 창은 패드가 작아 더 낮다. 리뷰 측정은 568×320 창 약 18.7dp, 360×300 분할 화면 약 13.5dp)
             // (측정 22.6~34.9dp. 고리를 피하던 #43 규칙에서는 가장 작은 320×568·상태바 20dp가 17.4dp였다).
+            // 이 목록에 없는 Android 320×568(위·아래 인셋 각 24dp)은 에뮬레이터에서 21.3dp로 하한 아래였다(#173).
+            // 하한과 인셋 조합은 #203에서 정한다.
             final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
             expect(
               semantic.shortestSide,
