@@ -158,26 +158,35 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
 ### 폴더블 에뮬레이터로 배치 확인 (#140)
 
 접힘선 기준 배치(책 자세·가로 접힘선·Flip)를 실제 앱으로 본 방법이다. 결과는 `CalcTheme` "접힘선 기준 배치" 절의 "에뮬레이터 실측 (#140)"에 있고,
-그 배치 줄은 `test/widget/foldable_emulator_layout_test.dart`가 재현한다.
+그 시스템 영역·배치 줄은 `test/widget/foldable_emulator_layout_test.dart`가 재현한다. 아래 명령은 모두 `adb -s <기기>`로 보낸다
+(`shell …`은 기기 안 명령, `emu …`는 에뮬레이터 콘솔 명령).
 
-- AVD: Android 16(`android-36.1/google_apis_playstore`) 이미지로 `pixel_fold`와 `6.7in Foldable` 기기 정의 AVD를 따로 만들어 썼다
-  (`avdmanager create avd -n <이름> -d pixel_fold -k "system-images;android-36.1;google_apis_playstore;x86_64"`, 끝난 뒤 지웠다).
+- AVD: Android 16(`android-36.1/google_apis_playstore`) 이미지로 기기 정의마다 따로 만들어 썼고, 끝난 뒤 지웠다.
+  기기 정의 이름에 공백이 있으면 따옴표로 감싼다:
+  `avdmanager create avd -n <이름> -d "7.6in Foldable" -k "system-images;android-36.1;google_apis_playstore;x86_64"`
+  (`pixel_fold`, `"6.7in Foldable"`도 같다). 이미 있는 AVD(`AltCalc_Pixel_Fold_API36` 등)를 쓸 때는 `-read-only`로 띄운다(위 항목).
   `-gpu host`로 띄운다 — 기본(SwiftShader)으로 띄운 Pixel Fold는 회전 중 에뮬레이터가 죽었다(종료 코드 139).
-- 배치는 진단 릴리스 빌드(`flutter build apk --release --dart-define=ALTCALC_LAYOUT_LOG=true`)의 "배치" 줄로 읽고,
-  키 크기는 `uiautomator dump`의 키 노드 높이(px ÷ 밀도)로 잰다.
+- 배치는 진단 릴리스 빌드(`flutter build apk --release --dart-define=ALTCALC_LAYOUT_LOG=true`)의 "배치"·"시스템 영역" 줄로 읽고,
+  키 크기는 `shell uiautomator dump`의 키 노드 높이(px ÷ 밀도)로 잰다.
+- 회전: `shell settings put system accelerometer_rotation 0` 뒤 `shell settings put system user_rotation 0|1`.
 - Pixel Fold
-  - 회전: `settings put system accelerometer_rotation 0` 뒤 `settings put system user_rotation 0|1`.
-  - 접기·펴기: `adb emu fold`·`adb emu unfold`. 반 접힘: `adb emu posture 2`(펼침 3). 화면이 2개라 캡처는 `screencap -d <id>`
-    (`dumpsys SurfaceFlinger --display-id` — 첫 번째가 내부 화면).
-  - 실제 분할 화면은 접힘선을 가로지르는 창을 만들지 않는다(가로 화면은 좌우, 세로 화면은 위아래로 나눠 접힘선이 창 경계다).
-    접힘선을 지나는 창은 자유 형식 창(위 "자유 형식 창")을 `am task resize`로 접힘선에 걸쳐 만든다.
-- `6.7in Foldable`(Flip): 화면이 하나뿐이라 커버 화면이 없다. **반 접힘(`emu posture 2`)에서만** 접힘 정보(폭 1px `hinge`)를 보고하고
-  완전히 펼치면(`posture 3`) 보고하지 않는다 — `display_features`를 덮어써도 같다. 완전히 펼친 Flip은 Pixel Fold에
-  `wm size 1080x2636`·`wm density 480`·`settings put global display_features "'fold-[0,1318,1080,1318]'"`로 흉내 낸다(#144의 방법).
-  - Flip AVD에서 `settings delete global display_features`를 하면 반 접힘에서도 접힘 정보가 오지 않았다.
-    원래 값 `hinge-[0,1318,1080,1319]`을 다시 넣어 되돌렸다.
-- TalkBack 쓸어 넘기기는 `adb shell uinput -` 가상 터치(위 TalkBack 항목)로 넣는다. 가상 터치 좌표는 화면 기본 방향 기준이라,
-  돌린 화면(Pixel Fold `user_rotation 1`)에서는 원시 좌표의 y축으로 쓸어야 다음 항목으로 간다(+y가 다음).
+  - 접기·펴기: `emu fold`·`emu unfold`. 반 접힘: `emu posture 2`(펼침 `3`). 화면이 2개라 캡처는 `shell screencap -d <id>`
+    (`shell dumpsys SurfaceFlinger --display-id` — 첫 번째가 내부 화면). 접으면 잠금 화면이 뜰 수 있어 `shell wm dismiss-keyguard`로 넘긴다.
+  - 실제 분할 화면은 접힘선을 창 경계에 둔다(가로 화면은 좌우, 세로 화면은 위아래). 접힘선을 지나는 창은 자유 형식 창(위 항목)을
+    `shell am task resize`로 접힘선에 걸쳐 만든다.
+- `7.6in Foldable`·`6.7in Foldable`: 화면이 하나뿐이라 커버 화면이 없다(`emu fold`가 화면을 바꾸지 않는다).
+  **접은 자세(`emu posture 2`·`1`)에서만** 접힘 정보(폭 1px `hinge`)를 보고하고, 반 접힘 자세(`2`)에서도 상태가 `postureFlat`로 온다.
+  완전히 펼치면(`posture 3`) 보고하지 않는다 — `display_features`를 덮어써도 같다.
+  - 7.6"는 가로로 돌린 뒤 좌우 분할하면 가로 접힘선을 지나는 실제 분할 창(약 416×674)이 생긴다(Galaxy Z Fold 분할 창 크기).
+  - 완전히 펼친 Flip은 Pixel Fold에 크기·접힘선을 덮어써 흉내 낸다(#144의 방법). 먼저 원래 값을 적어 둔다:
+    `shell settings get global display_features`(Flip AVD는 처음에 `null`이었다), `shell wm size`, `shell wm density`.
+    그 뒤 `shell wm size 1080x2636`·`shell wm density 480`·`shell settings put global display_features "'fold-[0,1318,1080,1318]'"`로 바꾸고
+    앱을 다시 시작한다. 되돌릴 때는 `shell wm size reset`·`shell wm density reset`, 적어 둔 값이 `null`이면
+    `shell settings delete global display_features`, 아니면 그 값을 다시 넣는다.
+  - Flip AVD는 `display_features`의 원래 값이 `null`인데도, 덮어쓴 뒤 `delete`로 지우자 반 접힘에서도 접힘 정보가 오지 않았다.
+    `hinge-[0,1318,1080,1319]`(그 AVD가 보고하던 값)을 넣어 되돌렸다 — 지우지 말고 이 값으로 되돌린다.
+- TalkBack 쓸어 넘기기는 `shell uinput -` 가상 터치(위 TalkBack 항목)로 넣는다. 가상 터치 좌표는 화면 기본 방향 기준이라,
+  돌린 화면(`user_rotation 1`)에서는 원시 좌표의 y축으로 쓸어야 다음 항목으로 간다(+y가 다음).
   초점 테두리 색은 LCD 위에서 더 밝은 초록으로 보이므로 색 판정을 넉넉히 둔다.
 
 ## 개발용 미리보기 (`preview/`)
