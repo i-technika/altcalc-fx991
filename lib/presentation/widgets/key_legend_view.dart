@@ -24,7 +24,9 @@ import '../../core/theme/calc_theme.dart';
 ///   곳에 글자를 그린다 — 키 버튼은 메인 각인을 그린 기준선으로 맞추고(#230 `InkCenteredLabel`), 각인 띠의 `Text`는 보고한 기준선에
 ///   그리게 옮긴다(#252 `DrawnBaselineLabel`).
 /// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
-///   각인 띠에서는 기준선이 그만큼(가장 많은 `d/dx◼`도 0.08em 미만, 테스트로 고정) 이웃 각인보다 올라간다.
+///   각인 띠에서는 기준선이 그만큼 이웃 각인보다 올라간다 — 넘치는 양은 가장 많은 `d/dx◼`도 0.08em 미만이고(em 치수, 테스트로
+///   고정), 그린 크기에서는 줄 상자 높이를 정수 dp로 반올림해 줄 상자 깊이가 줄어드는 만큼(최대 0.5dp) 더 올라간다(#252 실측:
+///   360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp, `test/widget/legend_band_baseline_test.dart`).
 ///
 /// [KeypadMetrics] 같은 측정 쪽은 그리지 않고 [emSize]로 크기를 잰다.
 class KeyLegendView extends LeafRenderObjectWidget {
@@ -969,7 +971,9 @@ TextSpan keyLabelSpan(String text, TextStyle style) {
 /// 앱 화면의 `Text`는 Material 3 테마의 기본 글자 스타일에서 `even`을 받아 기준선이 줄 상자 위에서 약 0.888em이고,
 /// 테마를 받지 않는 [KeyLegendView](`TextPainter`)는 0.785em이어서, 아래 정렬한 각인 띠의 글자 각인과 2차원 각인 기준선이
 /// 태블릿에서 약 1.4dp 어긋났다. `proportional`은 [KeyLegendView]·`KeypadMetrics`가 재던 값(0.785em) 그대로라 각인 크기·글자
-/// 크기 계산이 바뀌지 않는다. 내림 글자(`g` 잉크 아래끝 −0.206em)도 줄 상자 안(기준선 아래 0.215em)에 든다.
+/// 크기 계산이 바뀌지 않는다. 기준선 아래 줄 상자 깊이는 약 0.215em이다(줄 상자 높이를 정수 dp로 반올림하므로 글자 크기에
+/// 따라 조금 다르다) — 내림 글자 `g`(잉크 아래끝 −0.206em)는 대개 그 안에 들고, 변수 이탤릭 `y`(−0.24em, ALPHA 각인)는
+/// 약 0.025em 밖으로 나간다(`even`에서는 기준선 아래 0.112em이라 0.13em 나갔다).
 StrutStyle keyLabelStrut(TextStyle style) => StrutStyle.fromTextStyle(
   style,
   fontFamily: CalcTheme.keyStrutFontFamily,
