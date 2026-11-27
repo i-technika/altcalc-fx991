@@ -2352,8 +2352,9 @@ void _hingeLayoutTests() {
           : r.bottom <= hinge.top + e;
     }
 
-    /// 열린 대화상자를 두고 화면을 [size]·[features]로 바꾼 뒤, 바뀐 첫 프레임과 자리 잡은 뒤의 카드를 확인한다.
-    /// 자리 잡은 뒤에는 지금 설정 키 쪽 절반이다(#218).
+    /// 열린 대화상자를 두고 화면을 [size]·[fold]로 바꾼 뒤, 바뀐 첫 프레임과 자리 잡은 뒤의 카드를 확인한다.
+    /// 자리 잡은 뒤에는 지금 설정 키 쪽 절반이다(#218). [keyHalf]가 `false`면 자리 잡은 뒤 반대쪽 절반이다 — 설정 키 쪽
+    /// 절반이 대화상자 최소 폭에 못 미쳐 넓은 절반에 뜨는 화면(#125).
     Future<void> expectClearOnChange(
       WidgetTester tester,
       ProviderContainer container, {
@@ -2361,6 +2362,7 @@ void _hingeLayoutTests() {
       required EdgeInsets padding,
       required DisplayFeature fold,
       required String reason,
+      bool keyHalf = true,
     }) async {
       final element = tester.element(find.byType(HandednessDialog));
       // `_pump`는 `pumpWidget` 한 번 — 바뀐 첫 프레임이다
@@ -2380,9 +2382,10 @@ void _hingeLayoutTests() {
       final settled = tester.getRect(_dialogSurface);
       expect(
         sameHalf(fold.bounds, key, settled),
-        isTrue,
+        keyHalf,
         reason: '자리 잡은 뒤 $reason $key $settled',
       );
+      expect(clear(fold.bounds, settled), isTrue, reason: '$settled');
       // 카드가 화면 전체 가운데 → 절반으로 옮겨 가도 같은 대화상자다(포커스·스크롤 유지)
       expect(tester.element(find.byType(HandednessDialog)), same(element));
     }
@@ -2457,6 +2460,101 @@ void _hingeLayoutTests() {
         );
       }
     }
+
+    // 접힘선은 그대로이고 창 크기만 바뀌어 앱이 그 접힘선으로 나누게 되는 전환 (#226 R2). 이전 배치 값(위아래 배치, 또는
+    // 손잡이에 따라 배치가 바뀌는 화면)은 화면 전체를 고르지만, 그 카드는 접힘선을 가로지르므로 나눈다.
+    // - Pixel Fold 내부 2:1 분할 창(접힘선을 품은 왼쪽 창 560dp)을 전체 화면으로 키움, 접힘선 x=420.5
+    // - #129의 비대칭 접힘선 화면(841×701, x=654, 오른쪽 인셋 48)을 1000dp로 키움 — 오른손잡이는 설정 키 쪽 절반
+    //   (인셋 빼고 298dp)이 대화상자 최소 폭(360dp)에 못 미쳐 왼쪽 절반에 자리 잡는다(#125)
+    // 크기 비교를 뺀 R1 수정에서는 첫 프레임에 x=201.5~639.5, 257~695로 가로질렀다(R2 실측).
+    for (final h in Handedness.values) {
+      for (final (from, to, x, padding, keyHalf) in [
+        (
+          Size(560, 701),
+          Size(841, 701),
+          420.5,
+          const EdgeInsets.only(top: 24, bottom: 24),
+          true,
+        ),
+        (
+          Size(841, 701),
+          Size(1000, 701),
+          654.0,
+          const EdgeInsets.only(top: 24, right: 48, bottom: 24),
+          h == Handedness.left,
+        ),
+      ]) {
+        testWidgets(
+          '같은 접힘선(x=$x)에서 창이 ${from.width} → ${to.width}로 커져 나누게 되면·${h.name}',
+          (tester) async {
+            final fold = _foldAt(Rect.fromLTWH(x, 0, 0, from.height));
+            _setViewPadding(tester, padding);
+            final (container, _) = await _pump(
+              tester,
+              size: from,
+              padding: padding,
+              handedness: h,
+              displayFeatures: [fold],
+            );
+            await tester.tap(_settings);
+            await tester.pumpAndSettle();
+            // 시작 화면은 화면 전체 가운데에 뜬다(위아래 배치, 또는 손잡이에 따라 배치가 바뀌는 화면 — #129)
+            final opened = tester.getRect(_dialogSurface);
+            expect(
+              opened.center.dx,
+              moreOrLessEquals((from.width - padding.horizontal) / 2),
+              reason: '$opened',
+            );
+            await expectClearOnChange(
+              tester,
+              container,
+              size: to,
+              padding: padding,
+              fold: fold,
+              reason: '$h',
+              keyHalf: keyHalf,
+            );
+          },
+        );
+      }
+    }
+
+    // 창 크기와 함께 접힘선도 옮겨 가는 크기 변경(분할 화면의 오른쪽 창 등)에서도, 화면 전체 카드가 접힘선을 가로지르지
+    // 않으면 화면 전체 그대로다 (#226 R2 — 고치기 전 바뀐 각 프레임에 x=103~541 등 왼쪽 절반으로 튀었다).
+    testWidgets('접힘선이 함께 옮겨 가는 크기 변경에서도 가로지르지 않는 화면 전체 대화상자는 그대로다', (
+      tester,
+    ) async {
+      const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
+      _setViewPadding(tester, padding);
+      final (container, _) = await _pump(
+        tester,
+        size: const Size(841, 701),
+        padding: padding,
+        handedness: Handedness.right,
+        displayFeatures: [_foldAt(const Rect.fromLTWH(654, 0, 0, 701))],
+      );
+      expect(isStackedArrangement(tester), isTrue);
+      await tester.tap(_settings);
+      await tester.pumpAndSettle();
+      for (final shrink in const [10.0, 20.0, 30.0, 40.0]) {
+        final width = 841 - shrink;
+        await _pump(
+          tester,
+          size: Size(width, 701),
+          padding: padding,
+          displayFeatures: [_foldAt(Rect.fromLTWH(654 - shrink, 0, 0, 701))],
+          container: container,
+        );
+        final dialog = tester.getRect(_dialogSurface);
+        expect(
+          dialog.center.dx,
+          moreOrLessEquals((width - padding.horizontal) / 2),
+          reason: '$width $dialog',
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
 
     // 바뀐 프레임에 설정 키 쪽 절반이 하한(280dp)에 못 미치면 하한을 넘는 반대쪽 절반이다. 화면 전체에 띄우면 접힘선을
     // 가로지른다. 580×800 창에 접힘선 x=330을 넣으면 설정 키(오른쪽 위) 쪽 절반은 250dp, 반대쪽은 330dp다(둘 다
@@ -2556,6 +2654,14 @@ void _hingeLayoutTests() {
       tester.view.displayFeatures = [_foldAt(fold)];
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(tester.getRect(_dialogSurface), opened);
+
+      // 같은 접힘선이 0.5dp 다른 자리로 다시 보고되면 같은 화면이다 — 배치 값이 따라온 화면 전체 그대로다. 다른 화면으로
+      // 보면 그 프레임에 화면 전체 카드(접힘선을 가로지른다)를 피해 절반으로 튄다(#226 R1).
+      tester.view.displayFeatures = [_foldAt(fold.shift(const Offset(0, 0.5)))];
+      await tester.pump();
+      expect(tester.getRect(_dialogSurface), opened);
+      await tester.pumpAndSettle();
       expect(tester.getRect(_dialogSurface), opened);
     });
   });
