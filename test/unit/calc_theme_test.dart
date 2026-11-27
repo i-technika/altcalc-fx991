@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// CIELAB 명도 L* (0 ~ 100) — 사람이 느끼는 밝기에 가까운 척도 (D65, sRGB 상대 휘도 기준)
@@ -775,6 +776,18 @@ void main() {
           CalcTheme.lcdStatusCharWidthRatio /
           CalcTheme.lcdStatusCapHeightRatio;
       expect(storeCapRatio, lessThanOrEqualTo(8 / 7 * 1.15));
+      // √▭✎ 잉크(#217)는 3칸 슬롯 안에 들어가고, 대문자 높이 대비 폭이 실물(스프라이트 14도트 ÷ 대문자 높이 7도트 =
+      // 2.0배, #58 표)에서 5% 안이다. #160의 3칸 + 자간(약 2.52배)으로 되돌아가지 않게 한다.
+      expect(CalcTheme.lcdStatusMathInkCells, greaterThan(0));
+      expect(
+        CalcTheme.lcdStatusMathInkCells,
+        lessThanOrEqualTo(LcdIndicatorSlot.math.columns),
+      );
+      final mathCapRatio =
+          CalcTheme.lcdStatusMathInkCells *
+          CalcTheme.lcdStatusCharWidthRatio /
+          CalcTheme.lcdStatusCapHeightRatio;
+      expect(mathCapRatio, closeTo(14 / 7, 2.0 * 0.05));
     });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {
