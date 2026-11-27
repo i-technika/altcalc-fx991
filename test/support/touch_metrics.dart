@@ -102,7 +102,21 @@ const double cursorPadUpDownInscribedMinRatio = 0.95;
 /// 측정은 1.078배(360×300 창) 이상이고, 셀이 넓을수록 커진다.
 const double cursorPadLeftRightInscribedMinRatio = 1.0;
 
-/// 화면에 그려진 함수 키(sin)의 터치 높이 (dp) — 각인 띠까지 넓히면 셀 높이, 아니면 키캡 높이다.
+/// 화면의 커서 패드가 받는 터치 영역 전체 — 셀(`CursorPad` 상자)에 둘레 키 사이 간격 몫(`CursorPad.gapInsets`)을 더한 것
+/// (#236). 방향 나눔(터치 경로·시맨틱 영역)은 셀 기준 그대로이고, 이 사각형의 셀 밖 점은 셀 가장자리로 당겨 판정한다.
+Rect cursorPadTouchCell(WidgetTester tester) {
+  final finder = find.byType(CursorPad);
+  return tester
+      .widget<CursorPad>(finder)
+      .gapInsets
+      .inflateRect(tester.getRect(finder));
+}
+
+/// 화면에 그려진 함수 키(sin)의 셀 기준 터치 높이 (dp) — 각인 띠까지 넓히면 셀 높이, 아니면 키캡 높이다.
+///
+/// 셀 둘레 키 사이 간격 몫(#236)은 **빼고** 잰다. 커서 패드 방향 키도 같은 간격 몫을 받으므로, 커서 패드 기준(#159 —
+/// 방향 키 내접원 ≥ 이 높이 × 하한)은 간격 몫을 뺀 값끼리 견준다 — 패드 쪽도 셀 기준 터치 경로로 잰다
+/// ([expectCursorPadInscribedVersusFunctionKey]). 실제 터치 높이는 [functionKeyHitHeight]다.
 double functionKeyTouchHeight(WidgetTester tester) {
   final finder = find.byWidgetPredicate(
     (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
@@ -114,6 +128,17 @@ double functionKeyTouchHeight(WidgetTester tester) {
       : cell.height - button.legendBandHeightFor(cell.height);
 }
 
+/// 화면에 그려진 함수 키(sin)의 실제 터치 높이 (dp) — [functionKeyTouchHeight]에 터치 영역이 받는 위아래 간격 몫(#236)을
+/// 더한다(셀 전체를 터치 영역으로 쓰는 키만 받는다, `CalcKeyButton.hitGapInsets`).
+double functionKeyHitHeight(WidgetTester tester) {
+  final button = tester.widget<CalcKeyButton>(
+    find.byWidgetPredicate(
+      (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+    ),
+  );
+  return functionKeyTouchHeight(tester) + button.hitGapInsets.vertical;
+}
+
 /// 화면의 커서 패드 방향 키 터치 영역 내접원 지름이 함수 키(sin) 터치 높이 × 하한 이상인지 확인한다 (#159).
 /// ▲·▼는 [cursorPadUpDownInscribedMinRatio], ◀·▶는 [cursorPadLeftRightInscribedMinRatio]를 쓴다.
 void expectCursorPadInscribedVersusFunctionKey(
@@ -121,6 +146,7 @@ void expectCursorPadInscribedVersusFunctionKey(
   required String reason,
 }) {
   final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+  // #159 기준은 셀 기준 터치 경로로 잰다 — 셀 둘레 간격 몫(#236)은 함수 키 쪽([functionKeyTouchHeight])처럼 뺀다.
   final cell = tester.getRect(find.byType(CursorPad));
   final touch = functionKeyTouchHeight(tester);
   final g = CursorPadGeometry(pad.size);

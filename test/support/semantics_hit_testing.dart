@@ -55,11 +55,16 @@ SemanticsNode? semanticsHitTest(SemanticsNode node, Offset point) {
 /// 화면의 커서 패드(하나) 셀을 1.5dp 격자로 짚어, 터치 탐색이 닿는 노드가
 /// [CursorPadGeometry.semanticSectorAt] 방향의 노드인지 본다 (#203). 시맨틱이 켜져 있고 한국어 로캘이어야 한다.
 /// 네 방향이 모두 한 번 이상 나와야 한다.
+///
+/// 셀 둘레 간격 몫(#236)도 짚는다. 그곳의 기대 방향은 셀 변에 닿은 변만 늘린 방향별 영역
+/// ([CursorPad.inflateOnCellEdges])을 쌓은 순서의 위부터 찾은 것이다 — 묶는 노드의 경계가 간격 몫까지 넓지 않으면
+/// 엔진 터치 탐색이 간격의 자식에 닿지 못해 실패한다.
 void expectCursorPadTouchExplorationMatchesSpec(
   WidgetTester tester, {
   String reason = '',
 }) {
   final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+  // 셀 안만 짚는다 — 방향 나눔은 셀 기준이다. 셀 둘레 간격 몫(#236)의 시맨틱 영역은 키패드 테스트가 따로 본다.
   final cell = tester.getRect(find.byType(CursorPad));
   final bounds = cell.shift(-pad.topLeft);
   final g = CursorPadGeometry(pad.size);
@@ -85,4 +90,38 @@ void expectCursorPadTouchExplorationMatchesSpec(
     }
   }
   expect(seen, CursorPadSector.values.toSet(), reason: reason);
+
+  // 셀 둘레 간격 몫 (#236)
+  final pad0 = tester.widget<CursorPad>(find.byType(CursorPad));
+  final touch = pad0.gapInsets.inflateRect(cell);
+  Rect areaOf(CursorPadSector s) => CursorPad.inflateOnCellEdges(
+    CursorPad.semanticRect(
+      s,
+      pad.size,
+      bounds,
+    ).shift(pad.topLeft - cell.topLeft),
+    cell.size,
+    pad0.gapInsets,
+  ).shift(cell.topLeft);
+  var ring = 0;
+  for (var x = touch.left + 0.37; x < touch.right; x += 1.5) {
+    for (var y = touch.top + 0.41; y < touch.bottom; y += 1.5) {
+      final p = Offset(x, y);
+      if (cell.contains(p)) continue;
+      CursorPadSector? want;
+      for (final s in CursorPadGeometry.semanticStackOrder.reversed) {
+        if (areaOf(s).contains(p)) {
+          want = s;
+          break;
+        }
+      }
+      expect(want, isNotNull, reason: '$reason 간격 몫 $p');
+      final node = semanticsHitTest(root, p * dpr);
+      expect(node?.label, labels[want], reason: '$reason 간격 몫 $p');
+      ring++;
+    }
+  }
+  if (pad0.gapInsets != EdgeInsets.zero) {
+    expect(ring, greaterThan(0), reason: '$reason 간격 몫 표본');
+  }
 }

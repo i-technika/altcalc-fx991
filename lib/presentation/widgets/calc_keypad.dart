@@ -379,7 +379,9 @@ class KeypadMetrics {
   /// [available] 영역에 [arrangement] 배열 키패드를 놓았을 때 가장 낮은 키의 터치 높이 (dp, 커서 패드 제외).
   ///
   /// [CalcKeyButton]과 같은 규칙으로 구한다: 키캡이 [CalcTheme.keyMinTouchTargetHeight]보다 낮으면 각인 띠까지
-  /// 넓힌 셀 높이, 아니면 키캡 높이. 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
+  /// 넓힌 셀 높이, 아니면 키캡 높이. 셀 둘레 키 사이 간격 몫(#236 — 셀 전체를 터치하는 키가 더 받는 위아래 간격)은 빼고
+  /// 잰다. 배치 판정의 문턱(#38 등)이 이 값으로 정해져 있어서다 — 실제 터치 높이는 여기에 행 간격 몫을 더한 값이다.
+  /// 글자 크기를 재지 않으므로 [compute]보다 가볍다 — 배치를 고를 때 쓴다 (#25).
   ///
   /// [arrangement]는 기본값 없이 받는다 — 빠뜨리면 넓은 배열 키패드를 실물 배열로 재어 배치 판정이 조용히 틀린다(#80 R1).
   static double minKeyTouchHeightOf(
@@ -914,6 +916,7 @@ class _KeypadBody extends StatelessWidget {
     Path Function(Size size)? hitShape,
     EdgeInsets hitOutset = EdgeInsets.zero,
     EdgeInsets labelInsets = EdgeInsets.zero,
+    EdgeInsets gapInsets = EdgeInsets.zero,
   }) {
     final settings = onSettingsPressed;
     if (def.id == settingsKey && settings != null && onKeyPressed != null) {
@@ -928,6 +931,7 @@ class _KeypadBody extends StatelessWidget {
           hitShape: hitShape,
           hitOutset: hitOutset,
           labelInsets: labelInsets,
+          gapInsets: gapInsets,
         ),
       );
     }
@@ -940,6 +944,7 @@ class _KeypadBody extends StatelessWidget {
       hitShape: hitShape,
       hitOutset: hitOutset,
       labelInsets: labelInsets,
+      gapInsets: gapInsets,
     );
   }
 
@@ -952,6 +957,7 @@ class _KeypadBody extends StatelessWidget {
     required Path Function(Size size)? hitShape,
     required EdgeInsets hitOutset,
     required EdgeInsets labelInsets,
+    required EdgeInsets gapInsets,
   }) {
     return CalcKeyButton(
       keyDef: def,
@@ -971,6 +977,7 @@ class _KeypadBody extends StatelessWidget {
       legendHeight: metrics.legendBandHeight,
       keycapMaxAspectRatio: KeypadMetrics.keycapMaxAspectRatioOf(def.id),
       focusable: def.id == settingsKey,
+      gapInsets: gapInsets,
     );
   }
 
@@ -986,7 +993,12 @@ class _KeypadBody extends StatelessWidget {
                   Expanded(
                     child: Padding(
                       padding: _cellPadding,
-                      child: _button(def, extendHitArea: extendHitArea),
+                      // 셀 둘레 여백(키 사이 간격의 절반)은 이 키의 몫이다 — 터치를 넓힌 키는 여기까지 받는다 (#236).
+                      child: _button(
+                        def,
+                        extendHitArea: extendHitArea,
+                        gapInsets: _cellPadding,
+                      ),
                     ),
                   ),
               ],
@@ -1070,6 +1082,7 @@ class _KeypadBody extends StatelessWidget {
             child: Padding(
               padding: _cellPadding,
               child: CursorPad(
+                gapInsets: _cellPadding,
                 buttonBuilder: (def, keyShape) => _button(
                   def,
                   showLegendBand: false,
@@ -1077,6 +1090,7 @@ class _KeypadBody extends StatelessWidget {
                   hitShape: keyShape.hitShape,
                   hitOutset: keyShape.hitOutset,
                   labelInsets: keyShape.labelInsets,
+                  gapInsets: keyShape.hitGap,
                 ),
                 onKeyPressed: onKeyPressed,
                 enableHaptics: enableHaptics,
@@ -1101,6 +1115,7 @@ typedef CursorPadKeyShape = ({
   Path Function(Size size) hitShape,
   EdgeInsets hitOutset,
   EdgeInsets labelInsets,
+  EdgeInsets hitGap,
 });
 
 /// 커서 패드 모양 계산기 — 패드 상자([size]) 로컬 좌표의 외곽·X자 홈·허브와 방향 판정.
@@ -1538,9 +1553,13 @@ class CursorPadGeometry {
 ///     좁다(세로 폰 ▲·▼ 약 30~46dp, ◀·▶ 약 36~52dp). 셀이 패드보다 가로로 긴 배치(분할 화면 등)에서는
 ///     옆 여백을 받는 ◀·▶ 내접원이 약 +12dp 커진다.
 ///   - 경계는 외곽에서 꺾이지만 끊기지 않고, 누른 채 이동할 때의 이탈 판정도 같은 경로를 쓴다.
-/// - 셀 밖(셀 여백 `_cellPadding`)은 넓히지 않는다 — 이웃 키와의 간격은 다른 키 사이와 같다.
+/// - 셀 밖(셀 여백 `_cellPadding`, 키 사이 간격의 절반)도 다른 키처럼 패드의 몫이다(#236, [gapInsets]). 그 점은 셀
+///   가장자리 안쪽(0.01dp)으로 당겨 셀 기준 터치 경로로 판정하므로, 셀 변마다 그쪽 방향 키(옆 변 ◀·▶, 위·아래 변 ▲·▼)가
+///   바깥 간격까지 받는다. 모서리 바깥의 간격은 셀 모서리 점으로 당겨지고, 그 점은 홈 끝 → 셀 모서리 선이 가른다.
+///   (#236 전에는 넓히지 않았다 — 그때는 다른 키도 셀 여백을 받지 않았다.)
 /// - 한가운데 데드존은 그대로 누를 수 없고, 누른 채 데드존이나 다른 방향·셀 밖으로 나가면 반복이 멈춘다.
-/// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203).
+/// - 스크린리더 시맨틱 영역도 셀 전체를 덮는다([CursorPadGeometry.semanticRect]의 `bounds`, #203). 셀 둘레 간격 몫(#236)은
+///   각 영역의 바깥쪽 변을 늘려 덮는다 — 셀 안의 나눔은 그대로다.
 /// - 패드 상자는 셀 **가운데**에 있다고 가정한다([hitPath]가 상자 크기만으로 셀·패드를 되돌린다).
 ///
 /// ## 허브 한가운데만 데드존이다 (#43)
@@ -1558,8 +1577,8 @@ class CursorPadGeometry {
 /// 셀 어디를 짚어도 한 방향이 읽히게 한다([CursorPadGeometry.semanticStackOrder], #203).
 /// 쓸어 넘기기 순서는 쌓는 순서와 따로 [semanticTraversalOrder]로 정한다.
 class CursorPad extends StatelessWidget {
-  /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 네 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`·`labelInsets`에
-  /// 넘겨야 한다(보통 `showLegendBand: false`인 [CalcKeyButton]).
+  /// 방향 키 위젯 생성기. [CursorPadKeyShape]의 다섯 값을 `CalcKeyButton`의 `shape`·`hitShape`·`hitOutset`·`labelInsets`·
+  /// `gapInsets`(← `hitGap`)에 넘겨야 한다(보통 `showLegendBand: false`인 [CalcKeyButton]).
   final Widget Function(CalcKeyDef def, CursorPadKeyShape shape) buttonBuilder;
 
   /// 시맨틱 탭(스크린리더) 입력 콜백. `null`이면 시맨틱 노드가 비활성이다.
@@ -1568,12 +1587,38 @@ class CursorPad extends StatelessWidget {
   /// 시맨틱 탭 햅틱 사용 여부 (버튼과 같게 맞춘다)
   final bool enableHaptics;
 
+  /// 셀 바깥에서 패드가 맡는 키 사이 간격 몫 (#236) — 키패드가 셀 둘레 여백으로 둔 값. 다른 키와 같이 터치 영역·시맨틱
+  /// 영역을 이만큼 넓힌다(위 "터치 영역" 절).
+  final EdgeInsets gapInsets;
+
   const CursorPad({
     super.key,
     required this.buttonBuilder,
     this.onKeyPressed,
     this.enableHaptics = true,
+    this.gapInsets = EdgeInsets.zero,
   });
+
+  /// 셀([cell], 셀 로컬 좌표 원점) 안의 사각형 [rect]에서 셀 변에 닿은 변만 셀 둘레 간격 몫 [gap]만큼 바깥으로 늘린다 (#236).
+  /// 셀 변에 닿지 않은 변은 그대로다 — 셀 안의 나눔을 바꾸지 않는다. 방향별 시맨틱 영역에 쓴다.
+  static Rect inflateOnCellEdges(Rect rect, Size cell, EdgeInsets gap) {
+    const eps = 1e-6;
+    return Rect.fromLTRB(
+      rect.left <= eps ? rect.left - gap.left : rect.left,
+      rect.top <= eps ? rect.top - gap.top : rect.top,
+      rect.right >= cell.width - eps ? rect.right + gap.right : rect.right,
+      rect.bottom >= cell.height - eps ? rect.bottom + gap.bottom : rect.bottom,
+    );
+  }
+
+  /// [sector] 버튼 상자(셀의 반쪽)의 바깥쪽 변들에 붙는 간격 몫 — 셀 둘레 간격 몫 [gap]에서 패드 안쪽(가운데) 변을 뺀다.
+  static EdgeInsets hitGapOf(CursorPadSector sector, EdgeInsets gap) =>
+      switch (sector) {
+        CursorPadSector.up => gap.copyWith(bottom: 0),
+        CursorPadSector.down => gap.copyWith(top: 0),
+        CursorPadSector.left => gap.copyWith(right: 0),
+        CursorPadSector.right => gap.copyWith(left: 0),
+      };
 
   /// [sector] 구역 경로 생성기 (정적 함수라 매 빌드 같은 인스턴스 — 불필요한 재클립 방지)
   static Path Function(Size size) shapeOf(CursorPadSector sector) =>
@@ -1733,25 +1778,31 @@ class CursorPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cell = constraints.biggest;
-        if (!cell.isFinite || cell.isEmpty) return const SizedBox.shrink();
-        final padRect = padRectIn(cell);
-        final size = padRect.size;
-        final bounds = (Offset.zero & cell).shift(
-          -padRect.topLeft,
-        ); // 패드 로컬 좌표의 셀
-        final press = onKeyPressed;
-        final strings = CalcSemanticStrings.of(context);
-        // 네 방향 노드를 한 노드 아래에 묶는다 — 정렬 키가 이웃 키와 섞이지 않고 네 노드끼리만 비교된다.
-        // 묶는 노드는 라벨·동작이 없어 스크린리더 초점을 받지 않는다.
-        return Semantics(
-          container: true,
-          explicitChildNodes: true,
-          child: SizedBox.fromSize(
+    // 네 방향 노드를 한 노드 아래에 묶는다 — 정렬 키가 이웃 키와 섞이지 않고 네 노드끼리만 비교된다.
+    // 묶는 노드는 라벨·동작이 없어 스크린리더 초점을 받지 않는다.
+    // 셀 둘레 간격 몫(#236)의 누름을 셀 가장자리로 당겨 방향 키에 넘기고, 묶는 노드의 경계도 그만큼 넓힌다 —
+    // 방향별 노드가 간격 몫까지 나가므로 부모 경계가 좁으면 터치 탐색이 닿지 않는다. 부모(셀 여백)가 넘겨준 점을 바로
+    // 받아야 하므로 레이아웃 빌더보다 바깥에 둔다.
+    return GapSemantics(
+      gap: gapInsets,
+      container: true,
+      explicitChildNodes: true,
+      properties: const SemanticsProperties(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cell = constraints.biggest;
+          if (!cell.isFinite || cell.isEmpty) return const SizedBox.shrink();
+          final padRect = padRectIn(cell);
+          final size = padRect.size;
+          // 패드 로컬 좌표의 셀 — 방향 나눔(터치·시맨틱)은 셀 기준 그대로다(#64·#203). 셀 둘레 간격 몫은 바깥 변에만 붙인다.
+          final bounds = (Offset.zero & cell).shift(-padRect.topLeft);
+          final press = onKeyPressed;
+          final strings = CalcSemanticStrings.of(context);
+          return SizedBox.fromSize(
             size: cell,
             child: Stack(
+              // 시맨틱 영역이 셀 둘레 간격 몫까지 나간다 — 잘라 내지 않는다 (#236)
+              clipBehavior: Clip.none,
               children: [
                 // 방향 키: 버튼 상자는 셀의 반쪽(터치 영역), 그림은 그 안의 패드 반쪽 (#64)
                 for (final sector in CursorPadSector.values)
@@ -1763,6 +1814,7 @@ class CursorPad extends StatelessWidget {
                         hitShape: hitShapeOf(sector),
                         hitOutset: hitOutsetOf(sector, cell),
                         labelInsets: labelInsetsOf(sector, size),
+                        hitGap: hitGapOf(sector, gapInsets),
                       )),
                     ),
                   ),
@@ -1790,11 +1842,14 @@ class CursorPad extends StatelessWidget {
                 // 겹쳐 쌓은 시맨틱 영역 — 뒤에 쌓은 ◀·▶가 겹친 곳을 가진다 (자식이 없어 터치는 받지 않는다, #203)
                 for (final sector in CursorPadGeometry.semanticStackOrder)
                   Positioned.fromRect(
-                    rect: semanticRect(
-                      sector,
-                      size,
-                      bounds,
-                    ).shift(padRect.topLeft),
+                    // 셀 기준 영역에서 셀 변에 닿은 변만 간격 몫까지 늘린다 (#236) — 셀 안의 나눔은 그대로다. 간격 고리도
+                    // 셀 안의 터치·시맨틱 불일치를 물려받는다: 옆 간격 띠의 위·아래 끝과 네 바깥 모서리는 탭하면 ◀·▶,
+                    // 터치 탐색으로는 ▲·▼다(간격 고리의 약 7~14%, R2 실측). 두 번 탭은 읽힌 방향을 입력하므로 잘못 입력되지 않는다.
+                    rect: inflateOnCellEdges(
+                      semanticRect(sector, size, bounds).shift(padRect.topLeft),
+                      cell,
+                      gapInsets,
+                    ),
                     child: Semantics(
                       container: true,
                       sortKey: OrdinalSortKey(
@@ -1814,9 +1869,9 @@ class CursorPad extends StatelessWidget {
                   ),
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

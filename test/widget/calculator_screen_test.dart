@@ -1251,6 +1251,118 @@ void main() {
     });
   });
 
+  group('폰 세로 화면의 터치 대상 높이 (#236, Accessibility Scanner)', () {
+    // 함수부 키는 셀 전체가 터치 영역이고, 셀 둘레 키 사이 간격 몫까지 터치·의미 노드다(`CalcKeyButton.gapInsets`).
+    // 접근성 검사기는 의미 노드 경계를 터치 대상으로 재므로, 노드 높이 = 셀 + 위아래 간격 몫 = 행 간격이다.
+    // 행 간격은 키패드 높이가 정한다 — 창 폭(키패드 가로/세로 비 하한, #141)과 인셋을 뺀 높이가 모두 커야 48dp를 넘는다.
+    // 48dp에 못 미치는 폰은 받아들인 하한이다(`CalcTheme.keyMinTouchTargetHeight` 문서의 실측표). 값이 바뀌면 이 표를 다시 잰다.
+    const cases = <(String, Size, EdgeInsets, double, bool)>[
+      ('320×568', Size(320, 568), EdgeInsets.only(top: 20), 37.5, false),
+      (
+        '360×640',
+        Size(360, 640),
+        EdgeInsets.only(top: 24, bottom: 48),
+        38.9,
+        false,
+      ),
+      ('375×667', Size(375, 667), EdgeInsets.only(top: 20), 44.6, false),
+      (
+        '411×731',
+        Size(411.4, 731.4),
+        EdgeInsets.only(top: 24, bottom: 48),
+        45.5,
+        false,
+      ),
+      (
+        '360×800',
+        Size(360, 800),
+        EdgeInsets.only(top: 24, bottom: 24),
+        45.9,
+        false,
+      ),
+      (
+        '375×812',
+        Size(375, 812),
+        EdgeInsets.only(top: 50, bottom: 34),
+        47.9,
+        false,
+      ),
+      // 경계 근처 (R2): 높이가 넉넉하면 폭 약 377dp, 폭이 넉넉하면 인셋을 뺀 높이 약 695dp에서 48dp를 넘는다
+      (
+        '380×800',
+        Size(380, 800),
+        EdgeInsets.only(top: 24, bottom: 24),
+        48.53,
+        true,
+      ),
+      (
+        '411×772',
+        Size(411.4, 772),
+        EdgeInsets.only(top: 24, bottom: 48),
+        48.45,
+        true,
+      ),
+      (
+        '390×844',
+        Size(390, 844),
+        EdgeInsets.only(top: 47, bottom: 34),
+        49.9,
+        true,
+      ),
+      (
+        '411×797 Fold 커버',
+        Size(411.4, 797),
+        EdgeInsets.only(top: 41.9, bottom: 24),
+        50.7,
+        true,
+      ),
+      (
+        '411×914 (Medium Phone)',
+        Size(411.4, 914.3),
+        EdgeInsets.only(top: 52.6, bottom: 24),
+        52.7,
+        true,
+      ),
+      (
+        '430×932',
+        Size(430, 932),
+        EdgeInsets.only(top: 59, bottom: 34),
+        55.2,
+        true,
+      ),
+    ];
+    for (final (name, size, padding, height, reaches48) in cases) {
+      testWidgets(
+        '$name: 함수 키 의미 노드 높이 $height dp (48dp ${reaches48 ? '이상' : '미만'})',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          await _pumpScreen(tester, size: size, padding: padding);
+          final finder = find.byWidgetPredicate(
+            (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.sin,
+          );
+          expect(tester.widget<CalcKeyButton>(finder).hitsWholeCell, isTrue);
+          final node = tester.getSemantics(finder);
+          expect(node.rect.height, moreOrLessEquals(height, epsilon: 0.05));
+          // 의미 노드 높이 = 실제 터치 높이(셀 + 위아래 간격 몫)
+          expect(
+            node.rect.height,
+            moreOrLessEquals(functionKeyHitHeight(tester), epsilon: 1e-6),
+          );
+          expect(
+            node.rect.height >= CalcTheme.keyMinTouchTargetHeight,
+            reaches48,
+          );
+          // 키 폭은 늘 48dp 이상이다 (셀 폭 + 좌우 간격 몫)
+          expect(
+            node.rect.width,
+            greaterThanOrEqualTo(CalcTheme.keyMinTouchTargetHeight),
+          );
+          handle.dispose();
+        },
+      );
+    }
+  });
+
   group('세로 폰 화면의 키 크기 하한', () {
     // 배율 반영 메인 글자(dp) 하한
     const minMainFont = 7.0;
@@ -1345,12 +1457,13 @@ void main() {
           //   (함수 키 셀의 터치 높이와 직접 비교하지 않는다 — 그 높이는 각인 띠까지 넓힌 값이고,
           //   방향 키 구역은 함수 키보다 2~3배 넓다.)
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
-          final cell = tester.getRect(find.byType(CursorPad));
           final sin = buttons.firstWhere((b) => b.keyDef.id == CalcKeyId.sin);
           final sinCell = tester.getSize(find.byWidget(sin));
           final cellArea = sinCell.width * sinCell.height;
           final g = CursorPadGeometry(pad.size);
-          final bounds = cell.shift(-pad.topLeft);
+          final bounds = tester
+              .getRect(find.byType(CursorPad))
+              .shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
@@ -1512,7 +1625,9 @@ void main() {
             ),
           );
           final g = CursorPadGeometry(pad.size);
-          final bounds = cell.shift(-pad.topLeft);
+          final bounds = tester
+              .getRect(find.byType(CursorPad))
+              .shift(-pad.topLeft);
           for (final sector in CursorPadSector.values) {
             final vertical =
                 sector == CursorPadSector.up || sector == CursorPadSector.down;
