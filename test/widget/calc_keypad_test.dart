@@ -728,6 +728,66 @@ void main() {
       },
     );
 
+    test('◀·▶ 의미 영역은 폭 목표까지 허브 쪽 시작점을 당기되 하한(허브 반지름의 절반·▲·▼ 띠 28dp의 절반)에서 멈춘다 (#259)', () {
+      for (final (size, gap) in const [
+        (Size(127.2, 90.9), 2.4), // 412×915급 — 목표 48dp에 닿는다
+        (Size(97.7, 67.8), 1.8), // 320×568급 — 하한에 걸린다
+        (Size(250, 160), 4.7), // 태블릿급 — 이미 넓어 허브 가장자리 그대로
+      ]) {
+        final g = CursorPadGeometry(size);
+        final bounds = Offset.zero & size;
+        final outer = EdgeInsets.all(gap);
+        final c = g.center;
+        final minStart = math.min(
+          g.hubRadius,
+          CursorPadGeometry.semanticSideMinStart(g.hubRadius),
+        );
+        for (final s in [CursorPadSector.left, CursorPadSector.right]) {
+          final r = g.semanticRect(s, bounds, outer, 48);
+          final start = s == CursorPadSector.left
+              ? c.dx - r.right
+              : r.left - c.dx;
+          final width = r.width + gap;
+          // 허브 가장자리보다 바깥으로 가지 않고, 하한보다 가운데로 가지 않는다
+          expect(
+            start,
+            lessThanOrEqualTo(g.hubRadius + 1e-9),
+            reason: '$size $s',
+          );
+          expect(
+            start,
+            greaterThanOrEqualTo(minStart - 1e-9),
+            reason: '$size $s',
+          );
+          // 하한에 걸리지 않으면 정확히 목표 폭, 이미 넓으면 허브 가장자리에서 시작한다
+          if (start > minStart + 1e-9 && start < g.hubRadius - 1e-9) {
+            expect(
+              width,
+              moreOrLessEquals(48, epsilon: 1e-9),
+              reason: '$size $s',
+            );
+          }
+          // 폭 목표가 없으면 #203 그대로(허브 가장자리)
+          final plain = g.semanticRect(s, bounds);
+          final plainStart = s == CursorPadSector.left
+              ? c.dx - plain.right
+              : plain.left - c.dx;
+          expect(plainStart, moreOrLessEquals(g.hubRadius, epsilon: 1e-9));
+        }
+        // ▲·▼만 읽히는 가운데 띠는 28dp 이상 남는다(허브가 그보다 좁은 패드는 허브 폭)
+        final strip =
+            g.semanticRect(CursorPadSector.right, bounds, outer, 48).left -
+            g.semanticRect(CursorPadSector.left, bounds, outer, 48).right;
+        expect(
+          strip,
+          greaterThanOrEqualTo(
+            math.min(2 * g.hubRadius, CalcTheme.keyTouchHeightFloor) - 1e-9,
+          ),
+          reason: '$size',
+        );
+      }
+    });
+
     test('clampIntoBox는 네 변 모두 0.01dp 안쪽으로 당긴다 (#236)', () {
       const size = Size(40, 30);
       expect(
@@ -1359,6 +1419,8 @@ void _cursorPadR2Tests() {
                 sector,
                 pad.size,
                 bounds,
+                gap,
+                CursorPad.semanticMinSideWidth,
               ).shift(pad.topLeft - cell.topLeft),
               cell.size,
               gap,

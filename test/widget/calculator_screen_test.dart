@@ -1363,6 +1363,83 @@ void main() {
     }
   });
 
+  group('커서 패드 ◀·▶ 의미 노드 폭 (#259, Accessibility Scanner)', () {
+    // ◀·▶ 노드(셀 안 영역 + 셀 바깥 간격 몫)는 48dp를 목표로 허브 쪽 시작점을 가운데로 당긴다. 단 허브 반지름의 절반과
+    // 가운데 ▲·▼ 띠 폭 하한(28dp)의 절반보다 가운데로는 당기지 않는다 — 작은 폰은 그 하한에 걸려 48dp에 못 미친다.
+    // 값이 바뀌면 `CursorPadGeometry.semanticRect` 문서의 표와 함께 다시 잰다.
+    const cases = <(String, Size, EdgeInsets, double, bool)>[
+      ('320×568', Size(320, 568), EdgeInsets.only(top: 20), 36.7, false),
+      (
+        '360×800',
+        Size(360, 800),
+        EdgeInsets.only(top: 24, bottom: 24),
+        43.3,
+        false,
+      ),
+      (
+        '390×844',
+        Size(390, 844),
+        EdgeInsets.only(top: 47, bottom: 34),
+        48.0,
+        true,
+      ),
+      (
+        '411×914',
+        Size(411.4, 914.3),
+        EdgeInsets.only(top: 52.6, bottom: 24),
+        48.0,
+        true,
+      ),
+      (
+        '430×932',
+        Size(430, 932),
+        EdgeInsets.only(top: 59, bottom: 34),
+        48.0,
+        true,
+      ),
+      (
+        'Fold 841×701',
+        Size(841.1, 701),
+        EdgeInsets.only(top: 28.2, bottom: 32),
+        48.0,
+        true,
+      ),
+      (
+        '태블릿 800×1280',
+        Size(800, 1280),
+        EdgeInsets.only(top: 24, bottom: 48),
+        89.1,
+        true,
+      ),
+      (
+        '가로 915×412',
+        Size(915, 412),
+        EdgeInsets.only(top: 24, bottom: 24),
+        52.1,
+        true,
+      ),
+    ];
+    for (final (name, size, padding, width, reaches48) in cases) {
+      testWidgets('$name: ◀·▶ 노드 폭 $width dp', (tester) async {
+        final handle = tester.ensureSemantics();
+        await _pumpScreen(tester, size: size, padding: padding);
+        final widths = <double>[
+          for (final label in ['Cursor left', 'Cursor right'])
+            find.semantics.byLabel(label).evaluate().single.rect.width,
+        ];
+        for (final w in widths) {
+          expect(w, moreOrLessEquals(width, epsilon: 0.05), reason: name);
+          expect(
+            w >= CalcTheme.keyMinTouchTargetHeight - 0.01,
+            reaches48,
+            reason: name,
+          );
+        }
+        handle.dispose();
+      });
+    }
+  });
+
   group('세로 폰 화면의 키 크기 하한', () {
     // 배율 반영 메인 글자(dp) 하한
     const minMainFont = 7.0;
@@ -1483,12 +1560,23 @@ void main() {
             // 측정 31.8~47.7dp — 가장 작은 곳은 Android 320×568(인셋 24/24)의 ▲·▼ 31.8dp다.
             // #166의 겹치지 않는 사각형에서는 22.6~34.9dp였고, 그 인셋에서는 에뮬레이터 실측 21.3dp로 22dp 하한 아래였다(#173).
             // 세로 폰 화면만 본다 — 짧은 창·가로 창은 패드가 작아 더 낮다.
-            final semantic = CursorPad.semanticRect(sector, pad.size, bounds);
+            // 화면과 같은 값(셀 둘레 간격 몫 #236, ◀·▶ 폭 목표 #259)으로 잰다. ▲·▼만 읽히는 띠는 ◀·▶ 노드 사이다.
+            final gap = tester
+                .widget<CursorPad>(find.byType(CursorPad))
+                .gapInsets;
+            Rect semanticOf(CursorPadSector s) => CursorPad.semanticRect(
+              s,
+              pad.size,
+              bounds,
+              gap,
+              CursorPad.semanticMinSideWidth,
+            );
+            final semantic = semanticOf(sector);
             final readable = vertical
                 ? Rect.fromLTRB(
-                    g.center.dx - g.hubRadius,
+                    semanticOf(CursorPadSector.left).right,
                     semantic.top,
-                    g.center.dx + g.hubRadius,
+                    semanticOf(CursorPadSector.right).left,
                     semantic.bottom,
                   )
                 : semantic;
@@ -1499,7 +1587,12 @@ void main() {
                   readable.top + 0.01 + (readable.height - 0.02) * j / 8,
                 );
                 expect(
-                  g.semanticSectorAt(p, bounds),
+                  g.semanticSectorAt(
+                    p,
+                    bounds,
+                    gap,
+                    CursorPad.semanticMinSideWidth,
+                  ),
                   sector,
                   reason: '${sector.name} $p',
                 );
