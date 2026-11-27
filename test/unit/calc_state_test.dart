@@ -191,6 +191,16 @@ void main() {
       );
     });
 
+    test('쓰지 않는 SHIFT 기능(OFF)으로 입력을 만들 수 없다', () {
+      for (final id in ignoredShiftFunctions) {
+        expect(
+          () => KeyInput(id, KeyLayer.shift),
+          throwsA(isA<AssertionError>()),
+          reason: id.name,
+        );
+      }
+    });
+
     test('SHIFT + AC(실물 OFF)는 각인이 있어도 아무것도 입력하지 않는다', () {
       final next = _press([CalcKeyId.shift, CalcKeyId.ac]);
       expect(next.modifier, KeyModifier.none);

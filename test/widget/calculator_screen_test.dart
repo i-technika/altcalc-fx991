@@ -1011,10 +1011,10 @@ void main() {
     // 보통 셀(패드가 비율 상한에 닿지 않는 셀) — 내접원만 본다. 넓이는 세로 폰 화면 테스트("세로 폰 화면의 키 크기 하한")와
     // 키패드 테스트가 본다. 가장 낮은 곳은 셀 비 1.3인 셀이다.
     for (final (size, arrangement) in const [
-      (Size(320, 568), DrawnArrangement.stacked), // 0.957
+      (Size(320, 568), DrawnArrangement.stacked), // 0.958
       (Size(412, 915), DrawnArrangement.stacked), // 0.956
       // 작은 가로형 창 — #190 뒤로 410×400은 위아래 배치의 키가 더 커 410×380으로 바꿨다
-      (Size(410, 380), DrawnArrangement.landscape),
+      (Size(410, 380), DrawnArrangement.landscape), // 0.957
       (Size(360, 300), DrawnArrangement.landscape), // 0.956
       (Size(844, 390), DrawnArrangement.landscape), // 가로 폰, 0.963
       (Size(841, 701), DrawnArrangement.landscape), // 폴더블 내부 가로, 0.956

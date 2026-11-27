@@ -798,8 +798,9 @@ class _KeypadPanel extends ConsumerWidget {
       numbersOnLeft: numbersOnLeft,
       onKeyPressed: (id) => ref.read(calcProvider.notifier).pressKey(id),
       onKeyRepeat: (id) => ref.read(calcProvider.notifier).repeatKey(id),
-      // 설정 키(ON)는 계산기 입력 대신 설정을 연다 (#190). 상태 머신에도 알려 모디파이어 대기를 푼다 — 실물 ON 키처럼
-      // 다른 키를 누른 것으로 본다([CalcState.pressKey]).
+      // 설정 키(ON)는 계산기 입력 대신 설정을 연다 (#190). 상태 머신에도 알려 모디파이어 대기를 푼다 — 다른 키를 누른
+      // 것으로 본다([CalcState.pressKey], 앱 규칙). SHIFT·ALPHA 대기 중이었으면 스크린리더가 "꺼짐"을 알린 뒤 대화상자로
+      // 포커스가 옮겨 간다 — 대기가 풀렸다는 것도 사용자가 알아야 하는 상태 변화라 그대로 둔다.
       onSettingsPressed: (keyContext) {
         ref.read(calcProvider.notifier).pressKey(settingsKey);
         SettingsLauncher.openFrom(keyContext);

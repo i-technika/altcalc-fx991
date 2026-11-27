@@ -250,7 +250,8 @@ const Map<CalcKeyId, KeySpeech> _koKeys = {
   CalcKeyId.num8: KeySpeech('8', shift: '단위 변환'),
   CalcKeyId.num9: KeySpeech('9', shift: '초기화'),
   CalcKeyId.del: KeySpeech('지우기', shift: '삽입', alpha: '실행 취소'),
-  CalcKeyId.ac: KeySpeech('모두 지우기', shift: '쓰지 않는 전원 끄기'),
+  // SHIFT 각인 OFF(전원 끄기)는 이 앱에서 쓰지 않아 힌트로 읽지 않는다 (#190, `ignoredShiftFunctions`)
+  CalcKeyId.ac: KeySpeech('모두 지우기'),
   CalcKeyId.num4: KeySpeech('4'),
   CalcKeyId.num5: KeySpeech('5'),
   CalcKeyId.num6: KeySpeech('6'),
@@ -412,7 +413,8 @@ const Map<CalcKeyId, KeySpeech> _enKeys = {
   CalcKeyId.num8: KeySpeech('8', shift: 'Unit conversion'),
   CalcKeyId.num9: KeySpeech('9', shift: 'Reset'),
   CalcKeyId.del: KeySpeech('Delete', shift: 'Insert', alpha: 'Undo'),
-  CalcKeyId.ac: KeySpeech('All clear', shift: 'Unused power off'),
+  // SHIFT legend OFF (power off) is unused in this app, so it is not read as a hint (#190)
+  CalcKeyId.ac: KeySpeech('All clear'),
   CalcKeyId.num4: KeySpeech('4'),
   CalcKeyId.num5: KeySpeech('5'),
   CalcKeyId.num6: KeySpeech('6'),

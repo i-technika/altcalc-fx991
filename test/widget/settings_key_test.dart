@@ -345,6 +345,8 @@ void main() {
           displayFeatures: const [fold],
         );
         await _open(tester);
+        // 전제: 처음에는 대화상자가 ON 키 쪽(오른쪽) 절반에 갇혀 있다 — 나뉨이 바뀌어야 감싸는 위젯이 달라진다.
+        expect(tester.getRect(_surface).left, greaterThanOrEqualTo(420));
         final option = find.byKey(
           HandednessDialog.optionKeyOf(Handedness.values.first),
         );
@@ -408,6 +410,55 @@ void main() {
         expect(container.read(handednessProvider), first);
       });
     }
+
+    testWidgets(
+      '세로 접힘선 배치를 한쪽 손잡이로만 쓸 수 있는 화면: 안내 글을 보이지 않고, 대화상자를 좁은 절반에 가두지 않는다 (#41 R1·R2)',
+      (tester) async {
+        // 세로 접힘선 x=560, 오른쪽 인셋 48 → 오른쪽 절반은 233dp뿐이다.
+        // - 오른손잡이: 키패드가 오른쪽 절반에 들어가지 못해 위아래 배치로 대체한다. ON 키는 키패드 오른쪽 위(접힘선 오른쪽).
+        // - 왼손잡이: 키패드가 넓은 왼쪽 절반에 들어가 접힘선 기준 배치가 된다 — 그래서 손잡이 설정이 이 화면에
+        //   적용된다(위아래 배치로 그렸어도 안내 글을 보이면 안 된다).
+        const fold = DisplayFeature(
+          bounds: Rect.fromLTWH(560, 0, 0, 701),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        );
+        const padding = EdgeInsets.only(top: 24, right: 48, bottom: 24);
+        tester.view.padding = const FakeViewPadding(
+          top: 24 * 3,
+          right: 48 * 3,
+          bottom: 24 * 3,
+        );
+        addTearDown(tester.view.resetPadding);
+        final container = await _pump(
+          tester,
+          size: const Size(841, 701),
+          padding: padding,
+          displayFeatures: const [fold],
+        );
+        expect(isStackedArrangement(tester), isTrue);
+        expect(tester.getRect(_onKey).left, greaterThan(560));
+        await _open(tester);
+        Rect surface() => tester.getRect(_surface);
+        expect(surface().width, greaterThanOrEqualTo(280));
+        expect(surface().left, lessThan(560)); // 접힘선 오른쪽 좁은 절반에 갇히지 않았다
+        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+
+        // 왼손잡이를 고르면 접힘선 기준 배치가 된다. 반대 손잡이로는 위아래 배치라 대화상자는 화면 전체에 그대로 둔다.
+        await tester.tap(
+          find.byKey(HandednessDialog.optionKeyOf(Handedness.left)),
+        );
+        await tester.pumpAndSettle();
+        expect(container.read(handednessProvider), Handedness.left);
+        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(_dialog, findsOneWidget);
+        expect(surface().width, greaterThanOrEqualTo(280));
+        expect(surface().left, lessThan(560));
+        expect(surface().right, greaterThan(560));
+        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('회전으로 배치가 바뀌어도 ON 키 element가 유지된다', (tester) async {
       const padding = EdgeInsets.only(top: 24, bottom: 48);

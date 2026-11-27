@@ -768,7 +768,7 @@ List<CalcKeyDef> _buildAllKeys() {
 /// (`CalcState.pressKey` — 모디파이어 대기만 푼다).
 const CalcKeyId settingsKey = CalcKeyId.on;
 
-/// 각인은 실물대로 있지만 이 앱에서 무시하는 기능 — (키, SHIFT 층인지). 지금은 SHIFT + AC(전원 끄기 `OFF`)뿐이다
+/// 각인은 실물대로 있지만 이 앱에서 무시하는 SHIFT 기능을 가진 키. 지금은 SHIFT + AC(전원 끄기 `OFF`)뿐이다
 /// (#190 — 이 앱에는 전원이 없다). 계산기 상태 머신은 이 기능을 기능 없는 층처럼 다룬다(`CalcState.pressKey`).
 const Set<CalcKeyId> ignoredShiftFunctions = {CalcKeyId.ac};
 

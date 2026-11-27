@@ -369,7 +369,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     return Semantics(
       button: true,
       enabled: _enabled,
-      // 키보드 포커스를 받는 키(설정 키, #190)는 그 상태도 알린다 — 없어진 설정 버튼(IconButton)이 알리던 것과 같다.
+      // 키보드 포커스를 받는 키(설정 키, #190)는 포커스를 받을 수 있는지와 지금 포커스 상태를 알린다(스크린리더 포커스로
+      // 입력 포커스를 옮기는 동작 `onFocus`는 싣지 않는다 — 활성화는 탭 동작으로 한다).
       focusable: focusable ? true : null,
       focused: focusable ? _focused : null,
       // 표시 각인(`sin⁻¹`, `∫◻◻◼` 등) 대신 기능을 읽는 음성 라벨 (#20).
