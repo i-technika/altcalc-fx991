@@ -1,4 +1,5 @@
 import 'dart:developer' show Timeline;
+import 'dart:math' as math;
 import 'dart:ui'
     show DisplayFeature, FramePhase, FrameTiming, Offset, Rect, Size;
 
@@ -37,8 +38,11 @@ import 'form_factor.dart';
 /// ## 시스템 영역·키 입력 시점 (#118)
 /// 시스템 인셋·제스처 영역이 바뀔 때마다 "시스템 영역" 줄([systemInsets])을 남기고, 키 터치마다 누르는 순간 입력됐는지,
 /// 제스처 영역에서 시작해 손을 뗄 때로 미뤘는지, 미룬 누름이 시스템에 가로채여(취소) 버려졌는지([keyInput])를 남긴다.
-/// 누름 하나는 첫 줄(입력(누를 때) 또는 보류) 뒤에 끝 줄 하나로 끝난다 — 보류는 뗄 때 입력·버림·취소·해제 중 하나,
-/// 누를 때 입력은 취소·해제가 올 때만 끝 줄이 있다. 무시한 포인터(두 번째 손가락, 마우스 보조 버튼 등)는 남기지 않는다.
+/// 누름 하나는 첫 줄(입력(누를 때) 또는 보류) 뒤에 끝 줄 정확히 하나로 끝난다 — 보류는 뗄 때 입력·버림·취소·해제 중 하나,
+/// 누를 때 입력은 뗌·취소·해제 중 하나다. 무시한 포인터(두 번째 손가락, 마우스 보조 버튼 등)는 남기지 않는다.
+/// 좌표·크기는 소수 둘째 자리까지 적고 시스템 영역 줄에 밀도(devicePixelRatio)를 함께 적는다 — 밀도 2.625 기기의 경계
+/// (78px ÷ 2.625 = 29.714…)처럼 dp로 끝나지 않는 값은 px(= dp × 밀도)로 되돌려 비교한다. 경계 안팎의 판정 결과는 단계
+/// 이름(보류 / 입력(누를 때))이 말해 준다.
 /// 기기별 뒤로가기·작업 표시줄 영역과 가장자리 키 동작을 실기기 logcat으로 재려는 것이다(#177).
 ///
 /// 남는 것은 창·화면 크기, 접힘선 위치, 시스템 영역 크기, 판정 결과, 프레임 시각, 누른 키 이름과 그 화면 좌표다. 계정·기기
@@ -212,15 +216,18 @@ abstract final class LayoutLog {
   /// - [padding]: `MediaQuery.padding` (키보드 등에 가려진 부분을 뺀 시스템 인셋)
   /// - [viewPadding]: `MediaQuery.viewPadding` (시스템 바 인셋 그대로 — 본체 아래 여백 계산에 쓴다, #63)
   /// - [gestures]: `MediaQuery.systemGestureInsets` (Android 시스템 제스처 영역 — 키 입력을 뗄 때로 미루는 판정, #50)
+  /// - [devicePixelRatio]: 화면 밀도 — dp 값을 기기 px로 되돌릴 때 쓴다
   static void systemInsets({
     required Size window,
+    required double devicePixelRatio,
     required EdgeInsets padding,
     required EdgeInsets viewPadding,
     required EdgeInsets gestures,
   }) {
     if (!enabled) return;
     final line =
-        '시스템 영역: 창 ${_size(window)}, 인셋 ${_insets(padding)}, '
+        '시스템 영역: 창 ${_n2(window.width)}x${_n2(window.height)}, '
+        '밀도 ${_fixed(devicePixelRatio, 3)}, 인셋 ${_insets(padding)}, '
         '시스템 바 ${_insets(viewPadding)}, 제스처 영역 ${_insets(gestures)}';
     if (line == _lastInsets) return;
     _lastInsets = line;
@@ -228,8 +235,8 @@ abstract final class LayoutLog {
   }
 
   /// 키 터치 하나의 처리 ([KeyInputEvent]) — [key]는 키 이름, [at]은 그 단계의 포인터 화면 좌표(dp)다.
-  /// 좌표는 소수 둘째 자리까지 적는다 — 제스처 영역 경계(예: 화면 폭 − 30)와 비교할 때 0.1dp 반올림으로 경계 안팎이
-  /// 뒤섞이지 않게 한다. 위젯 쪽 사정으로 끝난 단계([KeyInputEvent.releasedByWidget])는 좌표가 없다.
+  /// 좌표는 시스템 영역 줄과 같이 소수 둘째 자리까지 적는다(클래스 문서의 경계 비교 참고). 위젯 쪽 사정으로 끝난 단계
+  /// ([KeyInputEvent.releasedDeferred]·[KeyInputEvent.releasedAfterPress])는 좌표가 없다.
   static void keyInput(KeyInputEvent event, {required String key, Offset? at}) {
     if (!enabled) return;
     final where = at == null ? '' : ' (${_n2(at.dx)},${_n2(at.dy)})';
@@ -277,7 +284,7 @@ abstract final class LayoutLog {
       '${f.type.name} ${f.state.name} ${_rect(f.bounds)}';
 
   static String _insets(EdgeInsets e) =>
-      '${_n(e.left)}/${_n(e.top)}/${_n(e.right)}/${_n(e.bottom)}';
+      '${_n2(e.left)}/${_n2(e.top)}/${_n2(e.right)}/${_n2(e.bottom)}';
 
   static String _size(Size s) => '${_n(s.width)}x${_n(s.height)}';
 
@@ -285,8 +292,12 @@ abstract final class LayoutLog {
       '${_n(r.left)},${_n(r.top)}-${_n(r.right)},${_n(r.bottom)}';
 
   /// dp 값을 소수 둘째 자리까지 (끝의 0은 지운다 — 정수면 소수점 없이)
-  static String _n2(double v) {
-    final fixed = ((v * 100).round() / 100).toStringAsFixed(2);
+  static String _n2(double v) => _fixed(v, 2);
+
+  /// [v]를 소수 [digits]자리까지 (끝의 0은 지운다 — 정수면 소수점 없이)
+  static String _fixed(double v, int digits) {
+    final scale = math.pow(10, digits);
+    final fixed = ((v * scale).round() / scale).toStringAsFixed(digits);
     return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
@@ -310,6 +321,9 @@ enum KeyInputEvent {
   /// 미룬 누름을 손을 뗄 때 입력했다
   committedOnRelease('입력(뗄 때)'),
 
+  /// 누를 때 입력한 누름에서 손을 뗐다 (반복 입력이 멈춘다)
+  liftedAfterPress('뗌(이미 입력)'),
+
   /// 미룬 누름이 키 밖으로 벗어나 버렸다
   discardedMovedOut('버림(벗어남)'),
 
@@ -319,8 +333,11 @@ enum KeyInputEvent {
   /// 이미 누를 때 입력한 누름이 취소됐다 (반복 입력만 멈춘다 — 입력은 되돌리지 않는다)
   cancelledAfterPress('취소(이미 입력)'),
 
-  /// 누른 채 키가 비활성이 되거나 다른 키로 바뀌거나 사라져(배치 전환 등) 눌림을 해제했다. 미룬 누름이면 입력하지 않았다.
-  releasedByWidget('해제(키 변경·제거)');
+  /// 미룬 누름을 누른 채 키가 비활성이 되거나 다른 키로 바뀌거나 사라져(배치 전환 등) 해제했다. 입력하지 않았다.
+  releasedDeferred('해제(보류 버림)'),
+
+  /// 누를 때 입력한 누름을 누른 채 키가 비활성이 되거나 다른 키로 바뀌거나 사라져 해제했다 (반복 입력만 멈춘다)
+  releasedAfterPress('해제(이미 입력)');
 
   /// 로그 표기
   final String label;

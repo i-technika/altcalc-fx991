@@ -843,6 +843,7 @@ class CalculatorScreen extends ConsumerWidget {
     if (LayoutLog.enabled) {
       LayoutLog.systemInsets(
         window: window,
+        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
         padding: padding,
         viewPadding: viewPadding,
         gestures: gestureInsets,

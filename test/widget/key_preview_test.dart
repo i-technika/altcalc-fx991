@@ -324,9 +324,9 @@ void main() {
       for (final d in previewDevices) {
         final g = d.systemGestureInsets;
         if (g == EdgeInsets.zero) continue;
-        // 위는 상태 표시줄 이상이다. 미리보기 프리셋은 모두 같게 두지만, 카메라 구멍 화면은 더 깊을 수 있다
-        // (Pixel Fold 커버 실측 41.9 / 54.1 — #172) — 그런 기기 프리셋을 더해도 이 규칙은 그대로 둔다.
-        expect(g.top, greaterThanOrEqualTo(d.padding.top), reason: d.name);
+        // 위는 상태 표시줄과 같다. 카메라 구멍 화면은 더 깊을 수 있다(Pixel Fold 커버 실측 41.9 / 54.1 — #172) —
+        // 그런 프리셋을 더할 때 그 프리셋만 이 단언에서 뺀다.
+        expect(g.top, d.padding.top, reason: d.name);
         expect(g.left, g.right, reason: d.name);
         expect(
           [0.0, previewBackGestureWidth],

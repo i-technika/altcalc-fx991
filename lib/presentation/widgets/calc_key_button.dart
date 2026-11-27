@@ -186,7 +186,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     super.didUpdateWidget(oldWidget);
     if (_pressed && (!_enabled || oldWidget.keyDef.id != widget.keyDef.id)) {
       // 누른 채 비활성이 되거나 다른 키로 바뀌면 눌림과 반복을 즉시 해제한다.
-      _logKey(KeyInputEvent.releasedByWidget, key: oldWidget.keyDef.id);
+      _logRelease(key: oldWidget.keyDef.id);
       _release();
     } else if (widget.onRepeat == null) {
       _cancelRepeat();
@@ -204,7 +204,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
   @override
   void dispose() {
     if (_pressed) {
-      _logKey(KeyInputEvent.releasedByWidget, key: widget.keyDef.id);
+      _logRelease(key: widget.keyDef.id);
     }
     _cancelRepeat();
     super.dispose();
@@ -271,10 +271,16 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     );
   }
 
-  /// 좌표 없는 진단 로그 — 위젯 쪽 사정으로 눌림이 끝날 때(dispose에서도 부르므로 context를 쓰지 않는다)
-  void _logKey(KeyInputEvent event, {required CalcKeyId key}) {
+  /// 좌표 없는 진단 로그 — 위젯 쪽 사정으로 눌림이 끝날 때(dispose에서도 부르므로 context를 쓰지 않는다).
+  /// [key]는 누르던 키다(다른 키로 바뀐 경우 옛 키).
+  void _logRelease({required CalcKeyId key}) {
     if (!LayoutLog.enabled) return;
-    LayoutLog.keyInput(event, key: key.name);
+    LayoutLog.keyInput(
+      _deferred
+          ? KeyInputEvent.releasedDeferred
+          : KeyInputEvent.releasedAfterPress,
+      key: key.name,
+    );
   }
 
   void _handlePointerDown(PointerDownEvent event) {
@@ -314,6 +320,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (commit) {
       _log(KeyInputEvent.committedOnRelease, at: event.position);
       _commitPress();
+    } else {
+      _log(KeyInputEvent.liftedAfterPress, at: event.position);
     }
   }
 
