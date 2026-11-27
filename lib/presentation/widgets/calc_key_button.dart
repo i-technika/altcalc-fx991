@@ -1314,12 +1314,16 @@ Widget _legendLabel(
 /// 자식([KeyLegendView]·[DrawnBaselineLabel])은 보고한 기준선에 그린다.
 ///
 /// `Text`는 상황에 따라 `RenderParagraph`를 다른 렌더 객체로 감싼다 — 위에 선택 영역이 있으면 `MouseRegion`, `semanticsLabel`을
-/// 주면 `Semantics`(#252 R1). 그런 감싸개는 모두 자식을 제자리(오프셋 0)에 두는 [RenderProxyBox]이므로, 그 사슬을 따라
-/// 내려가 `RenderParagraph`를 찾는다 — 그래야 감싸개가 끼어도 반올림 보정이 조용히 빠지지 않는다.
+/// 주면 `Semantics`·`ExcludeSemantics`(#252 R1). 그 감싸개(`RenderMouseRegion`·`RenderSemanticsAnnotations`·`RenderExcludeSemantics`)는 자식을 제자리(오프셋 0, 크기
+/// 그대로)에 두므로 그 사슬만 따라 내려가 `RenderParagraph`를 찾는다 — 그래야 감싸개가 끼어도 반올림 보정이 조용히 빠지지 않는다.
+/// 자식을 옮기거나 줄이는 [RenderProxyBox](`RenderTransform`·`RenderFittedBox` 등)는 따라가지 않는다(#252 R2) — 그런 렌더 객체는
+/// 자식 기준선을 변환 없이 보고하므로 반올림한 거리가 그린 곳이 아니다.
 double drawnBaselineOf(RenderBox child, double baseline) {
   RenderObject? node = child;
-  while (node is RenderProxyBox) {
-    node = node.child;
+  while (node is RenderMouseRegion ||
+      node is RenderSemanticsAnnotations ||
+      node is RenderExcludeSemantics) {
+    node = (node! as RenderProxyBox).child;
   }
   return node is RenderParagraph ? baseline.roundToDouble() : baseline;
 }
@@ -1328,7 +1332,8 @@ double drawnBaselineOf(RenderBox child, double baseline) {
 ///
 /// `Text`는 보고한 기준선(글자 상자 위끝에서 소수 거리)을 정수 dp로 반올림한 곳에 글자를 그린다([drawnBaselineOf]). 그래서
 /// 같은 줄 상자·기준선을 보고하는 [KeyLegendView](글자 조각을 계산한 기준선에 그린다)와 나란히 놓으면 그린 기준선이 최대
-/// 0.5dp 어긋난다(#252 실측 — 360×800 폰 SHIFT `sin⁻¹`·ALPHA `D` 0.50dp). 이 위젯은 크기·보고한 기준선은 [child] 그대로 두고
+/// 0.5dp 어긋난다(#252 실측 — 줄 간격 배분을 고친 뒤 800×1280 태블릿 SHIFT `sin⁻¹`·ALPHA `D` 0.37dp, 가로 폰 800×360 글자 배율 1.3에서
+/// 0.50dp). 이 위젯은 크기·보고한 기준선은 [child] 그대로 두고
 /// 반올림 차만큼 [child]를 옮겨(−0.5~+0.5dp), 보고한 기준선 = 그린 기준선이 되게 한다. 그래서 감싸는 아래 정렬·기준선 정렬
 /// 배치가 그린 기준선을 맞춘다. 기준선이 없는 자식은 옮기지 않는다.
 class DrawnBaselineLabel extends SingleChildRenderObjectWidget {

@@ -29,6 +29,7 @@ TextStyle legendStyleOf(WidgetTester tester, Finder finder) =>
 /// 각인 띠의 `Text` 각인은 [DrawnBaselineLabel]이 감싸 글자를 보고한 기준선에 그리도록 최대 0.5dp 옮긴다(#252) — 그래서
 /// `Text` 상자는 띠 안의 자리에서 그만큼 벗어나 있고, 자리는 감싸는 위젯의 상자다. 감싸지 않은 각인은 그 위젯의 상자다.
 Rect legendSlotRect(WidgetTester tester, Finder finder) {
+  expect(finder, findsOneWidget);
   final wrapper = find.ancestor(
     of: finder,
     matching: find.byType(DrawnBaselineLabel),

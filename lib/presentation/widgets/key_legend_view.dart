@@ -26,7 +26,8 @@ import '../../core/theme/calc_theme.dart';
 /// - 기준선은 한 줄 상자의 기준선이다. 분수가 아래로 더 나가면 그만큼 상자가 아래로 커지므로, 아래 정렬한
 ///   각인 띠에서는 기준선이 그만큼 이웃 각인보다 올라간다 — 넘치는 양은 가장 많은 `d/dx◼`도 0.08em 미만이고(em 치수, 테스트로
 ///   고정), 그린 크기에서는 줄 상자 높이를 정수 dp로 반올림해 줄 상자 깊이가 줄어드는 만큼(최대 0.5dp) 더 올라간다(#252 실측:
-///   360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp, `test/widget/legend_band_baseline_test.dart`).
+///   360×800 폰 0.94dp·800×1280 태블릿 글자 배율 1.3에서 1.20dp, `test/widget/legend_band_baseline_test.dart`). 실물도 이렇게
+///   올라가는지는 #260에서 대조한다.
 ///
 /// [KeypadMetrics] 같은 측정 쪽은 그리지 않고 [emSize]로 크기를 잰다.
 class KeyLegendView extends LeafRenderObjectWidget {

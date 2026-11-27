@@ -165,24 +165,31 @@ Future<void> _pumpApp(
 /// 2. 각인 글자는 자리가 보고한 기준선에 그려진다(`Text` 반올림 보정 — [DrawnBaselineLabel]).
 /// 3. 한 줄 아래로 넘치지 않는 각인은 기준선 아래 깊이가 테마 없는 줄 상자의 깊이와 같다 — 그래서 그린 기준선이 모두 같다
 ///    (줄 간격 배분 고정 — [keyLabelStrut]).
-/// 4. 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)은 넘친 만큼만 올라가고 그 양은 글자 크기의 0.08배 + 0.5dp 미만이다([KeyLegendView]
-///    "크기·기준선" 절의 의도한 배치 — 실물 대조는 후속 이슈).
+/// 4. 한 줄 아래로 넘칠 수 있는 각인은 [_overflowingLegends]뿐이고, 넘친 잉크 깊이(잉크 범위 표로 잰 em 치수 × 글자 크기)에서 줄 상자
+///    깊이를 뺀 만큼만 올라간다([KeyLegendView] "크기·기준선" 절의 의도한 배치 — 실물 대조는 #260).
 /// 띠 각인은 줄어들지 않는다 — 줄이면 아래 정렬에서 기준선이 올라가므로, 줄어드는 창이 생기면 기대값을 정해 이 검사를 넓힌다.
 double _expectBandBaselines(WidgetTester tester) {
-  final rows = <double, List<_BandLegend>>{};
-  for (final button in tester.widgetList<CalcKeyButton>(
-    find.byType(CalcKeyButton),
-  )) {
-    final id = button.keyDef.id;
-    final top = (tester.getRect(_button(id)).top * 100).round() / 100;
-    rows.putIfAbsent(top, () => []).addAll(_bandLegends(tester, id));
+  // 행 — 키 버튼 위끝을 정렬해 앞 키와 0.01dp 안이면 같은 행으로 묶는다(반올림 구간 경계에서 갈리지 않게)
+  final tops = [
+    for (final button in tester.widgetList<CalcKeyButton>(
+      find.byType(CalcKeyButton),
+    ))
+      (button.keyDef.id, tester.getRect(_button(button.keyDef.id)).top),
+  ]..sort((a, b) => a.$2.compareTo(b.$2));
+  final rows = <List<_BandLegend>>[];
+  double? lastTop;
+  for (final (id, top) in tops) {
+    if (lastTop == null || top - lastTop > 0.01) rows.add([]);
+    lastTop = top;
+    rows.last.addAll(_bandLegends(tester, id));
   }
-  final all = rows.values.expand((r) => r).toList();
+  final all = rows.expand((r) => r).toList();
   expect(all, isNotEmpty);
   final fontSize = all.first.fontSize;
 
   var mixedRows = 0;
-  for (final row in rows.values.where((r) => r.isNotEmpty)) {
+  final overflowing = <String>{};
+  for (final row in rows.where((r) => r.isNotEmpty)) {
     final bottom = row.first.slot.bottom;
     final baseline = bottom - _lineDescent(row.first.style, fontSize);
     for (final l in row) {
@@ -214,11 +221,19 @@ double _expectBandBaselines(WidgetTester tester) {
           reason: '$what 띠 기준선',
         );
       } else {
-        expect(l.plain, isFalse, reason: '$what 글자 각인은 넘치지 않는다');
+        overflowing.add(l.text);
+        final legend = _overflowingLegends[l.text];
+        expect(
+          legend,
+          isNotNull,
+          reason: '$what 넘치지 않아야 할 각인이 ${baseline - l.drawnBaseline}dp 올라갔다',
+        );
+        // 넘친 잉크 깊이 − 줄 상자 깊이 (em 치수의 넘침 0.08em 미만 + 줄 상자 높이 반올림 몫 — [KeyLegendView] "크기·기준선" 절)
+        final inkDepth =
+            -KeyLegendView.emMetrics(legend!, l.style).inkBottom * fontSize;
         expect(
           baseline - l.drawnBaseline,
-          // em 치수의 넘침(0.08em 미만) + 줄 상자 높이의 정수 반올림으로 줄 상자 깊이가 줄어드는 몫(최대 0.5dp)
-          lessThan(0.08 * fontSize + 0.5),
+          moreOrLessEquals(inkDepth - (bottom - baseline), epsilon: 0.01),
           reason: '$what 넘친 만큼 올라간 거리',
         );
       }
@@ -242,8 +257,19 @@ double _expectBandBaselines(WidgetTester tester) {
     );
   }
   expect(mixedRows, greaterThan(0));
+  // 가장 깊이 넘치는 `d/dx◼`는 늘 넘친다. `∑◻◻◼`는 넘친 깊이가 얕아 줄 상자 높이의 반올림에 따라 넘치지 않는 창도 있다.
+  expect(overflowing, contains('d/dx◼'));
   return fontSize;
 }
+
+/// 각인 띠에서 한 줄 상자 아래로 잉크가 넘칠 수 있는 각인 (한 줄 표기 → 각인) — 분모·아래 끝 칸이 기준선 아래로 내려간다.
+/// 그 밖의 각인이 넘치면 띠 기준선 검사가 실패한다.
+final Map<String, KeyLegend> _overflowingLegends = {
+  for (final id in CalcKeyId.values)
+    if (keyDefOf(id).shiftLegend case final l?
+        when l.plainText == 'd/dx◼' || l.plainText.startsWith('∑'))
+      l.plainText: l,
+};
 
 /// 키캡 위 각인 띠의 자리 [slot] 안에서, 색 [ink]로 그린 글자 잉크의 아래끝 (이미지 좌표 dp, 픽셀 이하 보간).
 ///
@@ -303,11 +329,14 @@ void main() {
   setUpAll(loadBundledFonts);
 
   group('실제 앱의 각인 띠 기준선', () {
-    const sizes = {
-      '폰 360×800': Size(360, 800),
-      '태블릿 800×1280': Size(800, 1280),
-    };
-    for (final MapEntry(key: name, value: size) in sizes.entries) {
+    // (이름, 창, 글자 배율 1.3이 띠 글자를 키우는지) — 세로 폰·태블릿과 가로형(넓은 배열 — 가로 폰은 옮긴 거리가 반올림 경계 0.5dp에
+    // 가까운 +0.497dp라 반올림 모델이 가장 아슬아슬한 곳이다, #252 R2)
+    for (final (name, size, scales) in const [
+      ('폰 360×800', Size(360, 800), true),
+      ('태블릿 800×1280', Size(800, 1280), true),
+      ('가로 폰 800×360', Size(800, 360), false),
+      ('가로 태블릿 1280×800', Size(1280, 800), false),
+    ]) {
       testWidgets('$name 글자 배율 1.0·1.3: 같은 행 각인 띠의 글자 각인과 2차원 각인은 그린 기준선이 같다', (
         tester,
       ) async {
@@ -315,19 +344,20 @@ void main() {
         final base = _expectBandBaselines(tester);
         await _pumpApp(tester, size, 1.3);
         final scaled = _expectBandBaselines(tester);
-        // 글자 배율이 띠 글자 크기를 실제로 바꾸는 창이어야 배율 검사가 뜻이 있다
-        expect(scaled, greaterThan(base + 0.1));
+        // 세로 창은 글자 배율이 띠 글자 크기를 실제로 바꿔야 배율 검사가 뜻이 있다
+        if (scales) expect(scaled, greaterThan(base + 0.1));
       });
     }
   });
 
   group('그린 픽셀', () {
-    // (창, 픽셀 비) — 폰(Android 흔한 픽셀 비 3)·태블릿 세로
-    for (final (size, pixelRatio) in const [
-      (Size(360, 800), 3.0),
-      (Size(800, 1280), 2.0),
+    // (창, 픽셀 비, 글자 배율) — `Text`의 반올림 차(띠 각인을 옮긴 거리)가 0.3dp 넘는 구성만 쓴다(#252 R2 — 차가 작으면 보정이
+    // 없어도 허용 오차 안이라 검사가 구별하지 못한다). 폰 +0.34dp·태블릿 −0.37dp로 옮기는 방향도 서로 반대다.
+    for (final (size, pixelRatio, scale) in const [
+      (Size(360, 800), 3.0, 1.3),
+      (Size(800, 1280), 2.0, 1.0),
     ]) {
-      for (final scale in [1.0, 1.3]) {
+      {
         testWidgets(
           '$size·픽셀 비 $pixelRatio·글자 배율 $scale: sin 키 SHIFT sin⁻¹과 ALPHA D의 잉크 아래끝이 같고 '
           '그린 기준선에 있다',
@@ -351,6 +381,18 @@ void main() {
             final legends = _bandLegends(tester, CalcKeyId.sin);
             final shift = legends.singleWhere((l) => !l.plain);
             final alpha = legends.singleWhere((l) => l.text == 'D');
+            final moved = tester
+                .renderObject<RenderDrawnBaselineLabel>(
+                  find.descendant(
+                    of: _button(CalcKeyId.sin),
+                    matching: find.byType(DrawnBaselineLabel),
+                  ),
+                )
+                .shift;
+            expect(moved.abs(), greaterThan(0.3), reason: '옮긴 거리 $moved');
+            final palette = CalcPalette.of(
+              tester.element(_button(CalcKeyId.sin)),
+            );
             double bottom(_BandLegend l, Color ink) =>
                 _pixelInkBottom(
                   data,
@@ -360,19 +402,20 @@ void main() {
                   ink,
                 ) +
                 origin.dy;
-            final shiftBottom = bottom(shift, CalcTheme.shiftLabel);
-            final alphaBottom = bottom(alpha, CalcTheme.alphaLabel);
+            final shiftBottom = bottom(shift, palette.shiftLabel);
+            final alphaBottom = bottom(alpha, palette.alphaLabel);
             image.dispose();
-            // s의 둥근 아래끝(−0.008em)과 픽셀 보간 오차를 합쳐 0.25dp — #252 전 차이(폰 0.5dp·태블릿 1.4dp)보다 작다
+            // s의 둥근 아래끝(−0.008em)과 픽셀 보간 오차를 합쳐 0.2dp — 보정이 없으면 옮긴 거리(0.3dp 넘게)만큼 어긋난다
             expect(
               shiftBottom,
-              moreOrLessEquals(alphaBottom, epsilon: 0.25),
+              moreOrLessEquals(alphaBottom, epsilon: 0.2),
               reason: 'sin⁻¹ $shiftBottom · D $alphaBottom',
             );
-            // 평평한 아래끝 글자 D의 잉크 아래끝 = 그린 기준선 (반올림 모델 확인)
+            // 평평한 아래끝 글자 D의 잉크 아래끝 = 그린 기준선 (반올림 모델 확인 — "보고한 기준선에 그린다"는 반대 모델이면
+            // 옮긴 거리만큼 어긋난다)
             expect(
               alphaBottom,
-              moreOrLessEquals(alpha.drawnBaseline, epsilon: 0.25),
+              moreOrLessEquals(alpha.drawnBaseline, epsilon: 0.15),
               reason: 'D 잉크 $alphaBottom · 기준선 ${alpha.drawnBaseline}',
             );
           },
