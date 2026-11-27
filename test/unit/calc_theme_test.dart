@@ -857,6 +857,20 @@ void main() {
           CalcTheme.lcdStatusCharWidthRatio /
           CalcTheme.lcdStatusCapHeightRatio;
       expect(mathCapRatio, closeTo(14 / 7, 2.0 * 0.05));
+      // 👁(화면 켜짐 유지, 앱 고유 — #233)는 2칸 슬롯 안에 들어간다. 대문자 높이 대비 폭은 실물 그 자리 ☀ 잉크(6도트 ÷
+      // 대문자 높이 7도트 = 0.86배, #58 표)보다 일부러 넓다(1.4칸 = 1.18배, 약 +37%): 눈이 가로로 길어야 작은 크기에서
+      // ⊙(☉ = 해)로 뭉개지지 않는다(#233 리뷰 R1 — 1칸 = 0.84배였다). 하한은 그 이유(가로:세로 1.6 이상 — 잉크 높이는
+      // 대문자 높이의 0.62), 상한은 회귀 방지(☀ 잉크의 1.5배)다.
+      expect(
+        CalcTheme.lcdStatusEyeInkCells,
+        lessThanOrEqualTo(LcdIndicatorSlot.keepScreenOn.columns),
+      );
+      final eyeCapRatio =
+          CalcTheme.lcdStatusEyeInkCells *
+          CalcTheme.lcdStatusCharWidthRatio /
+          CalcTheme.lcdStatusCapHeightRatio;
+      expect(eyeCapRatio, greaterThanOrEqualTo(0.62 * 1.6));
+      expect(eyeCapRatio, lessThanOrEqualTo(6 / 7 * 1.5));
     });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {

@@ -168,6 +168,8 @@ class KoSemanticStrings extends CalcSemanticStrings {
       LcdIndicatorSlot.historyDown => '아래쪽에 내용 더 있음',
       LcdIndicatorSlot.historyUp => '위쪽에 내용 더 있음',
       LcdIndicatorSlot.disp => '중간 결과 표시 중',
+      // 앱 설정 "화면 켜짐 유지"(#234)와 같은 이름 — 실물 ☀(태양광) 자리의 앱 고유 표시기(#233)
+      LcdIndicatorSlot.keepScreenOn => '화면 켜짐 유지',
     };
   }
 
@@ -306,6 +308,8 @@ class EnSemanticStrings extends CalcSemanticStrings {
       LcdIndicatorSlot.historyDown => 'More below',
       LcdIndicatorSlot.historyUp => 'More above',
       LcdIndicatorSlot.disp => 'Showing intermediate result',
+      // Same name as the "Keep screen on" app setting (#234) — app-only indicator in the real ☀ (solar) spot (#233)
+      LcdIndicatorSlot.keepScreenOn => 'Keep screen on',
     };
   }
 
