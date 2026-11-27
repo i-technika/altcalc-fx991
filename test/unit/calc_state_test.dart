@@ -4,6 +4,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 
 /// 키를 순서대로 누른 결과 상태
 CalcState _press(List<CalcKeyId> ids) =>
@@ -322,6 +323,33 @@ void main() {
         LcdStatus.initial.copyWith(shift: true),
         LcdStatus.initial,
       ]);
+    });
+
+    test('lcdStatusProvider는 화면 켜짐 유지 값을 계산기 상태와 합친다 (#233)', () {
+      // 기본은 꺼짐 — M1에는 이 값을 바꾸는 설정이 없다(설정은 #234).
+      expect(container.read(keepScreenOnProvider), isFalse);
+      expect(container.read(lcdStatusProvider), LcdStatus.initial);
+
+      container.read(keepScreenOnProvider.notifier).set(true);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(keepScreenOn: true),
+      );
+      // 계산기 상태가 바뀌어도 화면 켜짐 유지는 남는다.
+      container.read(calcProvider.notifier).pressKey(CalcKeyId.shift);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(shift: true, keepScreenOn: true),
+      );
+      // 계산기를 처음 상태로 되돌려도(초기화) 앱 설정에서 오는 값은 그대로다.
+      container.invalidate(calcProvider);
+      expect(
+        container.read(lcdStatusProvider),
+        LcdStatus.initial.copyWith(keepScreenOn: true),
+      );
+
+      container.read(keepScreenOnProvider.notifier).set(false);
+      expect(container.read(lcdStatusProvider), LcdStatus.initial);
     });
 
     test('무시된 반복은 상태 알림을 보내지 않는다', () {

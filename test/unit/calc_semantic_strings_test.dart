@@ -5,7 +5,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
-import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_reader_announcer.dart';
 
 /// 음성 라벨에 허용하는 글자: 한글 음절, 영문, 숫자, 공백, 아포스트로피(Euler's).
 /// 쉼표는 키 힌트에서 시프트·알파 기능을 나누는 구분자로만 쓰므로 기능 이름에는 넣지 않는다.
@@ -54,6 +54,7 @@ List<LcdStatus> _statusesWith(LcdIndicatorSlot slot) => switch (slot) {
   LcdIndicatorSlot.historyDown => [const LcdStatus(historyDown: true)],
   LcdIndicatorSlot.historyUp => [const LcdStatus(historyUp: true)],
   LcdIndicatorSlot.disp => [const LcdStatus(disp: true)],
+  LcdIndicatorSlot.keepScreenOn => [const LcdStatus(keepScreenOn: true)],
 };
 
 void main() {
@@ -224,12 +225,17 @@ void main() {
       );
     });
 
-    test('스크롤 표시기·중간 결과는 화면 순서(▼, ▲, ‖)대로 읽는다', () {
+    test('스크롤 표시기·중간 결과·화면 켜짐 유지는 화면 순서(▼, ▲, ‖, 👁)대로 읽는다', () {
       expect(
         ko.statusBar(
-          const LcdStatus(historyUp: true, historyDown: true, disp: true),
+          const LcdStatus(
+            historyUp: true,
+            historyDown: true,
+            disp: true,
+            keepScreenOn: true,
+          ),
         ),
-        '수학 입출력, 각도 단위 도, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중',
+        '수학 입출력, 각도 단위 도, 아래쪽에 내용 더 있음, 위쪽에 내용 더 있음, 중간 결과 표시 중, 화면 켜짐 유지',
       );
     });
 

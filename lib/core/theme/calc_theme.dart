@@ -614,7 +614,7 @@ abstract final class CalcTheme {
   );
 
   /// LCD 상태 표시줄 텍스트 스타일 (M, FIX 등 — 슬롯은 `LcdIndicatorSlot`. S·A·D/R/G는 `LcdStatusBoxedLetter`가,
-  /// →x·√▭✎·‖는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
+  /// →x·√▭✎·‖·👁(화면 켜짐 유지)는 `LcdStatusIcon`이 이 스타일의 크기·글꼴을 기준으로 그림).
   static const TextStyle lcdStatusStyle = TextStyle(
     fontFamily: monoFontFamily,
     fontFamilyFallback: monoFontFallback,
@@ -1067,6 +1067,14 @@ abstract final class CalcTheme {
   /// 내부 배치(근호 : 틈 : 칸 : 연필, #160 사진 측정)는 그대로 두고 가로로만 이 폭에 맞춰 줄인다(`LcdStatusIcon`).
   static const double lcdStatusMathInkCells = 2.4;
 
+  /// `👁`(화면 켜짐 유지, 앱 고유 — #233) 잉크 전체 폭 (한 칸 글리프 폭 대비). 2칸 슬롯 가운데에 놓는다.
+  /// 근거: 눈이 가로:세로 약 1.9:1로 가로로 길어야 작은 크기에서 원(⊙ — ☉ = 해)으로 뭉개지지 않는다(#233 리뷰 R1 —
+  /// 한 칸이면 1.1:1이었다). 그래서 다른 아이콘이 쓰는 척도(대문자 높이 대비 폭)로는 실물 그 자리 ☀ 잉크(6도트 ÷ 대문자
+  /// 높이 7도트 = 0.86배, #58 스프라이트 표)보다 약 37% 넓다(1.4 × 0.6em ÷ 0.714em = 1.18배) — 의도한 차이다.
+  /// 표시줄 폭 대비로는 LCD마다 다르다: 폭이 상태 글자 크기를 정하는 폰 세로 LCD에서는 한 칸 진행 폭이 실물 약
+  /// 4.3~5.5도트(글자 배율 1~1.3)라 1.4칸이 대략 ☀ 잉크 폭이고, 넓은 가로 LCD에서는 그 절반쯤이다(#233 리뷰 R2 실측).
+  static const double lcdStatusEyeInkCells = 1.4;
+
   /// 상태 표시 슬롯 너비 산정용 글자당 글리프 폭 (글자 크기 대비, 고정폭 폰트 0.6em).
   /// 자간([lcdStatusStyle]의 `letterSpacing`, 글자 배율과 무관한 dp)은 글자마다 따로 더한다 —
   /// 비율에 섞어 두면 특정 글자 크기에서만 맞고 작은 LCD에서 슬롯이 축소된다(#44 리뷰 R1).
@@ -1223,11 +1231,9 @@ abstract final class CalcTheme {
   //    않는다 — 번들 Saira의 기호는 x높이 안의 더 작은 기호이고(`assets/fonts/README.md`), Noto Sans Math는 Mono와 같은 크기다.
   //    키우면 획도 굵어지므로 한 단계 가는 Medium(w500)으로 그린다([keyNumberOperatorLabelStyle]) — 키운 − 의 획 약 0.13em이
   //    Saira 숫자 가로 획(약 0.12em)에 가깝다(약 10% 굵다. 실물은 같은 굵기이고, SemiBold면 0.15em로 Medium의 1.15배다). 실물의 기호는 숫자와 잉크
-  //    가운데 높이가 같다. 기호(기준선 위 약 0.35em)와 숫자(약 0.346em)의 잉크 가운데는 같은 글자 크기에서 거의 같지만, 메인
-  //    라벨은 줄 상자(글자 크기 높이)를 키캡 가운데에 두고 잉크 가운데는 줄 상자 가운데보다 약 0.065em 위다 — 기호만 1.41배로
-  //    키우면 그 차가 커져 기호가 숫자보다 약 0.6dp(360×800 폰)~0.8dp(태블릿, 배율 1.0) 높아진다. 그만큼 기호를 내려 그린다
-  //    ([keyNumberOperatorLabelDrop]). 숫자 자체도 잉크 가운데가 키캡 면 가운데보다 약 0.06em 위에 있다(실물은 가운데) —
-  //    모든 메인 각인에 공통인 줄 상자 배치라 이 이슈에서는 기호를 숫자에 맞추기만 한다.
+  //    가운데 높이가 같다. #225는 줄 상자를 키캡 가운데에 둔 채 키운 기호만 내려 숫자에 맞췄다. #230부터는 모든 메인 각인을
+  //    잉크 가운데로 세로 맞춤하고(아래 "메인 각인 세로 위치" 절) 기호는 자기 잉크 가운데를 쓰므로, 숫자와 기호가 함께 키캡
+  //    면 가운데에 놓인다.
   // 4. 큰 키와 글자 배율: 상한([keyNumberMainLabelMaxFontSize])은 함수부 상한(#141)처럼 실물 크기 키패드(480×640dp)의 숫자
   //    글자다. 글자 배율 1.3·2.0(키 글자 배율 상한 1.3)에서 숫자는 키캡 높이에 묶이기 전에는 줄지 않는다 — 폭에 묶이던 글자
   //    각인을 숫자와 떼어 놓았기 때문이다(실측한 모든 창에서 배율 1.0과 같은 크기다). 연산 기호는 작은 창에서 키캡 높이에
@@ -1275,20 +1281,55 @@ abstract final class CalcTheme {
     height: 1.0,
   );
 
-  /// 키캡 각인 줄 상자(strut, [keyStrutFontFamily] — Noto Sans Mono, 줄 높이 1.0)에서 위끝부터 기준선까지 거리 (글자 크기 대비).
-  /// Noto Sans Mono의 ascent 1069·descent 293(/1000)으로 나눈 값이다 — 실제 배치와 같은지 테스트로 확인한다.
-  static const double keyStrutBaselineRatio = 1069 / (1069 + 293);
+  // ── 메인 각인 세로 위치 (#230) ──
+  // 실물 키패드 근접 사진(가이드 폴더의 키패드 사진)에서 키캡 면 위끝(윗테두리)부터 잉크 가운데까지를 면 높이(옆면 앞까지)로
+  // 나눈 값 — 숫자부 숫자 0.47~0.53(평균 약 0.495), 연산 기호 0.49~0.53, DEL·AC 0.49·0.52, 함수부 대문자·높은 소문자 각인
+  // (ENG·tan·ln·sin) 0.50~0.52다. 사진 아래쪽 행일수록 조금 커지는(카메라 각도) 것을 빼면 실물은 대문자·숫자의 잉크 가운데를
+  // 키캡 면 가운데에 둔다. #230 전 앱은 줄 상자(Noto Sans Mono strut)를 면 가운데에 두었다. 줄 상자 안 기준선은 글자 스타일만
+  // 보면 위에서 0.785em이지만, 앱 테마(Material 3)의 기본 글자 스타일이 줄 간격을 위아래로 고르게 나눠(`TextLeadingDistribution
+  // .even`) `Text` 각인은 0.888em이고, 글자 배치 엔진은 그 거리를 정수 dp로 반올림한 곳에 글자를 그린다. 그래서 그린 픽셀의 잉크
+  // 가운데 / 면 비가 360×800 폰에서 숫자 약 0.528(1.0dp 아래)·연산 기호 약 0.541(1.5dp 아래)이었고, 함수부는 반올림에 따라
+  // STO 0.499·x 0.527로 제각각이었다. 2차원 각인(`KeyLegendView` — 테마 글자 스타일을 받지 않아 0.785em)은 `Text`보다 기준선이
+  // 약 0.1em 높아 log◼▯가 같은 행 ln보다 약 1dp 위였다.
+  //
+  // 실물은 각인마다 잉크를 가운데에 두지 않고 **기준선을 함께 쓴다** — 같은 행의 sin·cos·tan은 기준선이 같고(x높이뿐인 cos의
+  // 잉크 가운데는 면의 0.565로 아래에 있다), log◼▯(내림 글자 g)와 ln도 기준선이 같다(log 0.546·ln 0.500). x²(0.482)처럼
+  // 위첨자가 있는 각인은 그만큼 잉크 가운데가 위에 있다. 그래서 메인 각인은 두 가지로 맞춘다
+  // (`calc_key_button.dart`의 `mainLegendInkCenter`):
+  // 1. 기준선 글자가 있는 각인([hasKeyBaselineText] — 로마자·숫자·소수점, 변수 x 포함): 대문자·숫자 잉크 가운데
+  //    ([keyMainLegendInkCenter], 기준선 위)를 면 가운데에 둔다. 모든 각인의 기준선이 줄 상자 기준선에서 같은 거리라 실물처럼
+  //    기준선이 맞는다 — 같은 행의 x²·x^◼·log◼▯·ln, x⁻¹·sin·cos·tan의 기준선이 같다.
+  // 2. 기준선 글자가 없는 각인(연산 기호 × ÷ + − =, 방향 키 ▲▼◄►, (−)·( )·°'", 분수·근호·적분)과 변수 x 하나만 있는 x 키:
+  //    자기 잉크(`KeyLegendView.glyphInk` 표로 잰 범위)의 가운데를 면 가운데에 둔다. 연산 기호(Noto Sans Mono Medium, 잉크
+  //    가운데 0.346~0.354em)는 그래서 숫자와 같은 높이에 놓인다(#225의 내려 그리기를 대신한다). 분수 키(사진 0.509)는 맞출
+  //    기준선이 없다. x 키는 키 안에 기준선을 함께 쓸 글자가 없고 사진도 잉크가 가운데(0.509)라 자기 잉크로 맞춘다 — 그래서
+  //    x 키의 기준선은 같은 행 OPTN·CALC보다 약 0.08em(360×800 폰 약 1dp) 높다(의도한 결과다). 괄호·°'"는 사진(0.527~0.536)이
+  //    측정 잡음(같은 행 숫자끼리도 ±0.02) 안이라 두 규칙이 구별되지 않아, 글자가 없는 각인의 규칙(자기 잉크)을 따른다.
+  //    방향 키(커서 패드 반쪽 키캡의 라벨 자리, #65)도 같은 규칙으로 라벨 자리 가운데에 잉크를 둔다 — #230 전에는 줄 상자
+  //    기준선(0.888em) 때문에 잉크가 라벨 자리 가운데보다 약 0.1em(태블릿 약 1.9dp) 아래였다.
+  // 줄 상자 높이·줄 간격 배분·엔진의 기준선 반올림·2차원 각인의 큰 상자에 상관없이 **그린 기준선**에서 맞추므로(`InkCenteredLabel`)
+  // 기준 높이가 면 가운데와 0.01dp 안이다(그린 픽셀로 재면 대문자·숫자·기호 약 0.49~0.51 — 1 물리 픽셀 안). 내림 글자(g)·분수·∫도 키캡 면 안에
+  // 그려진다(`test/widget/main_legend_ink_center_test.dart`). `Text`의 반올림 보정은 엔진(SkParagraph) 동작에 기대므로, Flutter SDK를
+  // 올릴 때 그 동작이 바뀌면 같은 테스트의 픽셀 측정("실물 사진 대조")이 잡는다.
 
-  /// 숫자부 연산 기호를 내려 그리는 거리 (기호 글자 크기 대비, #225) — 키운 기호의 잉크 가운데를 같은 행 숫자의 잉크 가운데에
-  /// 맞춘다. 줄 상자를 키캡 가운데에 두면 잉크 가운데는 줄 상자 가운데에서 (기준선 비 − 0.5 − 잉크 가운데)×글자 크기만큼
-  /// 떨어진다. 기호(잉크 가운데 약 0.35em, 글자 크기 F)와 숫자(약 0.346em, F ÷ [keyNumberOperatorLabelScale])의 그 차를
-  /// 기호 글자 크기 단위로 쓴 값이다(약 0.02em — 360×800 폰 약 0.6dp). 기호가 키캡 높이에 묶여 배율보다 덜 커진 창에서는 숫자가
-  /// F ÷ 배율보다 커서 조금 덜 내려야 맞지만, 그 차는 약 0.1dp(0.007em)다(넓은 배열의 낮은 키패드 320×103.6, 배율 1.3). 키패드 밖에서
-  /// 글자 크기를 주입하지 않은 키 버튼(숫자와 같은 글자 크기)이나 비선형 글자 배율(Android 14 이상)에서도 같은 값으로 내리며,
-  /// 그 어긋남은 기호 글자 크기의 0.02em 미만이다.
-  static const double keyNumberOperatorLabelDrop =
-      (0.35 - (keyStrutBaselineRatio - 0.5)) -
-      (0.346 - (keyStrutBaselineRatio - 0.5)) / keyNumberOperatorLabelScale;
+  /// 메인 각인을 기준선으로 맞출 때 키캡 면 세로 가운데에 두는 높이 — 각인 글꼴 Saira 대문자·숫자의 잉크 가운데 (기준선 위,
+  /// 글자 크기 대비, #230). 윗변이 평평한 글자(E·7, 0~0.688em)와 둥근 글자(S·0, −0.008~0.696em)가 같다. 위 "메인 각인 세로
+  /// 위치" 절의 1이다.
+  static const double keyMainLegendInkCenter = 0.344;
+
+  /// 메인 각인 [legend]에 기준선 글자가 있는지 (#230, 위 "메인 각인 세로 위치" 절) — 로마자·숫자·소수점이다. 변수 이탤릭
+  /// 글자([isKeyVariableLetter])도 센다(x²·x⁻¹·x^◼의 x는 이웃 각인과 기준선을 함께 쓴다). 단 변수 글자만 있는 글자 각인
+  /// (x 키)은 키 안에 기준선을 함께 쓸 글자가 없어 기준선 각인이 아니다.
+  static bool hasKeyBaselineText(KeyLegend legend) {
+    if (legend case LegendText(:final text)) {
+      final onlyVariables = Iterable.generate(text.length)
+          .every((i) => isKeyVariableLetter(text, i));
+      if (onlyVariables) return false;
+    }
+    return legend.texts.any((piece) => _keyBaselineChar.hasMatch(piece.text));
+  }
+
+  static final RegExp _keyBaselineChar = RegExp(r'[A-Za-z0-9.]');
 
   /// 메인 각인 [legend]를 그리는 기준 스타일 — 숫자부 연산 기호는 [keyNumberOperatorLabelStyle], 나머지는 [keyMainLabelStyle]
   static TextStyle keyMainLabelStyleFor(KeyLegend legend) =>

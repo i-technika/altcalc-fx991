@@ -13,6 +13,7 @@ import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
@@ -21,6 +22,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_status_icon.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../preview/key_preview_main.dart';
@@ -51,6 +53,30 @@ Future<void> _pumpPreview(
 }
 
 Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
+
+void _announcerTests() {
+  testWidgets('스크린리더 알림 노드도 기기 화면 안에 있다 — 앱과 같은 구조 (#207, #72)', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    // 알림을 지원하지 않는 플랫폼(Android)처럼 liveRegion 알림 노드를 쓰게 한다.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures();
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await _pumpPreview(tester);
+    await tester.tap(_keycap(CalcKeyId.shift));
+    await tester.pump();
+    final announcer = find.byKey(const ValueKey('screen-reader-announcer'));
+    expect(announcer, findsOneWidget);
+    final screen = tester.getRect(_deviceScreen);
+    final node = tester.getRect(announcer);
+    expect(screen.contains(node.center), isTrue, reason: '$node ⊄ $screen');
+    // 기기 화면의 오른쪽 아래 구석이다 (축소 배율과 무관하게 1dp 이내)
+    expect(node.right, moreOrLessEquals(screen.right, epsilon: 1));
+    expect(node.bottom, moreOrLessEquals(screen.bottom, epsilon: 1));
+    handle.dispose();
+  });
+}
 
 /// 설정 키(ON, #190) — 누르면 설정 대화상자가 열린다
 final _settingsKey = _keycap(settingsKey);
@@ -293,6 +319,7 @@ final Map<_Pose, _PoseExpectation> _foldPoseExpectations = {
 };
 
 void main() {
+  _announcerTests();
   group('릴리스 빌드 분리', () {
     test('lib/의 상대 경로 .dart URI 중 preview/ 아래로 풀리는 것이 없다', () {
       // lib/ 밖으로 나가는 길은 상대 경로뿐이다(package: URI는 lib/ 안을 가리킨다).
@@ -1072,6 +1099,34 @@ void main() {
         expect(highContrast(), isFalse);
       },
     );
+
+    testWidgets('화면 켜짐 유지 토글은 LCD ☀ 자리의 표시기를 켜고 끈다 (#233)', (tester) async {
+      await _pumpPreview(tester);
+      final toggle = find.byKey(const ValueKey('preview-keep-screen-on'));
+      LcdStatus status() =>
+          tester.widget<LcdStatusBar>(find.byType(LcdStatusBar)).status;
+      Color iconColor() => tester
+          .widget<LcdStatusIcon>(
+            find.byKey(const ValueKey(LcdIndicatorIcon.keepScreenOn)),
+          )
+          .color;
+
+      // 기본은 꺼짐 — 꺼진 표시기 색으로 자리만 흐리게 남는다.
+      expect(status().keepScreenOn, isFalse);
+      expect(iconColor(), CalcTheme.lcdStatusInactive);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(status().keepScreenOn, isTrue);
+      expect(iconColor(), CalcTheme.lcdStatusActive);
+      // 계산기 상태는 그대로다 — 다른 표시기는 초기 상태와 같다.
+      expect(status().copyWith(keepScreenOn: false), LcdStatus.initial);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(status().keepScreenOn, isFalse);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('기능 입력은 번호·층 표기로, 모디파이어 대기 변화는 번호 없이 최근 순으로 기록된다', (
       tester,

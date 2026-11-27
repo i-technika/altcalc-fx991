@@ -23,6 +23,7 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/main.dart' show AltCalcApp;
 import 'package:itechnika_altcalc_fx991/presentation/providers/calc_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
@@ -532,14 +533,14 @@ String? describePreviewModifierChange(KeyModifier before, KeyModifier after) {
 /// ## Navigator 구조 (#72)
 /// `AltCalcApp.frameBuilder`로 앱을 감싸므로 [screen]은 **앱의 루트 Navigator**(첫 화면 `CalculatorScreen`)와
 /// 그 위의 대비 테마(가장 가까운 MediaQuery의 고대비 설정으로 고르는 `AnimatedTheme`, #97 — 텍스트 선택 색·Cupertino
-/// 테마도 함께 다시 정한다, #107)다.
+/// 테마도 함께 다시 정한다, #107), 그리고 Navigator 옆의 스크린리더 알림 층(`ScreenReaderAnnouncerLayer`, #207)이다.
 /// 이것을 기기 틀 안에 그대로 넣어, 실제 앱과 같은 Navigator 구조로 띄운다. 그래서 화면이 띄우는
 /// 대화상자·툴팁·SnackBar와 프레임워크가 루트 Overlay에 그리는 것(텍스트 선택 툴바·컨텍스트 메뉴 등)이 모두
 /// 기기 틀 안에 그 기기의 MediaQuery(크기·인셋·글자 배율)로, 기기 틀의 축소와 함께 그려진다.
 /// 조작 패널은 형제인 자기 Navigator([_PanelNavigator])를 쓴다 — 계산기 화면의 조상이 아니므로 화면 쪽의
 /// `rootNavigator: true`·`rootOverlay: true` 조회를 가로채지 않는다.
 class KeyPreviewScreen extends ConsumerStatefulWidget {
-  /// 앱의 루트 Navigator와 그 위 대비 테마 (`AltCalcApp.frameBuilder`가 넘겨준다)
+  /// 앱의 루트 Navigator와 그 위 대비 테마·스크린리더 알림 층 (`AltCalcApp.frameBuilder`가 넘겨준다)
   final Widget screen;
 
   /// 입력 로그 최대 보관 줄 수
@@ -637,6 +638,7 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
           orientation: _orientation,
           textScale: _textScale,
           highContrast: _highContrast,
+          keepScreenOn: ref.watch(keepScreenOnProvider),
           log: _log,
           inputTotal: _inputTotal,
           trimmed: _trimmed,
@@ -655,6 +657,8 @@ class _KeyPreviewScreenState extends ConsumerState<KeyPreviewScreen> {
           onOrientationChanged: (o) => setState(() => _orientation = o),
           onTextScaleChanged: (s) => setState(() => _textScale = s),
           onHighContrastChanged: (v) => setState(() => _highContrast = v),
+          onKeepScreenOnChanged: (v) =>
+              ref.read(keepScreenOnProvider.notifier).set(v),
           onReset: _reset,
         ),
       ),
@@ -723,7 +727,7 @@ class _DeviceFrame extends StatelessWidget {
   /// 흉내 내는 기기의 설정이므로 패널 스위치만 따른다.
   final bool highContrast;
 
-  /// 앱의 루트 Navigator와 그 위 대비 테마 ([KeyPreviewScreen.screen])
+  /// 앱의 루트 Navigator와 그 위 대비 테마·스크린리더 알림 층 ([KeyPreviewScreen.screen])
   final Widget screen;
 
   const _DeviceFrame({
@@ -1028,6 +1032,9 @@ class _ControlPanel extends StatelessWidget {
   final PreviewOrientation orientation;
   final double textScale;
   final bool highContrast;
+
+  /// 화면 켜짐 유지 표시기 (#233 — 앱 설정은 #234)
+  final bool keepScreenOn;
   final List<PreviewLogEntry> log;
   final int inputTotal;
   final bool trimmed;
@@ -1036,6 +1043,7 @@ class _ControlPanel extends StatelessWidget {
   final ValueChanged<PreviewOrientation> onOrientationChanged;
   final ValueChanged<double> onTextScaleChanged;
   final ValueChanged<bool> onHighContrastChanged;
+  final ValueChanged<bool> onKeepScreenOnChanged;
   final VoidCallback onReset;
 
   const _ControlPanel({
@@ -1044,6 +1052,7 @@ class _ControlPanel extends StatelessWidget {
     required this.orientation,
     required this.textScale,
     required this.highContrast,
+    required this.keepScreenOn,
     required this.log,
     required this.inputTotal,
     required this.trimmed,
@@ -1052,6 +1061,7 @@ class _ControlPanel extends StatelessWidget {
     required this.onOrientationChanged,
     required this.onTextScaleChanged,
     required this.onHighContrastChanged,
+    required this.onKeepScreenOnChanged,
     required this.onReset,
   });
 
@@ -1219,6 +1229,18 @@ class _ControlPanel extends StatelessWidget {
             key: const ValueKey('preview-high-contrast'),
             value: highContrast,
             onChanged: onHighContrastChanged,
+          ),
+        ],
+      ),
+      // LCD ☀ 자리의 화면 켜짐 유지 표시기 (#233). 앱에서는 설정(#234)이 켜고, 미리보기에서는 표시기만 켠다 —
+      // 화면 꺼짐 방지는 하지 않는다.
+      Row(
+        children: [
+          const Expanded(child: Text('화면 켜짐 유지 표시기 (LCD ☀ 자리)', style: _label)),
+          Switch(
+            key: const ValueKey('preview-keep-screen-on'),
+            value: keepScreenOn,
+            onChanged: onKeepScreenOnChanged,
           ),
         ],
       ),

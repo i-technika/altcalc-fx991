@@ -254,6 +254,7 @@ void main() {
           disp: true,
           historyUp: true,
           historyDown: true,
+          keepScreenOn: true,
         ),
       );
       expect(on, off);
