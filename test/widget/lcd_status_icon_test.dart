@@ -366,12 +366,34 @@ void main() {
           reason: slot.name,
         );
       }
-      // →x: 굵은 화살표는 대문자 높이 띠 가운데에 대칭이고 머리가 몸통보다 높다. x는 둘째 칸 상자 안에 있다 —
+      // →x: 굵은 화살표는 대문자 높이 띠 가운데에 대칭이고 머리가 몸통보다 높다. x는 한 칸 폭 상자 안에 있다 —
       // 상자는 띠를 채우고, 왼쪽 변 가운데가 열려 화살표 끝이 들어간다. 가운데 줄은 화살표 끝·x·오른쪽 변 세 구간이다.
+      // 가로(#183): 잉크 전체는 lcdStatusStoreInkCells칸(상자 한 칸 + 상자 밖 화살표)이고 2칸 슬롯 가운데에 놓인다.
       final store = _slotRect(tester, LcdIndicatorSlot.store);
-      final half = store.center.dx;
+      // 슬롯 안 좌표(계산값): 슬롯이 줄면 가운데 기준으로 같은 비율로 준다. [u]는 줄기 전 슬롯 왼쪽에서 잰 dp.
+      final advance = store.width / 2;
+      final cell = advance - CalcTheme.lcdStatusStyle.letterSpacing!;
+      double storeX(double u) =>
+          store.left + store.width * (1 - shrink) / 2 + u * shrink;
+      const inkCells = CalcTheme.lcdStatusStoreInkCells;
+      final boxLeft = storeX(advance + (inkCells / 2 - 1) * cell);
+      double col1X(double fraction) => boxLeft + cell * shrink * fraction;
+      final storeInk = shot.inkBounds(
+        _scanRect(tester, LcdIndicatorSlot.store),
+      )!;
+      expect(
+        storeInk.width,
+        closeTo(inkCells * cell * shrink, reach),
+        reason: '→x 잉크 $storeInk — 상자 한 칸 + 화살표',
+      );
+      expect(
+        storeInk.center.dx,
+        closeTo(store.center.dx, reach),
+        reason: '→x 잉크 $storeInk는 슬롯 $store 가운데에 놓인다',
+      );
+      // 상자 왼쪽 변(짧은 변)의 안티에일리어싱이 섞이지 않도록 물리 1px 앞까지만 화살표로 본다.
       final arrow = shot.inkBounds(
-        Rect.fromLTRB(store.left, store.top, half, store.bottom),
+        Rect.fromLTRB(store.left, store.top, boxLeft - 1 / dpr, store.bottom),
       )!;
       expect(
         arrow.center.dy,
@@ -383,16 +405,16 @@ void main() {
         greaterThan(stroke * 2),
         reason: '화살표 머리가 몸통보다 높아야 한다',
       );
-      final boxed = Rect.fromLTRB(half, store.top, store.right, store.bottom);
+      final boxed = Rect.fromLTRB(
+        boxLeft,
+        store.top,
+        store.right,
+        store.bottom,
+      );
       final box = shot.inkBounds(boxed)!;
       expect(box.top, closeTo(letter.top, reach), reason: 'x 상자 $box');
       expect(box.bottom, closeTo(letter.bottom, reach), reason: 'x 상자 $box');
-      // 둘째 칸의 좌표(계산값): 슬롯이 줄면 가운데 기준으로 같은 비율로 준다.
-      final advance = store.width / 2;
-      final cell = advance - CalcTheme.lcdStatusStyle.letterSpacing!;
-      final col1 =
-          store.left + store.width * (1 - shrink) / 2 + advance * shrink;
-      double col1X(double fraction) => col1 + cell * shrink * fraction;
+      expect(box.right, closeTo(col1X(1), reach), reason: 'x 상자 $box는 한 칸 폭이다');
       final cap = letter.height;
       double capY(double fraction) => letter.top + cap * fraction;
       // x 잉크: 화살표 끝(12%)·왼쪽 짧은 변(0~17%)·오른쪽 변(83%~)·위아래 변과 그 안티에일리어싱 밖의 안쪽만 본다
@@ -838,11 +860,15 @@ void main() {
 
       final normal = await render(false);
       final store = _slotRect(tester, LcdIndicatorSlot.store);
-      // x만 보도록 상자 둘째 칸의 안쪽(테두리 제외)을 센다.
+      // x만 보도록 x 상자(한 칸 폭, 슬롯 가운데에서 왼쪽으로 1/4칸부터 — #183)의 안쪽(테두리 제외)을 센다.
+      // 이 크기(60dp, 배율 1)에서는 글자가 줄지 않는다.
+      final cell = store.width / 2 - CalcTheme.lcdStatusStyle.letterSpacing!;
+      final boxLeft =
+          store.center.dx + (CalcTheme.lcdStatusStoreInkCells / 2 - 1) * cell;
       final xArea = Rect.fromLTRB(
-        store.center.dx + store.width * 0.12,
+        boxLeft + cell * 0.22,
         store.top + store.height * 0.3,
-        store.right - store.width * 0.12,
+        boxLeft + cell * 0.78,
         store.bottom - store.height * 0.3,
       );
       final shift = _slotRect(tester, LcdIndicatorSlot.shift);

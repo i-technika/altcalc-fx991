@@ -748,6 +748,15 @@ void main() {
         CalcTheme.lcdStatusStoreXRatio,
         lessThan(CalcTheme.lcdStatusBoxedLetterRatio),
       );
+      // →x 잉크(#183): 상자 한 칸 + 상자 밖 화살표(머리가 내민 0.2칸 + 몸통)이므로 1.2칸보다 넓다.
+      expect(CalcTheme.lcdStatusStoreInkCells, greaterThan(1.2));
+      // 실물 →x 잉크 폭은 대문자 높이(7도트 상자)의 8/7배다(스프라이트 8도트 — 진단 화면 영상에서도 S 상자의
+      // 약 1.1배). 앱 폭(칸 × 0.6em ÷ 대문자 높이)이 그와 15% 안쪽이어야 한다 — #160의 1.88칸은 약 1.58배였다.
+      final storeCapRatio =
+          CalcTheme.lcdStatusStoreInkCells *
+          CalcTheme.lcdStatusCharWidthRatio /
+          CalcTheme.lcdStatusCapHeightRatio;
+      expect(storeCapRatio, closeTo(8 / 7, 8 / 7 * 0.15));
     });
 
     test('LCD 치수 상수는 양수이며 베젤 안쪽 모서리가 음수가 되지 않는다', () {

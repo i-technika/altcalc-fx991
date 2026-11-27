@@ -344,27 +344,36 @@ class _LcdStatusIconPainter extends CustomPainter {
           fill,
         );
       case LcdIndicatorIcon.storeArrow:
-        // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 둘째 칸 상자의 왼쪽 열린 곳으로 들어간다.
+        // ➔ — 대문자 높이 가운데의 굵은 화살표(몸통 + 삼각형 머리)가 x 상자의 왼쪽 열린 곳으로 들어간다.
         // 가이드 실측(대문자 높이 대비): 몸통 굵기 0.26, 머리 높이 0.53·길이 0.27, 열린 곳 0.59 — 머리가 열린 곳보다
         // 작아 그 안으로 들어간다.
+        // 가로(#183): 잉크 전체는 [CalcTheme.lcdStatusStoreInkCells]칸(상자 한 칸 + 화살표)이고 2칸 슬롯 가운데에
+        // 놓는다 — 실물 잉크 가운데가 세그먼트 가운데([LcdIndicatorSlot.dotCenter])다. 상자 밖 화살표는 몸통 0.3칸 +
+        // 머리가 상자 밖으로 내민 0.2칸이고, 머리 끝은 상자 안 0.12칸까지 들어간다(머리 길이 0.32칸 = 대문자 높이의 약 0.27).
+        // 칸 폭 단위 좌표: 슬롯 가운데는 한 칸 진행 폭(글리프 + 자간)만큼 오른쪽이다.
+        final center = m.advance / m.cell;
+        const inkCells = CalcTheme.lcdStatusStoreInkCells;
+        final boxLeft = center + inkCells / 2 - 1;
         final mid = (ct + bl) / 2;
         final shaft = cap * 0.13;
         final head = cap * 0.265;
-        final neck = x(0, 0.8);
+        final start = x(0, center - inkCells / 2);
+        final tip = x(0, boxLeft + 0.12);
+        final neck = x(0, boxLeft + 0.12 - 0.32);
         canvas.drawPath(
           Path()
-            ..moveTo(x(0, 0.12), mid - shaft)
+            ..moveTo(start, mid - shaft)
             ..lineTo(neck, mid - shaft)
             ..lineTo(neck, mid - head)
-            ..lineTo(x(1, 0.12), mid)
+            ..lineTo(tip, mid)
             ..lineTo(neck, mid + head)
             ..lineTo(neck, mid + shaft)
-            ..lineTo(x(0, 0.12), mid + shaft)
+            ..lineTo(start, mid + shaft)
             ..close(),
           fill,
         );
-        // 둘째 칸: 왼쪽 변 가운데가 열린 상자(위아래 짧은 변만 남는다) 안의 x
-        final box = Rect.fromLTRB(x(1, 0), ct, x(1, 1), bl);
+        // 왼쪽 변 가운데가 열린 상자(위아래 짧은 변만 남는다, 한 칸 폭) 안의 x
+        final box = Rect.fromLTRB(x(0, boxLeft), ct, x(0, boxLeft + 1), bl);
         final inner = box.deflate(half);
         // 위아래 짧은 변: 바깥 테두리에서 대문자 높이의 0.2 (선 중심 기준으로 반 획 뺀다)
         final stub = cap * 0.2 - half;
