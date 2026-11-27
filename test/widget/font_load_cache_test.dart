@@ -62,11 +62,23 @@ void main() {
       after,
       KeypadMetrics.compute(size, TextScaler.noScaling).legendFontSize,
     );
-    // 모든 키가 같은 크기로 갱신된다.
+    // 모든 키가 같은 크기로 갱신된다. 메인 라벨도 구역(함수부·숫자부, #156)마다 새 글꼴로 다시 계산한 크기다.
+    final metrics = KeypadMetrics.compute(size, TextScaler.noScaling);
+    final numberIds = {
+      for (final row in numberRows)
+        for (final def in row) def.id,
+    };
     for (final b in tester.widgetList<CalcKeyButton>(
       find.byType(CalcKeyButton),
     )) {
       expect(b.legendFontSize, after, reason: b.keyDef.id.name);
+      expect(
+        b.mainLabelFontSize,
+        numberIds.contains(b.keyDef.id)
+            ? metrics.numberMainLabelFontSize
+            : metrics.mainLabelFontSize,
+        reason: b.keyDef.id.name,
+      );
     }
   });
 }

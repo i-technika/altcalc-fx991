@@ -60,8 +60,8 @@ Noto Serif의 OFL 전문은 <https://github.com/notofonts/latin-greek-cyrillic> 
 - 줄 상자(strut)는 Noto Sans Mono의 것을 그대로 쓴다(`CalcTheme.keyStrutFontFamily`). Saira는 위아래 여백(ascent 1.135·
   descent 0.439em)이 커서 그대로 쓰면 2차원 각인 배치·키패드 글자 크기 계산(#155·#169·#186)이 모두 달라진다.
 - **Noto Serif Bold Italic** (`CalcTheme.keyVariableFontFamily`): 실물은 변수 `x`·`y`·`e`를 교과서처럼 세리프 이탤릭으로
-  인쇄한다(근접 사진의 `x²`·`x!`·`×10ˣ`·ALPHA `y`·`e`). 어느 글자를 이탤릭으로 그리는지는 `CalcTheme.isKeyVariableLetter`가
-  정한다. 서브셋은 그 세 글자와 공백뿐이다.
+  인쇄한다(근접 사진의 `x²`·`x!`·`×10ˣ`·ALPHA `y`·`e`, SHIFT `π`). 어느 글자를 이탤릭으로 그리는지는
+  `CalcTheme.isKeyVariableLetter`가 정한다. 서브셋은 그 네 글자와 공백뿐이다.
 - 글자의 세로 잉크 범위 표(`KeyLegendView.glyphInk`·`variableGlyphInk`)는 그 글자를 실제로 그리는 글꼴의 값이다 —
   글꼴을 바꾸면 `test/widget/key_legend_view_test.dart`가 어긋난 값을 알려 준다.
 
@@ -107,7 +107,7 @@ for pair in "500 Medium" "600 SemiBold"; do
   pyftsubset tmp/Saira-$2.ttf --unicodes="$SAIRA" --output-file=out/Saira-$2.ttf \
     --name-IDs='*' --name-languages='*' --notdef-outline
 done
-pyftsubset src/NotoSerif-BoldItalic.ttf --unicodes="U+0020,U+0065,U+0078,U+0079" \
+pyftsubset src/NotoSerif-BoldItalic.ttf --unicodes="U+0020,U+0065,U+0078,U+0079,U+03C0" \
   --output-file=out/NotoSerif-BoldItalic.ttf --name-IDs='*' --name-languages='*' --notdef-outline
 ```
 
@@ -115,8 +115,8 @@ pyftsubset src/NotoSerif-BoldItalic.ttf --unicodes="U+0020,U+0065,U+0078,U+0079"
 |---|---|
 | `Saira-Medium.ttf` | `a6a10b46effe616602f11b71744515b95cf3c692aa2e94e0bd6c38d63f19858f` |
 | `Saira-SemiBold.ttf` | `f10b3687657a4e7038e7c2b56ec2730966e21c00dcc1f6a02840a874d8daecf2` |
-| `NotoSerif-BoldItalic.ttf` | `591db0e548a7ed886747ff4da7a5b15c64b128c276ec7ce2ff3e7f697431acd9` |
+| `NotoSerif-BoldItalic.ttf` | `67412450895043ab5fdda51ccdb31975973e63079fba1854e7880331e4cee166` |
 
-범위를 바꾸거나 새 기호를 라벨·LCD에 쓰면 `test/unit/font_glyph_coverage_test.dart`(글리프 유무)와
+범위를 바꾸거나 새 기호를 라벨·LCD에 쓰면 `test/widget/font_glyph_coverage_test.dart`(글리프 유무·글자마다 그리는 글꼴)와
 `test/widget/bundled_font_test.dart`(실제 폭 — 키캡 각인은 글자마다 그리는 글꼴의 진행폭)가 빠진 글리프·두 칸 폭 글자를
 알려 준다.

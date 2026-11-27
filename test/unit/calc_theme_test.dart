@@ -760,6 +760,7 @@ void main() {
       expect(italic('dx', 0), isFalse);
       expect(italic('dx', 1), isTrue);
       expect(italic('y', 0), isTrue);
+      expect(italic('π', 0), isTrue);
       expect(italic('e', 0), isTrue);
       expect(italic('Rec', 1), isFalse);
       expect(italic('SETUP', 1), isFalse);

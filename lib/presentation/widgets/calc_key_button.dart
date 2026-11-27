@@ -1016,15 +1016,15 @@ class KeycapSheenPainter extends CustomPainter {
     1.0,
   ];
 
+  /// 받는 상자는 키캡 테두리 안쪽이다 — 키캡(`AnimatedContainer`)이 장식의 테두리 두께만큼 자식을 안쪽에 둔다.
+  /// 그래서 더 줄이지 않고, 모서리 반경만 테두리 안쪽 곡선에 맞춘다(바깥 반경 − 테두리 두께, #156 R1).
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    const inset = CalcTheme.keyBorderWidth;
-    final rect = (Offset.zero & size).deflate(inset);
-    if (rect.isEmpty) return;
+    final rect = Offset.zero & size;
     final rrect = RRect.fromRectAndRadius(
       rect,
-      Radius.circular(math.max(0.0, cornerRadius - inset)),
+      Radius.circular(math.max(0.0, cornerRadius - CalcTheme.keyBorderWidth)),
     );
     canvas.drawRRect(
       rrect,

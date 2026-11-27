@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
+import 'package:material_ui/material_ui.dart' show FontStyle;
 
 import '../support/lcd_glyphs.dart';
 import '../support/ttf_cmap.dart';
@@ -54,6 +55,8 @@ void main() {
   late Map<String, List<String>> fonts;
   late Set<int> mono;
   late Set<int> fallback;
+  late Set<int> key;
+  late Set<int> variable;
   setUpAll(() async {
     fonts = await _manifestFonts();
     mono = await _familyCodePoints(fonts[CalcTheme.monoFontFamily]!);
@@ -61,13 +64,37 @@ void main() {
       for (final family in CalcTheme.monoFontFallback)
         ...await _familyCodePoints(fonts[family]!),
     };
+    key = await _familyCodePoints(fonts[CalcTheme.keyFontFamily]!);
+    variable = await _familyCodePoints(fonts[CalcTheme.keyVariableFontFamily]!);
   });
+
+  /// 키 각인 글자 [code]를 그리는 패밀리 — 변수 이탤릭이면 이탤릭 글꼴, 아니면 각인 글꼴 → 대체 글꼴 순서로 처음
+  /// 글자가 있는 패밀리 (#156, [CalcTheme.keyFontFallback]). 없으면 `null`.
+  Future<String?> keyFamilyOf(String text, int index) async {
+    final code = text.codeUnitAt(index);
+    if (CalcTheme.isKeyVariableLetter(text, index)) {
+      return variable.contains(code) ? CalcTheme.keyVariableFontFamily : null;
+    }
+    for (final family in [
+      CalcTheme.keyFontFamily,
+      ...CalcTheme.keyFontFallback,
+    ]) {
+      final codes = family == CalcTheme.keyFontFamily
+          ? key
+          : await _familyCodePoints(fonts[family]!);
+      if (codes.contains(code)) return family;
+    }
+    return null;
+  }
 
   group('번들 글꼴 등록', () {
     test('테마가 쓰는 패밀리가 모두 FontManifest에 있고 번들에서 읽힌다', () async {
       for (final family in [
         CalcTheme.monoFontFamily,
         ...CalcTheme.monoFontFallback,
+        CalcTheme.keyFontFamily,
+        ...CalcTheme.keyFontFallback,
+        CalcTheme.keyVariableFontFamily,
       ]) {
         expect(fonts.keys, contains(family));
         expect(fonts[family], isNotEmpty, reason: family);
@@ -86,39 +113,48 @@ void main() {
       }
     });
 
-    test('기본 글꼴은 테마가 쓰는 굵기를 모두 정적 파일로 갖는다', () {
-      final assets = fonts[CalcTheme.monoFontFamily]!;
-      expect(assets, hasLength(4), reason: '400/500/600/700');
+    test('각 스타일의 글꼴 패밀리는 그 스타일의 굵기를 정적 파일로 갖는다 (합성 굵기 없음, #156)', () {
+      // 패밀리에 그 굵기 파일이 없으면 엔진이 가까운 굵기를 고르거나 굵기를 합성한다. 키 각인(Saira)은 500·600만 있다.
+      expect(fonts[CalcTheme.monoFontFamily], hasLength(4));
       const suffix = {
         400: 'Regular',
         500: 'Medium',
         600: 'SemiBold',
         700: 'Bold',
       };
-      for (final style in _themeStyles) {
+      final styles = [
+        ..._themeStyles,
+        // 변수 이탤릭 (Noto Serif Bold Italic 하나)
+        CalcTheme.keyVariableStyle(CalcTheme.keyMainLabelStyle),
+      ];
+      for (final style in styles) {
+        final assets = fonts[style.fontFamily]!;
         final w = style.fontWeight!.value;
+        final italic = style.fontStyle == FontStyle.italic;
         expect(
-          assets.any((a) => a.endsWith('-${suffix[w]}.ttf')),
+          assets.any(
+            (a) => a.endsWith('-${suffix[w]}${italic ? 'Italic' : ''}.ttf'),
+          ),
           isTrue,
-          reason: 'weight $w',
+          reason: '${style.fontFamily} weight $w italic=$italic',
         );
       }
     });
   });
 
   group('글리프 커버리지 (플랫폼 대체 글꼴 없이 그려진다)', () {
-    test('50키의 모든 각인 글자는 기본 글꼴 또는 번들 대체 글꼴에 있다', () {
+    test('50키의 모든 각인 글자는 각인 글꼴·번들 대체 글꼴·변수 이탤릭 글꼴에 있다 (#156)', () async {
       // 2차원 각인(#155)은 글자 조각(texts)만 글꼴로 그리고, 분수 가로줄·근호는 선으로 그린다.
       final missing = <String>{};
-      for (final key in allKeys) {
-        for (final legend in [
-          key.mainLegend,
-          ?key.shiftLegend,
-          ?key.alphaLegend,
-        ]) {
-          for (final code in legend.texts.expand((t) => t.text.runes)) {
-            if (!mono.contains(code) && !fallback.contains(code)) {
-              missing.add('${key.id.name}: ${_describe(code)}');
+      for (final k in allKeys) {
+        for (final legend in [k.mainLegend, ?k.shiftLegend, ?k.alphaLegend]) {
+          for (final piece in legend.texts) {
+            for (var i = 0; i < piece.text.length; i++) {
+              if (await keyFamilyOf(piece.text, i) == null) {
+                missing.add(
+                  '${k.id.name}: ${_describe(piece.text.codeUnitAt(i))}',
+                );
+              }
             }
           }
         }
@@ -142,21 +178,37 @@ void main() {
       expect(missing, isEmpty);
     });
 
-    test('대체 글꼴이 필요한 각인 글자는 ∑·∫뿐이다', () {
-      // 대체 글꼴(Noto Sans Math)은 고정폭이 아니고 Regular뿐이다. 대체 글꼴로 그리는 글자가 늘면
-      // 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 근호를 그림으로 그려 쓰지 않는다.)
-      final viaFallback = {
-        for (final key in allKeys)
-          for (final legend in [
-            key.mainLegend,
-            ?key.shiftLegend,
-            ?key.alphaLegend,
-          ])
-            for (final code in legend.texts.expand((t) => t.text.runes))
-              if (!mono.contains(code)) String.fromCharCode(code),
-      };
-      expect(viaFallback, {'∑', '∫'});
-    });
+    test(
+      '각인 글자가 어느 글꼴로 그려지는지 고정한다 — 수학 글꼴은 ∑·∫뿐, 이탤릭은 변수 글자뿐 (#156)',
+      () async {
+        // 대체 순서는 Saira → Noto Sans Mono → Noto Sans Math다(CalcTheme.keyFontFallback). Noto Sans Math는 Regular뿐이라
+        // 그 글꼴로 그리는 글자가 늘면 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 그림으로 그린다.)
+        final byFamily = <String, Set<String>>{};
+        for (final k in allKeys) {
+          for (final legend in [k.mainLegend, ?k.shiftLegend, ?k.alphaLegend]) {
+            for (final piece in legend.texts) {
+              for (var i = 0; i < piece.text.length; i++) {
+                final family = await keyFamilyOf(piece.text, i);
+                (byFamily[family ?? '없음'] ??= {}).add(piece.text[i]);
+              }
+            }
+          }
+        }
+        expect(byFamily[CalcTheme.mathFontFamily], {'∑', '∫'});
+        expect(byFamily[CalcTheme.keyVariableFontFamily], {'x', 'y', 'e', 'π'});
+        // 연산 기호·입력 칸·화살표는 고정폭 글꼴의 큰 기호로 그린다(Saira 서브셋에서 뺐다)
+        expect(
+          byFamily[CalcTheme.monoFontFamily],
+          containsAll(['+', '=', '−', '×', '÷', '⇔', '▲', '◄', '°']),
+        );
+        expect(byFamily.keys, isNot(contains('없음')));
+        // 글자·숫자는 각인 글꼴로 그린다
+        expect(
+          byFamily[CalcTheme.keyFontFamily],
+          containsAll(['S', 'H', 'I', 'F', 'T', '7', 's', 'n', 'A']),
+        );
+      },
+    );
 
     test('LCD 줄·상태 표시줄 글자는 모두 고정폭 기본 글꼴에 있다', () {
       final glyphs = {

@@ -481,31 +481,49 @@ void main() {
       expect(painter(tester).edge, CalcTheme.keyBorder);
     });
 
-    testWidgets('그린 버튼이 작아도 셀 전체(각인 띠 포함)가 터치 영역이다', (tester) async {
-      final pressed = <CalcKeyId>[];
-      const cell = Size(64, 72);
-      await tester.pumpWidget(
-        _host(
-          CalcKeyButton(keyDef: on, onPressed: pressed.add),
-          size: cell,
-        ),
-      );
-      final box = tester.getRect(find.byType(CalcKeyButton));
-      expect(box.size, cell);
-      final bezel = RoundKeyFacePainter.bezelOf(tester.getSize(_keycap(on.id)));
-      expect(bezel.width, lessThan(cell.width));
-      // 네 모서리 (각인 띠의 위 모서리, 원 밖의 아래 모서리) — 모두 그린 원 밖이다
-      for (final p in [
-        box.topLeft + const Offset(1, 1),
-        box.topRight + const Offset(-1, 1),
-        box.bottomLeft + const Offset(1, -1),
-        box.bottomRight + const Offset(-1, -1),
-      ]) {
-        await tester.tapAt(p);
+    // #156부터 SHIFT·ALPHA·MENU도 원형 버튼이다 — 키캡만 받던 #156 전과 달리 각인 띠까지 셀 전체가 터치 영역이다
+    // (터치 영역이 넓어지기만 한다. 셀 밖·키 사이 간격은 그대로 터치 영역이 아니다).
+    for (final id in [
+      CalcKeyId.shift,
+      CalcKeyId.alpha,
+      CalcKeyId.menu,
+      settingsKey,
+    ]) {
+      testWidgets('${id.name}: 그린 버튼이 작아도 셀 전체(각인 띠 포함)가 터치 영역이다', (
+        tester,
+      ) async {
+        final def = keyDefOf(id);
+        final pressed = <CalcKeyId>[];
+        const cell = Size(64, 72);
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: def, onPressed: pressed.add),
+            size: cell,
+          ),
+        );
+        final box = tester.getRect(find.byType(CalcKeyButton));
+        expect(box.size, cell);
+        final bezel = RoundKeyFacePainter.bezelOf(
+          tester.getSize(_keycap(def.id)),
+        );
+        expect(bezel.width, lessThan(cell.width));
+        // 네 모서리 (각인 띠의 위 모서리, 원 밖의 아래 모서리) — 모두 그린 원 밖이다
+        for (final p in [
+          box.topLeft + const Offset(1, 1),
+          box.topRight + const Offset(-1, 1),
+          box.bottomLeft + const Offset(1, -1),
+          box.bottomRight + const Offset(-1, -1),
+        ]) {
+          await tester.tapAt(p);
+          await tester.pump();
+        }
+        expect(pressed, List.filled(4, def.id));
+        // 셀 바깥은 터치 영역이 아니다
+        await tester.tapAt(box.topLeft - const Offset(1, 1));
         await tester.pump();
-      }
-      expect(pressed, List.filled(4, on.id));
-    });
+        expect(pressed, hasLength(4));
+      });
+    }
 
     testWidgets('비활성이면 원판을 흐리게 그리고, 눌러도 입력되지 않는다', (tester) async {
       await tester.pumpWidget(_host(CalcKeyButton(keyDef: on)));

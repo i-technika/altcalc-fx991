@@ -87,22 +87,29 @@ abstract final class BodyTexture {
   /// 한 칸 크기 (dp) — 정사각형
   static const double pitch = CalcTheme.bodyTexturePitch;
 
-  /// 한 칸 그림을 [scale] 배율(기기 픽셀)로 만든다. 크기는 정수 픽셀로 반올림한다(반복할 때 이음매가 생기지 않게).
+  /// 한 칸 그림의 기기 픽셀 크기 — 정수로 반올림한다. 칠할 때 그림 한 픽셀이 기기 한 픽셀이 되도록 반복해(#156 R1),
+  /// 늘이거나 줄이며 생기는 중복 픽셀 줄이 없다. 그래서 화면의 한 칸은 [pitch]에 가장 가까운 정수 픽셀 크기다.
+  static int tilePixelsFor(double scale) =>
+      (pitch * scale).round().clamp(2, 512);
+
+  /// 한 칸 그림을 [scale] 배율(기기 픽셀)로 만든다 (크기 [tilePixelsFor]).
   static ui.Image paintTile(double scale) {
-    final pixels = (pitch * scale).round().clamp(2, 512);
+    final pixels = tilePixelsFor(scale);
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder)..scale(pixels / pitch);
     final light = Paint()..color = CalcTheme.bodyFrame;
     final dark = Paint()..color = CalcTheme.bodyBottomGradient;
     const row = pitch / 2;
     for (var r = 0; r < 2; r++) {
-      final y = r * row;
       final shift = r.isOdd ? pitch / 2 : 0.0;
-      // 칸 경계를 넘는 셰브런도 이어지도록 왼쪽·오른쪽 이웃 칸 자리까지 그린다 (그림 밖은 잘린다).
-      for (final x in [shift - pitch, shift, shift + pitch]) {
-        canvas
-          ..drawPath(_arm(x, y, row, left: true), light)
-          ..drawPath(_arm(x, y, row, left: false), dark);
+      // 칸 경계를 넘는 셰브런도 반복할 때 이어지도록 위·아래·왼쪽·오른쪽 이웃 칸 자리까지 그린다 (그림 밖은 잘린다,
+      // #156 R1 — 둘째 줄 팔 아래끝이 칸 밖으로 나간다).
+      for (final y in [r * row - pitch, r * row, r * row + pitch]) {
+        for (final x in [shift - pitch, shift, shift + pitch]) {
+          canvas
+            ..drawPath(_arm(x, y, row, left: true), light)
+            ..drawPath(_arm(x, y, row, left: false), dark);
+        }
       }
     }
     final picture = recorder.endRecording();
@@ -162,8 +169,8 @@ class BodyTexturePainter extends CustomPainter {
           colors: gradient,
         ).createShader(rect),
     );
-    // 그림 픽셀 → dp: 한 칸 그림이 정확히 [BodyTexture.pitch] dp가 되도록 줄인다.
-    final toDp = BodyTexture.pitch / tile.width;
+    // 그림 픽셀 → dp: 그림 한 픽셀이 기기 한 픽셀이 되도록 줄인다 (늘이지 않아 픽셀이 어긋나지 않는다, #156 R1).
+    final toDp = 1 / tileScale;
     canvas.drawRect(
       rect,
       Paint()

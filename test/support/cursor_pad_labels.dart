@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
@@ -36,6 +38,27 @@ void expectCursorPadLabelsClearOfHub(
       greaterThanOrEqualTo(g.hubRadius + CalcTheme.cursorPadDividerWidth / 2),
       reason: '$context ${sector.name} 라벨 $label이 허브에 덮인다',
     );
+    // 그린 X자 홈(#156 — 패드 높이의 [CalcTheme.cursorPadGrooveWidthRatio] 두께)이 라벨 글자 상자를 덮지 않는다.
+    final grooveHalf =
+        math.max(
+          CalcTheme.cursorPadDividerWidth,
+          pad.height * CalcTheme.cursorPadGrooveWidthRatio,
+        ) /
+        2;
+    for (final (from, to) in g.grooves()) {
+      for (var i = 0; i <= 64; i++) {
+        final p = Offset.lerp(from, to, i / 64)!;
+        final nearestOnLabel = Offset(
+          p.dx.clamp(label.left, label.right),
+          p.dy.clamp(label.top, label.bottom),
+        );
+        expect(
+          (nearestOnLabel - p).distance,
+          greaterThanOrEqualTo(grooveHalf - 0.01),
+          reason: '$context ${sector.name} 라벨 $label이 X자 홈에 덮인다',
+        );
+      }
+    }
     // FittedBox가 줄이면 그려진 높이(getRect)가 글자 상자 높이(getSize)보다 작아진다.
     final shrunk = label.height < tester.getSize(text).height - 0.01;
     if (shrunk) {

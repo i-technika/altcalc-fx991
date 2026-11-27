@@ -78,8 +78,9 @@ abstract final class CalcTheme {
   static const Color lcdBezelEdge = Color(0xFF4A5056);
 
   /// LCD 유리 윗부분 그늘 — 액정이 베젤 안으로 들어가 보이도록 유리 위쪽에 덧씌우는 옅은 그림자 (고대비 모드에서는 끈다).
-  /// 위끝에서 이 색이고 [lcdGlassShadeExtent]까지 투명해진다. 위끝의 글자 대비 손실은 약 8%다(LCD 글자 11.4 → 10.5:1).
-  static const Color lcdGlassShade = Color(0x14000000);
+  /// 위끝에서 이 색이고 [lcdGlassShadeExtent]까지 투명해진다. 맨 위끝(상태 표시줄 자리)의 글자 대비는 LCD 글자
+  /// 11.4 → 10.5:1, 켜진 표시기 9.4 → 8.7:1로 약 8% 낮아진다(R1에서 7.8%이던 그늘을 3.9%로 줄였다 — 16% 손실이었다).
+  static const Color lcdGlassShade = Color(0x0A000000);
 
   /// LCD 유리 윗부분 그늘이 퍼지는 높이 (LCD 안쪽 높이 대비)
   static const double lcdGlassShadeExtent = 0.25;
@@ -93,7 +94,10 @@ abstract final class CalcTheme {
   /// 고대비 모드에서는 [lcdStatusInactiveHighContrast]로 올린다(#54).
   static const Color lcdStatusInactive = Color(0x0A2A2A2A);
 
-  /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선)
+  /// LCD 도트 매트릭스 격자선 (픽셀 사이 틈을 표현하는 아주 옅은 선).
+  /// #156에서 액정을 회녹색으로 어둡게 하면서도 세기(검정 6%)는 그대로 두었다 — 덧칠 색이라 배경이 어두워진 만큼 격자도
+  /// 함께 어두워져 배경과의 대비(약 1.13:1)가 거의 같고, 실물 사진에서도 꺼진 도트는 정면에서 거의 보이지 않는다.
+  /// 더 진하게 하면 꺼진 표시기(#44, 격자보다 옅어야 한다 — 테스트)를 함께 올려야 한다.
   static const Color lcdDotGrid = Color(0x0F000000);
 
   // ───────────────────────────────────────────
@@ -523,7 +527,7 @@ abstract final class CalcTheme {
 
   /// [monoFontFamily]에 없는 글자를 찾을 대체 폰트 (모두 번들 글꼴이다).
   /// 라벨·LCD 템플릿의 모든 글자가 여기까지 안에서 찾아지는지 테스트로 검증한다
-  /// (`test/unit/font_glyph_coverage_test.dart`).
+  /// (`test/widget/font_glyph_coverage_test.dart`).
   static const List<String> monoFontFallback = [mathFontFamily];
 
   /// 키캡 각인 글꼴 패밀리 이름 (번들 글꼴 Saira Medium·SemiBold, #156).
@@ -535,7 +539,7 @@ abstract final class CalcTheme {
   /// (Saira의 `×`·`+`는 x높이 안의 작은 기호다). 출처·서브셋은 `assets/fonts/README.md`.
   static const String keyFontFamily = 'Saira';
 
-  /// 키캡 각인에서 변수 글자(`x`·`y`, 한 글자 각인 `e`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156).
+  /// 키캡 각인에서 변수 글자(`x`·`y`·`π`, 한 글자 각인 `e`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156).
   /// 실물은 변수를 교과서처럼 세리프 이탤릭으로 인쇄한다(근접 사진의 `x²`·`x!`·`×10ˣ`·ALPHA `y`·`e`). 어느 글자를 이탤릭으로
   /// 그리는지는 [isKeyVariableLetter]가 정한다.
   static const String keyVariableFontFamily = 'NotoSerifItalic';
@@ -550,10 +554,12 @@ abstract final class CalcTheme {
 
   /// [text]의 [index] 글자를 키캡 각인에서 변수 이탤릭([keyVariableFontFamily])으로 그리는지 (#156).
   /// - 소문자 `x`·`y`는 늘 변수다(`x²`·`x!`·`dx`·`×10ˣ`·ALPHA `x`·`y` — 각인에 단어 속 x·y가 없다).
+  /// - `π`도 늘 이탤릭이다(SHIFT `π` — 근접 사진에서 `e`와 같은 세리프 이탤릭, #156 R1).
   /// - `e`는 각인 전체가 그 한 글자일 때만이다(자연로그 밑 `e`·`e^◼`) — `Rec`·`SETUP` 같은 단어 속 글자는 바로 쓴다.
+  /// (ENG 키 ALPHA의 허수 `i`는 모드별 각인 #33에서 정한다.)
   static bool isKeyVariableLetter(String text, int index) {
     final ch = text[index];
-    if (ch == 'x' || ch == 'y') return true;
+    if (ch == 'x' || ch == 'y' || ch == 'π') return true;
     return ch == 'e' && text.length == 1;
   }
 
@@ -676,7 +682,13 @@ abstract final class CalcTheme {
   /// 키 눌림 시 키캡이 아래로 이동하는 거리 (dp)
   static const double keyPressedOffset = 1.0;
 
-  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡)
+  /// 키 버튼 전체 높이 중 상단 각인 띠가 차지하는 비율 (나머지는 키캡).
+  ///
+  /// #156에서 실물 근접 사진과 대조했지만 바꾸지 않았다. 실물 키캡 가로/세로 비는 함수 키 약 1.85, 숫자 키 약 1.49이고
+  /// 각인 띠·간격이 행 높이에서 차지하는 비는 함수부 약 0.43, 숫자부 약 0.33이다. 앱(360×420 키패드)은 함수 키캡 약 2.25,
+  /// 숫자 키캡 약 2.2로 더 납작하다. 이 차이는 키패드 높이(화면 배치 #141~#144: 키패드 가로/세로 비 하한, 숫자부 행 높이
+  /// 비 [keypadNumberRowHeightRatio])가 정한다. 키캡만 실물 비로 줄이면 터치 높이·짧은 창 판정(#38)·각인 글자 크기 계산이
+  /// 함께 바뀐다. 그래서 키 비율은 화면 배치 쪽 후속 이슈 #220에서 정한다(#156 R1).
   static const double keyLegendHeightRatio = 0.28;
 
   /// 각인 띠 높이 대비 각인 글자 크기 비율

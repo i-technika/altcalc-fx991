@@ -333,6 +333,9 @@ class KeypadMetrics {
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
+  /// 4. **숫자부 메인 라벨** (#156): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 키는 그 크기의
+  ///    [CalcTheme.keyNumberMainLabelScale]배를 목표로 숫자부 키캡 높이·숫자부 라벨 폭에 들어가게 줄이고(함수부 크기
+  ///    아래로는 내리지 않는다), [numberMainLabelFontSize]로 따로 주입한다.
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(
