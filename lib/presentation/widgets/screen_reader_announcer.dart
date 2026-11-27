@@ -10,13 +10,16 @@ import '../providers/calc_provider.dart';
 
 /// 앱 화면(루트 Navigator, [child]) 위에 스크린리더 알림 노드([ScreenReaderAnnouncer])를 얹는다 (#20, #207).
 ///
-/// 알림 노드를 계산기 화면 안이 아니라 **루트 Navigator 바깥**에 두는 이유: 설정 대화상자 같은 모달 경로는 장벽
-/// (`ModalBarrier`의 `BlockSemantics`)으로 그 아래 경로의 의미 노드를 모두 의미 트리에서 뺀다. 알림 노드가 화면 안에
+/// 알림 노드를 계산기 화면 안이 아니라 **루트 Navigator 바깥**(Navigator 다음 형제)에 두는 이유: 설정 대화상자 같은
+/// 모달 경로의 장벽(`ModalBarrier`의 `BlockSemantics`)은 의미 경계를 만날 때까지 위로 올라가며 **자기보다 앞에 그려진
+/// 노드를 모두** 의미 트리에서 뺀다 — 아래 경로뿐 아니라 Navigator 앞에 그려진 형제도 빠진다. 알림 노드가 화면 안에
 /// 있으면, SHIFT 대기 중 설정 키(ON)를 누른 프레임에 "시프트 꺼짐"으로 라벨이 바뀌는 그 노드가 대화상자와 함께
-/// 빠져서 Android가 읽지 않았다(#207 에뮬레이터 실측). Navigator보다 뒤에 그려지는 형제는 막히지 않는다.
+/// 빠져서 Android가 읽지 않았다(#207 에뮬레이터 실측). 그래서 이 층은 Navigator **뒤**에 그린다 — 앞으로 Navigator
+/// 바깥에 무엇을 더하더라도(예: 광고 영역 #18) 알림 노드가 그것보다도 뒤에 그려져야 한다.
 ///
-/// 노드는 화면 왼쪽 위 1dp에 두고 터치를 받지 않는다. 알린 뒤에는 라벨을 비우므로([ScreenReaderAnnouncer.clearDelay])
-/// 평소에는 스크린리더가 초점을 줄 수 없는 빈 노드다.
+/// 노드는 화면 오른쪽 아래 1dp에 두고 터치를 받지 않는다 — 위치 기준 읽기 순서의 맨 뒤라, 알리는 동안 스크린리더를
+/// 켜거나 쓸어 넘겨도 다른 노드보다 먼저 초점을 받지 않는다. 알릴 말이 없을 때는 의미 노드 자체를 두지 않는다
+/// ([ScreenReaderAnnouncer.clearDelay]).
 class ScreenReaderAnnouncerLayer extends StatelessWidget {
   /// 앱 화면 (루트 Navigator)
   final Widget child;
@@ -31,8 +34,8 @@ class ScreenReaderAnnouncerLayer extends StatelessWidget {
         child,
         // Navigator 뒤(위)에 그린다 — 앞에 그리면 모달 장벽이 이 노드도 막는다.
         const Positioned(
-          left: 0,
-          top: 0,
+          right: 0,
+          bottom: 0,
           width: 1,
           height: 1,
           child: IgnorePointer(child: ScreenReaderAnnouncer()),
@@ -51,10 +54,11 @@ class ScreenReaderAnnouncerLayer extends StatelessWidget {
 /// - **알림 미지원(Android)**: 이 위젯의 liveRegion 노드 라벨을 바꾼다. Android 엔진은 알림을 지원하지 않고
 ///   (Android 16부터 API 폐기 예정), liveRegion 노드는 **라벨이 바뀔 때만** 읽힌다. 같은 말이 이어져도
 ///   ("7" → "7") 읽히도록 매번 보이지 않는 문자(U+200B)를 붙였다 뗐다 해 라벨을 바꾼다.
-///   - 알린 뒤 [clearDelay]가 지나면 라벨을 비운다(#207). 라벨이 남아 있으면 이 노드가 TalkBack 쓸어 넘기기 초점
+///   - 알린 뒤 [clearDelay]가 지나면 의미 노드를 없앤다(#207). 라벨이 남아 있으면 이 노드가 TalkBack 쓸어 넘기기 초점
 ///     자리가 되어, 지난 알림(예: 이미 꺼진 시프트의 "시프트 켜짐")을 지금 상태처럼 읽었고 1dp 초점 테두리가 점처럼
-///     보였다(#140 에뮬레이터 실측). 비울 때도 liveRegion 변경이 나가지만, 빈 라벨은 읽을 말이 없어 TalkBack이
-///     아무것도 말하지 않고 말하던 것도 끊지 않는다(#207 실측).
+///     보였다(#140 에뮬레이터 실측). 라벨만 비우면 빈 라벨로의 liveRegion 변경이 한 번 더 나가므로, 노드를 아예 빼서
+///     비우는 순간에는 이벤트가 나가지 않게 한다. 다음 알림 때 새로 생기는 liveRegion 노드는 라벨이 있으면 바로
+///     읽힌다(창 크기 안내 `WindowTooSmallNotice`와 같은 동작, #207 TalkBack 16 에뮬레이터 실측).
 ///
 /// 상태 표시줄·입력 줄을 liveRegion으로 두지 않는 이유: 상태 표시줄 전체가 매번 다시 읽히고, 켜짐/꺼짐
 /// 의미가 전달되지 않으며, 같은 입력이 이어지면 입력 줄 라벨이 그대로라 읽히지 않는다(리뷰 R2).
@@ -62,7 +66,7 @@ class ScreenReaderAnnouncer extends ConsumerStatefulWidget {
   const ScreenReaderAnnouncer({super.key});
 
   /// 연속된 같은 말을 구분하려고 번갈아 붙이는 글자 (스크린리더는 읽지 않는다)
-  static const String repeatMarker = '​';
+  static const String repeatMarker = '\u200B';
 
   /// 알린 뒤 라벨을 비우기까지의 시간 (Android). TalkBack은 liveRegion 변경 이벤트를 받는 즉시(실측 수 ms) 노드 라벨을
   /// 읽어 말할 문장을 만들므로, 말하는 동안 라벨을 비워도 끊기지 않는다. 앱이나 TalkBack이 바빠 이벤트 처리가 늦어지는
@@ -118,6 +122,8 @@ class _ScreenReaderAnnouncerState extends ConsumerState<ScreenReaderAnnouncer> {
       },
     );
     if (supportsAnnounce) return const SizedBox.shrink();
+    // 알릴 말이 없으면 의미 노드를 두지 않는다 — 스크린리더가 초점을 줄 자리도, 비울 때의 변경 이벤트도 없다.
+    if (_message.isEmpty) return const SizedBox.expand();
     return Semantics(
       key: const ValueKey('screen-reader-announcer'),
       container: true,

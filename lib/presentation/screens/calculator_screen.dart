@@ -883,7 +883,7 @@ class _LcdPanel extends ConsumerWidget {
     final status = ref.watch(lcdStatusProvider);
     final lastInput = ref.watch(calcProvider.select((s) => s.lastInput));
     final strings = CalcSemanticStrings.of(context);
-    // 상태 변화 알림 노드는 화면 밖(루트 Navigator 위)에 있다 — `ScreenReaderAnnouncerLayer` (#207)
+    // 상태 변화 알림 노드는 계산기 화면 바깥, 루트 Navigator의 다음 형제에 있다 — `ScreenReaderAnnouncerLayer` (#207)
     return LcdDisplay(
       status: status,
       fitFontsToSize: true,

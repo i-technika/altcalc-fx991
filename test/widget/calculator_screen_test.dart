@@ -60,7 +60,6 @@ Future<ProviderContainer> _pumpScreen(
             padding: padding,
             viewPadding: padding,
             textScaler: TextScaler.linear(textScale),
-            supportsAnnounce: supportsAnnounce,
             accessibleNavigation: accessibleNavigation,
           ),
           child: const CalculatorScreen(),
@@ -82,6 +81,30 @@ Finder _keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
 
 String _lcdInputText(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(const ValueKey('lcd-input-text'))).data!;
+
+/// 지금 의미 트리의 모든 노드 `(라벨(반복 구분 글자 제거), liveRegion 여부)` — 모달 장벽에 막힌 노드는 빠져 있다.
+List<(String, bool)> _semanticsTree(WidgetTester tester) {
+  final nodes = <(String, bool)>[];
+  bool visit(SemanticsNode node) {
+    nodes.add((
+      node.label.replaceAll(ScreenReaderAnnouncer.repeatMarker, ''),
+      node.flagsCollection.isLiveRegion,
+    ));
+    node.visitChildren(visit);
+    return true;
+  }
+
+  visit(
+    tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!,
+  );
+  return nodes;
+}
+
+/// 의미 트리의 liveRegion 노드 라벨
+List<String> _liveLabels(WidgetTester tester) => [
+  for (final (label, live) in _semanticsTree(tester))
+    if (live) label,
+];
 
 void main() {
   group('조립', () {
@@ -2009,9 +2032,10 @@ void main() {
     });
 
     group('알림을 지원하지 않는 플랫폼(Android)', () {
-      /// 알림 노드 라벨 (반복 구분 글자 제거 전)
-      String rawLabel(WidgetTester tester) =>
-          tester.getSemantics(announcer).label;
+      /// 알림 노드 라벨 (반복 구분 글자 제거 전). 알릴 말이 없으면 노드가 없어 빈 문자열이다.
+      String rawLabel(WidgetTester tester) => announcer.evaluate().isEmpty
+          ? ''
+          : tester.getSemantics(announcer).label;
 
       testWidgets('알림 노드 하나의 liveRegion 라벨로 알리고, 같은 말이 이어져도 라벨이 매번 바뀐다', (
         tester,
@@ -2019,10 +2043,8 @@ void main() {
         final handle = tester.ensureSemantics();
         useKoreanLocale(tester);
         await _pumpScreen(tester);
-        expect(
-          tester.getSemantics(announcer).flagsCollection.isLiveRegion,
-          isTrue,
-        );
+        // 알릴 말이 없으면 의미 노드를 두지 않는다 (#207)
+        expect(announcer, findsNothing);
         final heard = <String>[];
         var previous = rawLabel(tester);
         for (final id in [
@@ -2038,14 +2060,19 @@ void main() {
           expect(label, isNot(previous), reason: '라벨이 같으면 Android가 읽지 않는다');
           previous = label;
           heard.add(label.replaceAll(ScreenReaderAnnouncer.repeatMarker, ''));
+          expect(
+            tester.getSemantics(announcer).flagsCollection.isLiveRegion,
+            isTrue,
+          );
         }
         expect(heard, ['7', '7', '시프트 켜짐', '아크사인', '시프트 켜짐', '아크사인']);
+        expect(_liveLabels(tester), hasLength(1), reason: '알림 노드는 하나다');
         expect(tester.takeAnnouncements(), isEmpty);
         handle.dispose();
       });
 
       testWidgets(
-        '알린 뒤 clearDelay가 지나면 라벨을 비운다 — 지난 알림이 초점 자리로 남지 않는다 (#207)',
+        '알린 뒤 clearDelay가 지나면 알림 노드를 없앤다 — 지난 알림이 초점 자리로 남지 않는다 (#207)',
         (tester) async {
           final handle = tester.ensureSemantics();
           useKoreanLocale(tester);
@@ -2059,7 +2086,8 @@ void main() {
           await tester.pump(delay - tick);
           expect(rawLabel(tester), '시프트 켜짐');
           await tester.pump(tick);
-          expect(rawLabel(tester), isEmpty);
+          expect(announcer, findsNothing);
+          expect(_liveLabels(tester), isEmpty);
 
           // 새 알림은 비우기를 처음부터 다시 잰다 — 이어진 알림이 앞 알림의 타이머에 지워지지 않는다.
           await press(tester, CalcKeyId.num7);
@@ -2075,7 +2103,7 @@ void main() {
             '8',
           );
           await tester.pump(tick);
-          expect(rawLabel(tester), isEmpty);
+          expect(announcer, findsNothing);
           handle.dispose();
         },
       );
@@ -2088,37 +2116,43 @@ void main() {
         await _pumpScreen(tester);
         await press(tester, CalcKeyId.shift);
         await tester.tap(_keycap(settingsKey));
-        await tester.pump(); // 대화상자 경로가 들어온 첫 프레임 — 장벽이 아래 경로의 의미 노드를 막는다
-
-        /// 지금 의미 트리에 있는 liveRegion 노드의 라벨 (반복 구분 글자 제거)
-        List<String> liveLabels() {
-          final labels = <String>[];
-          bool visit(SemanticsNode node) {
-            if (node.flagsCollection.isLiveRegion) {
-              labels.add(
-                node.label.replaceAll(ScreenReaderAnnouncer.repeatMarker, ''),
-              );
-            }
-            node.visitChildren(visit);
-            return true;
-          }
-
-          visit(
-            tester
-                .binding
-                .renderViews
-                .first
-                .owner!
-                .semanticsOwner!
-                .rootSemanticsNode!,
-          );
-          return labels;
-        }
+        await tester.pump(); // 대화상자 경로가 들어온 첫 프레임
 
         expect(find.byType(HandednessDialog), findsOneWidget);
-        expect(liveLabels(), contains('시프트 꺼짐'));
+        final labels = [for (final (label, _) in _semanticsTree(tester)) label];
+        // 전제: 이 프레임에 장벽(닫기 동작 노드)이 들어와 계산기 화면의 의미 노드(설정 키 등)를 이미 막았다.
+        expect(labels, contains('Dismiss'));
+        expect(labels, isNot(contains('설정')));
+        // 그래도 같은 프레임에 바뀐 알림 노드는 장벽 밖에 있어 남는다.
+        expect(_liveLabels(tester), ['시프트 꺼짐']);
         await tester.pumpAndSettle();
-        expect(liveLabels(), contains('시프트 꺼짐'));
+        expect([
+          for (final (label, _) in _semanticsTree(tester)) label,
+        ], contains('키패드 위치'));
+        expect(_liveLabels(tester), ['시프트 꺼짐']);
+        handle.dispose();
+      });
+
+      testWidgets('실제 앱 루트(AltCalcApp)도 알림 노드를 루트 Navigator 밖에 둔다 (#207)', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        // 테스트 기본 화면은 알림을 지원하는 플랫폼이다 — Android처럼 알림 미지원으로 둔다.
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures();
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
+        await tester.pumpWidget(const ProviderScope(child: AltCalcApp()));
+        expect(announcer, findsNothing);
+        await press(tester, CalcKeyId.shift);
+        expect(_liveLabels(tester), ['Shift on']);
+        await tester.tap(_keycap(settingsKey));
+        await tester.pump();
+        expect(find.byType(HandednessDialog), findsOneWidget);
+        expect(_liveLabels(tester), ['Shift off']);
+        await tester.pump(ScreenReaderAnnouncer.clearDelay);
+        expect(_liveLabels(tester), isEmpty);
         handle.dispose();
       });
 
