@@ -13,14 +13,15 @@ import '../support/bundled_fonts.dart';
 ///
 /// 이 파일은 "번들 글꼴 로드 전" 상태가 필요하므로 다른 글꼴 테스트와 분리한다.
 void main() {
-  double mainFontOf(WidgetTester tester, CalcKeyId id) => tester
+  double legendFontOf(WidgetTester tester, CalcKeyId id) => tester
       .widget<CalcKeyButton>(
         find.byWidgetPredicate((w) => w is CalcKeyButton && w.keyDef.id == id),
       )
-      .mainLabelFontSize!;
+      .legendFontSize!;
 
   testWidgets('글꼴을 나중에 로드하면 화면의 키 글자 크기가 새 글꼴로 다시 계산된다', (tester) async {
-    // 테스트 글꼴은 모든 글자가 1em 정사각형이라 `SHIFT`가 5em으로 넓다 → 폭 기준(하한)에 걸린다.
+    // 테스트 글꼴은 모든 글자가 1em 정사각형이라 설정 키 위에 인쇄한 `SETTING`이 7em으로 넓다 → 각인 폭 기준(하한)에
+    // 걸린다. (#156부터 SHIFT·ALPHA는 원형 버튼이라 메인 라벨 폭 기준에 들지 않아, 각인 글자 크기로 본다.)
     const size = Size(360, 420);
     await tester.pumpWidget(
       const MaterialApp(
@@ -33,10 +34,10 @@ void main() {
         ),
       ),
     );
-    final before = mainFontOf(tester, CalcKeyId.shift);
+    final before = legendFontOf(tester, CalcKeyId.shift);
     expect(
       before,
-      KeypadMetrics.compute(size, TextScaler.noScaling).mainLabelFontSize,
+      KeypadMetrics.compute(size, TextScaler.noScaling).legendFontSize,
     );
 
     var notified = 0;
@@ -53,15 +54,19 @@ void main() {
     expect(notified, greaterThan(0), reason: 'fontsChange → systemFonts 알림');
     await tester.pump();
 
-    // Noto Sans Mono는 0.6em 고정폭이라 같은 라벨이 좁아져 더 큰 글자가 들어간다.
+    // 번들 각인 글꼴(Saira)은 테스트 글꼴보다 글자가 좁아 같은 각인에 더 큰 글자가 들어간다.
     // 캐시가 비워지지 않거나 키패드가 다시 빌드되지 않으면 크기가 그대로 남는다.
-    final after = mainFontOf(tester, CalcKeyId.shift);
+    final after = legendFontOf(tester, CalcKeyId.shift);
     expect(after, greaterThan(before));
+    expect(
+      after,
+      KeypadMetrics.compute(size, TextScaler.noScaling).legendFontSize,
+    );
     // 모든 키가 같은 크기로 갱신된다.
     for (final b in tester.widgetList<CalcKeyButton>(
       find.byType(CalcKeyButton),
     )) {
-      expect(b.mainLabelFontSize, after, reason: b.keyDef.id.name);
+      expect(b.legendFontSize, after, reason: b.keyDef.id.name);
     }
   });
 }

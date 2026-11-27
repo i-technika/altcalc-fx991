@@ -10,8 +10,9 @@ import '../../core/theme/calc_theme.dart';
 ///
 /// 분수는 위아래로 쌓고 가로줄을 긋고, 위첨자·아래첨자는 작게 올리거나 내리며, 근호는 가로줄이 피개법수를
 /// 덮는 모양으로 그린다. ∑는 끝 칸을 기호 위·아래에 쌓고(#169), 입력 칸([LegendBox])은 모두 글자 대신 자리별 비율의
-/// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(번들 Noto Sans Mono, ∫·∑는 대체 글꼴 Noto Sans Math)로,
-/// 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
+/// 직사각형으로 직접 그린다(#186). 글자는 [style]의 글꼴(#156부터 번들 Saira, 기호는 대체 글꼴 Noto Sans Mono, ∫·∑는
+/// Noto Sans Math, 변수 `x`·`e`는 이탤릭 세리프 — [keyLabelSpan])로, 가로줄·근호·칸은 같은 색으로 그린다. 픽셀 이미지를
+/// 쓰지 않으므로 글자 배율·고대비 색 전환에도 선명하다.
 ///
 /// ## 크기·기준선
 /// - 크기는 [textScaler]를 반영한 글자 크기로 배치한 각인의 폭과, **한 줄 상자**(같은 글자 크기의
@@ -42,37 +43,45 @@ class KeyLegendView extends LeafRenderObjectWidget {
 
   /// 잉크 범위 표 — 2차원 각인에 쓰는 글자의 세로 잉크 범위 `(아래끝, 위끝)` (글자 크기 대비, 기준선 위가 +).
   ///
-  /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값(SemiBold·Medium의 평균,
-  /// ∫·∑는 Noto Sans Math)을 적어 둔다. 실제 글꼴과 맞는지, 2차원 각인의 모든 글자가 표에 있는지
-  /// 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를 잉크로 본다.
+  /// Flutter는 글리프의 잉크 범위를 알려 주지 않으므로 번들 글꼴의 `glyf` 값을 적어 둔다 — 그 글자를 실제로 그리는 글꼴의
+  /// 값이다: 글자·숫자는 각인 글꼴 Saira(SemiBold·Medium의 평균, #156), 기호(`◼`·`◻`·`−`·`×`·`⇔`)는 대체 글꼴 Noto Sans
+  /// Mono, ∫·∑는 Noto Sans Math. 변수 이탤릭 글자(`x`·`e`)는 [variableGlyphInk]에 따로 둔다. 실제 글꼴과 맞는지, 2차원
+  /// 각인의 모든 글자가 표에 있는지 테스트로 검증한다(`test/widget/key_legend_view_test.dart`). 표에 없는 글자는 한 줄 상자를
+  /// 잉크로 본다.
   ///
   /// `◼`는 직접 그리는 칸의 기본 높이로 쓴다. `◻`는 그리는 데 쓰지 않지만, 칸의 한 줄 표기 글자([LegendBox.texts])라
   /// "2차원 각인의 모든 글자가 표에 있다" 검사가 찾으므로 함께 둔다(글자 조각으로 다시 쓰일 때도 맞는 값이다).
   static const Map<String, (double, double)> glyphInk = {
     '◼': (0.0, 0.482),
     '◻': (0.0, 0.482),
-    '0': (-0.01, 0.724),
-    '1': (0.0, 0.714),
-    '2': (0.0, 0.724),
-    '3': (-0.01, 0.724),
-    'x': (0.0, 0.54),
-    'a': (-0.01, 0.55),
-    'b': (-0.01, 0.76),
-    'c': (-0.01, 0.55),
-    'd': (-0.01, 0.76),
-    'e': (-0.01, 0.55),
-    'g': (-0.245, 0.551),
-    'i': (0.0, 0.768),
-    'l': (0.0, 0.76),
-    'n': (0.0, 0.55),
-    'o': (-0.01, 0.55),
-    's': (-0.01, 0.55),
-    't': (-0.01, 0.68),
+    '0': (-0.008, 0.696),
+    '1': (0.0, 0.688),
+    '2': (0.0, 0.696),
+    '3': (-0.008, 0.696),
+    'a': (-0.008, 0.518),
+    'b': (-0.008, 0.743),
+    'c': (-0.008, 0.518),
+    'd': (-0.008, 0.743),
+    'g': (-0.206, 0.518),
+    'i': (0.0, 0.743),
+    'l': (0.0, 0.743),
+    'n': (0.0, 0.518),
+    'o': (-0.008, 0.518),
+    's': (-0.008, 0.518),
+    't': (0.0, 0.658),
     '−': (0.294, 0.396),
     '×': (0.136, 0.57),
     '⇔': (-0.02, 0.358),
     '∫': (-0.238, 0.893),
     '∑': (-0.24, 0.714),
+  };
+
+  /// 변수 이탤릭 글자([CalcTheme.isKeyVariableLetter])의 세로 잉크 범위 — 번들 Noto Serif Bold Italic의 `glyf` 값 (#156).
+  /// [glyphInk]와 같은 규칙이고, 이탤릭으로 그리는 글자만 담는다(`y`는 지금 2차원 각인에 없지만 변수 글자라 함께 둔다).
+  static const Map<String, (double, double)> variableGlyphInk = {
+    'x': (0.0, 0.536),
+    'y': (-0.24, 0.546),
+    'e': (-0.01, 0.546),
   };
 
   /// 측정 기준 글자 크기 — 크기는 글자 크기에 비례한다고 보고 1dp당 크기(em 크기)를 구한다.
@@ -294,10 +303,13 @@ sealed class _Op {
 final class _TextOp extends _Op {
   final TextPainter painter;
 
+  /// 그린 글자열 (색만 바꿀 때 같은 글자 조각을 다시 만든다)
+  final String text;
+
   /// 글자 상자 왼쪽 위 (조각 원점 기준, 위가 +)
   final Offset topLeft;
 
-  const _TextOp(this.painter, this.topLeft);
+  const _TextOp(this.painter, this.text, this.topLeft);
 }
 
 final class _BarOp extends _Op {
@@ -362,9 +374,9 @@ class _LegendLayout {
     for (final (_, op) in _ops) {
       if (op is _TextOp) {
         final span = op.painter.text! as TextSpan;
-        op.painter.text = TextSpan(
-          text: span.text,
-          style: span.style!.copyWith(color: color),
+        op.painter.text = keyLabelSpan(
+          op.text,
+          span.style!.copyWith(color: color),
         );
       }
     }
@@ -481,16 +493,11 @@ class _Builder {
   static const double _radicalIndexGap = 0.04;
   static const double _radicalIndexLift = 0.10;
 
-  StrutStyle _strut(double fontSize) => StrutStyle.fromTextStyle(
-    style.copyWith(fontSize: fontSize),
-    forceStrutHeight: true,
-  );
+  StrutStyle _strut(double fontSize) =>
+      keyLabelStrut(style.copyWith(fontSize: fontSize));
 
   TextPainter _painter(String text, double fontSize) => TextPainter(
-    text: TextSpan(
-      text: text,
-      style: style.copyWith(fontSize: fontSize),
-    ),
+    text: keyLabelSpan(text, style.copyWith(fontSize: fontSize)),
     strutStyle: _strut(fontSize),
     textDirection: TextDirection.ltr,
     maxLines: 1,
@@ -559,8 +566,10 @@ class _Builder {
     );
     var top = double.negativeInfinity;
     var bottom = double.infinity;
-    for (final ch in text.split('')) {
-      final ink = KeyLegendView.glyphInk[ch];
+    for (final (i, ch) in text.split('').indexed) {
+      final ink = CalcTheme.isKeyVariableLetter(text, i)
+          ? KeyLegendView.variableGlyphInk[ch]
+          : KeyLegendView.glyphInk[ch];
       if (ink == null) {
         // 표에 없는 글자는 한 줄 상자 전체를 잉크로 본다 (보수적으로 크게).
         top = math.max(top, ascent);
@@ -572,7 +581,7 @@ class _Builder {
     }
     if (top == double.negativeInfinity) (top, bottom) = (0, 0);
     return _Piece(painter.width, top, bottom, [
-      (Offset.zero, _TextOp(painter, Offset(0, ascent))),
+      (Offset.zero, _TextOp(painter, text, Offset(0, ascent))),
     ]);
   }
 
@@ -860,3 +869,47 @@ class _Builder {
     return _Piece(end, inkTop, math.min(inkBottom, rad.inkBottom), ops);
   }
 }
+
+/// 키캡 각인 글자열 [text]를 [style]로 그리는 글자 조각 (#156). 변수 글자([CalcTheme.isKeyVariableLetter])만
+/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로 바꾸고, 나머지는 [style] 그대로다. 변수 글자가 없으면 글자열 하나다.
+///
+/// 키 버튼의 `Text`(글자만 있는 각인)와 [KeyLegendView]의 글자 조각이 함께 쓴다 — 두 곳의 글자 모양이 같다.
+TextSpan keyLabelSpan(String text, TextStyle style) {
+  final runs = <TextSpan>[];
+  void add(int from, int to, bool italic) => runs.add(
+    TextSpan(
+      text: text.substring(from, to),
+      style: italic ? CalcTheme.keyVariableStyle(style) : null,
+    ),
+  );
+  var start = 0;
+  var italic = false;
+  for (var i = 0; i < text.length; i++) {
+    final here = CalcTheme.isKeyVariableLetter(text, i);
+    if (i == 0) {
+      italic = here;
+    } else if (here != italic) {
+      add(start, i, italic);
+      start = i;
+      italic = here;
+    }
+  }
+  if (text.isNotEmpty) add(start, text.length, italic);
+  if (runs.length <= 1 && (runs.isEmpty || runs.single.style == null)) {
+    return TextSpan(text: text, style: style);
+  }
+  return TextSpan(style: style, children: runs);
+}
+
+/// 키캡 각인의 줄 상자(strut) — 각인 글꼴이 아니라 [CalcTheme.keyStrutFontFamily]의 줄 높이·기준선으로 고정한다 (#156).
+///
+/// 대체 글꼴(Noto Sans Math — `∑`·`∫`)은 descent가 더 깊어(423 vs 293/1000), 고정하지 않으면 그 글자가 섞인 라벨만 줄이
+/// 약 7% 높아진다(#16 실측: 20 → 21dp). 각인 글꼴 Saira도 위아래 여백이 커서 같은 문제가 생긴다. 키패드 글자 크기
+/// 계산(`KeypadMetrics`의 `fitFontSizeToHeight`)이 전제하는 줄 높이(글자 크기 × `height`)와 맞추고, 라벨 사이 기준선을 같게
+/// 한다. strut는 줄 상자만 고정하고 잉크(글리프 모양)는 자르지 않는다.
+StrutStyle keyLabelStrut(TextStyle style) => StrutStyle.fromTextStyle(
+  style,
+  fontFamily: CalcTheme.keyStrutFontFamily,
+  fontFamilyFallback: const [],
+  forceStrutHeight: true,
+);

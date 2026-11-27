@@ -38,7 +38,7 @@
 
 ## 2. 디렉토리 구조 (`lib/`)
 - `core/constants/key_definitions.dart`: 50개 버튼 레이아웃 및 SHIFT/ALPHA 키 매핑 정의, `key_legend.dart` (각인 구조 — 글자·분수·첨자·위아래 끝(∑)·근호·직접 그리는 칸, 한 줄 표기 `plainText`)
-- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트 및 LCD 폰트 스타일, 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)와 짝인 Material 테마(대화상자·SnackBar·키보드 포커스 테두리)
+- `core/theme/calc_theme.dart`: 카시오 fx-991EX/CW 색상 팔레트(실물 사진 기준 — 흰 숫자부·파란 DEL/AC·검정 함수부·은색 커서, #156)·키캡 입체감 비율, LCD·키 각인 폰트 스타일(각인은 비례폭 Saira·변수 이탤릭), 기기 고대비 설정에 따른 일반·고대비 팔레트(`CalcPalette`)와 짝인 Material 테마(대화상자·SnackBar·키보드 포커스 테두리)
 - `core/theme/font_licenses.dart`: 번들 글꼴 OFL 라이선스를 `LicenseRegistry`에 등록
 - `core/theme/high_text_contrast.dart`: Android 접근성 "고대비 텍스트" 켜짐 여부 수신(이벤트 채널, Android 쪽 `HighTextContrastStreamHandler.kt`)과 화면 전달 범위 — `CalcPalette.of`가 `MediaQuery.highContrast`와 함께 쓴다
 - `core/layout/form_factor.dart`: 기기 종류(폰·폴더블·태블릿) 판정·방향 고정 규칙, 창 크기·접힘선 기준 배치 판정
@@ -48,7 +48,7 @@
 - `presentation/providers/`: `calc_provider.dart`, `settings_provider.dart` (`shared_preferences` 앱 설정 — `main()`이 불러와 override), `device_provider.dart` (폴더블 기기 여부 — `main()`이 시작 판정(Android 쪽 `FoldableDeviceProbe.kt`)과 그 뒤 화면 정보로 기억한 값 `DeviceOrientationLock.foldableDevice`로 override), `iap_provider.dart`
 - `presentation/l10n/`: `calc_semantic_strings.dart` (스크린리더 음성 문구 — 키 기능 이름·LCD 표시기 의미, 한국어·영어), `device_locale_scope.dart` (기기 로캘 전달·언어 변경 시 재빌드), `settings_strings.dart` (설정 UI·화면 안내 문구, 한국어·영어)
 - `presentation/screens/`: `calculator_screen.dart`
-- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖와 반전 상자 글자 S·A·D·R·G), `math_node_widget.dart`, `calc_key_button.dart` (키 하나 — 키캡·각인 띠, ON 자리의 설정 키는 원형 버튼·키보드 포커스, #190), `round_key_face.dart` (실물 SHIFT·ALPHA·MENU·ON 같은 원형 은색 버튼 면 — 지금은 설정 키만, #156에서 나머지), `key_legend_view.dart` (분수·첨자·근호·∑ 위아래 끝·직접 그리는 칸 각인을 실물처럼 2차원으로 그림 — 배치 비율은 `CalcTheme` "2차원 각인 배치" 절), `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 가로형·테이블톱 아래 절반용 넓은 배열 `KeypadArrangement`, 넓은 배열의 손잡이 대칭), `history_panel.dart` (가로형의 계산 기록 영역 — M1에서는 빈 영역, 내용은 #145), `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 키), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_launcher.dart`·`handedness_dialog.dart` (ON 키(설정 키, #190)로 설정 열기 — 접힘선 기준 대화상자 위치·키패드 위치 선택. LCD 위 상단 띠·설정 버튼(#41)은 #190에서 없앴다), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
+- `presentation/widgets/`: `lcd_display.dart`, `lcd_status_icon.dart` (글자 대신 직접 그리는 LCD 상태 아이콘 →x·√▭✎·‖와 반전 상자 글자 S·A·D·R·G), `math_node_widget.dart`, `calc_key_button.dart` (키 하나 — 키캡(윗면 광택·옆면·그림자, #156)·각인 띠, SHIFT·ALPHA·MENU·ON 자리의 설정 키는 원형 버튼, 설정 키는 키보드 포커스, #190), `round_key_face.dart` (실물 SHIFT·ALPHA·MENU·ON 같은 원형 은색 버튼 면), `calc_body_background.dart` (본체 바탕 — 세로 그라데이션·잔무늬·가장자리 선, 고대비에서는 끔, #156), `key_legend_view.dart` (분수·첨자·근호·∑ 위아래 끝·직접 그리는 칸 각인을 실물처럼 2차원으로 그림 — 배치 비율은 `CalcTheme` "2차원 각인 배치" 절), `calc_keypad.dart` (50키 배치·글자 크기 통일, 구역 배열 — 실물 배열과 가로형·테이블톱 아래 절반용 넓은 배열 `KeypadArrangement`, 넓은 배열의 손잡이 대칭), `history_panel.dart` (가로형의 계산 기록 영역 — M1에서는 빈 영역, 내용은 #145), `focus_ring.dart` (키보드 포커스 테두리 — 일반·고대비 모두, 대화상자 선택지·버튼·설정 키), `text_fit.dart` (글자 배율 반영 높이 맞춤), `settings_launcher.dart`·`handedness_dialog.dart` (ON 키(설정 키, #190)로 설정 열기 — 접힘선 기준 대화상자 위치·키패드 위치 선택. LCD 위 상단 띠·설정 버튼(#41)은 #190에서 없앴다), `screen_coordinate_root.dart` (화면을 흉내 내는 곳에 MediaQuery와 좌표 원점을 함께 제공 — 위젯 배치는 미리보기 기기 틀 전용, 키 버튼이 좌표 변환에 사용)
 - 테스트: `test/unit/` (순수 Dart 로직, Flutter 바인딩 없이 저장소 설정 파일을 읽는 구성 검사 포함 — 줄바꿈 속성 검사는 `git` 명령으로 속성을 조회하고, SDK 고정 검사는 CI의 버전 읽기 스크립트를 bash로 실행한다, 액션 고정 스크립트 검사는 가짜 gh로, 릴리스 APK API 격리 검사 스크립트는 가짜 Android SDK와 실제 빌드에서 옮긴 dexdump 표본으로 실행한다), `test/widget/` (위젯 테스트 — 바인딩·`rootBundle`·실제 글꼴을 쓰는 테스트 포함), `test/support/` (테스트 공용 도구: 번들 글꼴 로더, cmap·글리프 잉크 범위 파서, 각인 위젯 찾기, LCD 글자 목록, 키 터치 치수 측정·커서 패드 내접원 기준(#159), 커서 패드 라벨 검사, 화면 배치 판정, CI 워크플로 파일 목록·YAML 로더·`uses:` 줄 추출, 셸 스크립트 실행용 bash 찾기, 가짜 APK용 ZIP 작성기)
 - Android 단위 테스트: `android/app/src/test/kotlin/` (Kotlin 플랫폼 코드의 JVM 테스트 — Robolectric으로 API 수준별 분기를 기기 없이 검사한다.
   `TestSupport.kt`에 테스트 대상 API 수준 상수·가짜 메신저·시스템 설정 흉내 도구, `MainActivityLifecycleTest`는 Mockito `FlutterJNI` 대역 캐시 엔진으로 생명주기를 돈다. `flutter test`와 따로 Gradle로 돌린다 — README "Android 단위 테스트")
@@ -56,7 +56,7 @@
 - VS Code: `.vscode/` (실행 구성 `launch.json`·추천 확장 `extensions.json` — 준비 단계·SDK 탐지는 README "VS Code에서 실행". 기기마다 다른 절대경로는 넣지 않으며, 구성과 README 표의 일치와 함께 `test/unit/vscode_config_test.dart`가 검사한다)
 - 줄바꿈: `.gitattributes` (Flutter가 다시 쓰는 생성 플러그인 파일을 LF로 고정 — `test/unit/gitattributes_test.dart`가 대상 누락을, CI가 빌드 뒤 작업 트리가 깨끗한지 검사한다. 아래 "로컬 개발 환경 메모" 참조)
 - 분석 제외: `analysis_options.yaml`의 `analyzer.exclude` (플랫폼 폴더와 작업 영역 안 워크트리 `.claude/worktrees/**` — 워크트리 항목은 VS Code Dart 확장의 프로젝트 목록 제외용이며, 확장이 폴더 제외로 읽는 표기인지 `test/unit/analysis_options_test.dart`가 검사한다. README "작업 영역 안의 git 워크트리")
-- 에셋: `assets/fonts/` (번들 글꼴 Noto Sans Mono/Math 서브셋과 OFL 전문 — 출처·서브셋 재현·글리프 선택 규칙은 `assets/fonts/README.md`)
+- 에셋: `assets/fonts/` (번들 글꼴 Noto Sans Mono/Math, 키 각인용 Saira·Noto Serif Bold Italic 서브셋과 OFL 전문 — 출처·서브셋 재현·글리프 선택 규칙은 `assets/fonts/README.md`)
 
 ## 3. 코딩 원칙
 - 일반 스마트폰, 폴더블, 태블릿 등 다양한 화면비에서도 키패드 비율이 깨지지 않도록 반응형으로 설계한다.

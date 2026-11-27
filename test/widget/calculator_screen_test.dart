@@ -150,12 +150,21 @@ void main() {
             greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
           );
           // 키가 넓어져도 각인 글자는 상한에서 멈춘다.
+          // 숫자부 메인 라벨은 함수부보다 크다(#156) — 구역마다 상한이 있다.
+          final numberIds = {
+            for (final row in numberRows)
+              for (final def in row) def.id,
+          };
           for (final button in tester.widgetList<CalcKeyButton>(
             find.byType(CalcKeyButton),
           )) {
             expect(
               button.mainLabelFontSize,
-              lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
+              lessThanOrEqualTo(
+                numberIds.contains(button.keyDef.id)
+                    ? CalcTheme.keyNumberMainLabelMaxFontSize
+                    : CalcTheme.keyMainLabelMaxFontSize,
+              ),
             );
             expect(
               button.legendFontSize,

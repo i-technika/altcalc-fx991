@@ -43,57 +43,90 @@ void main() {
   setUpAll(() async => loadBundledFonts());
 
   group('잉크 범위 표 (KeyLegendView.glyphInk)', () {
-    test('2차원 각인의 모든 글자가 표에 있다', () {
+    test('2차원 각인의 모든 글자가 표에 있다 (변수 이탤릭 글자는 이탤릭 표에)', () {
       final missing = {
         for (final (_, legend, _) in _twoDimensional())
           for (final piece in legend.texts)
-            for (final ch in piece.text.split(''))
-              if (!KeyLegendView.glyphInk.containsKey(ch)) ch,
+            for (final (i, ch) in piece.text.split('').indexed)
+              if (!(CalcTheme.isKeyVariableLetter(piece.text, i)
+                      ? KeyLegendView.variableGlyphInk
+                      : KeyLegendView.glyphInk)
+                  .containsKey(ch))
+                ch,
       };
       expect(missing, isEmpty, reason: '표에 없으면 한 줄 상자를 잉크로 봐 배치가 성겨진다');
     });
 
-    test('표의 값은 번들 글꼴의 glyf 잉크 범위와 0.012em 안에서 같다 (각인에 쓰는 굵기 모두)', () async {
-      // 메인 각인은 SemiBold, SHIFT·ALPHA 각인은 Medium이다. ∫·∑는 대체 글꼴 Noto Sans Math에만 있다.
-      final fonts = {
-        'SemiBold': await rootBundle.load(
-          'assets/fonts/NotoSansMono-SemiBold.ttf',
-        ),
-        'Medium': await rootBundle.load('assets/fonts/NotoSansMono-Medium.ttf'),
-      };
-      final math = await rootBundle.load(
-        'assets/fonts/NotoSansMath-Regular.ttf',
-      );
-      expect(
-        {
-          CalcTheme.keyMainLabelStyle.fontWeight,
-          CalcTheme.keyShiftLabelStyle.fontWeight,
-          CalcTheme.keyAlphaLabelStyle.fontWeight,
-        },
-        {FontWeight.w600, FontWeight.w500},
-        reason: '굵기가 바뀌면 위 글꼴 목록도 바꾼다',
-      );
-      for (final MapEntry(key: ch, value: (yMin, yMax))
-          in KeyLegendView.glyphInk.entries) {
-        final code = ch.runes.single;
-        final sources = readCmap(fonts['Medium']!).containsKey(code)
-            ? fonts.entries.toList()
-            : [MapEntry('Math', math)];
-        for (final MapEntry(key: weight, value: data) in sources) {
-          final bounds = readGlyphYBounds(data, code)!;
+    test(
+      '표의 값은 그 글자를 그리는 번들 글꼴의 glyf 잉크 범위와 0.012em 안에서 같다 (각인에 쓰는 굵기 모두, #156)',
+      () async {
+        // 메인 각인은 SemiBold, SHIFT·ALPHA 각인은 Medium이다. 글자는 각인 글꼴 Saira에서, Saira에 없는 기호는 대체 글꼴
+        // Noto Sans Mono에서, ∫·∑는 Noto Sans Math에서 찾는다(CalcTheme.keyFontFallback 순서).
+        final key = {
+          'SemiBold': await rootBundle.load('assets/fonts/Saira-SemiBold.ttf'),
+          'Medium': await rootBundle.load('assets/fonts/Saira-Medium.ttf'),
+        };
+        final mono = {
+          'SemiBold': await rootBundle.load(
+            'assets/fonts/NotoSansMono-SemiBold.ttf',
+          ),
+          'Medium': await rootBundle.load(
+            'assets/fonts/NotoSansMono-Medium.ttf',
+          ),
+        };
+        final math = await rootBundle.load(
+          'assets/fonts/NotoSansMath-Regular.ttf',
+        );
+        expect(
+          {
+            CalcTheme.keyMainLabelStyle.fontWeight,
+            CalcTheme.keyShiftLabelStyle.fontWeight,
+            CalcTheme.keyAlphaLabelStyle.fontWeight,
+          },
+          {FontWeight.w600, FontWeight.w500},
+          reason: '굵기가 바뀌면 위 글꼴 목록도 바꾼다',
+        );
+        void check(
+          String ch,
+          (double, double) ink,
+          String name,
+          ByteData font,
+        ) {
+          final bounds = readGlyphYBounds(font, ch.runes.single)!;
           expect(
-            yMin,
+            ink.$1,
             moreOrLessEquals(bounds.yMin, epsilon: 0.012),
-            reason: '$ch $weight yMin',
+            reason: '$ch $name yMin',
           );
           expect(
-            yMax,
+            ink.$2,
             moreOrLessEquals(bounds.yMax, epsilon: 0.012),
-            reason: '$ch $weight yMax',
+            reason: '$ch $name yMax',
           );
         }
-      }
-    });
+
+        for (final MapEntry(key: ch, value: ink)
+            in KeyLegendView.glyphInk.entries) {
+          final code = ch.runes.single;
+          final sources = readCmap(key['Medium']!).containsKey(code)
+              ? key
+              : readCmap(mono['Medium']!).containsKey(code)
+              ? mono
+              : {'Math': math};
+          for (final MapEntry(key: weight, value: data) in sources.entries) {
+            check(ch, ink, weight, data);
+          }
+        }
+        // 변수 이탤릭 글자는 Noto Serif Bold Italic 하나로 그린다(굵기와 무관).
+        final italic = await rootBundle.load(
+          'assets/fonts/NotoSerif-BoldItalic.ttf',
+        );
+        for (final MapEntry(key: ch, value: ink)
+            in KeyLegendView.variableGlyphInk.entries) {
+          check(ch, ink, 'BoldItalic', italic);
+        }
+      },
+    );
   });
 
   group('크기·기준선', () {
@@ -705,13 +738,14 @@ void main() {
         );
         final baseline = l.$4; // l의 아래끝
         // 칸은 열 구간이 아니라 높이 띠로 찾는다 — 사진처럼 두 칸이 맞닿아 한 열 구간이 되어도 찾을 수 있다(R2).
-        // g 윗끝(0.55em)·밑 칸 윗끝(약 0.32em)보다 높은 띠에는 l과 진수 칸 왼쪽·오른쪽 벽만 있다.
+        // g 윗끝(0.52em)·밑 칸 윗끝(약 0.32em)보다 높고 진수 칸 윗변(l 윗끝 0.743em에서 테두리 두께만큼, #156 Saira)보다
+        // 낮은 띠에는 l과 진수 칸 왼쪽·오른쪽 벽만 있다.
         final high = runsOf(
           ink
               .where(
                 (p) =>
-                    p.$2 < baseline - fontSize * 0.6 &&
-                    p.$2 > baseline - fontSize * 0.7,
+                    p.$2 < baseline - fontSize * 0.56 &&
+                    p.$2 > baseline - fontSize * 0.66,
               )
               .map((p) => p.$1),
         );
@@ -911,7 +945,7 @@ void main() {
             arrangement: KeypadArrangement.wide,
           ),
         ]) {
-          ({double main, double legend}) limits([
+          ({double main, double numberMain, double legend}) limits([
             bool Function(CalcKeyDef)? where,
           ]) => KeypadMetrics.debugWidthLimits(
             functionKeyWidth: m.functionKeyWidth,

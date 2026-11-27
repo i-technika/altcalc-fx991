@@ -7,6 +7,7 @@ import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/layout/layout_log.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/round_key_face.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/screen_coordinate_root.dart';
 import 'package:material_ui/material_ui.dart';
@@ -89,6 +90,7 @@ const _light = 'HapticFeedbackType.lightImpact';
 
 void main() {
   _shapeAndLegendTests();
+  _appearanceTests();
   group('3단 라벨 레이아웃', () {
     testWidgets('메인·SHIFT·ALPHA 라벨을 모두 표시한다 (CALC / SOLVE / =)', (
       tester,
@@ -2072,6 +2074,215 @@ void _shapeAndLegendTests() {
       final error = tester.takeException();
       expect(error, isA<AssertionError>());
       expect('$error', contains('음수'));
+    });
+  });
+}
+
+/// 실물 외관 (#156) — 원형 버튼 넷, 키캡 입체감, 모서리 반경, 변수 이탤릭, 키별 그리기 층.
+void _appearanceTests() {
+  group('실물 외관 (#156)', () {
+    KeycapSheenPainter? sheenOf(WidgetTester tester, CalcKeyId id) {
+      final paints = tester.widgetList<CustomPaint>(
+        find.descendant(of: _keycap(id), matching: find.byType(CustomPaint)),
+      );
+      for (final p in paints) {
+        if (p.painter case final KeycapSheenPainter sheen) return sheen;
+      }
+      return null;
+    }
+
+    testWidgets(
+      'SHIFT·ALPHA·MENU·ON은 원형 버튼이고, 이름은 버튼 위 본체에 SHIFT 금색·ALPHA 자홍색·나머지 흰색으로 인쇄한다',
+      (tester) async {
+        for (final highContrast in [false, true]) {
+          final palette = highContrast
+              ? CalcPalette.highContrast
+              : CalcPalette.standard;
+          for (final (id, color) in [
+            (CalcKeyId.shift, palette.shiftLabel),
+            (CalcKeyId.alpha, palette.alphaLabel),
+            (CalcKeyId.menu, palette.bodyPrint),
+            (CalcKeyId.on, palette.bodyPrint),
+          ]) {
+            final def = keyDefOf(id);
+            expect(def.face, KeyFace.roundButton, reason: id.name);
+            await tester.pumpWidget(
+              _host(
+                CalcKeyButton(keyDef: def, onPressed: (_) {}),
+                highContrast: highContrast,
+              ),
+            );
+            final reason = '${id.name} highContrast=$highContrast';
+            expect(
+              find.descendant(
+                of: _keycap(id),
+                matching: find.byType(RoundKeyFace),
+              ),
+              findsOneWidget,
+              reason: reason,
+            );
+            expect(
+              find.descendant(of: _keycap(id), matching: find.byType(Text)),
+              findsNothing,
+              reason: reason,
+            );
+            expect(
+              legendStyleOf(tester, findLegend(def.mainLegend)).color,
+              color,
+              reason: reason,
+            );
+          }
+        }
+        // 실물 MENU 버튼 위 `MENU SETUP` — SETUP은 SHIFT 각인 색
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.menu))),
+        );
+        expect(
+          legendStyleOf(tester, find.text('SETUP')).color,
+          CalcTheme.shiftLabel,
+        );
+      },
+    );
+
+    testWidgets('일반 모드 키캡: 윗면 광택·옆면·그림자를 그리고, 눌리면 옆면·그림자가 사라진다', (
+      tester,
+    ) async {
+      for (final (id, dark) in [
+        (CalcKeyId.sin, true),
+        (CalcKeyId.del, true),
+        (CalcKeyId.num7, false),
+        (CalcKeyId.add, false),
+      ]) {
+        final def = keyDefOf(id);
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: def, onPressed: (_) {})),
+        );
+        final sheen = sheenOf(tester, id);
+        expect(sheen, isNotNull, reason: id.name);
+        expect(sheen!.dark, dark, reason: id.name);
+        // 광택은 글자 자리(가운데)를 비운다
+        expect(sheen.colors[1].a, 0);
+        expect(sheen.colors[2].a, 0);
+        final shadows = _decoration(tester, id).boxShadow!;
+        expect(shadows, hasLength(2), reason: id.name);
+        // 둘째가 옆면 — 번지지 않고, 옆면 깊이만큼 아래에, 키캡 색을 어둡게 한 색
+        expect(shadows[1].blurRadius, 0);
+        expect(shadows[1].offset, const Offset(0, CalcTheme.keyCapSideDepth));
+        expect(
+          shadows[1].color,
+          Color.alphaBlend(CalcTheme.keyCapSide, def.category.background),
+        );
+        expect(shadows[0].color, CalcTheme.keyShadow);
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(_keycap(id)),
+        );
+        await tester.pump();
+        expect(_decoration(tester, id).boxShadow, isEmpty, reason: id.name);
+        await gesture.up();
+        await tester.pump(CalcTheme.keyPressAnimationDuration);
+      }
+    });
+
+    testWidgets('고대비 키캡: 광택·옆면을 그리지 않고 그림자만 남긴다 (글자 뒤 색이 평평하다)', (
+      tester,
+    ) async {
+      for (final id in [CalcKeyId.sin, CalcKeyId.num7, CalcKeyId.ac]) {
+        await tester.pumpWidget(
+          _host(
+            CalcKeyButton(keyDef: keyDefOf(id), onPressed: (_) {}),
+            highContrast: true,
+          ),
+        );
+        expect(sheenOf(tester, id), isNull, reason: id.name);
+        final shadows = _decoration(tester, id).boxShadow!;
+        expect(shadows, hasLength(1), reason: id.name);
+        expect(shadows.single.color, CalcTheme.keyShadow);
+      }
+    });
+
+    testWidgets('키캡 모서리 반경은 숫자부가 덜 둥글고, 키캡 높이에 비례하되 상한에서 멈춘다', (tester) async {
+      expect(
+        keyCapCornerRadius(KeyCategory.function, 40),
+        moreOrLessEquals(40 * CalcTheme.keyCapCornerRadiusRatio),
+      );
+      expect(
+        keyCapCornerRadius(KeyCategory.number, 40),
+        moreOrLessEquals(40 * CalcTheme.keyCapNumberCornerRadiusRatio),
+      );
+      for (final c in [
+        KeyCategory.operator,
+        KeyCategory.equals,
+        KeyCategory.ac,
+        KeyCategory.del,
+      ]) {
+        expect(
+          keyCapCornerRadius(c, 40),
+          keyCapCornerRadius(KeyCategory.number, 40),
+          reason: c.name,
+        );
+      }
+      expect(
+        keyCapCornerRadius(KeyCategory.function, 1000),
+        CalcTheme.keyCapMaxCornerRadius,
+      );
+      expect(keyCapCornerRadius(KeyCategory.number, 0), 0);
+      // 화면의 키캡도 그 반경으로 그린다
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sin))),
+      );
+      final radius = _decoration(tester, CalcKeyId.sin).borderRadius!;
+      final capHeight = tester.getSize(_keycap(CalcKeyId.sin)).height;
+      expect(
+        (radius as BorderRadius).topLeft.x,
+        moreOrLessEquals(keyCapCornerRadius(KeyCategory.function, capHeight)),
+      );
+    });
+
+    testWidgets('변수 글자만 이탤릭 세리프로 그린다 — x 키·x!의 x (각인 글꼴은 그대로)', (tester) async {
+      const style = TextStyle(fontSize: 10, color: Color(0xFFFFFFFF));
+      final xBang = keyLabelSpan('x!', style);
+      expect(xBang.children, hasLength(2));
+      final italic = xBang.children![0] as TextSpan;
+      expect(italic.text, 'x');
+      expect(italic.style!.fontFamily, CalcTheme.keyVariableFontFamily);
+      expect(italic.style!.fontStyle, FontStyle.italic);
+      expect((xBang.children![1] as TextSpan).style, isNull);
+      // 변수 글자가 없으면 글자열 하나다
+      final plain = keyLabelSpan('Rec', style);
+      expect(plain.children, isNull);
+      expect(plain.text, 'Rec');
+
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.variableX))),
+      );
+      final text = tester.widget<Text>(
+        find.descendant(
+          of: _keycap(CalcKeyId.variableX),
+          matching: find.byType(Text),
+        ),
+      );
+      final span = text.textSpan! as TextSpan;
+      expect(
+        (span.children!.single as TextSpan).style!.fontStyle,
+        FontStyle.italic,
+      );
+      // 각인 위젯 찾기(find.text)·스타일 읽기는 그대로 된다
+      expect(findLegend(const LegendText('x')), findsWidgets);
+      expect(text.style!.fontFamily, CalcTheme.keyFontFamily);
+    });
+
+    testWidgets('키마다 따로 그리는 층이다 — 누른 키만 다시 그린다', (tester) async {
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sin))),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(CalcKeyButton),
+          matching: find.byType(RepaintBoundary),
+        ),
+        findsWidgets,
+      );
     });
   });
 }
