@@ -59,3 +59,21 @@ Future<SharedPreferences?> openSettingsStorage() async {
     return null;
   }
 }
+
+/// 화면 켜짐 유지 모드가 켜져 있는지 (앱 설정, 기본 꺼짐) — LCD 상태 표시줄의 ☀ 자리 표시기(#233)를 켠다.
+///
+/// M1에는 이 값을 바꾸는 설정 항목이 없어 늘 꺼짐이고, 개발용 미리보기(`preview/key_preview_main.dart`)만
+/// [KeepScreenOnNotifier.set]으로 켜 본다. 설정 항목·저장([HandednessNotifier]처럼 [sharedPreferencesProvider])·
+/// 실제 화면 꺼짐 방지는 #234(M4 설정 팝업)에서 붙인다.
+final keepScreenOnProvider = NotifierProvider<KeepScreenOnNotifier, bool>(
+  KeepScreenOnNotifier.new,
+);
+
+/// [keepScreenOnProvider]의 값
+class KeepScreenOnNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  /// 화면 켜짐 유지를 켜거나 끈다. 지금은 표시기만 바뀐다(저장·화면 꺼짐 방지는 #234).
+  void set(bool value) => state = value;
+}

@@ -108,23 +108,14 @@ void main() {
         expect(find.byIcon(Icons.settings), findsNothing);
         expect(find.byType(IconButton), findsNothing);
         expect(find.text('AltCalc'), findsNothing);
-        // LCD 쪽(LCD·기록 영역·LCD 위 빈 곳)이 본체 윗변부터다 — 빈 곳은 LCD가 줄 글자 상한 높이(#189)까지 받고도 남을 때만
-        // 생긴다(세로형 [CalcScreenLayout.top]).
+        // LCD 쪽(LCD·기록 영역)이 본체 윗변부터다 — LCD 위에 빈 곳도 없다(#232).
         final bodyTop = padding.top + CalcTheme.screenPadding;
-        final body = Size(
-          size.width - 2 * CalcTheme.screenPadding,
-          size.height - padding.vertical - 2 * CalcTheme.screenPadding,
-        );
         final lcd = tester.getRect(_lcd);
+        expect(lcd.top, moreOrLessEquals(bodyTop));
         if (find.byKey(HistoryPanel.panelKey).evaluate().isNotEmpty) {
           expect(
             tester.getRect(find.byKey(HistoryPanel.panelKey)).top,
             moreOrLessEquals(bodyTop),
-          );
-        } else {
-          expect(
-            lcd.top,
-            moreOrLessEquals(bodyTop + CalcScreenLayout.of(body).top),
           );
         }
       });

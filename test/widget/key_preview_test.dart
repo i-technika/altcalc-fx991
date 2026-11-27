@@ -13,6 +13,7 @@ import 'package:itechnika_altcalc_fx991/core/layout/form_factor.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/calc_state.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/domain/models/lcd_status.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
@@ -21,6 +22,7 @@ import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
+import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_status_icon.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../preview/key_preview_main.dart';
@@ -1098,6 +1100,34 @@ void main() {
       },
     );
 
+    testWidgets('화면 켜짐 유지 토글은 LCD ☀ 자리의 표시기를 켜고 끈다 (#233)', (tester) async {
+      await _pumpPreview(tester);
+      final toggle = find.byKey(const ValueKey('preview-keep-screen-on'));
+      LcdStatus status() =>
+          tester.widget<LcdStatusBar>(find.byType(LcdStatusBar)).status;
+      Color iconColor() => tester
+          .widget<LcdStatusIcon>(
+            find.byKey(const ValueKey(LcdIndicatorIcon.keepScreenOn)),
+          )
+          .color;
+
+      // 기본은 꺼짐 — 꺼진 표시기 색으로 자리만 흐리게 남는다.
+      expect(status().keepScreenOn, isFalse);
+      expect(iconColor(), CalcTheme.lcdStatusInactive);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(status().keepScreenOn, isTrue);
+      expect(iconColor(), CalcTheme.lcdStatusActive);
+      // 계산기 상태는 그대로다 — 다른 표시기는 초기 상태와 같다.
+      expect(status().copyWith(keepScreenOn: false), LcdStatus.initial);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(status().keepScreenOn, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('기능 입력은 번호·층 표기로, 모디파이어 대기 변화는 번호 없이 최근 순으로 기록된다', (
       tester,
     ) async {
@@ -1502,7 +1532,7 @@ void main() {
     );
 
     testWidgets(
-      '데스크톱 큰 창 프리셋: 가로형, 기록 영역이 있고 활성 LCD는 줄 글자 상한 높이로 키패드 바로 위다 (README, #189)',
+      '데스크톱 큰 창 프리셋: 가로형, 기록 영역이 있고 활성 LCD는 줄 글자 상한(#189)이며 위 띠 높이 전체다 (README, #232)',
       (tester) async {
         await _pumpPreview(tester);
         await _selectDevice(
@@ -1517,7 +1547,13 @@ void main() {
         expect(find.byKey(HistoryPanel.panelKey), findsOneWidget);
         // 미리보기는 큰 화면을 축소해 그리므로 화면 좌표(getRect)가 아니라 위젯 자신의 크기(getSize)로 잰다.
         final lcd = tester.getSize(find.byType(LcdDisplay));
-        expect(lcd.height, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+        expect(
+          lcd.height,
+          moreOrLessEquals(
+            tester.getSize(find.byKey(HistoryPanel.panelKey)).height,
+          ),
+        );
+        expect(lcd.height, greaterThan(LcdFontSizes.heightAtMaxLineFont));
         expect(
           LcdFontSizes.forSize(lcd, TextScaler.noScaling).input,
           CalcTheme.lcdLineMaxFontSize,

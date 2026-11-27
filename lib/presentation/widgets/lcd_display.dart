@@ -47,8 +47,9 @@ class LcdLineOverflow {
 /// ## 상한 (#189)
 /// - 줄 글자는 배율 반영 후 크기가 [CalcTheme.lcdLineMaxFontSize]를 넘지 않는다. 큰 창에서 LCD 글자가 키 각인
 ///   ([CalcTheme.keyMainLabelMaxFontSize])의 5~8배로 커지지 않게 한다.
-/// - 화면 배치는 LCD 높이도 [heightAtMaxLineFont]까지만 쓴다 — 그보다 높은 LCD는 글자가 상한에 묶여 식과 답만 세로로
-///   멀어진다(`CalculatorScreen`의 배치들).
+/// - 화면 배치는 LCD가 목표로 가져가는 높이를 [heightAtMaxLineFont]까지로 둔다. 키패드도 쓰지 못한 높이는 LCD가 받아 그보다
+///   높아질 수 있다(#232 — LCD 위에 빈 곳을 두지 않는다). 그런 LCD는 글자가 상한(또는 폭)에 묶여 입력·결과 줄만 높아지고 식과
+///   답 사이가 벌어진다(`CalculatorScreen`의 배치들, `CalcTheme` "LCD 내부 구성" 절).
 ///
 /// ## 시스템 글자 배율
 /// - **줄 글자**는 이미 LCD를 채우는 크기라 배율로 더 키울 공간이 없다. 그래서 배율 반영 후 크기가
@@ -147,8 +148,9 @@ class LcdFontSizes {
     return LcdFontSizes(status: statusOf(line), input: line, result: line);
   }
 
-  /// 줄 글자가 [CalcTheme.lcdLineMaxFontSize](배율 1)에 닿는 가장 낮은 LCD 높이 (dp, 베젤 포함) — 화면 배치의 LCD 최대 높이
-  /// 상한이다 (#189). 이보다 높여도 줄 글자는 커지지 않고 입력·결과 줄 사이만 벌어진다.
+  /// 줄 글자가 [CalcTheme.lcdLineMaxFontSize](배율 1)에 닿는 가장 낮은 LCD 높이 (dp, 베젤 포함) — 화면 배치에서 LCD가 **목표로
+  /// 가져가는** 높이의 상한이다 (#189). 키패드도 쓰지 못한 높이를 받으면 LCD는 이보다 높아진다(#232). 이보다 높여도 줄 글자는
+  /// 커지지 않고 입력·결과 줄 사이만 벌어진다.
   ///
   /// 폭이 충분하면(폭 기준 글자가 상한 이상) 이 높이의 LCD는 줄 글자가 정확히 상한이다. 상태 표시줄 + 4행 + 분수 막대를
   /// [forSize]의 높이 기준과 같은 식으로 더한 값이다.
@@ -164,19 +166,23 @@ class LcdFontSizes {
 
   /// 배율 반영 줄 글자 [scaledLine]·상태 표시 글자 [scaledStatus]일 때 LCD 안쪽 높이 사용량 (dp) — [forSize]의 높이 기준.
   /// 상태 표시줄은 LcdDisplay와 같은 식이다. 분수의 분자·분모 Text는 각각 높이가 정수로 올림되므로 행마다 1dp를 더한다.
-  /// 입력·결과 줄이 각각 분수 1단을 담도록 2행 줄마다 분수 막대 몫을 더한다.
+  /// 입력·결과 줄이 각각 분수 1단을 담도록 2행 줄마다 분수 막대 몫을 더한다([lineBandHeight] × 2).
   static double _usedHeight({
     required double scaledLine,
     required double scaledStatus,
   }) {
-    const rowCount = CalcTheme.lcdInputLineFlex + CalcTheme.lcdResultLineFlex;
     // LcdDisplay는 줄 높이를 flex 비율로 나누므로, 줄마다 분수 막대 몫을 정확히 받으려면 두 줄의
-    // 행 수가 같아야 한다 (calc_theme_test 불변식).
-    const fractionLines = 2;
+    // 행 수가 같아야 한다 (calc_theme_test 불변식). 그래서 두 줄 모두 [lineBandHeight]다.
     return scaledStatus * CalcTheme.lcdStatusBarHeightRatio +
-        rowCount * (scaledLine * _lineHeightFactor + 1) +
-        fractionLines * scaledLine * CalcTheme.lcdFractionBarRatio;
+        2 * lineBandHeight(scaledLine);
   }
+
+  /// 배율 반영 줄 글자 [scaledLine]인 입력·결과 줄 하나가 분수 1단(2행 + 분수 막대)을 담는 높이 (dp) — [forSize]의 높이
+  /// 기준이 줄마다 잡는 몫이다. 분자·분모 Text는 각각 높이가 정수로 올림되므로 행마다 1dp를 더한다.
+  /// [LcdDisplay]는 ◄/►를 이 높이의 띠(입력 줄은 위, 결과 줄은 아래) 가운데에 둔다(#232 R1).
+  static double lineBandHeight(double scaledLine) =>
+      CalcTheme.lcdInputLineFlex * (scaledLine * _lineHeightFactor + 1) +
+      scaledLine * CalcTheme.lcdFractionBarRatio;
 
   /// 높이 기준 비교의 반올림 오차 허용값 (dp)
   static const double _heightTolerance = 1e-9;
@@ -213,7 +219,7 @@ class LcdFontSizes {
 /// 구성 (위 → 아래):
 /// ```
 ///  ╔══════════════════════════════════╗  ← 검은 베젤 (CalcTheme.lcdFrame, 바깥 테두리 lcdBezelEdge — #156)
-///  ║ S A M →x √▭✎ D R G FIX SCI E i ∠ ▼▲ ‖ ║  ← 상태 표시줄 (실물 세그먼트 위치의 고정 슬롯)
+///  ║ S A M →x √▭✎ D R G FIX SCI E i ∠ ▼▲ ‖ 👁║  ← 상태 표시줄 (실물 세그먼트 위치의 고정 슬롯, 👁는 ☀ 자리의 화면 켜짐 유지)
 ///  ║◄ 2+3×                           ►║  ← 입력 줄 (왼쪽 정렬)
 ///  ║                                5 ║  ← 결과 줄 (오른쪽 정렬)
 ///  ╚══════════════════════════════════╝
@@ -823,15 +829,25 @@ class _LcdLine extends StatelessWidget {
       letterSpacing: 0,
       height: 1.0,
     );
+    // ◄/►는 줄 내용과 같은 쪽(입력 줄은 위, 결과 줄은 아래)의 2행 높이(분수 1단 — [LcdFontSizes.lineBandHeight]) 안 가운데에
+    // 둔다. LCD가 줄 글자에 필요한 높이보다 높아도(#232) 화살표가 식·답에서 떨어지지 않는다. 줄이 그보다 낮으면 줄 높이의
+    // 가운데다. 띠 가운데는 분수 막대 높이라 한 행짜리 식·답에서는 화살표가 글자보다 반 행 아래(입력)·위(결과)에 온다 —
+    // 줄 높이가 띠와 같던 #232 전과 같은 위치다(R2, `CalcTheme` "LCD 내부 구성" 절).
+    final arrowBandHeight = LcdFontSizes.lineBandHeight(
+      textScaler.scale(style.fontSize!),
+    );
     // 스크린리더: 줄 이름("입력"/"결과")과 ◄/► 표시·줄 내용을 한 덩어리로 읽는다.
     // M2에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
     // 그것까지 흡수하므로 이 병합 방식을 다시 정한다.
     return MergeSemantics(
-      child: Semantics(label: semanticLabel, child: _buildRow(arrowStyle)),
+      child: Semantics(
+        label: semanticLabel,
+        child: _buildRow(arrowStyle, arrowBandHeight),
+      ),
     );
   }
 
-  Widget _buildRow(TextStyle arrowStyle) {
+  Widget _buildRow(TextStyle arrowStyle, double arrowBandHeight) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -840,6 +856,8 @@ class _LcdLine extends StatelessWidget {
           visible: overflow.left,
           style: arrowStyle,
           textScaler: textScaler,
+          verticalAlignment: alignment.y,
+          bandHeight: arrowBandHeight,
         ),
         Expanded(
           child: LayoutBuilder(
@@ -871,6 +889,8 @@ class _LcdLine extends StatelessWidget {
           visible: overflow.right,
           style: arrowStyle,
           textScaler: textScaler,
+          verticalAlignment: alignment.y,
+          bandHeight: arrowBandHeight,
         ),
       ],
     );
@@ -903,6 +923,12 @@ class _ScrollArrow extends StatelessWidget {
   final TextStyle style;
   final TextScaler textScaler;
 
+  /// 화살표를 둘 띠의 세로 위치 (줄 내용 정렬의 y — 입력 줄 -1 위, 결과 줄 1 아래)
+  final double verticalAlignment;
+
+  /// 화살표를 가운데에 둘 띠 높이 (dp) — 줄 내용 2행 높이. 줄이 이보다 낮으면 줄 높이다.
+  final double bandHeight;
+
   /// 화살표 글자. 한 칸 폭인 `◄`·`►`를 쓴다 (`◀`·`▶`는 두 칸 폭 — [CalcTheme.lcdScrollArrowWidthRatio]).
   static const String leftSymbol = '◄';
   static const String rightSymbol = '►';
@@ -912,6 +938,8 @@ class _ScrollArrow extends StatelessWidget {
     required this.visible,
     required this.style,
     required this.textScaler,
+    required this.verticalAlignment,
+    required this.bandHeight,
   });
 
   @override
@@ -921,17 +949,24 @@ class _ScrollArrow extends StatelessWidget {
     return SizedBox(
       width: width,
       child: visible
-          ? Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  isLeft ? leftSymbol : rightSymbol,
-                  style: style.copyWith(color: CalcTheme.lcdText),
-                  textScaler: textScaler,
-                  maxLines: 1,
-                  softWrap: false,
-                  semanticsLabel: CalcSemanticStrings.of(context)
-                      .scrollMore(left: isLeft),
+          ? Align(
+              alignment: Alignment(0, verticalAlignment),
+              // 줄이 띠보다 낮으면 SizedBox가 줄 높이로 줄어 줄 가운데가 된다.
+              child: SizedBox(
+                height: bandHeight,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isLeft ? leftSymbol : rightSymbol,
+                      style: style.copyWith(color: CalcTheme.lcdText),
+                      textScaler: textScaler,
+                      maxLines: 1,
+                      softWrap: false,
+                      semanticsLabel: CalcSemanticStrings.of(context)
+                          .scrollMore(left: isLeft),
+                    ),
+                  ),
                 ),
               ),
             )
