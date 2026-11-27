@@ -1461,6 +1461,30 @@ void main() {
       },
     );
 
+    testWidgets(
+      '데스크톱 큰 창 프리셋: 가로형, 기록 영역이 있고 활성 LCD는 줄 글자 상한 높이로 키패드 바로 위다 (README, #189)',
+      (tester) async {
+        await _pumpPreview(tester);
+        await _selectDevice(
+          tester,
+          previewDevices.indexWhere((d) => d.name == '데스크톱 큰 창'),
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+          KeypadArrangement.wide,
+        );
+        expect(find.byKey(HistoryPanel.panelKey), findsOneWidget);
+        // 미리보기는 큰 화면을 축소해 그리므로 화면 좌표(getRect)가 아니라 위젯 자신의 크기(getSize)로 잰다.
+        final lcd = tester.getSize(find.byType(LcdDisplay));
+        expect(lcd.height, moreOrLessEquals(LcdFontSizes.heightAtMaxLineFont));
+        expect(
+          LcdFontSizes.forSize(lcd, TextScaler.noScaling).input,
+          CalcTheme.lcdLineMaxFontSize,
+        );
+      },
+    );
+
     testWidgets('창이 기기 화면을 그릴 수 없을 만큼 좁으면 안내 문구를 보인다', (tester) async {
       // 넓은 배치에서 창 높이가 여백(16×2)+캡션(24)보다 낮은 경우
       await _pumpPreview(tester, window: const Size(1280, 50));
