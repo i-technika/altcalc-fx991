@@ -155,8 +155,9 @@ TalkBack·Accessibility Scanner처럼 에뮬레이터로 되는 접근성 확인
   - `google_apis` 이미지에는 Play 스토어가 없다(`AltCalc_Phone_API34`의 `com.android.vending`은 라이선스 확인용 `LicenseChecker`뿐이었다, 실측).
   - Play 이미지이지만 `PlayStore.enabled=no`인 `Medium_Phone_API_37.0`·`AltCalc_Pixel_Fold_API36`(폴더블)에서 설치되는지는 확인하지 않았다.
 - **하드웨어 키보드**: `input keyevent`는 가상 키보드로 들어가 포커스 테두리가 보이지 않는다. 루트 가능한 `google_apis` 이미지에서
-  `adb root` 뒤 `sendevent /dev/input/event1 1 <키 코드> 1; sendevent /dev/input/event1 0 0 0`(뗄 때 값 0)로 넣는다
-  (`AT Translated Set 2 keyboard` — 장치 번호는 `getevent -p`로 확인, TAB 15·ENTER 28·SPACE 57·ESC 1).
+  `adb root` 뒤 누름·뗌을 모두 보낸다(뗌을 빼면 키가 눌린 채 반복 입력된다). Tab 한 번:
+  `sendevent /dev/input/event1 1 15 1; sendevent /dev/input/event1 0 0 0; sendevent /dev/input/event1 1 15 0; sendevent /dev/input/event1 0 0 0`
+  (`event1`은 예시 — `AT Translated Set 2 keyboard`의 장치는 `getevent -p`로 확인한다. 키 코드: TAB 15·ENTER 28·SPACE 57·ESC 1).
   - 첫 Tab은 Android가 앱 화면 View(FlutterView)에 포커스를 준다. 이때 Android 기본 포커스 강조로 창 가장자리에 초록 테두리가
     생기고, 다음 Tab부터 앱 안(설정 키)으로 간다(#207, API 34 실측). 초록 테두리는 키보드 입력이 이 창으로 간다는 시스템 표시라
     그대로 둔다(분할 화면에서 어느 창이 키를 받는지 알려 준다).

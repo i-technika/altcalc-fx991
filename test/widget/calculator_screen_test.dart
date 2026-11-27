@@ -27,6 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/korean_locale.dart';
 import '../support/semantics_hit_testing.dart';
+import '../support/semantics_order.dart';
 import '../support/screen_arrangement.dart';
 import '../support/touch_metrics.dart';
 
@@ -2133,6 +2134,45 @@ void main() {
         handle.dispose();
       });
 
+      testWidgets(
+        'SHIFT 뒤 알림 노드가 없어진 다음 설정 키를 눌러도, 장벽이 들어온 프레임에 새로 생긴 노드가 남는다 (#207 R2)',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          useKoreanLocale(tester);
+          await _pumpScreen(tester);
+          await press(tester, CalcKeyId.shift);
+          await tester.pump(ScreenReaderAnnouncer.clearDelay);
+          expect(announcer, findsNothing);
+          await tester.tap(_keycap(settingsKey));
+          await tester.pump(); // 대화상자 경로가 들어오고 알림 노드가 처음 생기는 같은 프레임
+          final labels = [
+            for (final (label, _) in _semanticsTree(tester)) label,
+          ];
+          expect(labels, contains('Dismiss'));
+          expect(labels, isNot(contains('설정')));
+          expect(_liveLabels(tester), ['시프트 꺼짐']);
+          handle.dispose();
+        },
+      );
+
+      testWidgets('스크린리더 초점이 알림 노드에 있으면 초점이 떠날 때까지 없애지 않는다 (#207 R2)', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        useKoreanLocale(tester);
+        await _pumpScreen(tester);
+        await press(tester, CalcKeyId.shift);
+        final owner = tester.binding.renderViews.first.owner!.semanticsOwner!;
+        final id = tester.getSemantics(announcer).id;
+        owner.performAction(id, SemanticsAction.didGainAccessibilityFocus);
+        await tester.pump(ScreenReaderAnnouncer.clearDelay * 2);
+        expect(rawLabel(tester), '시프트 켜짐', reason: '초점이 있는 노드를 없애면 초점이 지워진다');
+        owner.performAction(id, SemanticsAction.didLoseAccessibilityFocus);
+        await tester.pump();
+        expect(announcer, findsNothing);
+        handle.dispose();
+      });
+
       testWidgets('실제 앱 루트(AltCalcApp)도 알림 노드를 루트 Navigator 밖에 둔다 (#207)', (
         tester,
       ) async {
@@ -2147,10 +2187,26 @@ void main() {
         expect(announcer, findsNothing);
         await press(tester, CalcKeyId.shift);
         expect(_liveLabels(tester), ['Shift on']);
+        // 알림 노드는 읽기 순서 맨 뒤다 — 알리는 동안 스크린리더를 켜거나 쓸어 넘겨도 다른 노드보다 먼저 오지 않는다.
+        expect(
+          semanticsTraversalOrder(tester).last,
+          tester.getSemantics(announcer).id,
+        );
         await tester.tap(_keycap(settingsKey));
         await tester.pump();
         expect(find.byType(HandednessDialog), findsOneWidget);
         expect(_liveLabels(tester), ['Shift off']);
+        await tester.pump(
+          const Duration(milliseconds: 500),
+        ); // 대화상자 전환이 끝나 제목 노드가 생긴다
+        final order = semanticsTraversalOrder(tester);
+        expect(
+          semanticsIndexIn(tester, order, announcer),
+          greaterThan(
+            semanticsIndexIn(tester, order, find.text('Keypad position')),
+          ),
+        );
+        expect(order.last, tester.getSemantics(announcer).id);
         await tester.pump(ScreenReaderAnnouncer.clearDelay);
         expect(_liveLabels(tester), isEmpty);
         handle.dispose();

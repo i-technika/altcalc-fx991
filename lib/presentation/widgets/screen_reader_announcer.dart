@@ -68,9 +68,11 @@ class ScreenReaderAnnouncer extends ConsumerStatefulWidget {
   /// 연속된 같은 말을 구분하려고 번갈아 붙이는 글자 (스크린리더는 읽지 않는다)
   static const String repeatMarker = '\u200B';
 
-  /// 알린 뒤 라벨을 비우기까지의 시간 (Android). TalkBack은 liveRegion 변경 이벤트를 받는 즉시(실측 수 ms) 노드 라벨을
-  /// 읽어 말할 문장을 만들므로, 말하는 동안 라벨을 비워도 끊기지 않는다. 앱이나 TalkBack이 바빠 이벤트 처리가 늦어지는
-  /// 경우를 넉넉히 덮는 값이다. 이보다 짧은 동안만 지난 문구가 초점 자리에 남는다.
+  /// 알린 뒤 알림 노드를 없애기까지의 시간 (Android). TalkBack은 liveRegion 변경 이벤트를 받는 즉시(실측 수 ms) 노드
+  /// 라벨을 읽어 말할 문장을 만들므로, 말하는 동안 노드를 없애도 끊기지 않는다. 앱이나 TalkBack이 바빠 이벤트 처리가
+  /// 늦어지는 경우를 넉넉히 덮는 값이다. 이보다 짧은 동안만 지난 문구가 초점 자리에 남는다.
+  /// 그 사이 사용자가 쓸어 넘겨 이 노드에 스크린리더 초점을 두었으면, 초점이 떠날 때까지 없애기를 미룬다 — 초점이 있는
+  /// 노드를 없애면 초점이 지워져 다음 쓸어 넘기기가 처음부터 다시 시작한다(#207 R2).
   static const Duration clearDelay = Duration(seconds: 2);
 
   @override
@@ -82,6 +84,24 @@ class _ScreenReaderAnnouncerState extends ConsumerState<ScreenReaderAnnouncer> {
   String _message = '';
   bool _marked = false;
   Timer? _clearTimer;
+
+  /// 스크린리더 초점이 이 노드에 있는지 (Android 접근성 초점)
+  bool _focused = false;
+
+  /// [ScreenReaderAnnouncer.clearDelay]가 지났지만 초점이 있어 아직 없애지 않았는지
+  bool _clearPending = false;
+
+  void _clear() {
+    if (!mounted) return;
+    if (_focused) {
+      _clearPending = true;
+      return;
+    }
+    setState(() {
+      _clearPending = false;
+      _message = '';
+    });
+  }
 
   @override
   void dispose() {
@@ -114,21 +134,28 @@ class _ScreenReaderAnnouncerState extends ConsumerState<ScreenReaderAnnouncer> {
                 ? message
                 : '$message${ScreenReaderAnnouncer.repeatMarker}';
           });
+          _clearPending = false;
           _clearTimer?.cancel();
-          _clearTimer = Timer(ScreenReaderAnnouncer.clearDelay, () {
-            if (mounted) setState(() => _message = '');
-          });
+          _clearTimer = Timer(ScreenReaderAnnouncer.clearDelay, _clear);
         }
       },
     );
     if (supportsAnnounce) return const SizedBox.shrink();
     // 알릴 말이 없으면 의미 노드를 두지 않는다 — 스크린리더가 초점을 줄 자리도, 비울 때의 변경 이벤트도 없다.
-    if (_message.isEmpty) return const SizedBox.expand();
+    if (_message.isEmpty) {
+      _focused = false;
+      return const SizedBox.expand();
+    }
     return Semantics(
       key: const ValueKey('screen-reader-announcer'),
       container: true,
       liveRegion: true,
       label: _message,
+      onDidGainAccessibilityFocus: () => _focused = true,
+      onDidLoseAccessibilityFocus: () {
+        _focused = false;
+        if (_clearPending) _clear();
+      },
       child: const SizedBox.expand(),
     );
   }
