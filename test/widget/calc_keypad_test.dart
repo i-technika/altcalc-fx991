@@ -13,6 +13,7 @@ import '../support/bundled_fonts.dart';
 import '../support/cursor_pad_labels.dart';
 import '../support/key_legends.dart';
 import '../support/korean_locale.dart';
+import '../support/touch_metrics.dart';
 
 /// 지정한 크기 영역에 키패드를 배치한다.
 Widget _host(
@@ -39,16 +40,20 @@ Widget _host(
   );
 }
 
-/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 키패드 크기 — 실제 창에서 생기는 크기를 포함한다.
-const _wideCellAreas = <Size>[
-  Size(800, 300), // _areas의 가로 모드 폰 (화면은 가로형으로 그린다 — #142)
-  Size(584, 411.04), // 600×610 창의 위아래 배치
-  Size(752, 524.8), // 768×768 정사각형 창의 위아래 배치
-  Size(
-    624,
-    384,
-  ), // 1280×400 데스크톱 창의 예전 좌우 분할 (#142부터 가로형 — 넓은 배열 셀은 #159에서 다시 잰다)
-  Size(1600, 300),
+/// 커서 패드 셀이 #141 전보다 가로로 넓은(가로/세로 비 2.2 초과) 실물 배열 키패드 크기와 그 크기의 ▲·▼ 넓이 비율 하한
+/// (함수 키 sin 셀 대비). 실제 창에서 생기는 크기를 포함한다. 가로형(#142) 뒤 실제 창으로 다시 쟀다(#159).
+/// 넓은 배열의 가로형 창(2000×400 등)은 화면 테스트가 본다(`calculator_screen_test.dart` "커서 패드 ▲·▼ 기준 — 넓은 키패드 셀").
+/// 하한은 #159 결정 ③("지금 값에서 더 나빠지지 않게")에 따라 측정값보다 약 0.02 아래로 둔다. 비율은 셀 비가 커질수록
+/// 계속 내려가므로(바닥 없음, [CalcTheme.cursorPadMaxAspectRatio] 문서) 크기마다 따로 둔다.
+const _wideCellAreas = <(Size, double)>[
+  (
+    Size(800, 300),
+    0.64,
+  ), // _areas의 가로 모드 폰, 셀 비 4.63, 측정 0.662 (화면은 가로형으로 그린다 — #142)
+  (Size(396, 295.84), 0.89), // 412×450 창의 위아래 배치, 2.32, 0.915
+  (Size(584, 411.04), 0.86), // 600×610 창의 위아래 배치, 2.47, 0.881
+  (Size(752, 524.8), 0.85), // 768×768 정사각형 창의 위아래 배치, 2.49, 0.874
+  (Size(1600, 300), 0.51), // 극단 크기, 9.26, 0.535
 ];
 
 /// 테스트 화면(기본 800×600)을 [size]로 넓힌다 — [_host]의 영역이 화면보다 크면 화면 크기로 잘리기 때문이다.
@@ -557,9 +562,10 @@ void main() {
   _cursorPadShapeTests();
   _cursorPadHitTests();
 
-  for (final area in _wideCellAreas) {
+  for (final (area, minUpDownAreaRatio) in _wideCellAreas) {
     testWidgets(
-      '${area.width}×${area.height}: 키패드가 가로로 넓어져도 방향 키 터치 영역은 #141 전 폭보다 줄지 않는다',
+      '${area.width}×${area.height}: 키패드가 가로로 넓어져도 방향 키 터치 영역은 #141 전 폭보다 줄지 않고 '
+      '손가락 크기는 보통 셀과 같은 기준이다',
       (tester) async {
         // 같은 높이에서 #141 전 키패드 폭(높이 × 1.25, 480dp 이하)과 견준다. 패드는 비율 상한에서 멈추고 남는 폭은
         // ◀·▶가 받으므로, 어느 방향도 그때보다 좁아지지 않는다.
@@ -590,15 +596,35 @@ void main() {
             reason: '${sector.name} $area (전 $before)',
           );
         }
-        // 함수 키 셀과 견준 ▲·▼ 비율은 보통 크기의 하한(0.9배)보다 낮아진다(#159). 지금 값보다 나빠지지 않게 아래
-        // 한계를 고정한다 — #159에서 기준을 정하면 이 값을 바꾼다. 홈 기울기 실측(#65)으로 ▲·▼가 실물처럼 좁아져
-        // 가장 낮은 1600×300이 약 0.74 → 0.54배, 800×300이 약 0.66배다.
+        // 이 크기가 넓은 셀(셀 비 2.2 초과, 패드가 비율 상한에서 멈춤)이어야 검사가 뜻이 있다 — 배치가 바뀌어 크기가
+        // 낡으면 여기서 알린다.
+        final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
+        final cell = tester.getRect(find.byType(CursorPad));
+        const stale =
+            '넓은 셀이 아니다 — 배치가 바뀌었으면 이 크기를 다시 재어 _wideCellAreas를 갱신한다 (#159)';
+        expect(
+          cell.width / cell.height,
+          greaterThan(2.2),
+          reason: '$area: $stale',
+        );
+        expect(
+          pad.width / pad.height,
+          moreOrLessEquals(CalcTheme.cursorPadMaxAspectRatio, epsilon: 1e-6),
+          reason: '$area: $stale',
+        );
+        // 손가락이 들어가는 크기(내접원)는 #159 결정 ①의 하한(보통 셀과 같은 기준)을 지킨다.
+        expectCursorPadInscribedVersusFunctionKey(tester, reason: '$area');
+        // 함수 키 셀과 견준 ▲·▼ 넓이 비율은 보통 셀의 하한(0.9배)보다 낮아진다. 함수 키가 옆으로만 넓어지기 때문이다.
+        // #159에서 패드 모양을 그대로 두기로 정했다(CalcTheme.cursorPadMaxAspectRatio 문서). 대신 크기마다 지금 값보다
+        // 나빠지지 않게 하한을 둔다([_wideCellAreas]).
         final sin = tester.getSize(_button(CalcKeyId.sin));
         for (final sector in [CursorPadSector.up, CursorPadSector.down]) {
           expect(
             now[sector]! / (sin.width * sin.height),
-            greaterThanOrEqualTo(0.5),
-            reason: '${sector.name} $area',
+            greaterThanOrEqualTo(minUpDownAreaRatio),
+            reason:
+                '${sector.name} $area 셀 비 ${cell.width / cell.height} — '
+                '퇴행인지, 의도한 배치 변경이면 다시 재어 하한을 갱신할지 판단한다 (#159)',
           );
         }
       },
@@ -1929,12 +1955,14 @@ void _cursorPadShapeTests() {
           await tester.pumpWidget(_host(const CalcKeypad(), size: area));
           final pad = tester.getRect(find.byKey(const ValueKey('cursor-pad')));
           final cell = tester.getRect(find.byType(CursorPad));
+          // 내접원(손가락이 들어가는 크기)은 셀 모양과 관계없이 같은 하한을 지킨다(#159).
+          expectCursorPadInscribedVersusFunctionKey(tester, reason: '$area');
           // 셀이 #141 전의 가장 넓은 경우(가로/세로 비 약 2.1 — 가로 폰 800×300의 키패드가 375dp로 줄던 때)보다
           // 넓으면 비교 기준인 함수 키 셀만 넓어지고 패드는 비율 상한에서 멈춰 ▲·▼ 비율이 아래 하한(0.9배) 밑으로 내려갈 수 있다
-          // (CalcTheme.cursorPadMaxAspectRatio 문서 — 패드 모양은 #159). 그 크기([_wideCellAreas])는
-          // 아래 "가로로 넓어져도" 테스트가 절대 넓이로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
+          // (CalcTheme.cursorPadMaxAspectRatio 문서 — #159에서 모양을 그대로 두기로 정했다). 그 크기([_wideCellAreas])는
+          // 아래 "가로로 넓어져도" 테스트가 절대 넓이와 낮춘 하한으로 본다. 여기서 건너뛰는 크기가 그 목록에 있는지도 확인한다.
           if (cell.width / cell.height > 2.2) {
-            expect(_wideCellAreas, contains(area));
+            expect(_wideCellAreas.map((e) => e.$1), contains(area));
             return;
           }
           final sin = tester.getSize(_button(CalcKeyId.sin));
