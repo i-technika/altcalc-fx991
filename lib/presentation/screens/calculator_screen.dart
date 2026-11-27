@@ -17,6 +17,7 @@ import '../l10n/settings_strings.dart';
 import '../providers/calc_provider.dart';
 import '../providers/device_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/calc_body_background.dart';
 import '../widgets/calc_keypad.dart';
 import '../widgets/history_panel.dart';
 import '../widgets/lcd_display.dart';
@@ -614,37 +615,41 @@ class CalculatorScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: CalcTheme.screenPadding,
-            top: CalcTheme.screenPadding,
-            right: CalcTheme.screenPadding,
-            bottom: bottomMargin,
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) => _BodyOriginCheck(
-              expected: bodyOrigin,
-              enabled: hinge != null,
-              child: _Body(
-                body: Size(constraints.maxWidth, constraints.maxHeight),
-                arrangement: arrangement,
-                picksFormByKeySize: FormFactor.picksFormByKeySize(
-                  window,
-                  features,
-                  foldableDevice: foldableDevice,
+      // 본체 바탕(그라데이션·잔무늬·가장자리 선, #156)은 화면 전체에 깐다.
+      body: CalcBodyBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: CalcTheme.screenPadding,
+              top: CalcTheme.screenPadding,
+              right: CalcTheme.screenPadding,
+              bottom: bottomMargin,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => _BodyOriginCheck(
+                expected: bodyOrigin,
+                enabled: hinge != null,
+                child: _Body(
+                  body: Size(constraints.maxWidth, constraints.maxHeight),
+                  arrangement: arrangement,
+                  picksFormByKeySize: FormFactor.picksFormByKeySize(
+                    window,
+                    features,
+                    foldableDevice: foldableDevice,
+                  ),
+                  smallWindow:
+                      window.shortestSide <
+                      FormFactor.largeScreenMinShortestSide,
+                  hinge: hinge,
+                  // 진단 로그용 (#158) — 켜져 있을 때만 넘긴다
+                  diagnostics: LayoutLog.enabled
+                      ? (
+                          window: window,
+                          features: features,
+                          foldableDevice: foldableDevice,
+                        )
+                      : null,
                 ),
-                smallWindow:
-                    window.shortestSide < FormFactor.largeScreenMinShortestSide,
-                hinge: hinge,
-                // 진단 로그용 (#158) — 켜져 있을 때만 넘긴다
-                diagnostics: LayoutLog.enabled
-                    ? (
-                        window: window,
-                        features: features,
-                        foldableDevice: foldableDevice,
-                      )
-                    : null,
               ),
             ),
           ),

@@ -80,8 +80,15 @@ class KeypadMetrics {
   /// 키패드 전체에 통일해 주입하는 각인 글자 크기 (배율 반영 전, dp)
   final double legendFontSize;
 
-  /// 키패드 전체에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
+  /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
   final double mainLabelFontSize;
+
+  /// 숫자부(숫자·사칙연산·`=`·DEL·AC 등)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp, #156).
+  ///
+  /// 실물 숫자부 각인은 함수부보다 훨씬 크다(근접 사진: 숫자 키캡 높이의 약 0.69가 숫자 높이, 함수 키는 약 0.55가 대문자
+  /// 높이 — 키도 더 크다). [mainLabelFontSize]의 [CalcTheme.keyNumberMainLabelScale]배를 목표로 하고, 숫자부 키캡 높이와
+  /// 숫자부 라벨 폭에 들어가는 크기까지 줄이되 [mainLabelFontSize] 아래로는 내리지 않는다.
+  final double numberMainLabelFontSize;
 
   /// 함수부·상단 조작부 키의 터치 영역을 각인 띠까지 넓힐지 여부
   final bool extendFunctionHitArea;
@@ -100,6 +107,7 @@ class KeypadMetrics {
     required this.numberRowHeight,
     required this.legendFontSize,
     required this.mainLabelFontSize,
+    required this.numberMainLabelFontSize,
     required this.extendFunctionHitArea,
     required this.extendNumberHitArea,
   });
@@ -135,7 +143,7 @@ class KeypadMetrics {
   /// [compute]의 2단계(폭 기준)와 같은 계산이다. [where]로 키를 골라 재면, 어떤 키들이 통일 글자 크기를 정하는지
   /// 테스트가 제품 규칙 그대로 확인할 수 있다(#186 R1 — 2차원 각인이 폭 기준을 정하지 않는지).
   @visibleForTesting
-  static ({double main, double legend}) debugWidthLimits({
+  static ({double main, double numberMain, double legend}) debugWidthLimits({
     required double functionKeyWidth,
     required double numberKeyWidth,
     bool Function(CalcKeyDef def)? where,
@@ -145,7 +153,11 @@ class KeypadMetrics {
       numberKeyWidth: numberKeyWidth,
       where: where,
     );
-    return (main: limits.main, legend: limits.legend);
+    return (
+      main: limits.main,
+      numberMain: limits.numberMain,
+      legend: limits.legend,
+    );
   }
 
   /// 상단 조작부·함수부 키의 셀 너비 (간격 제외, dp)
@@ -321,6 +333,9 @@ class KeypadMetrics {
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
+  /// 4. **숫자부 메인 라벨** (#156): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 키는 그 크기의
+  ///    [CalcTheme.keyNumberMainLabelScale]배를 목표로 숫자부 키캡 높이·숫자부 라벨 폭에 들어가게 줄이고(함수부 크기
+  ///    아래로는 내리지 않는다), [numberMainLabelFontSize]로 따로 주입한다.
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(
@@ -405,6 +420,36 @@ class KeypadMetrics {
       byHeight * CalcTheme.keypadUniformFontMinRatio,
     );
 
+    final mainLabelFontSize = unify(mainByHeight, widths.main);
+
+    // 4. 숫자부 메인 라벨 (#156) — 함수부 크기의 배수를 목표로, 숫자부 키캡 높이·폭에 들어가게 줄인다(함수부보다 작아지지 않는다).
+    final numberCapHeight = capHeightOf(numberRowHeight);
+    final numberCapInnerHeight =
+        numberCapHeight -
+        math.min(CalcTheme.keyPressedOffset, numberCapHeight) -
+        2 * CalcTheme.keyBorderWidth;
+    final numberByHeight = _fitToHeight(
+      math.max(
+        minFittedFontSize,
+        math.min(
+          mainLabelFontSize * CalcTheme.keyNumberMainLabelScale,
+          CalcTheme.keyNumberMainLabelMaxFontSize,
+        ),
+      ),
+      maxHeight: numberCapInnerHeight,
+      textScaler: scaler,
+      style: CalcTheme.keyMainLabelStyle,
+      tallLegends: limits.tallNumberMains,
+    );
+    final numberMainLabelFontSize = math.max(
+      mainLabelFontSize,
+      fitFontSize(
+        numberByHeight,
+        textScaler: scaler,
+        fits: (scaled) => scaled <= widths.numberMain,
+      ),
+    );
+
     return KeypadMetrics._(
       arrangement: arrangement,
       size: size,
@@ -415,7 +460,8 @@ class KeypadMetrics {
       functionRowHeight: functionRowHeight,
       numberRowHeight: numberRowHeight,
       legendFontSize: unify(legendByHeight, widths.legend),
-      mainLabelFontSize: unify(mainByHeight, widths.main),
+      mainLabelFontSize: mainLabelFontSize,
+      numberMainLabelFontSize: numberMainLabelFontSize,
       extendFunctionHitArea: capHeight < CalcTheme.keyMinTouchTargetHeight,
       extendNumberHitArea:
           capHeightOf(numberRowHeight) < CalcTheme.keyMinTouchTargetHeight,
@@ -428,19 +474,32 @@ class KeypadMetrics {
 /// 크기는 실제 글꼴로 그린 각인 크기([KeyLegendView.emSize] — 2차원 각인 포함, 글자 크기 1dp당 값)로 잰다.
 /// (키 라벨 스타일은 `letterSpacing: 0`을 명시하므로 자간 때문에 폭이 글자 크기에 비례하지 않는 일은 없다.)
 class _LabelLimits {
-  /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp)
+  /// 메인 라벨 최대 글자 크기 (배율 반영 후, dp) — 숫자부를 뺀 키
   final double main;
+
+  /// 숫자부 메인 라벨 최대 글자 크기 (배율 반영 후, dp, #156)
+  final double numberMain;
 
   /// 각인 최대 글자 크기 (배율 반영 후, dp)
   final double legend;
 
-  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155)
+  /// 2차원 메인 각인의 em 치수 (한 줄보다 높을 수 있어 높이 기준이 함께 잰다, #155) — 숫자부를 뺀 키
   final List<KeyLegendEmMetrics> tallMains;
+
+  /// 숫자부 2차원 메인 각인(`×10ˣ`)의 em 치수 (#156)
+  final List<KeyLegendEmMetrics> tallNumberMains;
 
   /// 2차원 SHIFT·ALPHA 각인의 em 치수
   final List<KeyLegendEmMetrics> tallLegends;
 
-  const _LabelLimits(this.main, this.legend, this.tallMains, this.tallLegends);
+  const _LabelLimits(
+    this.main,
+    this.numberMain,
+    this.legend,
+    this.tallMains,
+    this.tallNumberMains,
+    this.tallLegends,
+  );
 
   static double _emWidth(KeyLegend legend, TextStyle style) =>
       KeyLegendView.emSize(legend, style).width;
@@ -452,8 +511,10 @@ class _LabelLimits {
     bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
+    var numberMain = double.infinity;
     var legend = double.infinity;
     final tallMains = <KeyLegendEmMetrics>[];
+    final tallNumberMains = <KeyLegendEmMetrics>[];
     final tallLegends = <KeyLegendEmMetrics>[];
     final numberIds = {
       for (final row in numberRows)
@@ -464,9 +525,8 @@ class _LabelLimits {
     for (final def in allKeys) {
       if (cursorIds.contains(def.id)) continue;
       if (where != null && !where(def)) continue;
-      final width = numberIds.contains(def.id)
-          ? numberKeyWidth
-          : functionKeyWidth;
+      final number = numberIds.contains(def.id);
+      final width = number ? numberKeyWidth : functionKeyWidth;
 
       // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인을 SHIFT·ALPHA 각인과 함께 각인 띠에 한 줄로 인쇄한다
       // (CalcKeyButton의 `_BodyPrintRow`). 띠 폭에 그 줄이 들어가는 각인 크기까지 줄인다.
@@ -494,13 +554,16 @@ class _LabelLimits {
       final capInner =
           width * (1 - 2 * CalcTheme.keyCapHorizontalPaddingRatio) -
           2 * CalcTheme.keyBorderWidth;
-      main = math.min(
-        main,
-        math.max(0.0, capInner) /
-            _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle),
-      );
+      final mainLimit =
+          math.max(0.0, capInner) /
+          _emWidth(def.mainLegend, CalcTheme.keyMainLabelStyle);
+      if (number) {
+        numberMain = math.min(numberMain, mainLimit);
+      } else {
+        main = math.min(main, mainLimit);
+      }
       if (!def.mainLegend.isPlain) {
-        tallMains.add(
+        (number ? tallNumberMains : tallMains).add(
           KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
         );
       }
@@ -542,7 +605,14 @@ class _LabelLimits {
         legend = math.min(legend, usable / 2 / shortEm);
       }
     }
-    return _LabelLimits(main, legend, tallMains, tallLegends);
+    return _LabelLimits(
+      main,
+      numberMain,
+      legend,
+      tallMains,
+      tallNumberMains,
+      tallLegends,
+    );
   }
 }
 
@@ -668,6 +738,12 @@ class _KeypadBody extends StatelessWidget {
     vertical: metrics.verticalGap / 2,
   );
 
+  /// 숫자부 키 — 메인 라벨을 [KeypadMetrics.numberMainLabelFontSize]로 그린다 (#156)
+  static final Set<CalcKeyId> _numberKeyIds = {
+    for (final row in numberRows)
+      for (final def in row) def.id,
+  };
+
   Widget _button(
     CalcKeyDef def, {
     bool showLegendBand = true,
@@ -727,7 +803,9 @@ class _KeypadBody extends StatelessWidget {
       showLegendBand: showLegendBand,
       extendHitAreaToLegend: showLegendBand && extendHitArea,
       legendFontSize: metrics.legendFontSize,
-      mainLabelFontSize: metrics.mainLabelFontSize,
+      mainLabelFontSize: _numberKeyIds.contains(def.id)
+          ? metrics.numberMainLabelFontSize
+          : metrics.mainLabelFontSize,
       focusable: def.id == settingsKey,
     );
   }
@@ -895,6 +973,13 @@ class CursorPadGeometry {
 
   /// 누를 수 없는 가운데 원의 반지름 (dp, [hubRadius] 이하)
   final double deadZoneRadius;
+
+  /// 그리는 X자 홈의 두께 (dp, #156) — 패드 높이의 [CalcTheme.cursorPadGrooveWidthRatio]이되 [CalcTheme.cursorPadDividerWidth]
+  /// 보다 가늘지 않다. 그림만 이 두께이고 터치 경계는 선이다. 화살표 라벨 검사(테스트)도 이 값을 쓴다.
+  double get grooveStrokeWidth => math.max(
+    CalcTheme.cursorPadDividerWidth,
+    size.height * CalcTheme.cursorPadGrooveWidthRatio,
+  );
 
   factory CursorPadGeometry(Size size) {
     const inset = CalcTheme.cursorPadDividerWidth / 2;
@@ -1529,7 +1614,7 @@ class CursorPad extends StatelessWidget {
                           child: RepaintBoundary(
                             child: CustomPaint(
                               painter: _CursorPadDecorationPainter(
-                                CalcPalette.of(context).keyBorder,
+                                CalcPalette.of(context).cursorPadGroove,
                               ),
                             ),
                           ),
@@ -1574,7 +1659,7 @@ class CursorPad extends StatelessWidget {
 
 /// 커서 패드 X자 홈·외곽선과 가운데 허브
 class _CursorPadDecorationPainter extends CustomPainter {
-  /// 홈·외곽선·허브 둘레 색 (키캡 테두리와 같다 — 고대비 모드에서 바뀐다, #54)
+  /// 홈·외곽선·허브 둘레 색 ([CalcPalette.cursorPadGroove] — 은색 키 사이의 어두운 틈, 고대비 모드에서 바뀐다, #156)
   final Color lineColor;
 
   const _CursorPadDecorationPainter(this.lineColor);
@@ -1586,8 +1671,14 @@ class _CursorPadDecorationPainter extends CustomPainter {
       ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = CalcTheme.cursorPadDividerWidth;
+    // X자 홈은 실물처럼 넓은 어두운 틈으로 그린다 (#156) — 터치 경계는 선 그대로다.
+    final groove = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..strokeWidth = geometry.grooveStrokeWidth;
     for (final (from, to) in geometry.grooves()) {
-      canvas.drawLine(from, to, line);
+      canvas.drawLine(from, to, groove);
     }
     canvas
       ..drawPath(geometry.outlinePath(), line)

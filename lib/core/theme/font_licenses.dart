@@ -10,6 +10,8 @@ import 'calc_theme.dart';
 const Map<String, String> bundledFontLicenseAssets = {
   CalcTheme.monoFontFamily: 'assets/fonts/NotoSansMono-OFL.txt',
   CalcTheme.mathFontFamily: 'assets/fonts/NotoSansMath-OFL.txt',
+  CalcTheme.keyFontFamily: 'assets/fonts/Saira-OFL.txt',
+  CalcTheme.keyVariableFontFamily: 'assets/fonts/NotoSerif-OFL.txt',
 };
 
 bool _registered = false;

@@ -212,7 +212,7 @@ class LcdFontSizes {
 ///
 /// 구성 (위 → 아래):
 /// ```
-///  ╔══════════════════════════════════╗  ← 은색 베젤 (CalcTheme.lcdFrame)
+///  ╔══════════════════════════════════╗  ← 검은 베젤 (CalcTheme.lcdFrame, 바깥 테두리 lcdBezelEdge — #156)
 ///  ║ S A M →x √▭✎ D R G FIX SCI E i ∠ ▼▲ ‖ ║  ← 상태 표시줄 (실물 세그먼트 위치의 고정 슬롯)
 ///  ║◄ 2+3×                           ►║  ← 입력 줄 (왼쪽 정렬)
 ///  ║                                5 ║  ← 결과 줄 (오른쪽 정렬)
@@ -249,6 +249,9 @@ class LcdFontSizes {
 /// - 일반 [Text]를 넘기면 입력 줄은 [CalcTheme.lcdInputStyle], 결과 줄은 [CalcTheme.lcdResultStyle]
 ///   (글자 크기는 위 규칙으로 조정)이 적용된다.
 class LcdDisplay extends StatelessWidget {
+  /// 유리 윗부분 그늘 위젯 키 (테스트용, #156)
+  static const Key glassShadeKey = ValueKey('lcd-glass-shade');
+
   /// 상태 표시줄 상태
   final LcdStatus status;
 
@@ -382,14 +385,7 @@ class LcdDisplay extends StatelessWidget {
       width: width,
       height: height,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: CalcTheme.lcdBackground,
-          border: Border.all(
-            color: CalcTheme.lcdFrame,
-            width: CalcTheme.lcdFrameWidth,
-          ),
-          borderRadius: BorderRadius.circular(CalcTheme.lcdBorderRadius),
-        ),
+        decoration: lcdBezelDecoration,
         // DecoratedBox는 테두리만큼 자식을 밀어주지 않으므로 베젤 두께를 직접 비운다.
         child: Padding(
           padding: const EdgeInsets.all(CalcTheme.lcdFrameWidth),
@@ -405,6 +401,28 @@ class LcdDisplay extends StatelessWidget {
                   const RepaintBoundary(
                     child: CustomPaint(painter: _DotMatrixPainter()),
                   ),
+                // 유리 윗부분 그늘 (#156) — 액정이 베젤 안으로 들어가 보이게 한다. 고대비 모드에서는 끈다(장식만 비우고 트리
+                // 모양은 그대로 둔다 — 고대비를 켜고 끌 때 아래 내용이 다시 만들어지지 않게).
+                IgnorePointer(
+                  child: DecoratedBox(
+                    key: LcdDisplay.glassShadeKey,
+                    decoration: CalcPalette.of(context).drawsRelief
+                        ? const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment(
+                                0,
+                                -1 + 2 * CalcTheme.lcdGlassShadeExtent,
+                              ),
+                              colors: [
+                                CalcTheme.lcdGlassShade,
+                                Color(0x00000000),
+                              ],
+                            ),
+                          )
+                        : const BoxDecoration(),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(CalcTheme.lcdInnerPadding),
                   child: Column(
@@ -943,3 +961,15 @@ class _DotMatrixPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DotMatrixPainter oldDelegate) => false;
 }
+
+/// LCD·계산 기록 영역의 베젤 장식 (#156) — 회녹색 액정([CalcTheme.lcdBackground])을 검은 베젤([CalcTheme.lcdFrame])이
+/// 감싸고, 베젤 바깥에 얇은 테두리([CalcTheme.lcdBezelEdge])를 그려 검은 베젤이 본체와 구분되게 한다. 바깥 테두리는
+/// 그림자(퍼짐 1dp)로 그려 배치 크기를 바꾸지 않는다.
+const BoxDecoration lcdBezelDecoration = BoxDecoration(
+  color: CalcTheme.lcdBackground,
+  border: Border.fromBorderSide(
+    BorderSide(color: CalcTheme.lcdFrame, width: CalcTheme.lcdFrameWidth),
+  ),
+  borderRadius: BorderRadius.all(Radius.circular(CalcTheme.lcdBorderRadius)),
+  boxShadow: [BoxShadow(color: CalcTheme.lcdBezelEdge, spreadRadius: 1)],
+);

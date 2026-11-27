@@ -322,22 +322,20 @@ void main() {
       }
     });
 
-    test(
-      '설정 키는 ON 자리의 원형 버튼이고, 원형 버튼은 설정 키뿐이다 (#190 — SHIFT·ALPHA·MENU는 #156)',
-      () {
-        expect(settingsKey, CalcKeyId.on);
-        expect(
-          [
-            for (final key in allKeys)
-              if (key.face == KeyFace.roundButton) key.id,
-          ],
-          [settingsKey],
-        );
-        final on = keyDefOf(settingsKey);
-        expect(on.mainLabel, 'SETTING');
-        expect(on.hasShift || on.hasAlpha, isFalse);
-      },
-    );
+    test('원형 버튼은 실물대로 SHIFT·ALPHA·MENU·ON(설정 키) 넷이다 (#190, #156)', () {
+      expect(settingsKey, CalcKeyId.on);
+      // Quick Start Guide 1쪽 제품 사진: 커서 패드 양옆 윗줄의 네 버튼이 원형 은색 버튼이다.
+      expect(
+        [
+          for (final key in allKeys)
+            if (key.face == KeyFace.roundButton) key.id,
+        ],
+        [CalcKeyId.shift, CalcKeyId.alpha, CalcKeyId.menu, settingsKey],
+      );
+      final on = keyDefOf(settingsKey);
+      expect(on.mainLabel, 'SETTING');
+      expect(on.hasShift || on.hasAlpha, isFalse);
+    });
 
     test('쓰지 않는 기능은 SHIFT + AC(OFF)뿐이고 그 각인은 실물대로 있다 (#190)', () {
       expect(ignoredShiftFunctions, {CalcKeyId.ac});

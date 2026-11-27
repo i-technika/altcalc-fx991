@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -13,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import '../support/bundled_fonts.dart';
 import '../support/key_legends.dart';
 import '../support/lcd_glyphs.dart';
+import '../support/ttf_cmap.dart';
 
 /// 실제 번들 글꼴로 [text]를 [style]로 그린 폭 (글자 크기 1dp당, 자간 제외).
 double _emWidth(String text, TextStyle style) {
@@ -218,11 +220,20 @@ void main() {
   });
 
   group('키 라벨 폭 실측', () {
-    test('각인 글자는 두 칸 폭 ⇔와 대체 글꼴 기호(∑·∫)를 빼면 모두 한 칸이다', () {
-      // 글자만 있는 각인은 폭이 글자 수에 비례한다는 가정(각인 배분의 우선 배분 판정)이 실제 글꼴에서도
-      // 성립하는지 본다. 2차원 각인(#155)의 글자 조각도 같은 글꼴로 그린다(근호는 글자가 아니라 그림).
+    test('각인 글자는 모두 번들 글꼴의 진행폭으로 그려진다 — 각인 글꼴 Saira, 없는 기호는 고정폭·수학 글꼴, 변수는 이탤릭 세리프 (#156)', () async {
+      // 각인 글꼴(#156)과 대체 글꼴 순서대로 그 글자가 있는 첫 글꼴의 진행폭이어야 한다. 테스트 글꼴(1em)이나 플랫폼
+      // 글꼴로 떨어지면 값이 달라진다. 각인 굵기(w500)의 파일로 잰다.
       const style = CalcTheme.keyShiftLabelStyle;
-      final odd = <String, double>{};
+      expect(style.fontWeight, FontWeight.w500, reason: '굵기가 바뀌면 아래 파일도 바꾼다');
+      final chain = [
+        await rootBundle.load('assets/fonts/Saira-Medium.ttf'),
+        await rootBundle.load('assets/fonts/NotoSansMono-Medium.ttf'),
+        await rootBundle.load('assets/fonts/NotoSansMath-Regular.ttf'),
+      ];
+      final variable = await rootBundle.load(
+        'assets/fonts/NotoSerif-BoldItalic.ttf',
+      );
+      final fromMono = <String>{};
       for (final key in allKeys) {
         for (final legend in [
           key.mainLegend,
@@ -230,35 +241,60 @@ void main() {
           ?key.alphaLegend,
         ]) {
           for (final piece in legend.texts) {
-            for (final ch in piece.text.split('')) {
-              final w = _emWidth(ch, style);
-              if ((w - cell).abs() > 0.005) odd[ch] = w;
+            for (final (i, ch) in piece.text.split('').indexed) {
+              final code = ch.runes.single;
+              final italic = CalcTheme.isKeyVariableLetter(piece.text, i);
+              final symbol = CalcTheme.isKeyMathSymbol(ch);
+              final font = italic
+                  ? variable
+                  : symbol
+                  ? chain[2]
+                  : chain.firstWhere((f) => readCmap(f).containsKey(code));
+              if (identical(font, chain[1])) fromMono.add(ch);
+              expect(
+                _emWidth(
+                  ch,
+                  italic
+                      ? CalcTheme.keyVariableStyle(style)
+                      : symbol
+                      ? CalcTheme.keyMathSymbolStyle(style)
+                      : style,
+                ),
+                moreOrLessEquals(readAdvanceWidth(font, code), epsilon: 0.005),
+                reason: '$ch (${piece.text})',
+              );
             }
           }
         }
       }
-      // ∑·∫는 대체 글꼴 Noto Sans Math의 진행폭(852·836/1000)이어야 한다.
-      // 테스트 글꼴(1em)이나 플랫폼 글꼴로 떨어지면 값이 달라진다.
-      expect(odd.keys.toSet(), {'⇔', '∑', '∫'});
-      expect(odd['⇔'], moreOrLessEquals(2 * cell, epsilon: 0.005));
-      expect(odd['∑'], moreOrLessEquals(0.852, epsilon: 0.005));
-      expect(odd['∫'], moreOrLessEquals(0.836, epsilon: 0.005));
+      // 연산 기호·입력 칸 기호는 각인 글꼴에서 뺐다 — 고정폭 글꼴의 큰 기호를 쓴다(assets/fonts/README.md).
+      expect(fromMono, containsAll(['+', '=', '−', '×', '÷', '◼']));
+      expect(fromMono, isNot(contains('⇔')), reason: '⇔는 수학 글꼴로 그린다 (#156 R2)');
     });
 
-    test('가장 넓은 메인 각인은 SHIFT·ALPHA(5칸)이고, 2차원 각인(log◼◻ 등)도 5칸을 넘지 않는다', () {
-      const style = CalcTheme.keyMainLabelStyle;
-      final shift = _emWidth('SHIFT', style);
-      expect(shift, moreOrLessEquals(5 * cell, epsilon: 0.01));
-      for (final key in allKeys) {
-        // 원형 버튼(#190 — 설정 키의 SETTING)의 메인 각인은 키캡 면이 아니라 각인 띠에 인쇄한다.
-        if (key.face == KeyFace.roundButton) continue;
-        expect(
-          KeyLegendView.emSize(key.mainLegend, style).width,
-          lessThanOrEqualTo(shift + 0.001),
-          reason: key.mainLabel,
-        );
-      }
-    });
+    test(
+      '키캡 메인 각인 중 가장 넓은 것은 글자 각인(OPTN)이고, 2차원 각인(log◼◻ 등)은 그보다 5% 넘게 좁다 (#156)',
+      () {
+        // 2차원 각인이 메인 라벨 폭 기준을 정하지 않는다(#186 — 정하면 키패드 전체 글자가 작아진다). #156 전에는 SHIFT·ALPHA
+        // (고정폭 5칸)가 가장 넓었다. 이제 둘은 원형 버튼이라 메인 각인을 본체에 인쇄하고(각인 띠), 키캡에서는 OPTN이 가장 넓다.
+        const style = CalcTheme.keyMainLabelStyle;
+        final keycaps = [
+          for (final key in allKeys)
+            if (key.face == KeyFace.keycap) key,
+        ];
+        double width(CalcKeyDef k) =>
+            KeyLegendView.emSize(k.mainLegend, style).width;
+        final widest = keycaps.reduce((a, b) => width(a) >= width(b) ? a : b);
+        expect(widest.id, CalcKeyId.optn);
+        for (final key in keycaps.where((k) => !k.mainLegend.isPlain)) {
+          expect(
+            width(key),
+            lessThan(width(widest) / 1.05),
+            reason: key.mainLabel,
+          );
+        }
+      },
+    );
 
     for (final scale in [1.0, 1.3]) {
       testWidgets(

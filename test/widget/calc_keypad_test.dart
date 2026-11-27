@@ -123,29 +123,33 @@ void main() {
       expect(find.byKey(const ValueKey('cursor-pad')), findsOneWidget);
     });
 
-    testWidgets('커서 패드 홈·외곽선·허브 둘레는 키 테두리 색이고, 고대비 모드에서 함께 바뀐다 (#54)', (
-      tester,
-    ) async {
-      final decoration = find.descendant(
-        of: find.byKey(const ValueKey('cursor-pad')),
-        matching: find.byType(CustomPaint),
-      );
-      for (final palette in [CalcPalette.standard, CalcPalette.highContrast]) {
-        await tester.pumpWidget(
-          _host(const CalcKeypad(), highContrast: palette.isHighContrast),
+    testWidgets(
+      '커서 패드 홈·외곽선·허브 둘레는 홈 색(은색 키 사이의 어두운 틈)이고, 고대비 모드에서 함께 바뀐다 (#54, #156)',
+      (tester) async {
+        final decoration = find.descendant(
+          of: find.byKey(const ValueKey('cursor-pad')),
+          matching: find.byType(CustomPaint),
         );
-        expect(
-          decoration,
-          paints
-            ..line(color: palette.keyBorder)
-            ..line(color: palette.keyBorder)
-            ..path(color: palette.keyBorder)
-            ..circle(color: CalcTheme.cursorPadHub)
-            ..circle(color: palette.keyBorder),
-          reason: '고대비=${palette.isHighContrast}',
-        );
-      }
-    });
+        for (final palette in [
+          CalcPalette.standard,
+          CalcPalette.highContrast,
+        ]) {
+          await tester.pumpWidget(
+            _host(const CalcKeypad(), highContrast: palette.isHighContrast),
+          );
+          expect(
+            decoration,
+            paints
+              ..line(color: palette.cursorPadGroove)
+              ..line(color: palette.cursorPadGroove)
+              ..path(color: palette.cursorPadGroove)
+              ..circle(color: CalcTheme.cursorPadHub)
+              ..circle(color: palette.cursorPadGroove),
+            reason: '고대비=${palette.isHighContrast}',
+          );
+        }
+      },
+    );
 
     testWidgets('반복 콜백은 autoRepeatKeys에만 연결된다', (tester) async {
       await tester.pumpWidget(
@@ -294,13 +298,33 @@ void main() {
   });
 
   group('글자 크기 통일', () {
-    testWidgets('모든 키에 같은 각인·메인 글자 크기가 주입된다', (tester) async {
+    testWidgets('모든 키에 같은 각인 글자 크기가, 메인 글자 크기는 구역(함수부·숫자부)마다 하나씩 주입된다 (#156)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const CalcKeypad()));
       final buttons = _buttons(tester);
+      final numberIds = {
+        for (final row in numberRows)
+          for (final def in row) def.id,
+      };
       expect(buttons.map((b) => b.legendFontSize).toSet(), hasLength(1));
-      expect(buttons.map((b) => b.mainLabelFontSize).toSet(), hasLength(1));
       expect(buttons.first.legendFontSize, isNotNull);
-      expect(buttons.first.mainLabelFontSize, isNotNull);
+      final function = {
+        for (final b in buttons)
+          if (!numberIds.contains(b.keyDef.id)) b.mainLabelFontSize,
+      };
+      final number = {
+        for (final b in buttons)
+          if (numberIds.contains(b.keyDef.id)) b.mainLabelFontSize,
+      };
+      final m = KeypadMetrics.compute(
+        const Size(360, 420),
+        TextScaler.noScaling,
+      );
+      expect(function, {m.mainLabelFontSize});
+      expect(number, {m.numberMainLabelFontSize});
+      // 실물처럼 숫자부 글자가 더 크다 (#156)
+      expect(m.numberMainLabelFontSize, greaterThan(m.mainLabelFontSize));
     });
 
     for (final scale in [1.0, 1.3, 2.0]) {
@@ -324,12 +348,16 @@ void main() {
     }
 
     for (final scale in [1.0, 1.3]) {
-      testWidgets('글자 배율 $scale: 한 글자 메인 라벨은 모두 같은 크기로, 축소 없이 그려진다', (
+      testWidgets('글자 배율 $scale: 한 글자 메인 라벨은 구역마다 모두 같은 크기로, 축소 없이 그려진다', (
         tester,
       ) async {
         await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
         final cursorIds = cursorPad.all.map((d) => d.id).toSet();
-        final heights = <double>{};
+        final numberIds = {
+          for (final row in numberRows)
+            for (final def in row) def.id,
+        };
+        final heights = <bool, Set<double>>{true: {}, false: {}};
         for (final def in allKeys) {
           if (cursorIds.contains(def.id)) continue;
           if (def.face == KeyFace.roundButton) continue;
@@ -345,9 +373,10 @@ void main() {
             moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
             reason: def.id.name,
           );
-          heights.add(rendered.roundToDouble());
+          heights[numberIds.contains(def.id)]!.add(rendered.roundToDouble());
         }
-        expect(heights, hasLength(1));
+        expect(heights[true], hasLength(1));
+        expect(heights[false], hasLength(1));
       });
     }
 
@@ -432,6 +461,11 @@ void main() {
             reason: '$area',
           );
           expect(
+            m.numberMainLabelFontSize,
+            moreOrLessEquals(CalcTheme.keyNumberMainLabelMaxFontSize),
+            reason: '$area',
+          );
+          expect(
             m.legendFontSize,
             moreOrLessEquals(CalcTheme.keyLegendMaxFontSize),
             reason: '$area',
@@ -454,14 +488,18 @@ void main() {
           m.mainLabelFontSize,
           moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
         );
-        // 한 글자 라벨(숫자 7)은 상한 × 배율 크기로 그려진다(FittedBox가 줄이지 않는다).
+        expect(
+          m.numberMainLabelFontSize,
+          moreOrLessEquals(CalcTheme.keyNumberMainLabelMaxFontSize),
+        );
+        // 한 글자 라벨(숫자 7)은 숫자부 상한 × 배율 크기로 그려진다(FittedBox가 줄이지 않는다).
         final seven = find.descendant(
           of: _keycap(CalcKeyId.num7),
           matching: find.byType(Text),
         );
         expect(
           tester.widget<Text>(seven).style?.fontSize,
-          CalcTheme.keyMainLabelMaxFontSize,
+          CalcTheme.keyNumberMainLabelMaxFontSize,
         );
         expect(
           tester.getRect(seven).height,
@@ -1052,42 +1090,44 @@ void _cursorPadR2Tests() {
   });
 
   group('폭 제약 라벨의 렌더링', () {
-    // 폭 제약을 결정하는 가장 긴 메인 라벨(SHIFT·ALPHA)까지 포함해 모든 메인 라벨이
-    // FittedBox 축소 없이 통일 크기로 그려진다 (통일 크기가 하한에 걸리지 않는 크기에서).
-    // 테스트 글꼴(글자 폭 1em)은 실제 고정폭 글꼴(약 0.6em)보다 넓어, 배율 1.3에서는 하한에 걸린다.
+    // 폭 제약을 결정하는 가장 긴 메인 라벨(테스트 글꼴에서 OPTN·CALC — #156부터 SHIFT·ALPHA는 원형 버튼)까지 포함해 모든
+    // 메인 라벨이 FittedBox 축소 없이 구역 통일 크기로 그려진다 (통일 크기가 하한에 걸리지 않는 크기에서).
+    // 테스트 글꼴(글자 폭 1em)은 실제 글꼴보다 넓어, 배율 1.3에서는 하한에 걸린다. 폭이 통일 크기를 정하도록 좁은 키패드로 본다.
+    const area = Size(300, 420);
     for (final scale in [1.0]) {
-      testWidgets('360×420, 글자 배율 $scale: 모든 메인 라벨이 축소 없이 그려진다', (
-        tester,
-      ) async {
-        await tester.pumpWidget(_host(const CalcKeypad(), textScale: scale));
-        final m = KeypadMetrics.compute(
-          const Size(360, 420),
-          TextScaler.linear(scale),
-        );
-        final cap = m.functionKeyHeight * (1 - CalcTheme.keyLegendHeightRatio);
-        // 전제: 통일 크기가 폭 제약으로 정해졌다 (하한 미만이 아니고 높이 기준보다 작다).
-        final byHeight = cap * CalcTheme.keyMainLabelFontRatio;
-        expect(m.mainLabelFontSize, lessThan(byHeight));
-        expect(
-          m.mainLabelFontSize,
-          greaterThan(byHeight * CalcTheme.keypadUniformFontMinRatio),
-        );
-        for (final def in allKeys) {
-          if (def.category == KeyCategory.cursor) continue;
-          // 원형 버튼(#190)의 메인 각인은 키캡 면이 아니라 각인 띠에 인쇄한다.
-          if (def.face == KeyFace.roundButton) continue;
-          // 2차원 각인(#155)은 Text가 아니라 KeyLegendView로 그려진다.
-          final text = find.descendant(
-            of: _keycap(def.id),
-            matching: findLegend(def.mainLegend),
+      testWidgets(
+        '${area.width}×${area.height}, 글자 배율 $scale: 모든 메인 라벨이 축소 없이 그려진다',
+        (tester) async {
+          await tester.pumpWidget(
+            _host(const CalcKeypad(), size: area, textScale: scale),
           );
+          final m = KeypadMetrics.compute(area, TextScaler.linear(scale));
+          final cap =
+              m.functionKeyHeight * (1 - CalcTheme.keyLegendHeightRatio);
+          // 전제: 통일 크기가 폭 제약으로 정해졌다 (하한 미만이 아니고 높이 기준보다 작다).
+          final byHeight = cap * CalcTheme.keyMainLabelFontRatio;
+          expect(m.mainLabelFontSize, lessThan(byHeight));
           expect(
-            tester.getRect(text).height,
-            moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
-            reason: def.mainLabel,
+            m.mainLabelFontSize,
+            greaterThan(byHeight * CalcTheme.keypadUniformFontMinRatio),
           );
-        }
-      });
+          for (final def in allKeys) {
+            if (def.category == KeyCategory.cursor) continue;
+            // 원형 버튼(#190)의 메인 각인은 키캡 면이 아니라 각인 띠에 인쇄한다.
+            if (def.face == KeyFace.roundButton) continue;
+            // 2차원 각인(#155)은 Text가 아니라 KeyLegendView로 그려진다.
+            final text = find.descendant(
+              of: _keycap(def.id),
+              matching: findLegend(def.mainLegend),
+            );
+            expect(
+              tester.getRect(text).height,
+              moreOrLessEquals(tester.getSize(text).height, epsilon: 0.01),
+              reason: def.mainLabel,
+            );
+          }
+        },
+      );
     }
   });
 }
