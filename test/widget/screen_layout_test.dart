@@ -817,11 +817,11 @@ void _hingeLayoutTests() {
         const EdgeInsets.only(top: 32, bottom: 24),
         _foldAt(const Rect.fromLTWH(336.5, 0, 0, 841)),
       ),
-      // Pixel Fold 내부 화면 (가로가 기본 방향)
+      // Pixel Fold 내부 화면 (가로가 기본 방향, 인셋은 API 36 에뮬레이터 실측 — #118)
       (
         'Pixel Fold 내부',
         const Size(841, 701),
-        const EdgeInsets.only(top: 24, bottom: 24),
+        const EdgeInsets.only(top: 28.2, bottom: 32),
         _foldAt(const Rect.fromLTWH(420.5, 0, 0, 701)),
       ),
       // 정사각형에 가까운 내부 화면 + 가로 화면 왼쪽 카메라 인셋

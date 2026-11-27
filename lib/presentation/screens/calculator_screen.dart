@@ -756,7 +756,8 @@ class CalcTopStripLayout {
 ///   낮은 키의 셀 높이([KeypadMetrics.minKeyCellHeightOf])로 비교하고, 같으면 세로형이다. 두 키 크기가 창 크기에 따라
 ///   연속으로 변하므로 바뀌는 경계에서 키가 튀지 않는다([CalcTheme] "가로형 배치" 절).
 /// - **접힘선 기준 배치** (폴더블 내부 화면, #25): 세로 접힘선이면 접힘선을 경계로 좌우 배치([CalcHingeSplitLayout]),
-///   가로 접힘선이면 위 절반 LCD·아래 절반 키패드([CalcTabletopLayout]).
+///   가로 접힘선이면 위 절반 LCD·아래 절반 키패드([CalcTabletopLayout]). 접힘선이 둘 이상 창을 가로지르면(펼친
+///   트라이폴드, #144) 접힘선을 무시하고 접힘선 없는 창과 같게 그린다([FormFactor.crossesMultipleHinges]).
 /// - **짧은 창** (#38): 폴더블 기기·접힘 정보가 있어 위아래 배치로 그리는 창도 짧은 변 600dp 미만이면 위아래 배치와 가로형
 ///   중 키가 큰 쪽으로 그린다. 어느 배치든 그린 키가 [CalcTheme.keyTouchHeightUsableMin]보다 낮으면 계산기 대신 창을
 ///   키워 달라는 안내를 띄운다([CalcTheme] "짧은 창" 절).
@@ -830,13 +831,25 @@ class CalculatorScreen extends ConsumerWidget {
     )?.bounds.shift(-bodyOrigin);
     // 아래 여백: 보통 화면 여백이고, 아래 시스템 제스처 영역이 본체 아래를 가리는 것(시스템 인셋·키보드)보다 화면 여백
     // 넘게 깊으면 그 초과분만큼 넓혀 본체가 영역에 닿지 않게 한다 (#63).
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final gestureInsets = MediaQuery.systemGestureInsetsOf(context);
     final bottomMargin = CalcTheme.screenBottomMargin(
       bottomInset: math.max(
-        MediaQuery.viewPaddingOf(context).bottom,
+        viewPadding.bottom,
         MediaQuery.viewInsetsOf(context).bottom,
       ),
-      bottomGestureInset: MediaQuery.systemGestureInsetsOf(context).bottom,
+      bottomGestureInset: gestureInsets.bottom,
     );
+    // 진단 로그 (#118) — 기기별 시스템 인셋·제스처 영역을 실기기 logcat으로 잰다(진단 빌드에서만)
+    if (LayoutLog.enabled) {
+      LayoutLog.systemInsets(
+        window: window,
+        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+        padding: padding,
+        viewPadding: viewPadding,
+        gestures: gestureInsets,
+      );
+    }
     return Scaffold(
       backgroundColor: CalcTheme.bodyBackground,
       // 맨 아래 광고 슬롯 없이 본체가 아래 시스템 인셋 위 아래 여백까지 쓴다 (#141, #63).
@@ -859,6 +872,7 @@ class CalculatorScreen extends ConsumerWidget {
                 ),
                 arrangement: arrangement,
                 picksFormByKeySize: FormFactor.picksFormByKeySize(
+                  window,
                   features,
                   foldableDevice: foldableDevice,
                 ),
@@ -1440,7 +1454,8 @@ class _Body extends ConsumerWidget {
   /// - 접힘선 없는 창([FormFactor.picksFormByKeySize]): 늘 비교한다.
   /// - 폴더블 기기·접힘 정보가 있어 위아래 배치로 그리는 창: 짧은 변 600dp 미만이거나(#38 R1) 위아래 배치의 키가
   ///   [CalcTheme.keyTouchHeightFloor]보다 낮을 때만 비교한다 — 접힘 정보가 늦게 오는 폴더블 내부 화면을 가로형으로
-  ///   그렸다가 바꾸는 깜빡임을 막는다(#25). 이 창들의 배치는 #143·#144에서 다시 정한다.
+  ///   그렸다가 바꾸는 깜빡임을 막는다(#25). 이 창들의 배치는 #143에서 다시 정한다. 접힘선이 둘 이상 가로지르는 창(펼친
+  ///   트라이폴드)은 앞의 접힘선 없는 창과 같다(#144).
   /// 가로형 키패드 크기는 손잡이와 무관하다.
   static CalcLandscapeLayout? _landscapeAlternative(
     Size body,
