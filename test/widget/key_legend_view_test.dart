@@ -469,25 +469,46 @@ void main() {
       expect(sum.inkBottom, greaterThanOrEqualTo(derivative.inkBottom - 1e-9));
     });
 
-    test(
-      '굵어진 분수 키 각인(#206)도 가장 높은 각인(d/dx◼)보다 높지 않다 — 키패드 통일 각인 크기를 줄이지 않는다',
-      () {
-        final derivative = KeyLegendView.emMetrics(
-          keyDefOf(CalcKeyId.integral).shiftLegend!,
-          CalcTheme.keyShiftLabelStyle,
-        );
-        final fraction = KeyLegendView.emMetrics(
-          keyDefOf(CalcKeyId.fraction).mainLegend,
-          CalcTheme.keyMainLabelStyle,
-        );
-        // 사진의 분수 키 각인 높이 37.9px ÷ 33.5px ≈ 1.13em
-        expect(
-          fraction.inkTop - fraction.inkBottom,
-          moreOrLessEquals(37.9 / 33.5, epsilon: 0.02),
-        );
-        expect(fraction.size.height, lessThanOrEqualTo(derivative.size.height));
-      },
-    );
+    test('분수 키 각인 높이는 사진(약 1.13em)이고, 굵게 한 각인(#206)이 메인·SHIFT 각인 높이 맞춤의 기준 각인을 넘지 않는다', () {
+      // 사진의 분수 키 각인 높이 37.9px ÷ 33.5px ≈ 1.13em
+      final fraction = KeyLegendView.emMetrics(
+        keyDefOf(CalcKeyId.fraction).mainLegend,
+        CalcTheme.keyMainLabelStyle,
+      );
+      expect(
+        fraction.inkTop - fraction.inkBottom,
+        moreOrLessEquals(37.9 / 33.5, epsilon: 0.02),
+      );
+      // 키패드 통일 글자 크기의 높이 맞춤(KeypadMetrics)은 가장 높은 각인이 정한다 — 메인은 ∫◻◻◼, SHIFT·ALPHA는
+      // d/dx◼다. 분수 키(메인)·∛◼(SHIFT, 지수가 굵은 근호 머리 위로 올라감)를 굵게 해도 어느 글자 크기에서든(작은 글자의
+      // 줄 상자 반올림 포함) 실제 배치 높이가 그 기준을 넘지 않아야 글자 크기가 #206 전과 같다(#206 R1).
+      final integral = keyDefOf(CalcKeyId.integral);
+      for (final (isMain, reference) in [
+        (true, integral.mainLegend),
+        (false, integral.shiftLegend!),
+      ]) {
+        final legends = [
+          for (final (k, legend, style) in _twoDimensional())
+            if (identical(legend, k.mainLegend) == isMain) (legend, style),
+        ];
+        for (var f = 3.0; f <= 40; f += 0.1) {
+          for (final (legend, style) in legends) {
+            final limit = KeyLegendView.layoutSize(
+              reference,
+              style.copyWith(fontSize: f),
+            ).height;
+            expect(
+              KeyLegendView.layoutSize(
+                legend,
+                style.copyWith(fontSize: f),
+              ).height,
+              lessThanOrEqualTo(limit + 1e-9),
+              reason: '${legend.plainText} 글자 $f',
+            );
+          }
+        }
+      }
+    });
 
     /// [legend]를 글자 크기 [fontSize]·빨간색으로 그려 잉크 픽셀을 `(x, y)` 목록으로 돌려준다.
     Future<List<(int, int)>> inkPixels(
@@ -885,7 +906,7 @@ void main() {
         final bar = rowBounds(rows[1]);
         expect(
           (bar.$3 - bar.$1 + 1) / (part.$3 - part.$1 + 1),
-          moreOrLessEquals(1.46, epsilon: 0.08),
+          moreOrLessEquals(1.46, epsilon: 0.02),
         );
         // 두께·간격 (#206): 사진(칸 높이 14px 대비) 가로줄 4.9px ≈ 0.35, 간격 2.4~2.5px ≈ 0.17, 분모 테두리 3.4~4.0px
         // ≈ 0.26, 각인 전체 37.9px ≈ 2.7
@@ -911,6 +932,43 @@ void main() {
       },
     );
 
+    testWidgets('굵은 근호에서도 지수(∛◼의 3, ◼√◻의 지수 칸)·피개법수는 근호와 떨어져 있다 (#206 R1)', (
+      tester,
+    ) async {
+      // 잉크 픽셀의 8방향 연결 성분 수 — 지수·근호·피개법수가 서로 닿지 않으면 3이다(∛의 3은 한 획이다).
+      int components(List<(int, int)> ink) {
+        final remaining = ink.toSet();
+        var count = 0;
+        while (remaining.isNotEmpty) {
+          count++;
+          final stack = [remaining.first];
+          remaining.remove(stack.first);
+          while (stack.isNotEmpty) {
+            final (x, y) = stack.removeLast();
+            for (var dx = -1; dx <= 1; dx++) {
+              for (var dy = -1; dy <= 1; dy++) {
+                if (remaining.remove((x + dx, y + dy))) {
+                  stack.add((x + dx, y + dy));
+                }
+              }
+            }
+          }
+        }
+        return count;
+      }
+
+      for (final legend in [
+        keyDefOf(CalcKeyId.sqrt).shiftLegend!,
+        keyDefOf(CalcKeyId.power).shiftLegend!,
+      ]) {
+        // 큰 글자와 실제 크기대(각인 약 9dp × 기기 배율 2.625 ≈ 24px)
+        for (final fontSize in [140.0, 24.0]) {
+          final ink = await inkPixels(tester, legend, fontSize);
+          expect(components(ink), 3, reason: '${legend.plainText} $fontSize');
+        }
+      }
+    });
+
     testWidgets(
       '그린 √ 각인: 근호 가로줄 두께는 피개법수 칸 높이의 약 0.3이다 (#206 사진 4.7px / 15.7px)',
       (tester) async {
@@ -920,7 +978,7 @@ void main() {
           keyDefOf(CalcKeyId.sqrt).mainLegend,
           fontSize,
         );
-        final (_, _, right, _) = boundsOf(ink);
+        final (_, _, right, inkBottom) = boundsOf(ink);
         // 오른쪽 끝 근처 세로 단면: 근호 가로줄 → 간격 → 채운 피개법수 칸
         final x = right - (fontSize * 0.25).round();
         final column = runsOf(ink.where((p) => p.$1 == x).map((p) => p.$2));
@@ -934,6 +992,12 @@ void main() {
             fontSize * CalcTheme.keyLegendRadicalStroke,
             epsilon: 2,
           ),
+        );
+        // 아래 꼭짓점 잉크는 선 두께와 상관없이 칸 아래끝보다 약 0.065em 아래다(사진 약 2px ≈ 0.06em, #206 R1 —
+        // 선을 굵게 한 만큼 더 내려가지 않는다).
+        expect(
+          inkBottom - column.last.$2,
+          moreOrLessEquals(fontSize * 0.065, epsilon: 2),
         );
       },
     );

@@ -989,11 +989,18 @@ void main() {
         CalcTheme.keyLegendIntegralOperandHeight,
         inInclusiveRange(0.33, 0.40),
       );
-      // 분수 키 가로줄 나감: 다른 분수보다 길다(가로줄/칸 ≈ 1.46은 위젯 테스트가 그린 픽셀로 본다)
-      expect(
-        CalcTheme.keyLegendDisplayFractionOverhang,
-        inInclusiveRange(0.1, 0.16),
-      );
+      // 분수 키 가로줄 나감: 가로줄/칸 잉크 폭이 사진(37~38px / 25~26px ≈ 1.46)과 같다(#186 R1, #206에서 칸 배율을
+      // 바꾸며 다시 맞춤). 칸 잉크 폭 = ◼ 잉크 높이 0.482 × 칸 배율 × 25/14, 칸 조각 폭 = 잉크 + 좌우 여백.
+      const s = CalcTheme.keyLegendDisplayFractionScale;
+      final boxInk =
+          0.482 *
+          s *
+          CalcTheme.keyLegendBoxAspectRatio(LegendBoxShape.fractionPart);
+      final barWidth =
+          boxInk +
+          2 * CalcTheme.keyLegendBoxSideBearing * s +
+          2 * CalcTheme.keyLegendDisplayFractionOverhang;
+      expect(barWidth / boxInk, moreOrLessEquals(1.46, epsilon: 0.01));
       expect(
         CalcTheme.keyLegendDisplayFractionOverhang,
         greaterThan(CalcTheme.keyLegendFractionOverhang),
@@ -1001,8 +1008,8 @@ void main() {
     });
 
     test('빈 칸 테두리는 칸 짧은 변의 사진 비율이고, 구멍이 칸의 절반 이상 남는다 (#206, #169 R2)', () {
-      // 근접 사진의 빈 칸 테두리: 칸 짧은 변의 0.24~0.29 (분수 키 분모 0.26, ∫ 끝 칸 0.28~0.29, log 진수 칸 0.24).
-      expect(CalcTheme.keyLegendBoxStrokeRatio, inInclusiveRange(0.24, 0.29));
+      // 근접 사진의 빈 칸 테두리: 칸 짧은 변의 0.24~0.31 (분수 키 분모 0.26, ∫ 끝 칸 0.28~0.31, log 진수 칸 0.24).
+      expect(CalcTheme.keyLegendBoxStrokeRatio, inInclusiveRange(0.24, 0.31));
       // 테두리는 칸 안쪽에 칠하므로 구멍 = 1 − 2 × 비율. 칸 크기에 비례하므로 글자 크기(짧은 창 하한 각인 약 3.2dp
       // 포함)와 상관없이 구멍이 칸의 절반 이상이다 — 작은 각인에서도 빈 칸이 채운 칸처럼 메워지지 않는다(#169 R2).
       expect(
@@ -1024,14 +1031,13 @@ void main() {
       // 칸 높이 = 글꼴 ◼ 잉크 0.482em × 분수 키 배율
       const box = 0.482 * CalcTheme.keyLegendDisplayFractionScale;
       expect(box, moreOrLessEquals(14 / 33.5, epsilon: 0.01));
-      // 각인 높이 = 칸 둘 + 간격 둘 + 가로줄: 사진 37.9px ≈ 1.13em이고, 가장 높은 d/dx◼(약 1.141em)보다 낮다
-      // (그래서 키패드 통일 각인 크기가 그대로다 — 실제 배치는 위젯 테스트가 본다).
+      // 각인 높이 = 칸 둘 + 간격 둘 + 가로줄: 사진 37.9px ≈ 1.13em. 메인 라벨 높이 맞춤을 바꾸지 않는지(가장 높은 메인
+      // 각인 ∫◻◻◼ 이하)는 실제 배치로 위젯 테스트가 본다.
       const height =
           2 * box +
           2 * CalcTheme.keyLegendDisplayFractionGap +
           CalcTheme.keyLegendDisplayFractionBarThickness;
       expect(height, moreOrLessEquals(37.9 / 33.5, epsilon: 0.02));
-      expect(height, lessThan(1.141));
       // 작은 분수는 높이 예산 때문에 가늘게 둔다(CalcTheme "2차원 각인 배치" 절)
       expect(
         CalcTheme.keyLegendDisplayFractionBarThickness,
