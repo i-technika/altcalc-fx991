@@ -1273,11 +1273,63 @@ void main() {
       }
     });
 
-    test('숫자부 메인 라벨 배율·상한 (#156): 함수부보다 크고, 상한은 함수부 상한의 같은 배수다', () {
-      expect(CalcTheme.keyNumberMainLabelScale, greaterThan(1.0));
+    test('숫자부 메인 각인 크기 (#225): 숫자 키캡 비율은 실물 글자/키캡 비로 함수부 비율에서 이끈 값이다', () {
+      // 근접 사진(같은 모양 글자끼리): 숫자 / 숫자 키캡 45/80, 대문자 / 함수 키캡 26/55. Saira는 숫자·대문자 잉크 높이가 같다.
+      const derived = CalcTheme.keyMainLabelFontRatio * (45 / 80) / (26 / 55);
+      expect(CalcTheme.keyNumberMainLabelFontRatio, closeTo(derived, 0.005));
+      expect(
+        CalcTheme.keyNumberMainLabelFontRatio,
+        greaterThan(CalcTheme.keyMainLabelFontRatio),
+      );
       expect(
         CalcTheme.keyNumberMainLabelMaxFontSize,
-        CalcTheme.keyMainLabelMaxFontSize * CalcTheme.keyNumberMainLabelScale,
+        greaterThan(CalcTheme.keyMainLabelMaxFontSize),
+      );
+      // 글자 각인은 숫자보다 작고(실물 약 0.83), 연산 기호는 숫자 대비 크게 키운다(실물/Mono 비 1.38~1.47 — 평균은 number_label_size_test가 고정한다)
+      expect(CalcTheme.keyNumberWordLabelScale, inExclusiveRange(0.8, 0.86));
+      expect(
+        CalcTheme.keyNumberOperatorLabelScale,
+        inInclusiveRange(1.38, 1.47),
+      );
+    });
+
+    test(
+      '숫자부 연산 기호 스타일 (#225): Noto Sans Mono Medium, 줄 상자·자간 규칙은 메인 라벨과 같다',
+      () {
+        const op = CalcTheme.keyNumberOperatorLabelStyle;
+        expect(op.fontFamily, CalcTheme.monoFontFamily);
+        expect(op.fontFamily, CalcTheme.keyStrutFontFamily);
+        expect(op.fontWeight, FontWeight.w500);
+        expect(op.letterSpacing, 0);
+        expect(op.height, CalcTheme.keyMainLabelStyle.height);
+      },
+    );
+
+    test('연산 기호 각인 (#225): 메인 각인이 연산 기호 한 글자인 키는 숫자부 × ÷ + − = 다섯 키뿐이다', () {
+      final numberIds = {for (final r in numberRows) ...r.map((d) => d.id)};
+      final operators = {
+        for (final d in allKeys)
+          if (CalcTheme.isKeyOperatorLegend(d.mainLegend)) d.id,
+      };
+      expect(operators, {
+        CalcKeyId.multiply,
+        CalcKeyId.divide,
+        CalcKeyId.add,
+        CalcKeyId.subtract,
+        CalcKeyId.equals,
+      });
+      expect(numberIds.containsAll(operators), isTrue);
+      // 다른 글자 사이의 기호·SHIFT·ALPHA 각인은 연산 기호 각인이 아니다
+      for (final text in ['M+', '(−)', '×10', '==', '']) {
+        expect(CalcTheme.isKeyOperatorLegend(LegendText(text)), isFalse);
+      }
+      expect(
+        CalcTheme.keyMainLabelStyleFor(const LegendText('7')),
+        CalcTheme.keyMainLabelStyle,
+      );
+      expect(
+        CalcTheme.keyMainLabelStyleFor(const LegendText('×')),
+        CalcTheme.keyNumberOperatorLabelStyle,
       );
     });
 
