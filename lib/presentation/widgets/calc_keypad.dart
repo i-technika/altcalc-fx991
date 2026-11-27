@@ -695,7 +695,7 @@ class _LabelLimits {
       final number = KeypadMetrics.isNumberKey(def.id);
       final width = number ? numberKeyWidth : functionKeyWidth;
 
-      // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인만 각인 띠에 인쇄한다(CalcKeyButton의 `_BodyPrintRow` —
+      // 원형 버튼(#190): 버튼 면에는 글자가 없고, 메인 각인만 각인 띠에 인쇄한다(CalcKeyButton의 `_BodyPrintLabel` —
       // 원형 버튼에는 SHIFT·ALPHA 각인이 없다, #253). 띠 폭에 그 각인이 들어가는 각인 크기까지 줄인다.
       if (def.face == KeyFace.roundButton) {
         const style = CalcTheme.keyBodyPrintStyle;

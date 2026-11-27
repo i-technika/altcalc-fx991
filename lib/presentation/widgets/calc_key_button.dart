@@ -592,7 +592,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
             height: legendHeight,
             width: width,
             child: round
-                ? _BodyPrintRow(
+                ? _BodyPrintLabel(
                     keyDef: widget.keyDef,
                     fontSize: legendFontSize,
                     textScaler: textScaler,
@@ -859,12 +859,12 @@ double keyCapFaceWidth({
 /// 원형 버튼에는 SHIFT·ALPHA 각인이 없다(#253 — 실물 MENU 위 `MENU SETUP`의 `SETUP`은 앱에서 뺐다, `CalcKeyDef` assert).
 /// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
 /// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 각인을 잰다.
-class _BodyPrintRow extends StatelessWidget {
+class _BodyPrintLabel extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;
   final TextScaler textScaler;
 
-  const _BodyPrintRow({
+  const _BodyPrintLabel({
     required this.keyDef,
     required this.fontSize,
     required this.textScaler,
