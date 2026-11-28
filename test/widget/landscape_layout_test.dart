@@ -5,18 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
-import 'package:itechnika_altcalc_fx991/presentation/l10n/calc_semantic_strings.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/bundled_fonts.dart';
-import '../support/korean_locale.dart';
 import '../support/screen_arrangement.dart';
 import '../support/semantics_order.dart';
 
@@ -28,7 +25,6 @@ final _keypad = find.byKey(const ValueKey('calc-keypad'));
 
 /// 설정 키(ON, #190)
 final _settingsKey = find.byKey(CalcKeyButton.keycapKeyOf(settingsKey));
-final _history = find.byKey(HistoryPanel.panelKey);
 
 /// [size] 창·[padding] 인셋으로 [CalculatorScreen]을 띄운다.
 Future<ProviderContainer> _pump(
@@ -163,7 +159,6 @@ void main() {
                 keypad,
                 rectMoreOrLessEquals(expected.keypad.shift(body.topLeft)),
               );
-              expect(_history, findsNothing);
               expect(lcd.left, moreOrLessEquals(body.left));
               expect(lcd.right, moreOrLessEquals(body.right));
 
@@ -212,15 +207,6 @@ void main() {
             lcd.height,
             inInclusiveRange(CalcTheme.screenLcdMinHeight - 0.01, 128),
           );
-          expect(_history, findsNothing);
-          // 숨긴 기록 영역은 스크린리더에도 없다.
-          final handle = tester.ensureSemantics();
-          await tester.pump();
-          expect(
-            find.bySemanticsLabel(const EnSemanticStrings().historyEmpty),
-            findsNothing,
-          );
-          handle.dispose();
         },
       );
     }
@@ -236,7 +222,6 @@ void main() {
     final body = _bodyRectOf(size, padding);
     final lcd = tester.getRect(_lcd);
     final keypad = tester.getRect(_keypad);
-    expect(_history, findsNothing);
     expect(lcd.top, moreOrLessEquals(body.top));
     expect(lcd.left, moreOrLessEquals(body.left));
     expect(lcd.right, moreOrLessEquals(body.right));
@@ -245,29 +230,6 @@ void main() {
       keypad.top - lcd.bottom,
       moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
     );
-  });
-
-  testWidgets('한국어 기기: 책 자세의 빈 기록 영역은 "계산 기록 없음"으로 읽힌다 (#285 전까지)', (
-    tester,
-  ) async {
-    useKoreanLocale(tester);
-    final handle = tester.ensureSemantics();
-    await _pump(
-      tester,
-      size: const Size(841, 701),
-      displayFeatures: const [
-        DisplayFeature(
-          bounds: Rect.fromLTWH(420.5, 0, 0, 701),
-          type: DisplayFeatureType.fold,
-          state: DisplayFeatureState.postureFlat,
-        ),
-      ],
-    );
-    expect(
-      tester.getSemantics(_history),
-      isSemantics(label: const KoSemanticStrings().historyEmpty),
-    );
-    handle.dispose();
   });
 
   Finder keycap(CalcKeyId id) => find.byKey(CalcKeyButton.keycapKeyOf(id));
@@ -292,11 +254,6 @@ void main() {
         expect(lcd, lessThan(function));
         expect(function, lessThan(number));
         expect(on, lessThan(number));
-        // 기록 영역이 없으니 빈 기록 노드도 읽지 않는다(#284).
-        expect(
-          find.bySemanticsLabel(const EnSemanticStrings().historyEmpty),
-          findsNothing,
-        );
         handle.dispose();
       },
     );

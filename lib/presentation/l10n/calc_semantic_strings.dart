@@ -113,9 +113,6 @@ abstract class CalcSemanticStrings {
   /// LCD 결과 줄
   String get resultLine;
 
-  /// 비어 있는 계산 기록 영역 (#143 — 책 자세의 반대쪽 패널만 남았다. 기록 목록 #145는 하지 않고, 이 영역은 #285에서 없앤다)
-  String get historyEmpty;
-
   /// 줄 왼쪽(◄)·오른쪽(►)에 가려진 내용이 있음
   String scrollMore({required bool left});
 
@@ -190,9 +187,6 @@ class KoSemanticStrings extends CalcSemanticStrings {
 
   @override
   String get resultLine => '결과';
-
-  @override
-  String get historyEmpty => '계산 기록 없음';
 
   @override
   String scrollMore({required bool left}) =>
@@ -330,9 +324,6 @@ class EnSemanticStrings extends CalcSemanticStrings {
 
   @override
   String get resultLine => 'Result';
-
-  @override
-  String get historyEmpty => 'No calculation history';
 
   @override
   String scrollMore({required bool left}) =>

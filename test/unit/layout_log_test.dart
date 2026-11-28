@@ -311,14 +311,13 @@ void main() {
       chosen: ScreenArrangement.hingeSplit,
       drawn: ScreenArrangement.hingeSplit,
       tooSmall: false,
-      lcdBesideKeypad: true,
       keypad: const Rect.fromLTRB(328, 36.1905, 632, 328),
       window: const Size(640, 360),
       features: const [],
       foldableDevice: true,
     );
     expect(lines, [
-      'AltCalc 배치: hingeSplit (LCD 옆 패널) — 창 640x360, '
+      'AltCalc 배치: hingeSplit — 창 640x360, '
           '키패드 328,36.19-632,328, 화면 특징 [], 가로지르는 접힘선 0, '
           '폴더블=true @0.0ms',
     ]);

@@ -28,10 +28,11 @@ enum KeypadArrangement {
   standard,
 
   /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 가로 접힘선 기준 배치의 아래 패널
-  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
+  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 책 자세(`CalcHingeSplitLayout`,
+  /// #285)는 늘 이 배열이고 두 블록 사이에 접힘선이 온다(`CalcKeypad.minSectionGap`). 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(#80 당시 Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 기본으로 오른쪽이고(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것), `CalcKeypad.numbersOnLeft`로
-  /// 좌우를 맞바꿀 수 있다 — 두 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, 사용자 결정).
+  /// 좌우를 맞바꿀 수 있다 — 세 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, #285, 사용자 결정).
   wide,
 }
 
@@ -164,10 +165,17 @@ class KeypadMetrics {
   /// [KeypadArrangement.wide] 키패드 폭을 블록 폭 단위로 센 값 (블록 2개 + 블록 사이 간격)
   static const double _wideWidthUnits = 2 + CalcTheme.keypadWideSectionGapRatio;
 
-  /// [KeypadArrangement.wide] 키패드 폭 [width]에서 블록 하나의 폭 (dp) — 가로형 배치가 위 띠를 블록에 맞춰 나눌 때
-  /// 쓴다(#142). 블록 사이 간격은 `width - 2 × 블록 폭`이다.
-  static double wideBlockWidthOf(double width) =>
-      math.max(0.0, width) / _wideWidthUnits;
+  /// [KeypadArrangement.wide] 키패드 폭 [width]에서 블록 하나의 폭 (dp). 블록 사이 간격은 `width - 2 × 블록 폭`이다.
+  ///
+  /// 블록 사이 간격은 보통 블록 폭 × [CalcTheme.keypadWideSectionGapRatio]다. [minSectionGap]이 그보다 넓으면 간격을 그만큼
+  /// 넓히고 블록을 줄인다 — 책 자세(#285)는 두 블록 사이에 접힘선과 그 양쪽 여백([CalcTheme.screenHingeMargin])을 둔다.
+  static double wideBlockWidthOf(double width, {double minSectionGap = 0}) {
+    final w = math.max(0.0, width);
+    final natural = w / _wideWidthUnits;
+    final gap = minSectionGap.isFinite ? math.max(0.0, minSectionGap) : 0.0;
+    if (w - 2 * natural >= gap) return natural;
+    return math.max(0.0, (w - gap) / 2);
+  }
 
   /// 키패드 치수 [metrics]의 셀·키캡 폭에서 폭 기준이 허락하는 (배율 반영) 최대 글자 크기 — 메인 라벨·각인.
   ///
@@ -315,10 +323,11 @@ class KeypadMetrics {
   /// - [KeypadArrangement.standard]: 키패드 폭 / [CalcTheme.keypadMinAspectRatio].
   /// - [KeypadArrangement.wide]: 블록 폭 / ([CalcTheme.keypadMinAspectRatio] × [wideHeightFactor]) — 같은 행 높이의
   ///   표준 키패드와 키 모양의 세로 한계가 같다. 블록 폭은 영역 폭에서 블록 사이 간격
-  ///   (블록 폭 × [CalcTheme.keypadWideSectionGapRatio])을 뺀 절반이다.
+  ///   (블록 폭 × [CalcTheme.keypadWideSectionGapRatio], [minSectionGap]이 더 넓으면 그 값 — [wideBlockWidthOf])을 뺀 절반이다.
   static Size fitSize(
     Size available, [
     KeypadArrangement arrangement = KeypadArrangement.standard,
+    double minSectionGap = 0,
   ]) {
     final width = available.width.isFinite
         ? math.max(0.0, available.width)
@@ -327,8 +336,7 @@ class KeypadMetrics {
     final maxHeight = switch (arrangement) {
       KeypadArrangement.standard => width / CalcTheme.keypadMinAspectRatio,
       KeypadArrangement.wide =>
-        width /
-            _wideWidthUnits /
+        wideBlockWidthOf(width, minSectionGap: minSectionGap) /
             (CalcTheme.keypadMinAspectRatio * wideHeightFactor),
     };
     return Size(width, math.min(availableHeight, maxHeight));
@@ -348,8 +356,9 @@ class KeypadMetrics {
   /// (블록 폭, 키 사이 가로 간격, 키 사이 세로 간격, 구역 간격, 함수부 행 높이, 숫자부 행 높이)
   static (double, double, double, double, double, double) _geometryOf(
     Size size,
-    KeypadArrangement arrangement,
-  ) {
+    KeypadArrangement arrangement, [
+    double minSectionGap = 0,
+  ]) {
     switch (arrangement) {
       case KeypadArrangement.standard:
         final sectionGap = size.height * CalcTheme.keypadSectionGapRatio;
@@ -364,7 +373,10 @@ class KeypadMetrics {
           rowUnit * CalcTheme.keypadNumberRowHeightRatio,
         );
       case KeypadArrangement.wide:
-        final block = size.width / _wideWidthUnits;
+        final block = wideBlockWidthOf(
+          size.width,
+          minSectionGap: minSectionGap,
+        );
         return (
           block,
           block * CalcTheme.keyHorizontalGapRatio,
@@ -387,10 +399,21 @@ class KeypadMetrics {
   /// 세로형(셀 68.2dp, 터치 49.1dp)이 가로형(셀·터치 49.7dp)보다 키가 큰데 터치 높이로는 가로형이 이긴다.
   static double minKeyCellHeightOf(
     Size available,
-    KeypadArrangement arrangement,
-  ) {
-    final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
-        _geometryOf(fitSize(available, arrangement), arrangement);
+    KeypadArrangement arrangement, {
+    double minSectionGap = 0,
+  }) {
+    final (
+      _,
+      _,
+      verticalGap,
+      _,
+      functionRowHeight,
+      numberRowHeight,
+    ) = _geometryOf(
+      fitSize(available, arrangement, minSectionGap),
+      arrangement,
+      minSectionGap,
+    );
     return math.max(
       0.0,
       math.min(functionRowHeight, numberRowHeight) - verticalGap,
@@ -407,10 +430,21 @@ class KeypadMetrics {
   /// [arrangement]는 기본값 없이 받는다 — 빠뜨리면 넓은 배열 키패드를 실물 배열로 재어 배치 판정이 조용히 틀린다(#80 R1).
   static double minKeyTouchHeightOf(
     Size available,
-    KeypadArrangement arrangement,
-  ) {
-    final (_, _, verticalGap, _, functionRowHeight, numberRowHeight) =
-        _geometryOf(fitSize(available, arrangement), arrangement);
+    KeypadArrangement arrangement, {
+    double minSectionGap = 0,
+  }) {
+    final (
+      _,
+      _,
+      verticalGap,
+      _,
+      functionRowHeight,
+      numberRowHeight,
+    ) = _geometryOf(
+      fitSize(available, arrangement, minSectionGap),
+      arrangement,
+      minSectionGap,
+    );
     // 각인 띠는 모든 구역이 함수부 띠 높이다 (#220).
     final band = _legendBandHeightOf(functionRowHeight - verticalGap);
     double touchOf(double rowHeight) {
@@ -500,8 +534,9 @@ class KeypadMetrics {
     TextScaler textScaler, {
     KeypadArrangement arrangement = KeypadArrangement.standard,
     Set<KeyFeature> releasedFeatures = releasedKeyFeatures,
+    double minSectionGap = 0,
   }) {
-    final size = fitSize(available, arrangement);
+    final size = fitSize(available, arrangement, minSectionGap);
     final (
       blockWidth,
       horizontalGap,
@@ -512,6 +547,7 @@ class KeypadMetrics {
     ) = _geometryOf(
       size,
       arrangement,
+      minSectionGap,
     );
 
     // CalcKeyButton 내부 치수와 같은 방식으로 각인 띠·키캡 높이를 구한다. 각인 띠는 모든 구역이 함수부 띠 높이다(#220).
@@ -914,6 +950,11 @@ class CalcKeypad extends StatelessWidget {
   /// 스크린리더 읽기 순서(함수부 다음 숫자부)는 그대로이고 블록의 좌우만 바뀐다. [KeypadArrangement.standard]에서는 쓰지 않는다.
   final bool numbersOnLeft;
 
+  /// [KeypadArrangement.wide]의 블록 사이 최소 간격 (dp, #285) — 책 자세는 접힘선과 그 양쪽 여백이 두 블록 사이에 들어가게
+  /// 이 값을 준다([KeypadMetrics.wideBlockWidthOf]). 0이면 보통 간격(블록 폭 × [CalcTheme.keypadWideSectionGapRatio])이다.
+  /// [KeypadArrangement.standard]에서는 쓰지 않는다.
+  final double minSectionGap;
+
   /// 각인 띠에 어느 기능의 각인까지 인쇄할지 (#267) — 기본은 배포된 기능([releasedKeyFeatures])이다. 글자 크기 계산
   /// ([KeypadMetrics.compute])과 키 버튼이 같은 값을 쓴다. 그리는 각인만 정한다(`CalcKeyButton.releasedFeatures`).
   final Set<KeyFeature> releasedFeatures;
@@ -929,6 +970,7 @@ class CalcKeypad extends StatelessWidget {
     this.enableHaptics = true,
     this.arrangement = KeypadArrangement.standard,
     this.numbersOnLeft = false,
+    this.minSectionGap = 0,
     this.releasedFeatures = releasedKeyFeatures,
   });
 
@@ -960,6 +1002,9 @@ class CalcKeypad extends StatelessWidget {
           textScaler,
           arrangement: arrangement,
           releasedFeatures: releasedFeatures,
+          minSectionGap: arrangement == KeypadArrangement.wide
+              ? minSectionGap
+              : 0,
         );
         return Center(
           child: SizedBox.fromSize(

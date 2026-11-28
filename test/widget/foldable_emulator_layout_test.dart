@@ -12,7 +12,6 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,9 +61,6 @@ class _Case {
   /// 에뮬레이터 logcat 배치 줄 (`AltCalc 배치: ` 뒤, ` @` 앞)
   final String line;
 
-  /// 계산 기록 영역이 보이는지
-  final bool hasHistory;
-
   /// 가장 낮은 키(함수 키)의 터치 높이 (dp, 위젯이 그린 값)
   final double functionKeyTouch;
 
@@ -85,7 +81,6 @@ class _Case {
     this.handedness = Handedness.right,
     required this.insetsLine,
     required this.line,
-    required this.hasHistory,
     required this.functionKeyTouch,
     required this.keyNodePx,
     this.talkBack,
@@ -133,9 +128,12 @@ const _noInsets = '인셋 0/0/0/0, 시스템 바 0/0/0/0, 제스처 영역 0/0/0
 
 final _cases = <_Case>[
   // ── Pixel Fold 책 자세 (세로 접힘선) — TalkBack: 오른손잡이 펼침 ──
+  // #285: 키패드는 접힘선 기준 대칭이라 두 손잡이가 같은 자리다(숫자부만 옮겨 간다). 오른손잡이 펼침·반 접힘의 배치 줄은 #285 뒤
+  // 에뮬레이터에서 다시 재어 같았다(CalcTheme "접힘선 기준 배치" 절 "#285 에뮬레이터 실측"). 그때 가장 낮은 키 노드는 140px로 셀
+  // 둘레 간격 몫까지 넓은 행 간격(#236)이라 셀 기준 터치 높이와 견주는 [_Case.keyNodePx]에는 넣지 않는다.
   for (final (h, keypad) in [
-    (Handedness.right, '428.57,219.12-833.14,660.95'),
-    (Handedness.left, '8,219.12-412.57,660.95'),
+    (Handedness.right, '8,393.92-833.14,660.95'),
+    (Handedness.left, '8,393.92-833.14,660.95'),
   ])
     for (final (state, stateName) in [
       (_flat, 'postureFlat'),
@@ -154,11 +152,10 @@ final _cases = <_Case>[
         line:
             'hingeSplit — 창 841.1x701, 키패드 $keypad, '
             '화면 특징 [fold $stateName 420.6,0-420.6,701], 가로지르는 접힘선 1, 폴더블=true',
-        hasHistory: true,
-        functionKeyTouch: 37.56,
-        keyNodePx: 98,
+        functionKeyTouch: 45.40,
+        keyNodePx: null,
         talkBack: h == Handedness.right && state == _flat
-            ? 'LCD→기록→함수부→숫자부'
+            ? 'LCD→기록→함수부→숫자부 — #285 전 측정, 지금은 기록 없이 LCD→함수부→숫자부'
             : null,
       ),
   // ── Pixel Fold 세로로 돌림 (가로 접힘선, 넓은 배열, 기록 없음) — TalkBack: 두 손잡이 펼침 ──
@@ -180,7 +177,6 @@ final _cases = <_Case>[
         line:
             'hingeStacked — 창 701x841.1, 키패드 8,579.48-692.95,801.14, '
             '화면 특징 [fold $stateName 0,420.6-701,420.6], 가로지르는 접힘선 1, 폴더블=true',
-        hasHistory: false,
         functionKeyTouch: 37.68,
         keyNodePx: 99,
         talkBack: state == _flat ? 'LCD→함수부→숫자부' : null,
@@ -198,7 +194,6 @@ final _cases = <_Case>[
     line:
         'stacked — 창 841.1x701, 키패드 8,219.12-833.14,660.95, '
         '화면 특징 [fold postureFlat 0,420.6-701,420.6], 가로지르는 접힘선 0, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 37.56,
     keyNodePx: null,
   ),
@@ -214,14 +209,13 @@ final _cases = <_Case>[
     line:
         'stacked — 창 701x841.1, 키패드 8,258.38-692.95,801.14, '
         '화면 특징 [fold postureFlat 420.6,0-420.6,701], 가로지르는 접힘선 0, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 46.14,
     keyNodePx: null,
   ),
-  // ── 손 쪽 패널이 짧은 책 자세 (#143 R1): 자유 형식 창 2208×930px (인셋 없음) ──
+  // ── 짧은 창의 책 자세: 자유 형식 창 2208×930px (인셋 없음) — #285 전에는 손 쪽 패널이 짧은 변형(#143 R1)이었다 ──
   for (final (h, keypad) in [
-    (Handedness.right, '428.57,16.87-833.14,346.29'),
-    (Handedness.left, '8,16.87-412.57,346.29'),
+    (Handedness.right, '8,128-833.14,346.29'),
+    (Handedness.left, '8,128-833.14,346.29'),
   ])
     _Case(
       'Pixel Fold 짧은 창 책 자세 ${h.name}',
@@ -234,11 +228,10 @@ final _cases = <_Case>[
       handedness: h,
       insetsLine: '창 841.14x354.29, 밀도 2.625, $_noInsets',
       line:
-          'hingeSplit (LCD 옆 패널) — 창 841.1x354.3, 키패드 $keypad, '
+          'hingeSplit — 창 841.1x354.3, 키패드 $keypad, '
           '화면 특징 [fold postureFlat 420.6,0-420.6,354.3], 가로지르는 접힘선 1, 폴더블=true',
-      hasHistory: false,
-      functionKeyTouch: CalcTheme.keyTouchHeightFloor,
-      keyNodePx: 73,
+      functionKeyTouch: 37.11,
+      keyNodePx: null,
     ),
   // ── 가로 접힘선을 지나는 자유 형식 창 1103×1767px (인셋 없음) ──
   const _Case(
@@ -253,7 +246,6 @@ final _cases = <_Case>[
     line:
         'hingeStacked — 창 420.2x673.1, 키패드 8,344.38-412.19,665.14, '
         '화면 특징 [fold postureFlat 0,336.4-420.2,336.4], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 27.26,
     keyNodePx: 71,
   ),
@@ -273,11 +265,10 @@ final _cases = <_Case>[
       featuresPx: [(_hinge, state, const Rect.fromLTRB(884, 0, 885, 2208))],
       insetsLine: '창 673.52x841.14, 밀도 2.625, $_f76Insets',
       line:
-          'hingeSplit — 창 673.5x841.1, 키패드 345.14,373.97-665.52,801.14, '
+          'hingeSplit — 창 673.5x841.1, 키패드 8.38,588.48-665.52,801.14, '
           '화면 특징 [hinge $stateName 336.8,0-337.1,841.1], 가로지르는 접힘선 1, 폴더블=true',
-      hasHistory: true,
-      functionKeyTouch: 36.31,
-      keyNodePx: 95,
+      functionKeyTouch: 36.15,
+      keyNodePx: null,
     ),
   const _Case(
     '7.6" Foldable 가로로 돌림 (넓은 배열 — #284 전에는 기록 영역도 있었다)',
@@ -291,7 +282,6 @@ final _cases = <_Case>[
     line:
         'hingeStacked — 창 841.1x673.5, 키패드 8,366.49-833.14,633.52, '
         '화면 특징 [hinge postureFlat 0,336.4-841.1,336.8], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 45.40,
     keyNodePx: 119,
     talkBack: 'LCD→기록→함수부→숫자부 — #284 전 측정, 지금은 기록 없이 LCD→함수부→숫자부',
@@ -314,7 +304,6 @@ final _cases = <_Case>[
       line:
           'hingeStacked — 창 415.6x673.5, 키패드 8,344.76-407.62,633.52, '
           '화면 특징 [hinge $stateName 0,336.4-415.6,336.8], 가로지르는 접힘선 1, 폴더블=true',
-      hasHistory: false,
       functionKeyTouch: 24.55,
       keyNodePx: 64,
     ),
@@ -332,7 +321,6 @@ final _cases = <_Case>[
     line:
         'hingeStacked — 창 360x878.7, 키패드 8,447.67-352,846.67, '
         '화면 특징 [hinge postureFlat 0,439.3-360,439.7], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 33.91,
     keyNodePx: 101,
     talkBack: 'LCD→기록→함수부, 숫자부까지는 쓸지 않음 — #284 전 측정, 지금은 기록 없음',
@@ -349,7 +337,6 @@ final _cases = <_Case>[
     line:
         'stacked — 창 360x878.7, 키패드 8,388-352,846.67, '
         '화면 특징 [], 가로지르는 접힘선 0, 폴더블=true',
-    hasHistory: false,
     functionKeyTouch: 38.99,
     keyNodePx: 116,
   ),
@@ -370,7 +357,6 @@ final _cases = <_Case>[
       line:
           'hingeStacked — 창 360x878.7, 키패드 8,447.33-352,846.67, '
           '화면 특징 [fold $stateName 0,439.3-360,439.3], 가로지르는 접힘선 1, 폴더블=true',
-      hasHistory: false,
       functionKeyTouch: 33.94,
       keyNodePx: 101,
     ),
@@ -459,41 +445,24 @@ void main() {
           expect((touch * c.density - c.keyNodePx!).abs(), lessThan(1.0));
         }
 
-        // 계산 기록 영역 유무
-        final history = find.byType(HistoryPanel);
-        expect(history, c.hasHistory ? findsOneWidget : findsNothing);
+        // 계산 기록 영역은 어느 배치에도 없다(#284·#285)
         final lcdRect = tester.getRect(find.byType(LcdDisplay));
         final keypadRect = tester.getRect(
           find.byKey(const ValueKey('calc-keypad')),
         );
-
-        final historyRect = c.hasHistory ? tester.getRect(history) : null;
-        final regions = <String, Rect>{
-          'LCD': lcdRect,
-          '키패드': keypadRect,
-          '기록': ?historyRect,
-        };
-
-        // LCD·기록·키패드는 서로 겹치지 않는다
-        final names = regions.keys.toList();
-        for (var i = 0; i < names.length; i++) {
-          for (var j = i + 1; j < names.length; j++) {
-            final a = regions[names[i]]!;
-            final b = regions[names[j]]!;
-            final o = a.intersect(b);
-            expect(
-              o.width <= 0.01 || o.height <= 0.01,
-              isTrue,
-              reason: '${names[i]} $a ↔ ${names[j]} $b',
-            );
-          }
-        }
+        // LCD와 키패드는 겹치지 않는다
+        final o = lcdRect.intersect(keypadRect);
+        expect(
+          o.width <= 0.01 || o.height <= 0.01,
+          isTrue,
+          reason: 'LCD $lcdRect ↔ 키패드 $keypadRect',
+        );
 
         final keypad = tester.widget<CalcKeypad>(find.byType(CalcKeypad));
         final sin = tester.getRect(_keycap(CalcKeyId.sin));
         final seven = tester.getRect(_keycap(CalcKeyId.num7));
 
-        // 접힘선 기준 배치: 세 영역이 접힘선 양쪽 간격 띠에 걸치지 않고, 패널 배정이 기록대로다
+        // 접힘선 기준 배치: 키가 접힘선 양쪽 간격 띠에 걸치지 않고, 패널 배정이 기록대로다
         if (c.line.startsWith('hinge')) {
           final hinge = FormFactor.hingeOf(size, c.features);
           expect(hinge, isNotNull);
@@ -504,27 +473,26 @@ void main() {
               vertical ? r.right <= b.left - m : r.bottom <= b.top - m;
           bool after(Rect r) =>
               vertical ? r.left >= b.right + m : r.top >= b.bottom + m;
-          for (final e in regions.entries) {
-            expect(
-              before(e.value) || after(e.value),
-              isTrue,
-              reason: '${e.key} ${e.value}',
-            );
+          for (final id in [..._functionSideKeys, ..._numberKeys]) {
+            final r = tester.getRect(_keycap(id));
+            expect(before(r) || after(r), isTrue, reason: '${id.name} $r');
           }
           if (vertical) {
-            // 책 자세: 키패드는 손 쪽 패널, 기록은 반대쪽 패널. 손 쪽 패널이 짧으면 활성 LCD도 반대쪽 패널이다.
-            final keypadOnRight = after(keypadRect);
-            expect(keypadOnRight, c.handedness == Handedness.right);
-            if (historyRect != null) {
-              expect(after(historyRect), !keypadOnRight);
-            }
-            final lcdBeside = c.line.contains('(LCD 옆 패널)');
-            expect(after(lcdRect), lcdBeside ? !keypadOnRight : keypadOnRight);
+            // 책 자세(#285): 키패드가 접힘선 양쪽에 걸치고(두 블록 사이에 접힘선), 숫자부는 손 쪽 패널, 함수부는 반대쪽
+            // 패널이다. 이 에뮬레이터들의 접힘선은 폭 0(또는 1px)이라 LCD도 접힘선에 걸친다.
+            final numbersRight = c.handedness == Handedness.right;
+            expect(numbersRight ? after(seven) : before(seven), isTrue);
+            expect(numbersRight ? before(sin) : after(sin), isTrue);
+            expect(
+              keypadRect.left < b.left && keypadRect.right > b.right,
+              isTrue,
+            );
+            expect(lcdRect.left < b.left && lcdRect.right > b.right, isTrue);
           } else {
+            expect(before(lcdRect) || after(lcdRect), isTrue);
             // 가로 접힘선: 키패드는 아래 패널, LCD는 위 패널 전체다(#284 — 기록 영역 없음)
             expect(after(keypadRect), isTrue);
             expect(before(lcdRect), isTrue);
-            expect(historyRect, isNull);
           }
         }
 
@@ -539,7 +507,7 @@ void main() {
           expect(seven.top, greaterThan(sin.bottom));
         }
 
-        // 스크린리더 읽기 순서: 활성 LCD → 계산 기록(있으면) → 함수부 쪽 키 전부 → 숫자부 키 전부
+        // 스크린리더 읽기 순서: LCD → 함수부 쪽 키 전부 → 숫자부 키 전부
         final order = semanticsTraversalOrder(tester);
         final lcd = semanticsIndexIn(tester, order, find.byType(LcdDisplay));
         final functionIdx = [
@@ -555,11 +523,6 @@ void main() {
         final firstNumber = numberIdx.reduce((a, b) => a < b ? a : b);
         expect(lcd, lessThan(firstFunction));
         expect(lastFunction, lessThan(firstNumber));
-        if (c.hasHistory) {
-          final h = semanticsIndexIn(tester, order, history);
-          expect(lcd, lessThan(h));
-          expect(h, lessThan(firstFunction));
-        }
       } finally {
         handle.dispose();
       }

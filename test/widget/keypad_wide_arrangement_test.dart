@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
@@ -196,6 +198,110 @@ void main() {
           moreOrLessEquals(m.blockWidth),
         );
       }
+    });
+
+    test(
+      '블록 사이 최소 간격 (#285 — 책 자세의 접힘선): 보통 간격보다 넓을 때만 블록을 줄이고, 치수·세로 한계가 함께 따른다',
+      () {
+        for (final width in const [300.0, 549.0, 657.0, 825.0, 1098.0]) {
+          final natural = KeypadMetrics.wideBlockWidthOf(width);
+          final naturalGap = width - 2 * natural;
+          for (final minGap in const [0.0, 16.0, 50.0, 120.0]) {
+            final block = KeypadMetrics.wideBlockWidthOf(
+              width,
+              minSectionGap: minGap,
+            );
+            final reason = '$width 최소 간격 $minGap';
+            // 간격은 보통 간격과 최소 간격 중 넓은 쪽이다
+            expect(
+              width - 2 * block,
+              moreOrLessEquals(math.max(naturalGap, minGap)),
+              reason: reason,
+            );
+            // 세로 한계는 줄어든 블록 폭을 따른다 — 키가 세로로 길어지지 않는다
+            final size = KeypadMetrics.fitSize(
+              Size(width, double.infinity),
+              KeypadArrangement.wide,
+              minGap,
+            );
+            expect(
+              size.height,
+              moreOrLessEquals(
+                block /
+                    (CalcTheme.keypadMinAspectRatio *
+                        KeypadMetrics.wideHeightFactor),
+              ),
+              reason: reason,
+            );
+            // 치수 계산이 같은 블록 폭·간격을 쓴다
+            final m = KeypadMetrics.compute(
+              Size(width, 200),
+              TextScaler.noScaling,
+              arrangement: KeypadArrangement.wide,
+              minSectionGap: minGap,
+            );
+            expect(m.blockWidth, moreOrLessEquals(block), reason: reason);
+            expect(
+              m.sectionGap,
+              moreOrLessEquals(width - 2 * block),
+              reason: reason,
+            );
+            // 블록이 줄면 키도 커지지 않는다
+            expect(
+              KeypadMetrics.minKeyCellHeightOf(
+                Size(width, 400),
+                KeypadArrangement.wide,
+                minSectionGap: minGap,
+              ),
+              lessThanOrEqualTo(
+                KeypadMetrics.minKeyCellHeightOf(
+                      Size(width, 400),
+                      KeypadArrangement.wide,
+                    ) +
+                    1e-9,
+              ),
+              reason: reason,
+            );
+          }
+        }
+        // 비유한·음수 최소 간격은 0으로 본다
+        for (final bad in const [double.nan, double.infinity, -10.0]) {
+          expect(
+            KeypadMetrics.wideBlockWidthOf(825, minSectionGap: bad),
+            moreOrLessEquals(KeypadMetrics.wideBlockWidthOf(825)),
+            reason: '$bad',
+          );
+        }
+      },
+    );
+
+    testWidgets('CalcKeypad.minSectionGap: 두 블록 사이가 그 간격 이상이다 (#285)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 657,
+              height: 212,
+              child: CalcKeypad(
+                arrangement: KeypadArrangement.wide,
+                minSectionGap: 50,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final keypad = tester.getRect(find.byKey(const ValueKey('calc-keypad')));
+      Rect key(CalcKeyId id) =>
+          tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
+      // 함수부 오른쪽 끝 열(ON 키 쪽)과 숫자부 왼쪽 끝 열(7) 사이
+      expect(
+        key(CalcKeyId.num7).left - key(settingsKey).right,
+        greaterThanOrEqualTo(50 - 0.01),
+      );
+      expect(keypad.width, moreOrLessEquals(657));
     });
 
     test('preferredArrangementFor: 넓은 배열의 키가 클 때만 넓은 배열이다', () {

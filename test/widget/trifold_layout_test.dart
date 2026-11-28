@@ -10,7 +10,6 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/device_provider.d
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -229,13 +228,13 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
       final r = _rects(tester);
-      // 책 자세(#143): LCD·키패드(오른손 — 오른쪽 절반)와 계산 기록(왼쪽 절반)이 가운데 접힘선을 넘지 않는다
-      expect(r.keypad.left, greaterThanOrEqualTo(320));
-      expect(r.lcd.left, greaterThanOrEqualTo(320));
-      expect(
-        tester.getRect(find.byType(HistoryPanel)).right,
-        lessThanOrEqualTo(320),
-      );
+      // 책 자세(#285): 오른손잡이라 숫자부는 오른쪽 패널, 함수부는 왼쪽 패널 — 어느 키도 가운데 접힘선을 넘지 않는다
+      Rect key(CalcKeyId id) =>
+          tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
+      expect(key(CalcKeyId.num7).left, greaterThanOrEqualTo(320));
+      expect(key(CalcKeyId.sin).right, lessThanOrEqualTo(320));
+      expect(r.lcd.left, lessThan(320));
+      expect(r.lcd.right, greaterThan(320));
     },
   );
 

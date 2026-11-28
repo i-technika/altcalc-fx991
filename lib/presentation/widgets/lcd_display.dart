@@ -997,7 +997,7 @@ class _DotMatrixPainter extends CustomPainter {
   bool shouldRepaint(_DotMatrixPainter oldDelegate) => false;
 }
 
-/// LCD·계산 기록 영역의 베젤 장식 (#156) — 회녹색 액정([CalcTheme.lcdBackground])을 검은 베젤([CalcTheme.lcdFrame])이
+/// LCD의 베젤 장식 (#156 — #285 전에는 계산 기록 영역도 썼다) — 회녹색 액정([CalcTheme.lcdBackground])을 검은 베젤([CalcTheme.lcdFrame])이
 /// 감싸고, 베젤 바깥에 얇은 테두리([CalcTheme.lcdBezelEdge])를 그려 검은 베젤이 본체와 구분되게 한다. 바깥 테두리는
 /// 그림자(퍼짐 1dp)로 그려 배치 크기를 바꾸지 않는다.
 const BoxDecoration lcdBezelDecoration = BoxDecoration(

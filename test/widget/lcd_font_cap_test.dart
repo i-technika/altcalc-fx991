@@ -8,7 +8,6 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,7 +24,6 @@ import '../support/bundled_fonts.dart';
 
 final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
-final _history = find.byKey(HistoryPanel.panelKey);
 
 const double _cap = CalcTheme.lcdLineMaxFontSize;
 
@@ -312,58 +310,37 @@ void main() {
       },
     );
 
-    test(
-      '세로 접힘선 배치(책 자세): 줄 글자는 상한 이하이고, 활성 LCD는 본체 윗변부터 남는 높이를 모두 받는다 (#232)',
-      () {
-        var sawShortWithout = 0;
-        var sawShortWith = 0;
-        for (var width = 400.0; width <= 2400; width += 61) {
-          for (var height = 200.0; height <= 1600; height += 23) {
-            final body = Size(width, height);
-            final hinge = Rect.fromLTWH(width * 0.45, 0, 20, height);
+    test('세로 접힘선 배치(책 자세): 줄 글자는 상한 이하이고, LCD는 본체 윗변부터 키패드 위 간격까지 남는 높이를 모두 받는다 (#232, #285)', () {
+      var sawOccluding = 0;
+      for (var width = 400.0; width <= 2400; width += 61) {
+        for (var height = 200.0; height <= 1600; height += 23) {
+          final body = Size(width, height);
+          // 폭 0 접힘선과 폭 있는 물리 힌지(LCD가 숫자부 쪽 패널에만, #285)를 모두 본다
+          for (final hingeWidth in const [0.0, 20.0]) {
+            final hinge = Rect.fromLTWH(width * 0.45, 0, hingeWidth, height);
             for (final h in Handedness.values) {
               final l = CalcHingeSplitLayout.of(body, hinge, h);
-              final reason = '$body $h $l';
+              final reason = '$body 힌지 $hingeWidth $h $l';
               expect(l.lcd.top, moreOrLessEquals(0), reason: reason);
               expect(
                 _lineFontOf(l.lcd.size),
                 lessThanOrEqualTo(_cap),
                 reason: reason,
               );
-              final history = l.history;
-              if (!l.shortHandPanel) {
-                // 손 쪽 패널의 세로형: LCD 아래 간격 바로 밑이 키패드다 — LCD 위·아래에 빈 곳이 없다.
-                expect(
-                  l.lcd.bottom + CalcTheme.screenLcdKeypadGap,
-                  moreOrLessEquals(l.keypad.top),
-                  reason: reason,
-                );
-              } else if (history == null) {
-                // 짧은 손 쪽 패널, 반대쪽 패널에 기록이 없으면 LCD가 반대쪽 패널 높이 전체다.
-                sawShortWithout++;
-                expect(l.lcd.bottom, moreOrLessEquals(height), reason: reason);
-              } else {
-                // 기록이 있으면 LCD는 상한 높이 이하이고 기록이 패널 끝까지 남는 높이를 쓴다.
-                sawShortWith++;
-                expect(
-                  l.lcd.height,
-                  lessThanOrEqualTo(_lcdHeightLimit + 1e-9),
-                  reason: reason,
-                );
-                expect(
-                  history.bottom,
-                  moreOrLessEquals(height),
-                  reason: reason,
-                );
-              }
+              // 가로형처럼 LCD 아래 간격 바로 밑이 키패드다 — LCD 위·아래에 빈 곳이 없다.
+              expect(
+                l.lcd.bottom + CalcTheme.screenLcdKeypadGap,
+                moreOrLessEquals(l.keypad.top),
+                reason: reason,
+              );
+              if (l.lcdOnNumberPanel) sawOccluding++;
             }
           }
         }
-        // 스윕이 짧은 손 쪽 패널의 두 경우를 실제로 지나는지 확인한다.
-        expect(sawShortWithout, greaterThan(0));
-        expect(sawShortWith, greaterThan(0));
-      },
-    );
+      }
+      // 스윕이 물리 힌지 경우를 실제로 지나는지 확인한다.
+      expect(sawOccluding, greaterThan(0));
+    });
   });
 
   // 실제 번들 글꼴로 그린 화면의 줄 글자와 키 각인을 잰다. 글꼴 등록은 이후 테스트에도 남으므로 파일 맨 끝 그룹에 둔다.
@@ -434,7 +411,6 @@ void main() {
           keypad.top - lcd.bottom,
           moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
         );
-        expect(_history, findsNothing);
         // 줄 글자는 키 메인 각인의 2.5배 아래에서 멈춘다. (#264 전에는 키 메인 각인도 상한 16.5dp에서 멈춰 약 2.4배였다 —
         // 지금 키 각인은 상한 없이 키 높이의 실물 비율이라 큰 창일수록 이 비가 더 작다.)
         expect(keyFont(tester), greaterThan(16.5));
