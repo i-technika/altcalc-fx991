@@ -38,9 +38,9 @@ import 'screen_coordinate_root.dart';
 ///
 /// ## 크기 계약
 /// - 크기는 부모(그리드 셀)가 정한다. 제약이 무한한 축에만 [fallbackSize]의 해당 축 값을 쓴다.
-/// - 글자 크기는 [CalcTheme]의 비율 상수로 계산하되 상한([CalcTheme.keyMainLabelMaxFontSize]·
-///   [CalcTheme.keyLegendMaxFontSize], #141)을 넘지 않으며, 키패드 전체의 글자 크기를 맞추려면
-///   부모가 [legendFontSize]/[mainLabelFontSize]를 주입한다. 넘치는 라벨은 [FittedBox]로 축소한다.
+/// - 글자 크기는 [CalcTheme]의 비율 상수로 계산하며(상한은 없다 — #264, 키가 커지면 글자도 실물 비율로 커진다),
+///   키패드 전체의 글자 크기를 맞추려면 부모가 [legendFontSize]/[mainLabelFontSize]를 주입한다. 넘치는 라벨은
+///   [FittedBox]로 축소한다.
 /// - 시스템 글자 배율은 [CalcTheme.keyMaxTextScaleFactor]까지 반영하지만, 이미 폭이 꽉 찬
 ///   여러 글자 라벨은 [FittedBox]가 다시 줄이므로 사실상 공간이 남는 라벨(주로 한 글자)에만 효과가 있다.
 ///   키패드 전체를 고르게 키우려면 부모가 배율을 반영한 글자 크기를 주입한다.
@@ -118,6 +118,14 @@ class CalcKeyButton extends StatefulWidget {
   /// 키패드는 모든 구역에 함수부 띠 높이(`KeypadMetrics.legendBandHeight`)를 준다 — 숫자부 셀이 높은 몫은 키캡이 받는다(#220).
   final double? legendHeight;
 
+  /// 키캡 위 각인(SHIFT·ALPHA 각인, 원형 버튼 위 인쇄)의 줄 상자를 각인 띠 아래끝에서 올리는 거리 (dp, #264 — 실물은 각인이
+  /// 키에 붙어 있지 않다, [CalcTheme] "글자 크기 실물 대조 (#264)" 절). 키패드가 모든 키에 같은 값을 준다
+  /// (`KeypadMetrics.legendBaseLift` — 각인 기준선이 키캡 위끝에서 `legendBaselineGap`만큼 떨어지는 거리). 0이면 줄 상자를
+  /// 띠 아래끝에 붙인다(기준선은 줄 상자 깊이만큼 위). 올린 각인은 띠 위끝을 넘어 셀 위쪽 간격 몫([gapInsets]의 위)까지
+  /// 쓸 수 있다. 한 줄 아래로 넘치는 각인(#260)은 여기서 더 올리며 간격의 나머지 절반까지 쓸 수 있고, 그보다 위로는 가지
+  /// 않는다(각인마다 그 여유까지만 올린다).
+  final double legendBaseLift;
+
   /// 그린 키캡의 가로/세로 비 상한 (#220). 키캡이 이보다 납작하면 셀 가운데에 폭을 줄여 그린다
   /// ([keyCapFaceWidth] — 셀 폭의 [CalcTheme.keyCapMinWidthRatio] 아래로는 줄이지 않는다). 터치 영역은 셀 폭 그대로다.
   /// `null`이면 셀 폭 전체에 그린다. 원형 버튼과 모양([shape])이 있는 키에는 쓰지 않는다.
@@ -178,6 +186,7 @@ class CalcKeyButton extends StatefulWidget {
     this.legendFontSize,
     this.mainLabelFontSize,
     this.legendHeight,
+    this.legendBaseLift = 0,
     this.keycapMaxAspectRatio,
     this.shape,
     this.hitShape,
@@ -608,10 +617,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                   cornerRadius: cornerRadius,
                   fontSize:
                       widget.mainLabelFontSize ??
-                      math.min(
-                        capHeight * CalcTheme.keyMainLabelFontRatio,
-                        CalcTheme.keyMainLabelMaxFontSize,
-                      ),
+                      capHeight * CalcTheme.keyMainLabelFontRatio,
                   horizontalPadding:
                       faceWidth * CalcTheme.keyCapHorizontalPaddingRatio,
                   labelInsets: widget.labelInsets,
@@ -625,42 +631,53 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
     if (!hitMode && !extendToLegend) keycap = _wrapHitArea(keycap);
 
     final legendFontSize =
-        widget.legendFontSize ??
-        math.min(
-          legendHeight * CalcTheme.keyLegendFontRatio,
-          CalcTheme.keyLegendMaxFontSize,
-        );
+        widget.legendFontSize ?? legendHeight * CalcTheme.keyLegendFontRatio;
+    // 각인을 놓을 수 있는 높이 (#264) — 띠에 키 사이 세로 간격(셀 위쪽 간격 몫의 두 배)을 더한다. 키캡 사이 빈 본체는 띠와
+    // 키 사이 간격을 합친 높이이고, 각인은 그 안에서 키캡 위끝에서 띄워 인쇄한다. 띠 위로 넘는 몫은 그리기만 넘는다(셀·터치
+    // 영역은 그대로다). 키패드는 각인 글자 크기와 올리는 거리를 띠 + 간격의 절반(자기 몫, `KeypadMetrics.legendExtent`)에
+    // 맞추므로, 나머지 절반까지 가는 것은 한 줄 아래로 넘쳐 더 올리는 각인(`d/dx◼`·`∑◻◻◼`, #260)뿐이다.
+    final legendExtent =
+        legendHeight + (hitMode ? 0.0 : 2 * widget.gapInsets.top);
+    assert(widget.legendBaseLift >= 0, 'legendBaseLift는 음수일 수 없다');
+    // 각인 줄 상자를 띠 아래끝에서 올릴 거리 — 각인마다 위쪽 여유까지만 올린다([KeyLegendView.bandLifts])
+    final legendBaseLift = widget.showLegendBand ? widget.legendBaseLift : 0.0;
     final column = Column(
       children: [
         if (widget.showLegendBand)
           SizedBox(
             height: legendHeight,
             width: width,
-            child: round
-                ? _BodyPrintLabel(
-                    keyDef: widget.keyDef,
-                    fontSize: legendFontSize,
-                    textScaler: textScaler,
-                  )
-                // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭 안에 인쇄한다 (#220 R1)
-                : Center(
-                    child: SizedBox(
-                      width: faceWidth,
-                      child: _LegendRow(
-                        shiftLegend: widget.keyDef.shiftLegend,
-                        alphaLegend: widget.keyDef.alphaLegend,
-                        width: faceWidth,
-                        height: legendHeight,
-                        fontSize: legendFontSize,
-                        maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
-                        sideInset: keyLegendSideInset(
-                          faceWidth: faceWidth,
-                          cornerRadius: cornerRadius,
-                        ),
-                        textScaler: textScaler,
+            // 각인 줄은 띠 아래끝에 맞춘 채 위로 [legendExtent]까지 쓴다 (넘는 몫은 셀 위쪽 간격에 그려진다)
+            child: OverflowBox(
+              alignment: Alignment.bottomCenter,
+              minHeight: legendExtent,
+              maxHeight: legendExtent,
+              child: round
+                  ? _BodyPrintLabel(
+                      keyDef: widget.keyDef,
+                      fontSize: legendFontSize,
+                      height: legendExtent,
+                      baseLift: legendBaseLift,
+                      textScaler: textScaler,
+                    )
+                  // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭에 맞춰 인쇄하고(#220 R1, 좌우 자리는 #265), 긴 쌍만 키캡 밖
+                  // 셀 폭까지 쓴다(#264 — 실물 `Ran# RanInt`는 키캡보다 넓다).
+                  : _LegendRow(
+                      shiftLegend: widget.keyDef.shiftLegend,
+                      alphaLegend: widget.keyDef.alphaLegend,
+                      width: width,
+                      faceWidth: faceWidth,
+                      height: legendExtent,
+                      fontSize: legendFontSize,
+                      maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
+                      sideInset: keyLegendSideInset(
+                        faceWidth: faceWidth,
+                        cornerRadius: cornerRadius,
                       ),
+                      baseLift: legendBaseLift,
+                      textScaler: textScaler,
                     ),
-                  ),
+            ),
           ),
         SizedBox(height: capHeight, width: width, child: keycap),
       ],
@@ -899,39 +916,51 @@ class _ShapeClipper extends CustomClipper<Path> {
 /// `A`~`F`, `y` 등)면 짧은 쪽이 자연 폭을 먼저(띠 폭의 절반까지) 쓰고 긴 쪽이 남은 폭을 써서, 한 글자 각인은
 /// 긴 이웃 때문에 줄어들지 않는다. (`KeypadMetrics`의 폭 측정도 같은 규칙이다.)
 ///
+/// 폭 [width]는 셀 폭이다 — 각인은 그 가운데의 그린 키캡에 맞춰 놓되, 긴 각인은 키캡 밖 셀 폭까지 쓴다(#264).
 /// 가로로는 실물처럼 놓는다([CalcTheme] "각인 띠 좌우 정렬 (#265)" 절):
 /// - 각인이 하나면 키캡 가운데다.
 /// - 둘이면 SHIFT 각인은 왼쪽, ALPHA 각인은 오른쪽이고, 두 바깥 끝을 키캡 둥근 모서리 안쪽([sideInset])에 맞춘다. 두 각인의
 ///   폭과 사이 간격을 빼고 남는 폭이 모자라면 들이는 거리를 양쪽 똑같이 줄인다 — 두 각인 사이가 들이는 거리보다 좁아지지
 ///   않는 만큼만 들여, 바깥을 들이느라 두 각인이 서로 붙지 않게 한다([keyLegendPairInset]). 가장 긴 쌍(`Ran# RanInt`)은 실물처럼
-///   키캡 폭을 거의 다 쓴다. 남는 폭이 없으면 들이지 않고 위의 폭 배분대로 각인이 줄어든다 — 그래서 `KeypadMetrics`의 폭
-///   기준(키캡 폭 전체)은 그대로다.
+///   키캡보다 넓게 셀 폭까지 쓴다(키캡 폭에 들어가지 않는 쌍은 가운데에 둔 채 키캡 양옆으로 똑같이 나간다 — 들이는 거리가
+///   음수다). 셀 폭에도 들어가지 않으면 위의 폭 배분대로 각인이 줄어든다 — `KeypadMetrics`의 폭 기준도 셀 폭이다.
 ///
-/// 세로로는 띠 아래끝에 정렬해 모든 키의 각인이 기준선을 함께 쓴다(#252). 한 줄 아래로 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)이 있는
-/// 키만 실물처럼 그 잉크 아래끝이 띠 기준선에 오게, 짝 각인(`:`)과 함께 띠 높이 [height] 안에서 올린다
-/// ([KeyLegendView.bandLifts], #260 — 그리는 자리만 옮긴다. 폭 배분·줄임 배율은 그대로다).
+/// 세로로는 띠 아래끝에 정렬한 뒤 [baseLift]만큼 올려 모든 키의 각인이 기준선을 함께 쓴다(#252, 올림은 #264 — 기준선을 키캡
+/// 위끝에서 띄운다). 한 줄 아래로 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)이 있는 키만 실물처럼 그 잉크 아래끝이 그 기준선에 오게,
+/// 짝 각인(`:`)과 함께 높이 [height] 안에서 더 올린다([KeyLegendView.bandLifts], #260 — 그리는 자리만 옮긴다. 폭 배분·줄임
+/// 배율은 그대로다).
 class _LegendRow extends StatelessWidget {
   final KeyLegend? shiftLegend;
   final KeyLegend? alphaLegend;
+
+  /// 셀 폭 (dp) — 각인이 쓸 수 있는 폭
   final double width;
 
-  /// 각인 띠 높이 (dp) — 넘치는 각인을 올릴 수 있는 여유를 잰다
+  /// 그린 키캡 폭 (dp, 셀 가운데) — 각인을 맞춰 놓는 기준
+  final double faceWidth;
+
+  /// 각인을 놓을 수 있는 높이 (dp) — 각인 띠에 키 사이 세로 간격을 더한 값(#264). 각인을 올릴 수 있는 여유를 잰다
   final double height;
   final double fontSize;
   final double maxGap;
 
   /// 각인이 둘일 때 두 바깥 끝을 키캡 끝에서 들이는 거리의 상한 (dp, [keyLegendSideInset])
   final double sideInset;
+
+  /// 각인 줄 상자를 띠 아래끝에서 올리는 거리 (dp, #264 — `CalcKeyButton.legendBaseLift`)
+  final double baseLift;
   final TextScaler textScaler;
 
   const _LegendRow({
     required this.shiftLegend,
     required this.alphaLegend,
     required this.width,
+    required this.faceWidth,
     required this.height,
     required this.fontSize,
     required this.maxGap,
     required this.sideInset,
+    required this.baseLift,
     required this.textScaler,
   });
 
@@ -977,27 +1006,36 @@ class _LegendRow extends StatelessWidget {
           : naturalWidth;
     }
 
+    // 키캡 옆 여백 (셀 폭과 그린 키캡 폭의 차의 절반) — 키캡 폭에 들어가지 않는 쌍이 나갈 수 있는 자리 (#264)
+    final faceMargin = math.max(0.0, (width - faceWidth) / 2);
+    // 각인 줄(셀 폭)의 좌우 여백 = 키캡 옆 여백 + 키캡 끝에서 들이는 거리(키캡 밖으로 나가면 음수)
     final inset = both
-        ? keyLegendPairInset(
-            width: width,
-            gap: gap,
-            leftWidth: drawnWidth(shift, CalcTheme.keyShiftLabelStyle),
-            rightWidth: drawnWidth(alpha, CalcTheme.keyAlphaLabelStyle),
-            sideInset: sideInset,
-          )
+        ? faceMargin +
+              keyLegendPairInset(
+                width: faceWidth,
+                gap: gap,
+                leftWidth: drawnWidth(shift, CalcTheme.keyShiftLabelStyle),
+                rightWidth: drawnWidth(alpha, CalcTheme.keyAlphaLabelStyle),
+                sideInset: sideInset,
+                outerMargin: faceMargin,
+              )
         : 0.0;
-    final lifts = KeyLegendView.bandLifts([
-      if (shift != null)
-        (
-          shift,
-          CalcTheme.keyShiftLabelStyle.copyWith(fontSize: scaledFontSize),
-        ),
-      if (alpha != null)
-        (
-          alpha,
-          CalcTheme.keyAlphaLabelStyle.copyWith(fontSize: scaledFontSize),
-        ),
-    ], height);
+    final lifts = KeyLegendView.bandLifts(
+      [
+        if (shift != null)
+          (
+            shift,
+            CalcTheme.keyShiftLabelStyle.copyWith(fontSize: scaledFontSize),
+          ),
+        if (alpha != null)
+          (
+            alpha,
+            CalcTheme.keyAlphaLabelStyle.copyWith(fontSize: scaledFontSize),
+          ),
+      ],
+      height,
+      baseLift: baseLift,
+    );
 
     Widget legend(
       KeyLegend legend,
@@ -1089,14 +1127,17 @@ double keyLegendSideInset({
   );
 }
 
-/// 각인 띠 폭 [width]에 왼쪽 묶음(폭 [leftWidth])과 오른쪽 묶음(폭 [rightWidth])을 최소 사이 간격 [gap]으로 놓을 때 양쪽
-/// 바깥을 들이는 거리 (dp, #265). 지금은 묶음이 SHIFT 각인 하나·ALPHA 각인 하나다(모드 전용 각인과 괄호는 #266).
+/// 그린 키캡 폭 [width]에 왼쪽 묶음(폭 [leftWidth])과 오른쪽 묶음(폭 [rightWidth])을 최소 사이 간격 [gap]으로 놓을 때 양쪽
+/// 바깥 끝을 키캡 끝에서 들이는 거리 (dp, #265). 지금은 묶음이 SHIFT 각인 하나·ALPHA 각인 하나다(모드 전용 각인과 괄호는 #266).
 ///
 /// 상한 [sideInset]까지 들이되 두 가지를 넘지 않는다.
 /// - 묶음과 최소 간격을 빼고 남는 폭의 절반 — 두 묶음 사이가 [gap]보다 좁아지지 않는다.
 /// - `(남는 폭 + gap) ÷ 3` — 두 묶음 사이(`gap + 남는 폭 − 2 × 들이는 거리`)가 들이는 거리보다 좁아지지 않는다. 바깥을 들이느라
 ///   두 각인이 붙어 보이지 않게 한다(실물 `INS UNDO`도 사이가 바깥 여백보다 넓다).
-/// 남는 폭이 없으면 0이다(각인이 키캡 폭을 다 쓰고, 그래도 넘치면 각인 줄이 줄인다).
+///
+/// 남는 폭이 없으면(키캡 폭에 들어가지 않으면) 음수다 — 쌍을 키캡 가운데에 둔 채 양옆으로 똑같이 내보낸다(#264 — 실물
+/// `Ran# RanInt`는 키보다 넓다). 키캡 옆 여백 [outerMargin]보다 더 나가지는 않는다(−[outerMargin]에서 멈추고, 그래도 넘치면
+/// 각인 줄이 줄인다). [outerMargin]이 0이면(키캡이 셀 폭을 다 쓴다) 0에서 멈춘다.
 @visibleForTesting
 double keyLegendPairInset({
   required double width,
@@ -1104,12 +1145,11 @@ double keyLegendPairInset({
   required double leftWidth,
   required double rightWidth,
   required double sideInset,
+  double outerMargin = 0,
 }) {
   final spare = width - gap - leftWidth - rightWidth;
-  return math.max(
-    0.0,
-    math.min(sideInset, math.min(spare / 2, (spare + gap) / 3)),
-  );
+  if (spare < 0) return math.max(-math.max(0.0, outerMargin), spare / 2);
+  return math.min(sideInset, math.min(spare / 2, (spare + gap) / 3));
 }
 
 /// 키캡([KeyFace.keycap]) 모서리 반경 (#156) — 숫자부 키(흰 키·파란 키)는 [CalcTheme.keyCapNumberCornerRadiusRatio],
@@ -1150,35 +1190,60 @@ double keyCapFaceWidth({
 }
 
 /// 원형 버튼 키의 각인 띠 (#190) — 버튼 위 본체에 인쇄한 메인 각인을 가운데에 쓴다. 띠 폭을 넘으면 줄인다.
+/// SHIFT·ALPHA 각인처럼 띠 아래끝에서 [baseLift]만큼 올려 그린다(#264 — 높이 [height] 안에서).
 /// 원형 버튼에는 SHIFT·ALPHA 각인이 없다(#253 — 실물 MENU 위 `MENU SETUP`의 `SETUP`은 앱에서 뺐다, `CalcKeyDef` assert).
 /// 메인 각인 색은 키마다 다르다 — SHIFT 금색, ALPHA 자홍색, 나머지 흰색([CalcPalette.bodyPrintOf], #156).
 /// 키패드 글자 크기 계산(`KeypadMetrics`)도 같은 각인을 잰다.
 class _BodyPrintLabel extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;
+
+  /// 각인을 놓을 수 있는 높이 (dp) — 각인 띠에 키 사이 세로 간격을 더한 값
+  final double height;
+
+  /// 각인 줄 상자를 띠 아래끝에서 올리는 거리 (dp)
+  final double baseLift;
   final TextScaler textScaler;
 
   const _BodyPrintLabel({
     required this.keyDef,
     required this.fontSize,
+    required this.height,
+    required this.baseLift,
     required this.textScaler,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = CalcPalette.of(context);
+    final label = _legendLabel(
+      keyDef.mainLegend,
+      CalcTheme.keyBodyPrintStyle.copyWith(
+        color: palette.bodyPrintOf(keyDef.category),
+        fontSize: fontSize,
+      ),
+      textScaler,
+      snapToDrawnBaseline: true,
+    );
+    final lift = KeyLegendView.bandLifts(
+      [
+        (
+          keyDef.mainLegend,
+          CalcTheme.keyBodyPrintStyle.copyWith(
+            fontSize: textScaler.scale(fontSize),
+          ),
+        ),
+      ],
+      height,
+      baseLift: baseLift,
+    ).single;
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.bottomCenter,
-      child: _legendLabel(
-        keyDef.mainLegend,
-        CalcTheme.keyBodyPrintStyle.copyWith(
-          color: palette.bodyPrintOf(keyDef.category),
-          fontSize: fontSize,
-        ),
-        textScaler,
-        snapToDrawnBaseline: true,
-      ),
+      // 올리는 거리는 그리는 자리만 옮긴다 (SHIFT·ALPHA 각인 줄과 같다)
+      child: lift > 0
+          ? Transform.translate(offset: Offset(0, -lift), child: label)
+          : label,
     );
   }
 }
@@ -1308,11 +1373,16 @@ class _Keycap extends StatelessWidget {
                   builder: (context, color, _) {
                     final legend = keyDef.mainLegend;
                     final style = CalcTheme.keyMainLabelStyleFor(legend);
+                    final scaledFontSize = textScaler.scale(fontSize);
                     // 잉크 가운데를 키캡 면 가운데에 둔다 (#230, CalcTheme "메인 각인 세로 위치" 절)
                     return InkCenteredLabel(
                       inkCenter:
-                          mainLegendInkCenter(legend, style) *
-                          textScaler.scale(fontSize),
+                          mainLegendInkCenter(legend, style) * scaledFontSize,
+                      // 숫자부 연산 기호는 줄 상자가 아니라 잉크 높이를 상자로 본다 (#264) — 실물 비율로 키운 기호는 줄 상자가
+                      // 키캡보다 높아도 잉크는 키캡의 절반쯤이다. 줄 상자로 재면 `FittedBox`가 기호만 줄인다.
+                      boxHeight: CalcTheme.isKeyOperatorLegend(legend)
+                          ? mainLegendInkHeight(legend, style) * scaledFontSize
+                          : null,
                       child: _legendLabel(
                         legend,
                         style.copyWith(fontSize: fontSize, color: color),
@@ -1519,11 +1589,20 @@ double mainLegendInkCenter(KeyLegend legend, TextStyle style) {
   return (m.inkTop + m.inkBottom) / 2;
 }
 
+/// 메인 각인 [legend]([style]로 그린다)의 잉크 높이 — 글자 크기 대비 (#264). 잉크 범위 표(`KeyLegendView.glyphInk`)로 잰
+/// [KeyLegendView.emMetrics]의 위끝·아래끝 차다. 숫자부 연산 기호의 상자 높이([InkCenteredLabel.boxHeight])와 키패드의 높이
+/// 기준(`KeypadMetrics` — 기호 잉크가 키캡 안쪽 높이에 들어가는 크기)이 함께 쓴다.
+double mainLegendInkHeight(KeyLegend legend, TextStyle style) {
+  final m = KeyLegendView.emMetrics(legend, style);
+  return math.max(0.0, m.inkTop - m.inkBottom);
+}
+
 /// 각인 라벨([child] — `Text` 또는 [KeyLegendView])을 기준선 위 [inkCenter](dp) 높이가 자기 상자의 세로 가운데에 오도록
 /// 옮겨 그린다 (#230).
 ///
 /// 크기는 [child] 그대로라 감싸는 `Center`·`FittedBox`의 배치(글자 줄이기 포함)는 바뀌지 않고, 그 상자 안에서 [child]만
-/// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). 옮기는 거리는 [child]가 글자를 실제로 그리는 기준선으로
+/// 위아래로 옮긴다(`FittedBox`가 줄이면 옮긴 거리도 함께 준다). [boxHeight]를 주면 상자 높이만 그 값으로 줄인다(#264 —
+/// [child]는 [inkCenter]를 가운데에 둔 채 상자 위아래로 넘쳐 그려진다. 줄 상자가 잉크보다 훨씬 높은 연산 기호에 쓴다). 옮기는 거리는 [child]가 글자를 실제로 그리는 기준선으로
 /// 정한다 — 줄 상자 높이(글자 크기를 반올림한 정수 dp)·줄 상자 안 기준선 위치(#252부터 [keyLabelStrut]이 줄 간격 배분을
 /// 고정해 약 0.785em — 그 전에는 앱 테마의 `TextLeadingDistribution.even`을 받은 `Text`만 약 0.888em이었다)·2차원 각인의 큰
 /// 상자와 상관없이 [inkCenter] 높이가 정확히 가운데에 온다.
@@ -1538,37 +1617,65 @@ class InkCenteredLabel extends SingleChildRenderObjectWidget {
   /// 상자 세로 가운데에 둘 높이 — 자식 기준선 위 거리 (dp, 글자 배율 반영)
   final double inkCenter;
 
+  /// 상자 높이 상한 (dp, 글자 배율 반영, #264). `null`이면 자식 높이 그대로다. 자식보다 낮으면 상자만 낮아지고 자식은
+  /// [inkCenter]를 상자 가운데에 둔 채 위아래로 넘쳐 그려진다.
+  final double? boxHeight;
+
   const InkCenteredLabel({
     super.key,
     required this.inkCenter,
+    this.boxHeight,
     required Widget super.child,
   });
 
   @override
   RenderInkCenteredLabel createRenderObject(BuildContext context) =>
-      RenderInkCenteredLabel(inkCenter);
+      RenderInkCenteredLabel(inkCenter, boxHeight);
 
   @override
   void updateRenderObject(
     BuildContext context,
     RenderInkCenteredLabel renderObject,
   ) {
-    renderObject.inkCenter = inkCenter;
+    renderObject
+      ..inkCenter = inkCenter
+      ..boxHeight = boxHeight;
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DoubleProperty('inkCenter', inkCenter));
+    properties
+      ..add(DoubleProperty('inkCenter', inkCenter))
+      ..add(DoubleProperty('boxHeight', boxHeight, defaultValue: null));
   }
 }
 
-/// [InkCenteredLabel]의 렌더 객체 — 크기는 자식 크기이고, 자식을 세로로만 옮겨 둔다.
+/// [InkCenteredLabel]의 렌더 객체 — 크기는 자식 크기(높이는 [boxHeight]까지)이고, 자식을 세로로만 옮겨 둔다.
 class RenderInkCenteredLabel extends RenderShiftedBox {
-  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 [_inkCenter](dp)로 만든다.
-  RenderInkCenteredLabel(this._inkCenter) : super(null);
+  /// 상자 세로 가운데에 둘 자식 기준선 위 높이 [_inkCenter](dp)와 상자 높이 상한 [_boxHeight](dp)로 만든다.
+  RenderInkCenteredLabel(this._inkCenter, [this._boxHeight]) : super(null);
 
   double _inkCenter;
+  double? _boxHeight;
+
+  /// 상자 높이 상한 (dp) — `null`이면 자식 높이 그대로
+  double? get boxHeight => _boxHeight;
+  set boxHeight(double? value) {
+    if (value == _boxHeight) return;
+    _boxHeight = value;
+    markNeedsLayout();
+  }
+
+  /// 자식 크기 [childSize]에서 정한 상자 크기 — 높이만 [boxHeight]로 줄인다
+  Size _boxSize(BoxConstraints constraints, Size childSize) {
+    final limit = _boxHeight;
+    return constraints.constrain(
+      limit == null
+          ? childSize
+          : Size(childSize.width, math.min(childSize.height, limit)),
+    );
+  }
 
   /// 상자 세로 가운데에 둘 자식 기준선 위 높이 (dp)
   double get inkCenter => _inkCenter;
@@ -1590,8 +1697,12 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
   }
 
   @override
-  Size computeDryLayout(covariant BoxConstraints constraints) =>
-      child?.getDryLayout(constraints) ?? constraints.smallest;
+  Size computeDryLayout(covariant BoxConstraints constraints) {
+    final child = this.child;
+    return child == null
+        ? constraints.smallest
+        : _boxSize(constraints, child.getDryLayout(constraints));
+  }
 
   @override
   double? computeDryBaseline(
@@ -1602,9 +1713,10 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
     if (child == null) return null;
     final result = child.getDryBaseline(constraints, baseline);
     if (result == null) return null;
-    final height = constraints
-        .constrain(child.getDryLayout(constraints))
-        .height;
+    final height = _boxSize(
+      constraints,
+      child.getDryLayout(constraints),
+    ).height;
     final alphabetic = baseline == TextBaseline.alphabetic
         ? result
         : child.getDryBaseline(constraints, TextBaseline.alphabetic);
@@ -1619,7 +1731,7 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
       return;
     }
     child.layout(constraints, parentUsesSize: true);
-    size = constraints.constrain(child.size);
+    size = _boxSize(constraints, child.size);
     final dy = _shiftFor(
       child,
       size.height,

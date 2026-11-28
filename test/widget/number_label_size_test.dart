@@ -12,8 +12,9 @@ import 'package:material_ui/material_ui.dart';
 import '../support/bundled_fonts.dart';
 import '../support/ttf_cmap.dart';
 
-/// 숫자부 메인 각인 크기 (#225, [CalcTheme] "숫자부 메인 각인 크기 (#225)" 절):
-/// - 숫자는 숫자부 키캡 높이의 비율이고, 두 구역의 글자/키캡 비가 실물의 같은 배수다.
+/// 숫자부 메인 각인 크기 (#225, [CalcTheme] "숫자부 메인 각인 크기 (#225)" 절 — 크기 비율은 #264 "글자 크기 실물 대조" 절):
+/// - 숫자는 숫자부 키캡 높이의 비율이고, 숫자/키캡 비가 실물과 같다(#264). 함수부 대문자는 가장 긴 각인이 키캡 폭에 걸려
+///   실물 비보다 조금 작다.
 /// - 글자 각인(DEL·AC·Ans·×10ˣ)은 숫자의 0.83배, 연산 기호(× ÷ + − =)는 Noto Sans Mono Medium을 숫자의 1.41배로 그리고, 잉크 가운데가
 ///   숫자의 잉크 가운데와 같은 높이다(둘 다 키캡 면 가운데 — #230, `main_legend_ink_center_test.dart`).
 /// - 글자 배율 1.0·1.3·2.0에서 숫자부 각인은 따로 줄지 않는다.
@@ -198,22 +199,18 @@ void main() {
       }
     });
 
-    test('실물 크기 키패드(480×640)의 숫자 글자를 올림한 값이 숫자 상한이다 (함수부 상한 16.5와 같은 기준)', () {
-      final m = KeypadMetrics.compute(
-        const Size(480, 640),
-        TextScaler.noScaling,
-      );
-      expect(
-        m.mainLabelFontSize,
-        closeTo(CalcTheme.keyMainLabelMaxFontSize, 0.1),
-      );
-      expect(
-        m.numberMainLabelFontSize,
-        inInclusiveRange(
-          CalcTheme.keyNumberMainLabelMaxFontSize - 0.1,
-          CalcTheme.keyNumberMainLabelMaxFontSize,
-        ),
-      );
+    test('키패드가 커져도 숫자 / 숫자 키캡 비는 그대로다 (#264 — 상한 없음)', () {
+      for (final area in const [Size(480, 640), Size(960, 1280)]) {
+        final m = KeypadMetrics.compute(area, TextScaler.noScaling);
+        expect(
+          m.numberMainLabelFontSize,
+          closeTo(
+            m.numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
+            0.01,
+          ),
+          reason: '$area',
+        );
+      }
     });
   });
 
@@ -232,39 +229,33 @@ void main() {
     ];
 
     for (final (size, padding) in cases) {
-      testWidgets('$size·글자 배율 1.0: 숫자 / 숫자 키캡과 함수부 대문자 / 함수 키캡이 실물의 같은 배수다', (
-        tester,
-      ) async {
-        await _pumpScreen(tester, size, padding);
-        final m = _drawnMetrics(tester, 1.0);
-        // 상한에 걸린 큰 키(태블릿)는 글자가 실물 크기 키패드에서 멈추므로 비를 보지 않는다
-        if (m.mainLabelFontSize >= CalcTheme.keyMainLabelMaxFontSize - 1e-6) {
-          expect(
-            m.numberMainLabelFontSize,
-            CalcTheme.keyNumberMainLabelMaxFontSize,
-          );
-          return;
-        }
-        final digitInk = readGlyphYBounds(saira, '7'.runes.single)!.yMax;
-        final upperInk = readGlyphYBounds(saira, 'E'.runes.single)!.yMax;
-        final numberCap = tester.getSize(_keycap(CalcKeyId.num7)).height;
-        final functionCap = tester.getSize(_keycap(CalcKeyId.calc)).height;
-        final number =
-            m.numberMainLabelFontSize *
-            digitInk /
-            numberCap /
-            _photoDigitPerNumberCap;
-        final function =
-            m.mainLabelFontSize *
-            upperInk /
-            functionCap /
-            _photoUpperPerFunctionCap;
-        expect(
-          number / function,
-          closeTo(1.0, 0.04),
-          reason: '$number / $function',
-        );
-      });
+      testWidgets(
+        '$size·글자 배율 1.0: 숫자 / 숫자 키캡은 실물 비, 함수부 대문자 / 함수 키캡은 실물 비의 0.7~1배다 (#264)',
+        (tester) async {
+          await _pumpScreen(tester, size, padding);
+          final m = _drawnMetrics(tester, 1.0);
+          final digitInk = readGlyphYBounds(saira, '7'.runes.single)!.yMax;
+          final upperInk = readGlyphYBounds(saira, 'E'.runes.single)!.yMax;
+          final numberCap = tester.getSize(_keycap(CalcKeyId.num7)).height;
+          final functionCap = tester.getSize(_keycap(CalcKeyId.calc)).height;
+          final number =
+              m.numberMainLabelFontSize *
+              digitInk /
+              numberCap /
+              _photoDigitPerNumberCap;
+          final function =
+              m.mainLabelFontSize *
+              upperInk /
+              functionCap /
+              _photoUpperPerFunctionCap;
+          // 숫자: 실물과 같다 (그린 키캡은 눌림 여유 1dp만큼 낮아 낮은 키캡일수록 비가 조금 크다)
+          expect(number, closeTo(1.0, 0.06), reason: '$number');
+          // 함수부: 가장 긴 OPTN이 키캡 폭에 걸리면 실물보다 작다 — 그래도 #264 전(약 0.62배)보다 크다
+          expect(function, inInclusiveRange(0.7, 1.0), reason: '$function');
+          // 숫자가 함수부 글자보다 크다
+          expect(m.numberMainLabelFontSize, greaterThan(m.mainLabelFontSize));
+        },
+      );
 
       for (final scale in [1.0, 1.3, 2.0]) {
         testWidgets(
@@ -364,11 +355,21 @@ void main() {
               TextScaler.linear(scale),
               arrangement: arrangement,
             );
-            // 숫자는 키캡 높이 목표 그대로다(폭 기준·높이 기준 어느 쪽에도 묶이지 않는다)
+            // 숫자는 키캡 높이 목표를 키캡 안쪽 높이에 맞춘 크기 그대로다 — 폭 기준에는 묶이지 않는다. (#264에서 목표를 실물
+            // 비율로 올린 뒤로, 글자 배율 1.3이나 낮은 키캡에서는 줄 상자가 키캡 안쪽 높이에 걸린다.)
             expect(
               m.numberMainLabelFontSize,
               closeTo(
-                m.numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
+                KeypadMetrics.fitToHeight(
+                  m.numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
+                  maxHeight:
+                      m.numberCapHeight -
+                      CalcTheme.keyPressedOffset -
+                      2 * CalcTheme.keyBorderWidth,
+                  textScaler: TextScaler.linear(scale),
+                  style: CalcTheme.keyMainLabelStyle,
+                  tallLegends: const [],
+                ),
                 1e-6,
               ),
             );
@@ -415,21 +416,23 @@ void main() {
       }
     }
 
-    // CalcTheme "숫자부 메인 각인 크기" 절 4 — 키캡 폭 하한을 풀지 않는 근거: 함수부 글자가 키캡 폭에 가장 많이 묶이는
-    // 넓은 배열의 낮은 키패드에서도 배율 1.3의 글자가 배율 1.0보다 1.14배 이상 크다
+    // CalcTheme "글자 크기 실물 대조 (#264)" 절 7 — 함수부 메인 글자는 배율 1.0에서 이미 키캡 폭에 걸려, 배율을 올려도
+    // 그리는 크기가 줄지는 않지만 더 커지지도 않는다(넓은 배열의 낮은 키패드 포함)
     for (final size in const [Size(320, 103.6), Size(400, 129.4)]) {
-      test('키패드 $size(wide): 배율 1.3의 함수부 메인 글자가 배율 1.0의 1.14배 이상이다', () {
-        KeypadMetrics at(double scale) => KeypadMetrics.compute(
-          size,
-          TextScaler.linear(scale),
-          arrangement: KeypadArrangement.wide,
-        );
-        final ratio =
-            at(1.3).mainLabelFontSize * 1.3 / at(1.0).mainLabelFontSize;
-        expect(ratio, greaterThanOrEqualTo(1.14));
-        // 키캡 폭에 실제로 묶인다 — 묶이지 않으면 이 근거가 필요 없다
-        expect(ratio, lessThan(1.3));
-      });
+      test(
+        '키패드 $size(wide): 배율 1.3의 함수부 메인 글자는 배율 1.0보다 작지 않고, 배율만큼 커지지는 않는다',
+        () {
+          KeypadMetrics at(double scale) => KeypadMetrics.compute(
+            size,
+            TextScaler.linear(scale),
+            arrangement: KeypadArrangement.wide,
+          );
+          final ratio =
+              at(1.3).mainLabelFontSize * 1.3 / at(1.0).mainLabelFontSize;
+          expect(ratio, greaterThanOrEqualTo(1.0 - 1e-3));
+          expect(ratio, lessThan(1.3));
+        },
+      );
     }
   });
 }

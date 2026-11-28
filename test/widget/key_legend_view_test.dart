@@ -242,6 +242,54 @@ void main() {
           expect(KeyLegendView.bandLifts(const [], fontSize * 3), isEmpty);
         });
 
+        test(
+          '글자 크기 $fontSize: baseLift를 주면 넘치는 각인이 없는 키도 그만큼 올리고, 넘치는 각인은 올린 기준선에서 '
+          '다시 올린다 (#264)',
+          () {
+            final sin = keyDefOf(CalcKeyId.sin);
+            final (ascent, descent) = line();
+            // 키패드가 올리는 거리를 정할 때 쓰는 줄 상자 깊이는 그린 크기의 줄 상자에서 잰 값이다
+            expect(
+              KeyLegendView.lineDepthAt(shiftStyle, fontSize),
+              moreOrLessEquals(descent, epsilon: 1e-9),
+            );
+            // 여유가 넉넉하면 글자 각인·2차원 각인 모두 baseLift만큼 올린다 — 기준선이 함께 올라간다
+            final level = KeyLegendView.bandLifts(
+              [(sin.shiftLegend!, shiftStyle), (sin.alphaLegend!, alphaStyle)],
+              fontSize * 3,
+              baseLift: 2,
+            );
+            expect(level[0], moreOrLessEquals(2, epsilon: 1e-9));
+            expect(level[1], moreOrLessEquals(2, epsilon: 1e-9));
+            // 넘치는 각인이 있는 키: 잉크 아래끝이 올린 기준선에 온다 — baseLift 없이 올리던 거리에 baseLift를 더한 만큼
+            final inkDepth =
+                -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
+                fontSize;
+            final raised = KeyLegendView.bandLifts(
+              [(derivative, shiftStyle), (colon, alphaStyle)],
+              fontSize * 4,
+              baseLift: 2,
+            );
+            expect(raised[0], moreOrLessEquals(2 + descent, epsilon: 1e-9));
+            expect(raised[1], moreOrLessEquals(2 + inkDepth, epsilon: 1e-9));
+            // 위쪽 여유가 모자라면 그 여유까지만 올린다 (각인이 높이 밖으로 나가지 않는다)
+            final tight = KeyLegendView.bandLifts(
+              [(sin.alphaLegend!, alphaStyle)],
+              ascent + descent + 0.5,
+              baseLift: 2,
+            );
+            expect(tight.single, moreOrLessEquals(0.5, epsilon: 1e-9));
+            // baseLift가 0이면 예전과 같다
+            expect(
+              KeyLegendView.bandLifts([
+                (sin.shiftLegend!, shiftStyle),
+                (sin.alphaLegend!, alphaStyle),
+              ], fontSize * 3),
+              [0.0, 0.0],
+            );
+          },
+        );
+
         test('글자 크기 $fontSize: 띠에 여유가 있으면 넘치는 각인의 잉크 아래끝이 띠 기준선에 오고, '
             '짝 각인은 기준선이 같아지게 띄운다', () {
           expect(colon.plainText, ':');
@@ -352,11 +400,10 @@ void main() {
       // - 고른 크기에서 모든 2차원 각인의 실제 높이 ≤ 띠(키캡 안쪽) 높이 — FittedBox가 높이 때문에 줄이지 않는다(#155 R2).
       // - 잉크 높이를 넣어 #155 이전(한 줄 높이만)보다 작아졌다면, 이전 크기에서는 어떤 각인이 실제로 넘친다
       //   — 높이 측정이 불필요하게 다른 키 글자를 줄이지 않는다(#155 R1).
-      for (final (style, ratio, maxFont, legends) in [
+      for (final (style, ratio, legends) in [
         (
           CalcTheme.keyShiftLabelStyle,
           CalcTheme.keyLegendFontRatio,
-          CalcTheme.keyLegendMaxFontSize,
           [
             for (final (k, l, _) in _twoDimensional())
               if (!identical(l, k.mainLegend)) l,
@@ -365,7 +412,6 @@ void main() {
         (
           CalcTheme.keyMainLabelStyle,
           CalcTheme.keyMainLabelFontRatio,
-          CalcTheme.keyMainLabelMaxFontSize,
           [
             for (final (k, l, _) in _twoDimensional())
               if (identical(l, k.mainLegend)) l,
@@ -397,10 +443,7 @@ void main() {
                       math.min(CalcTheme.keyPressedOffset, box) -
                       2 * CalcTheme.keyBorderWidth
                 : box;
-            final start = math.max(
-              minFittedFontSize,
-              math.min(box * ratio, maxFont),
-            );
+            final start = math.max(minFittedFontSize, box * ratio);
             final withInk = KeypadMetrics.fitToHeight(
               start,
               maxHeight: max,

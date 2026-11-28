@@ -90,6 +90,13 @@ class KeypadMetrics {
   /// 키패드 전체에 통일해 주입하는 각인 글자 크기 (배율 반영 전, dp)
   final double legendFontSize;
 
+  /// 키캡 위 각인의 줄 상자를 각인 띠 아래끝에서 올리는 거리 (dp, 글자 배율 반영, #264) — 모든 키에 같은 값을 주어
+  /// ([CalcKeyButton.legendBaseLift]) 기준선이 한 줄이다(#252). 각인 기준선이 키캡 위끝에서 [legendBaselineGap]만큼 떨어지는
+  /// 거리(목표 − 줄 상자 깊이)이되, 가장 높은 각인(2차원 각인 포함)이 각인이 쓸 수 있는 높이([legendExtent])를 넘지 않는
+  /// 만큼이다 — 글자 배율이 커서 각인이 높아지면 덜 올린다. 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`, #260)은 키 버튼이 여기서
+  /// 더 올린다(키 사이 간격 전체까지).
+  final double legendBaseLift;
+
   /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
   final double mainLabelFontSize;
 
@@ -126,6 +133,7 @@ class KeypadMetrics {
     required this.functionRowHeight,
     required this.numberRowHeight,
     required this.legendFontSize,
+    required this.legendBaseLift,
     required this.mainLabelFontSize,
     required this.numberMainLabelFontSize,
     required this.numberWordLabelFontSize,
@@ -211,6 +219,16 @@ class KeypadMetrics {
   /// 각인 띠 높이 (dp) — 함수부 셀 높이 × [CalcTheme.keyLegendHeightRatio]. 숫자부 키도 같은 높이다(#220 — 실물처럼
   /// 숫자부 셀이 높은 몫은 키캡이 받는다, [CalcTheme] "키캡 크기 (#220)" 절).
   double get legendBandHeight => _legendBandHeightOf(functionKeyHeight);
+
+  /// 키캡 위 각인의 기준선을 키캡 위끝에서 띄우는 거리의 목표 (dp, #264) — 함수부 행 높이 ×
+  /// [CalcTheme.keyLegendBaselineGapRatio]. 실제로 올리는 거리는 [legendBaseLift]다.
+  double get legendBaselineGap =>
+      functionRowHeight * CalcTheme.keyLegendBaselineGapRatio;
+
+  /// 키캡 위 각인이 쓸 수 있는 높이 (dp, #264) — 각인 띠에 셀 위쪽 간격 몫(키 사이 세로 간격의 절반)을 더한 값이다.
+  /// 글자 크기의 높이 기준과 [legendBaseLift]가 이 높이로 잰다. 한 줄 아래로 넘치는 각인을 더 올릴 때만(#260) 키 버튼이
+  /// 간격의 나머지 절반까지 쓴다.
+  double get legendExtent => legendBandHeight + verticalGap / 2;
 
   /// 상단 조작부·함수부 키캡 높이 (각인 띠 아래, 눌림 여유 포함, dp)
   double get functionCapHeight =>
@@ -423,6 +441,17 @@ class KeypadMetrics {
     tallLegends: tallLegends,
   );
 
+  /// 숫자부 연산 기호 메인 각인 가운데 가장 높은 잉크 (글자 크기 대비, #264) — 기호 글자 크기의 높이 기준이다
+  /// ([mainLegendInkHeight], 잉크 범위 표 `KeyLegendView.glyphInk`).
+  static double get _tallestOperatorInkEm => [
+    for (final def in allKeys)
+      if (CalcTheme.isKeyOperatorLegend(def.mainLegend))
+        mainLegendInkHeight(
+          def.mainLegend,
+          CalcTheme.keyNumberOperatorLabelStyle,
+        ),
+  ].reduce(math.max);
+
   static double _fitToHeight(
     double fontSize, {
     required double maxHeight,
@@ -443,19 +472,21 @@ class KeypadMetrics {
   /// ## 글자 크기 통일
   /// 각인·메인 라벨 글자 크기를 각각 하나로 정해 모든 키에 주입한다. 배율은 [CalcKeyButton]과 같이
   /// [CalcTheme.keyMaxTextScaleFactor]까지 반영하며, 다음 순서로 정한다.
-  /// 1. **높이 기준**: 함수부 셀 높이에서 [CalcKeyButton]과 같은 비율로 구한 크기를, 배율을 반영해도
-  ///    각인 띠·키캡 안쪽 높이를 넘지 않도록 줄인다. 큰 키(태블릿)에서는 [CalcTheme.keyMainLabelMaxFontSize]·
-  ///    [CalcTheme.keyLegendMaxFontSize]에서 멈춘다(#141). 폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는
-  ///    이 높이 기준보다 커지지 않는다.
-  /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 모든 라벨이 자기 키의 그린 키캡 폭
-  ///    (#220 — 원형 버튼의 각인 줄은 셀 폭)에 들어가는 크기까지 줄인다. 그래서 대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
+  /// 1. **높이 기준**: 함수부 셀 높이에서 [CalcKeyButton]과 같은 비율(실물 비율, [CalcTheme] "글자 크기 실물 대조 (#264)"
+  ///    절)로 구한 크기를, 배율을 반영해도 각인이 쓸 수 있는 높이([legendExtent])·키캡 안쪽 높이를 넘지 않도록 줄인다.
+  ///    글자 크기 상한은 없다(#264, 사용자 결정 — 키가 커지면 글자도 실물 비율로 커진다. #141의 상한을 없앴다).
+  ///    폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는 이 높이 기준보다 커지지 않는다.
+  /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 메인 라벨은 자기 키의 그린 키캡 폭(#220)에,
+  ///    키캡 위 각인은 셀 폭(#264 — 긴 각인 쌍은 실물처럼 키캡보다 넓게 인쇄한다)에 들어가는 크기까지 줄인다. 그래서
+  ///    대부분의 키는 `FittedBox`가 따로 줄이지 않고 같은 크기로 그려진다.
   /// 3. **하한**: 긴 라벨 몇 개 때문에 전체가 지나치게 작아지지 않도록, 높이 기준의
   ///    [CalcTheme.keypadUniformFontMinRatio]배 아래로는 내리지 않는다. 이보다 긴 라벨만
   ///    `FittedBox`가 개별로 줄인다.
   /// 4. **숫자부 메인 라벨** (#156·#225): 1~3으로 정한 메인 크기는 상단 조작부·함수부 키에 쓴다. 숫자부 숫자는 숫자부
   ///    키캡 높이 × [CalcTheme.keyNumberMainLabelFontRatio]를 목표로 키캡 높이·숫자 폭에 들어가게 줄이고(함수부 크기
   ///    아래로는 내리지 않는다), 글자 각인·연산 기호는 그 숫자 크기의 배수를 목표로 각각 키캡 높이·자기 폭에 맞춘다
-  ///    ([numberMainLabelFontSize]·[numberWordLabelFontSize]·[numberOperatorLabelFontSize]).
+  ///    ([numberMainLabelFontSize]·[numberWordLabelFontSize]·[numberOperatorLabelFontSize]). 연산 기호의 높이는 줄 상자가
+  ///    아니라 잉크로 잰다(#264 — 기호 잉크는 글자 크기의 절반쯤이라, 줄 상자로 재면 숫자보다 훨씬 작아진다).
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
   factory KeypadMetrics.compute(
@@ -509,17 +540,12 @@ class KeypadMetrics {
       ),
     );
 
-    // 1. 높이 기준 — 큰 키에서도 상한에서 멈춘다 (#141). 가장 높은 각인(분수 등 2차원 각인, #155)까지
+    // 1. 높이 기준 — 실물 비율이고 상한은 없다 (#264). 가장 높은 각인(분수 등 2차원 각인, #155)까지
     //    띠·키캡 안에 들어가게 한다.
+    // 각인은 띠에 셀 위쪽 간격 몫을 더한 높이까지 쓴다 (#264 — CalcKeyButton의 각인 줄과 같다)
     final legendByHeight = _fitToHeight(
-      math.max(
-        minFittedFontSize,
-        math.min(
-          legendHeight * CalcTheme.keyLegendFontRatio,
-          CalcTheme.keyLegendMaxFontSize,
-        ),
-      ),
-      maxHeight: legendHeight,
+      math.max(minFittedFontSize, legendHeight * CalcTheme.keyLegendFontRatio),
+      maxHeight: legendHeight + verticalGap / 2,
       textScaler: scaler,
       style: CalcTheme.keyShiftLabelStyle,
       tallLegends: limits.tallLegends,
@@ -530,13 +556,7 @@ class KeypadMetrics {
         math.min(CalcTheme.keyPressedOffset, capHeight) -
         2 * CalcTheme.keyBorderWidth;
     final mainByHeight = _fitToHeight(
-      math.max(
-        minFittedFontSize,
-        math.min(
-          capHeight * CalcTheme.keyMainLabelFontRatio,
-          CalcTheme.keyMainLabelMaxFontSize,
-        ),
-      ),
+      math.max(minFittedFontSize, capHeight * CalcTheme.keyMainLabelFontRatio),
       maxHeight: capInnerHeight,
       textScaler: scaler,
       style: CalcTheme.keyMainLabelStyle,
@@ -563,31 +583,36 @@ class KeypadMetrics {
         numberCapHeight -
         math.min(CalcTheme.keyPressedOffset, numberCapHeight) -
         2 * CalcTheme.keyBorderWidth;
+    // [inkHeightEm]을 주면 높이를 줄 상자가 아니라 그 잉크 높이(글자 크기 대비)로 잰다 — 연산 기호 (#264)
     double fitNumber(
       double target, {
       required double floor,
       required double maxScaledByWidth,
       required TextStyle style,
       List<KeyLegendEmMetrics> tallLegends = const [],
+      double? inkHeightEm,
     }) => math.max(
       floor,
       fitFontSize(
-        _fitToHeight(
-          math.max(minFittedFontSize, target),
-          maxHeight: numberCapInnerHeight,
-          textScaler: scaler,
-          style: style,
-          tallLegends: tallLegends,
-        ),
+        inkHeightEm == null
+            ? _fitToHeight(
+                math.max(minFittedFontSize, target),
+                maxHeight: numberCapInnerHeight,
+                textScaler: scaler,
+                style: style,
+                tallLegends: tallLegends,
+              )
+            : fitFontSize(
+                math.max(minFittedFontSize, target),
+                textScaler: scaler,
+                fits: (scaled) => scaled * inkHeightEm <= numberCapInnerHeight,
+              ),
         textScaler: scaler,
         fits: (scaled) => scaled <= maxScaledByWidth,
       ),
     );
     final numberMainLabelFontSize = fitNumber(
-      math.min(
-        numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
-        CalcTheme.keyNumberMainLabelMaxFontSize,
-      ),
+      numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
       floor: mainLabelFontSize,
       maxScaledByWidth: widths.numberMain,
       style: CalcTheme.keyMainLabelStyle,
@@ -604,6 +629,30 @@ class KeypadMetrics {
       floor: numberMainLabelFontSize,
       maxScaledByWidth: widths.numberOperator,
       style: CalcTheme.keyNumberOperatorLabelStyle,
+      inkHeightEm: _tallestOperatorInkEm,
+    );
+
+    // 키캡 위 각인을 띠 아래끝에서 올리는 거리 (#264) — 기준선을 키캡 위끝에서 목표만큼 띄우되, 가장 높은 각인(2차원 각인
+    // 포함)이 쓸 수 있는 높이 안에 남는 만큼만. 모든 키가 같은 거리라 기준선이 한 줄이다.
+    final legendFontSize = unify(legendByHeight, widths.legend);
+    final scaledLegendFontSize = scaler.scale(legendFontSize);
+    const legendStyle = CalcTheme.keyShiftLabelStyle;
+    final legendBaseLift = math.max(
+      0.0,
+      math.min(
+        functionRowHeight * CalcTheme.keyLegendBaselineGapRatio -
+            KeyLegendView.lineDepthAt(legendStyle, scaledLegendFontSize),
+        legendHeight +
+            verticalGap / 2 -
+            KeyLegendView.tallestAt(
+              [
+                KeyLegendView.emMetrics(const LegendText(' '), legendStyle),
+                ...limits.tallLegends,
+              ],
+              legendStyle,
+              scaledLegendFontSize,
+            ),
+      ),
     );
 
     return KeypadMetrics._(
@@ -615,7 +664,8 @@ class KeypadMetrics {
       sectionGap: sectionGap,
       functionRowHeight: functionRowHeight,
       numberRowHeight: numberRowHeight,
-      legendFontSize: unify(legendByHeight, widths.legend),
+      legendFontSize: legendFontSize,
+      legendBaseLift: legendBaseLift,
       mainLabelFontSize: mainLabelFontSize,
       numberMainLabelFontSize: numberMainLabelFontSize,
       numberWordLabelFontSize: numberWordLabelFontSize,
@@ -747,9 +797,9 @@ class _LabelLimits {
       // 두 폭의 합이 띠 폭 이하여야 하고, 짧은 쪽이 우선 배분을 받으면 절반 이하여야 한다.
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
-      // 각인 띠 폭은 그린 키캡 폭이다 (#220 R1 — 실물처럼 각인이 키캡 폭 안에 놓인다).
-      // 각인 둘의 바깥 끝을 들이는 거리(#265)는 떼어 두지 않는다 — 긴 쌍은 실물처럼 들이는 거리를 줄여 키캡 폭을 다 쓴다
-      // (`keyLegendPairInset`). 각인 글자를 키울 때(#264) 폭 기준을 어디에 둘지 다시 정한다.
+      // 각인이 쓸 수 있는 폭은 셀 폭이다 (#264) — 각인은 그린 키캡에 맞춰 놓되(#220 R1, 좌우 자리 #265), 긴 각인은 실물
+      // `Ran# RanInt`처럼 키캡 밖 셀 폭까지 쓴다. 각인 둘의 바깥 끝을 들이는 거리(#265)는 떼어 두지 않는다 — 긴 쌍은 들이는
+      // 거리를 줄인다(`keyLegendPairInset`). 사이 간격 상한은 그린 키캡 폭 기준이다(CalcKeyButton과 같다).
       final shift = def.shiftLegend;
       final alpha = def.alphaLegend;
       if (shift == null && alpha == null) continue;
@@ -757,12 +807,12 @@ class _LabelLimits {
         final (text, style) = shift != null
             ? (shift, CalcTheme.keyShiftLabelStyle)
             : (alpha!, CalcTheme.keyAlphaLabelStyle);
-        legend = math.min(legend, capWidth / _emWidth(text, style));
+        legend = math.min(legend, width / _emWidth(text, style));
         continue;
       }
       final usable = math.max(
         0.0,
-        capWidth - capWidth * CalcTheme.keyLegendGapMaxWidthRatio,
+        width - capWidth * CalcTheme.keyLegendGapMaxWidthRatio,
       );
       final shiftEm = _emWidth(shift, CalcTheme.keyShiftLabelStyle);
       final alphaEm = _emWidth(alpha, CalcTheme.keyAlphaLabelStyle);
@@ -977,6 +1027,8 @@ class _KeypadBody extends StatelessWidget {
       mainLabelFontSize: metrics.mainLabelFontSizeOf(def),
       // 모든 구역이 함수부와 같은 각인 띠, 구역별 키캡 가로/세로 비 상한 (#220)
       legendHeight: metrics.legendBandHeight,
+      // 각인 기준선을 키캡 위끝에서 띄운다 (#264)
+      legendBaseLift: metrics.legendBaseLift,
       keycapMaxAspectRatio: KeypadMetrics.keycapMaxAspectRatioOf(def.id),
       focusable: def.id == settingsKey,
       gapInsets: gapInsets,

@@ -669,21 +669,34 @@ void main() {
         return tester.getRect(find.text('7')).height;
       }
 
-      // 두 크기 모두 글자 크기 상한(#141) 아래다(키캡 높이 × 비율: 약 7.3·14.5dp).
+      // 글자 크기는 키캡 높이 × 비율이다(약 10.7·21.4dp).
       final small = await renderedHeight(const Size(20, 24));
       final large = await renderedHeight(const Size(40, 48));
       // 텍스트 줄 높이는 픽셀 단위로 반올림되므로 1dp 오차를 허용한다.
       expect(large, closeTo(small * 2, 1.0));
     });
 
-    testWidgets('키가 아주 커져도 라벨 글자는 상한에서 멈춘다 (#141)', (tester) async {
+    testWidgets('키가 아주 커져도 라벨 글자는 키캡 높이의 비율 그대로다 (#264 — #141의 상한은 없앴다)', (
+      tester,
+    ) async {
       for (final size in const [Size(80, 96), Size(200, 240)]) {
         await tester.pumpWidget(
           _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.num7)), size: size),
         );
+        final capHeight = size.height * (1 - CalcTheme.keyLegendHeightRatio);
         expect(
           tester.widget<Text>(find.text('7')).style?.fontSize,
-          CalcTheme.keyMainLabelMaxFontSize,
+          moreOrLessEquals(capHeight * CalcTheme.keyMainLabelFontRatio),
+          reason: '$size',
+        );
+        // 각인도 띠 높이의 비율 그대로다
+        expect(
+          tester.widget<Text>(find.text('CONST')).style?.fontSize,
+          moreOrLessEquals(
+            size.height *
+                CalcTheme.keyLegendHeightRatio *
+                CalcTheme.keyLegendFontRatio,
+          ),
           reason: '$size',
         );
       }
@@ -2045,6 +2058,8 @@ void _shapeAndLegendTests() {
         showLegendBand: false,
         enableHaptics: false,
         labelInsets: labelInsets,
+        // 여백을 빼고 남은 자리에 들어가는 크기 (기본값은 키캡 높이의 비율이라 이 상자에서는 남은 자리보다 크다, #264)
+        mainLabelFontSize: 20,
         onPressed: (_) {},
       ),
       size: box,

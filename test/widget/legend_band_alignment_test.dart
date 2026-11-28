@@ -22,7 +22,8 @@ import '../support/key_legends.dart';
 /// - 각인이 하나면 키캡 가운데다.
 /// - 둘이면 SHIFT는 왼쪽·ALPHA는 오른쪽이고, 바깥 끝을 키캡 끝에서 똑같이 들인다. 들이는 거리는 키캡 폭의
 ///   [CalcTheme.keyLegendSideInsetRatio]와 키캡 모서리 반경 가운데 큰 쪽까지이고, 두 각인 사이가 최소 간격·들이는 거리보다
-///   좁아지지 않는 만큼만 들인다([_expectedInset]).
+///   좁아지지 않는 만큼만 들인다([_expectedInset]). 키캡 폭에 들어가지 않는 쌍은 키캡 가운데에 둔 채 양옆으로 셀 폭까지
+///   나간다(#264 — 들인 거리가 음수다).
 ///
 /// 실제 앱([AltCalcApp])을 번들 글꼴로 띄워 **그려진 자리(화면 좌표)** 를 잰다. 기대값은 그려진 키캡·각인 폭에서 이 파일의
 /// 식([_expectedInset])으로 따로 구한다 — 구현 함수(`keyLegendPairInset`·`keyLegendSideInset`)를 부르지 않는다.
@@ -178,6 +179,9 @@ Rect _legend(WidgetTester tester, CalcKeyDef def, KeyLegend legend) {
 typedef _Pair = ({
   CalcKeyDef def,
   Rect cap,
+
+  /// 키 버튼(셀) 상자
+  Rect cell,
   Rect shift,
   Rect alpha,
 
@@ -207,6 +211,7 @@ _Pair _measure(WidgetTester tester, CalcKeyDef def) {
   return (
     def: def,
     cap: cap,
+    cell: tester.getRect(_button(def.id)),
     shift: shift,
     alpha: alpha,
     left: shift.left - cap.left,
@@ -226,14 +231,16 @@ double _sideInsetOf(_Pair p) =>
     math.max(p.cap.width * CalcTheme.keyLegendSideInsetRatio, p.radius);
 
 /// 그려진 키캡·각인 폭에서 구한 들이는 거리의 기대값 (dp) — 상한까지 들이되, 두 각인 사이가 최소 간격보다도(남는 폭 ÷ 2)
-/// 들이는 거리보다도((남는 폭 + 최소 간격) ÷ 3) 좁아지지 않는 만큼
+/// 들이는 거리보다도((남는 폭 + 최소 간격) ÷ 3) 좁아지지 않는 만큼. 키캡 폭에 들어가지 않으면 음수다 — 키캡 양옆으로 똑같이
+/// 나가되(남는 폭 ÷ 2) 셀 끝을 넘지 않는다(#264).
 double _expectedInset(_Pair p) {
   final spare = p.cap.width - p.gap - p.shift.width - p.alpha.width;
-  return math.max(
-    0,
-    [_sideInsetOf(p), spare / 2, (spare + p.gap) / 3].reduce(math.min),
-  );
+  if (spare < 0) return math.max(-_faceMarginOf(p), spare / 2);
+  return [_sideInsetOf(p), spare / 2, (spare + p.gap) / 3].reduce(math.min);
 }
+
+/// 키캡 옆 여백 (dp) — 셀 폭과 그린 키캡 폭의 차의 절반
+double _faceMarginOf(_Pair p) => math.max(0, (p.cell.width - p.cap.width) / 2);
 
 String _describe(_Pair p) =>
     '${p.def.id.name}: 왼쪽 ${p.left.toStringAsFixed(3)} · 사이 ${p.middle.toStringAsFixed(3)} · '
@@ -316,6 +323,73 @@ void main() {
         expect(middle(60, right), greaterThanOrEqualTo(gap - 1e-9));
         expect(middle(60, right), greaterThanOrEqualTo(i - 1e-9));
       }
+    });
+  });
+
+  group('키캡 폭에 들어가지 않는 쌍은 키캡 밖 셀 폭까지 쓴다 (#264)', () {
+    test('들이는 거리는 음수가 되어 양옆으로 똑같이 나가고, 키캡 옆 여백에서 멈춘다', () {
+      double inset(double outerMargin) => keyLegendPairInset(
+        width: 50,
+        gap: 4,
+        leftWidth: 30,
+        rightWidth: 22, // 남는 폭 −6
+        sideInset: 5,
+        outerMargin: outerMargin,
+      );
+      expect(inset(10), -3); // 남는 폭의 절반만큼 양쪽으로
+      expect(inset(3), -3);
+      expect(inset(2), -2); // 키캡 옆 여백에서 멈춘다 (그 뒤로는 각인 줄이 줄인다)
+      expect(inset(0), 0); // 키캡이 셀 폭을 다 쓰면 나갈 자리가 없다
+      // 들어가는 쌍은 옆 여백이 있어도 키캡 안에 놓인다
+      expect(
+        keyLegendPairInset(
+          width: 50,
+          gap: 4,
+          leftWidth: 20,
+          rightWidth: 10,
+          sideInset: 5,
+          outerMargin: 10,
+        ),
+        5,
+      );
+    });
+
+    testWidgets('폰 세로 360×780: Ran# · RanInt는 키캡보다 넓게, 줄지 않고 셀 폭 안에 그려진다', (
+      tester,
+    ) async {
+      await _pump(tester, _windows.first);
+      final p = _measure(tester, keyDefOf(CalcKeyId.dot));
+      final reason = _describe(p);
+      // 실물도 이 쌍은 키보다 넓다 (CalcTheme "글자 크기 실물 대조 (#264)" 절 4)
+      expect(
+        p.shift.width + p.alpha.width + p.gap,
+        greaterThan(p.cap.width),
+        reason: reason,
+      );
+      expect(p.left, lessThan(-0.1), reason: reason);
+      expect(p.left, closeTo(p.right, 2 * _tolerance), reason: reason);
+      expect(p.left, closeTo(_expectedInset(p), _tolerance), reason: reason);
+      expect(
+        p.left,
+        greaterThanOrEqualTo(-_faceMarginOf(p) - _tolerance),
+        reason: reason,
+      );
+      expect(p.shift.left, greaterThanOrEqualTo(p.cell.left - _tolerance));
+      expect(p.alpha.right, lessThanOrEqualTo(p.cell.right + _tolerance));
+      expect(p.shiftScale, closeTo(1, 1e-3), reason: reason);
+      // 이웃 키(0 키의 Rnd, ×10ˣ 키의 π)의 각인과 겹치지 않는다
+      final rnd = _legend(
+        tester,
+        keyDefOf(CalcKeyId.num0),
+        keyDefOf(CalcKeyId.num0).shiftLegend!,
+      );
+      final pi = _legend(
+        tester,
+        keyDefOf(CalcKeyId.exp10),
+        keyDefOf(CalcKeyId.exp10).shiftLegend!,
+      );
+      expect(rnd.right, lessThan(p.shift.left));
+      expect(pi.left, greaterThan(p.alpha.right));
     });
   });
 
@@ -513,7 +587,12 @@ void main() {
                 lessThanOrEqualTo(_sideInsetOf(p) + _tolerance),
                 reason: reason,
               );
-              expect(p.left, greaterThanOrEqualTo(-_tolerance), reason: reason);
+              // 키캡 밖으로 나가는 긴 쌍도 셀 폭 안이다 (#264)
+              expect(
+                p.left,
+                greaterThanOrEqualTo(-_faceMarginOf(p) - _tolerance),
+                reason: reason,
+              );
               // SHIFT가 ALPHA 왼쪽이고, 사이는 최소 간격·들인 거리보다 좁지 않다 (바깥을 들이느라 붙지 않는다)
               expect(
                 p.middle,

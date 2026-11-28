@@ -47,10 +47,12 @@ Future<void> _pumpScreen(
   );
 }
 
-/// [id] 키의 SHIFT·ALPHA 각인(키캡 위 각인 띠의 `FittedBox` — 평문·2차원 모두)이 그린 키캡 폭 안에 있고, 따로 줄지 않았는지
-/// 확인한다 (#220 R1·R2 — 실물처럼 각인을 키캡 폭 안에 인쇄하고, 좁힌 띠에서도 통일 글자 크기 그대로 그린다).
-void _expectLegendsInsideCapUnscaled(WidgetTester tester, CalcKeyId id) {
+/// [id] 키의 SHIFT·ALPHA 각인(키캡 위 각인 띠의 `FittedBox` — 평문·2차원 모두)이 셀 폭 안에 있고, 따로 줄지 않았는지
+/// 확인한다 (#220 R1·R2 — 좁힌 키캡에서도 통일 글자 크기 그대로 그린다. #264부터 각인은 그린 키캡에 맞춰 놓되 긴 각인 쌍은
+/// 실물처럼 키캡 밖 셀 폭까지 쓴다 — 키캡 안에 놓이는 자리는 `legend_band_alignment_test.dart`가 본다).
+void _expectLegendsInsideCellUnscaled(WidgetTester tester, CalcKeyId id) {
   final cap = tester.getRect(_keycap(id));
+  final cell = tester.getRect(_button(id));
   final boxes = find.descendant(
     of: _button(id),
     matching: find.byType(FittedBox),
@@ -58,9 +60,9 @@ void _expectLegendsInsideCapUnscaled(WidgetTester tester, CalcKeyId id) {
   for (final e in boxes.evaluate()) {
     final box = tester.getRect(find.byWidget(e.widget));
     if (box.bottom > cap.top + 0.01) continue; // 키캡 안 메인 라벨
-    final reason = '${id.name} 각인 $box (키캡 $cap)';
-    expect(box.left, greaterThanOrEqualTo(cap.left - 0.01), reason: reason);
-    expect(box.right, lessThanOrEqualTo(cap.right + 0.01), reason: reason);
+    final reason = '${id.name} 각인 $box (셀 $cell)';
+    expect(box.left, greaterThanOrEqualTo(cell.left - 0.01), reason: reason);
+    expect(box.right, lessThanOrEqualTo(cell.right + 0.01), reason: reason);
     final render = e.renderObject! as RenderFittedBox;
     final child = render.child!.size;
     expect(
@@ -250,26 +252,26 @@ void main() {
             lessThanOrEqualTo(cell.width / oldCap + 1e-6),
             reason: reason,
           );
-          _expectLegendsInsideCapUnscaled(tester, def.id);
+          _expectLegendsInsideCellUnscaled(tester, def.id);
         }
       });
     }
 
-    // 글자 배율 1.3(키 글자 배율 상한)에서도 각인이 키캡 폭 안에 따로 줄지 않고 들어간다 — 작은 폰·짧은 창·넓은 배열·초광폭
+    // 글자 배율 1.3(키 글자 배율 상한)에서도 각인이 셀 폭 안에 따로 줄지 않고 들어간다 — 작은 폰·짧은 창·넓은 배열·초광폭
     for (final (size, padding) in const [
       (Size(320, 568), EdgeInsets.only(top: 20)),
       (Size(360, 520), EdgeInsets.only(top: 24)),
       (Size(800, 360), EdgeInsets.only(top: 24)),
       (Size(2000, 400), EdgeInsets.zero),
     ]) {
-      testWidgets('$size·글자 배율 1.3: 각인이 키캡 폭 안에 축소 없이 들어간다', (tester) async {
+      testWidgets('$size·글자 배율 1.3: 각인이 셀 폭 안에 축소 없이 들어간다', (tester) async {
         await _pumpScreen(tester, size, padding, textScale: 1.3);
         for (final def in allKeys) {
           if (def.category == KeyCategory.cursor ||
               def.face == KeyFace.roundButton) {
             continue;
           }
-          _expectLegendsInsideCapUnscaled(tester, def.id);
+          _expectLegendsInsideCellUnscaled(tester, def.id);
         }
       });
     }

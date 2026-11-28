@@ -1112,8 +1112,7 @@ void main() {
             ).input,
             lessThan(cap),
           );
-          // 상한이 키 각인 상한보다 크다(LCD 글자가 키 각인보다 작아지지 않는다).
-          expect(cap, greaterThan(CalcTheme.keyMainLabelMaxFontSize));
+          // (#264 전에는 "상한이 키 각인 상한 16.5dp보다 크다"도 확인했다 — 키 각인 상한은 없앴다.)
         },
       );
 
@@ -1155,18 +1154,14 @@ void main() {
         ).input;
         expect(at(widest), moreOrLessEquals(cap, epsilon: 1e-3));
         expect(at(widest - 1), lessThan(cap));
-        // 예전 LCD 최대 크기 480×274(#24·#92)는 39.1dp — 상한은 이 값을 올림했다(키 각인 상한 16.45 → 16.5와 같은 기준).
+        // 예전 LCD 최대 크기 480×274(#24·#92)는 39.1dp — 상한은 이 값을 올림했다.
         final realSize = LcdFontSizes.forSize(
           const Size(480, 480 / CalcTheme.screenLcdMinAspectRatio),
           TextScaler.noScaling,
         ).input;
         expect(realSize, moreOrLessEquals(39.1, epsilon: 0.05));
         expect(cap, realSize.ceilToDouble());
-        // 키 메인 각인 상한 대비 — 폰의 줄 글자 / 키 각인 비(약 2.3배)와 비슷하게 2.5배 미만에서 멈춘다.
-        expect(
-          cap / CalcTheme.keyMainLabelMaxFontSize,
-          inInclusiveRange(2.2, 2.5),
-        );
+        // (#264 전에는 키 메인 각인 상한 16.5dp의 2.2~2.5배인지도 확인했다 — 키 각인 상한은 없앴다.)
       });
 
       test('배율을 바꿔도 배율 반영 후 줄 글자는 상한을 넘지 않는다 (아주 큰 LCD 포함)', () {

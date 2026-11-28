@@ -189,14 +189,22 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// 각인을 줄이지 않고, 줄어드는 각인(키패드 밖에서 좁게 쓰는 키 버튼)은 올린 거리도 같은 비율로 줄어든다. 줄어드는 비율이
   /// 각인마다 다르면 기준선이 그만큼 어긋난다(아래 정렬의 기준선도 그렇다 — 키패드에는 각인이 줄어드는 창이 없다,
   /// `test/widget/legend_band_baseline_test.dart`).
+  ///
+  /// [baseLift]는 넘치는 각인이 없어도 모든 각인을 띠 아래끝에서 띄우는 거리다 (dp, #264 — 실물처럼 각인 기준선을 키캡 위끝에서
+  /// 띄운다, [CalcTheme] "글자 크기 실물 대조 (#264)" 절). 띠 기준선이 그만큼 올라간 것으로 보고 위 규칙을 그대로 쓴다 —
+  /// 넘치는 각인의 잉크 아래끝은 띄운 기준선에 오고, 어느 각인도 위끝이 띠 위끝을 넘지 않는 만큼만 띄운다.
   static List<double> bandLifts(
     List<(KeyLegend, TextStyle)> legends,
-    double bandHeight,
-  ) {
+    double bandHeight, {
+    double baseLift = 0,
+  }) {
+    assert(baseLift >= 0, 'baseLift는 음수일 수 없다');
     final overhanging = [
       for (final (legend, style) in legends) overhangsLine(legend, style),
     ];
-    if (!overhanging.contains(true)) return List.filled(legends.length, 0.0);
+    if (!overhanging.contains(true) && baseLift <= 0) {
+      return List.filled(legends.length, 0.0);
+    }
     // (상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리, 잉크 아래끝 깊이)
     final boxes = [
       for (final (legend, style) in legends) _bandBox(legend, style),
@@ -205,11 +213,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
     // · 목표: 넘치는 각인의 잉크 깊이(잉크 아래끝이 띠 기준선에 온다)
     // · 상한: 어느 각인도 위끝이 띠 위끝을 넘지 않는다(각인마다 아래 정렬 자리 + 띠 위쪽 여유)
     // · 하한: 아래 정렬만으로 가장 높이 올라간 각인의 기준선(각인을 내릴 수는 없다)
-    var target = 0.0;
+    var target = baseLift;
     var highest = double.infinity;
     var lowest = 0.0;
     for (final (i, (height, natural, inkDepth)) in boxes.indexed) {
-      if (overhanging[i]) target = math.max(target, inkDepth);
+      if (overhanging[i]) target = math.max(target, baseLift + inkDepth);
       highest = math.min(highest, natural + math.max(0.0, bandHeight - height));
       lowest = math.max(lowest, natural);
     }
@@ -224,6 +232,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
         ),
     ];
   }
+
+  /// [style]의 글꼴을 배율 반영 글자 크기 [scaledFontSize]로 그릴 때 한 줄 상자의 기준선 아래 깊이 (dp, #264).
+  /// 각인 띠가 각인 기준선을 키캡 위끝에서 띄울 거리를 정할 때 쓴다 — 아래 정렬한 글자 각인의 기준선은 띠 아래끝에서 이만큼 위다.
+  static double lineDepthAt(TextStyle style, double scaledFontSize) =>
+      _Builder(style).lineMetrics(scaledFontSize).$2;
 
   /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).

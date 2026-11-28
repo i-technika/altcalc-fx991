@@ -477,11 +477,9 @@ void main() {
           moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
         );
         expect(_history.evaluate().isNotEmpty, withHistory);
-        // 키 메인 각인은 상한(16.5dp)이고, 줄 글자는 그 약 2.4배에서 멈춘다(폰 390×844 약 2.3배).
-        expect(
-          keyFont(tester),
-          moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
-        );
+        // 줄 글자는 키 메인 각인의 2.5배 아래에서 멈춘다. (#264 전에는 키 메인 각인도 상한 16.5dp에서 멈춰 약 2.4배였다 —
+        // 지금 키 각인은 상한 없이 키 높이의 실물 비율이라 큰 창일수록 이 비가 더 작다.)
+        expect(keyFont(tester), greaterThan(16.5));
         expect(drawnLineFont(tester) / keyFont(tester), lessThan(2.5));
       });
     }

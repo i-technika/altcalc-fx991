@@ -355,7 +355,7 @@ void main() {
     );
 
     for (final scale in [1.0, 1.3, 2.0]) {
-      test('글자 배율 $scale: 배율을 반영한 글자가 각인 띠·키캡 높이를 넘지 않는다', () {
+      test('글자 배율 $scale: 배율을 반영한 글자가 각인이 쓸 수 있는 높이·키캡 높이를 넘지 않는다', () {
         final scaler = TextScaler.linear(scale);
         final m = KeypadMetrics.compute(const Size(360, 420), scaler);
         final effective = scaler.clamp(
@@ -363,15 +363,20 @@ void main() {
         );
         final cell = m.functionRowHeight - m.verticalGap;
         final legendHeight = cell * CalcTheme.keyLegendHeightRatio;
+        // 각인은 띠에 셀 위쪽 간격 몫(세로 간격의 절반)을 더한 높이까지 쓴다 (#264)
+        expect(
+          m.legendExtent,
+          moreOrLessEquals(legendHeight + m.verticalGap / 2),
+        );
         expect(
           effective.scale(m.legendFontSize).ceilToDouble(),
-          lessThanOrEqualTo(legendHeight),
+          lessThanOrEqualTo(m.legendExtent),
         );
         expect(
           effective.scale(m.mainLabelFontSize),
           lessThan(cell - legendHeight),
         );
-        // 숫자부 세 크기(숫자·글자 각인·연산 기호, #225)의 줄 상자도 숫자부 키캡 안쪽 높이 안이다
+        // 숫자부 숫자·글자 각인(#225)의 줄 상자도 숫자부 키캡 안쪽 높이 안이다
         final numberCapInner =
             m.numberCapHeight -
             CalcTheme.keyPressedOffset -
@@ -379,12 +384,24 @@ void main() {
         for (final size in [
           m.numberMainLabelFontSize,
           m.numberWordLabelFontSize,
-          m.numberOperatorLabelFontSize,
         ]) {
           expect(
             effective.scale(size).ceilToDouble(),
             lessThanOrEqualTo(numberCapInner),
             reason: '$size',
+          );
+        }
+        // 연산 기호는 줄 상자가 아니라 잉크가 키캡 안쪽 높이 안이다 (#264 — 기호 잉크는 글자 크기의 절반쯤이다)
+        for (final def in allKeys) {
+          if (!CalcTheme.isKeyOperatorLegend(def.mainLegend)) continue;
+          expect(
+            effective.scale(m.numberOperatorLabelFontSize) *
+                mainLegendInkHeight(
+                  def.mainLegend,
+                  CalcTheme.keyNumberOperatorLabelStyle,
+                ),
+            lessThanOrEqualTo(numberCapInner + 1e-9),
+            reason: def.mainLabel,
           );
         }
       });
@@ -431,9 +448,10 @@ void main() {
     test('폭 기준: 통일 크기는 높이 기준 크기의 하한 비율 이상, 높이 기준 이하다', () {
       for (final scale in [1.0, 1.3]) {
         final scaler = TextScaler.linear(scale);
-        final m = KeypadMetrics.compute(const Size(360, 420), scaler);
+        // 이 크기에서는 높이 제한(키캡 안쪽 높이에 가장 높은 2차원 각인이 들어가는 크기)에 걸리지 않으므로 높이 기준 =
+        // 비율 크기다. (#264에서 비율을 올린 뒤로 360×420은 배율 1.3에서 높이 제한에 걸린다.)
+        final m = KeypadMetrics.compute(const Size(720, 960), scaler);
         final cap = m.functionKeyHeight * (1 - CalcTheme.keyLegendHeightRatio);
-        // 이 크기에서는 높이 제한에 걸리지 않으므로 높이 기준 = 비율 크기다.
         final byHeight = cap * CalcTheme.keyMainLabelFontRatio;
         expect(m.mainLabelFontSize, lessThanOrEqualTo(byHeight + 1e-9));
         expect(
@@ -494,92 +512,95 @@ void main() {
       expect(scaledLarge, greaterThan(scaledNormal));
     });
 
-    group('글자 크기 상한 (#141)', () {
-      test('태블릿처럼 큰 키패드는 키가 아무리 커져도 상한에서 멈춘다 (가로로 넓어져도 커지지 않는다)', () {
+    group('글자 크기 상한 없음 (#264 — #141의 상한을 없앴다)', () {
+      test('키가 폭에 걸리지 않을 만큼 넓으면 글자는 높이 목표(키캡·각인 띠 높이의 비율) 그대로다', () {
         for (final area in const [
-          Size(784, 813.6), // 10인치 800×1280 세로
-          Size(1008, 895.68), // 12.9인치 iPad 세로
-          Size(2000, 2000),
           Size(3000, 900), // 아주 넓은 키
+          Size(6000, 2000),
         ]) {
           final m = KeypadMetrics.compute(area, TextScaler.noScaling);
           expect(
             m.mainLabelFontSize,
-            moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
+            moreOrLessEquals(
+              m.functionCapHeight * CalcTheme.keyMainLabelFontRatio,
+              epsilon: 0.01,
+            ),
             reason: '$area',
           );
           expect(
             m.numberMainLabelFontSize,
-            moreOrLessEquals(CalcTheme.keyNumberMainLabelMaxFontSize),
+            moreOrLessEquals(
+              m.numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio,
+              epsilon: 0.01,
+            ),
             reason: '$area',
           );
           expect(
             m.legendFontSize,
-            moreOrLessEquals(CalcTheme.keyLegendMaxFontSize),
+            moreOrLessEquals(
+              m.legendBandHeight * CalcTheme.keyLegendFontRatio,
+              epsilon: 0.01,
+            ),
             reason: '$area',
           );
         }
       });
 
-      testWidgets('상한에 걸린 키패드도 시스템 글자 배율은 그대로 반영한다 (상한은 배율 반영 전 크기)', (
-        tester,
-      ) async {
-        // 테스트 글꼴은 글자 폭이 넓어 784dp 폭에서는 배율 1.3의 폭 기준에 걸린다 — 폭 제한이 없는 큰 키패드로 본다.
+      test('키패드가 두 배로 커지면 글자도 두 배로 커진다 (태블릿에서 멈추지 않는다)', () {
+        for (final area in const [
+          Size(784, 813.6), // 10인치 800×1280 세로
+          Size(1008, 895.68), // 12.9인치 iPad 세로
+          Size(2000, 2000),
+        ]) {
+          final m = KeypadMetrics.compute(area, TextScaler.noScaling);
+          final doubled = KeypadMetrics.compute(area * 2, TextScaler.noScaling);
+          for (final (name, small, large) in [
+            ('메인', m.mainLabelFontSize, doubled.mainLabelFontSize),
+            ('숫자', m.numberMainLabelFontSize, doubled.numberMainLabelFontSize),
+            (
+              '글자 각인',
+              m.numberWordLabelFontSize,
+              doubled.numberWordLabelFontSize,
+            ),
+            (
+              '연산 기호',
+              m.numberOperatorLabelFontSize,
+              doubled.numberOperatorLabelFontSize,
+            ),
+            ('각인', m.legendFontSize, doubled.legendFontSize),
+          ]) {
+            // 줄 상자 높이의 정수 반올림만큼만 다르다
+            expect(large / small, closeTo(2, 0.03), reason: '$area $name');
+          }
+        }
+      });
+
+      testWidgets('큰 키패드도 시스템 글자 배율을 반영하고, 숫자는 줄지 않은 크기로 그려진다', (tester) async {
         const area = Size(2000, 1500);
         _setViewSize(tester, area);
         await tester.pumpWidget(
           _host(const CalcKeypad(), size: area, textScale: 1.3),
         );
         expect(tester.takeException(), isNull);
+        final normal = KeypadMetrics.compute(area, TextScaler.noScaling);
         final m = KeypadMetrics.compute(area, const TextScaler.linear(1.3));
+        // 배율을 반영한 숫자는 배율 1.0보다 크다 (키캡 높이에 걸리기 전까지)
         expect(
-          m.mainLabelFontSize,
-          moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize),
+          m.numberMainLabelFontSize * 1.3,
+          greaterThan(normal.numberMainLabelFontSize),
         );
-        expect(
-          m.numberMainLabelFontSize,
-          moreOrLessEquals(CalcTheme.keyNumberMainLabelMaxFontSize),
-        );
-        // 한 글자 라벨(숫자 7)은 숫자부 상한 × 배율 크기로 그려진다(FittedBox가 줄이지 않는다).
+        // 한 글자 라벨(숫자 7)은 주입한 크기 × 배율로 그려진다(FittedBox가 줄이지 않는다).
         final seven = find.descendant(
           of: _keycap(CalcKeyId.num7),
           matching: find.byType(Text),
         );
         expect(
           tester.widget<Text>(seven).style?.fontSize,
-          CalcTheme.keyNumberMainLabelMaxFontSize,
+          m.numberMainLabelFontSize,
         );
         expect(
           tester.getRect(seven).height,
           moreOrLessEquals(tester.getSize(seven).height, epsilon: 0.01),
-        );
-      });
-
-      testWidgets('글자 크기를 주입하지 않은 키 버튼도 상한을 넘지 않는다', (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 200,
-                  height: 200,
-                  child: CalcKeyButton(
-                    keyDef: allKeys.firstWhere((d) => d.id == CalcKeyId.num7),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-        final text = tester.widget<Text>(
-          find.descendant(
-            of: _keycap(CalcKeyId.num7),
-            matching: find.byType(Text),
-          ),
-        );
-        expect(
-          text.style?.fontSize,
-          lessThanOrEqualTo(CalcTheme.keyMainLabelMaxFontSize),
         );
       });
     });
@@ -1240,46 +1261,64 @@ void main() {
       }
     });
 
-    test('폰 키패드(가장 넓은 폰 본체 424dp 이하)에는 상한이 걸리지 않는다 (실제 글꼴 — 폭 기준이 덜 줄인다)', () {
+    test('폰 키패드의 글자는 실물 비율이다 (실제 글꼴, #264)', () {
+      // 각인 글꼴 Saira의 대문자·숫자 잉크 높이 (글자 크기 대비)
+      const capInk = 0.688;
       // 세로 폰의 키패드는 폭 기준 최대 높이(폭 / 가로세로비 하한)를 넘지 않는다.
-      for (final width in [304.0, 374.0, 424.0]) {
+      for (final width in [304.0, 344.0, 374.0, 424.0]) {
         final area = Size(width, width / CalcTheme.keypadMinAspectRatio);
-        for (final scale in [1.0, 1.3]) {
-          final m = KeypadMetrics.compute(area, TextScaler.linear(scale));
-          expect(
-            m.mainLabelFontSize,
-            lessThan(CalcTheme.keyMainLabelMaxFontSize),
-            reason: '$area ×$scale',
-          );
-          expect(
-            m.legendFontSize,
-            lessThan(CalcTheme.keyLegendMaxFontSize),
-            reason: '$area ×$scale',
-          );
-        }
+        final m = KeypadMetrics.compute(area, TextScaler.noScaling);
+        final reason = '$area';
+        // 숫자: 잉크가 숫자 키캡 높이의 0.55 (실물 0.55~0.57)
+        expect(
+          m.numberMainLabelFontSize * capInk / m.numberCapHeight,
+          closeTo(0.55, 0.01),
+          reason: reason,
+        );
+        // 키 위 각인: 잉크가 함수부 행 간격의 0.154 (실물 0.14~0.155)
+        expect(
+          m.legendFontSize * capInk / m.functionRowHeight,
+          closeTo(0.154, 0.005),
+          reason: reason,
+        );
+        // 함수부 메인 각인: 가장 긴 OPTN이 키캡 폭에 걸려 높이 목표(0.43)보다 작다 — 잉크가 키캡 높이의 0.37~0.39
+        // (실물 키 높이의 0.38~0.42), 행 간격의 0.22~0.23(실물 0.23~0.25)
+        expect(
+          m.mainLabelFontSize * capInk / m.functionCapHeight,
+          inInclusiveRange(0.36, 0.40),
+          reason: reason,
+        );
+        expect(
+          m.mainLabelFontSize * capInk / m.functionRowHeight,
+          inInclusiveRange(0.21, 0.24),
+          reason: reason,
+        );
+        // 글자 각인(DEL·AC·Ans·×10ˣ)은 ×10ˣ가 폭에 걸려 숫자의 0.7~0.83, 연산 기호는 숫자의 목표 배수 그대로다
+        expect(
+          m.numberWordLabelFontSize / m.numberMainLabelFontSize,
+          inInclusiveRange(0.7, CalcTheme.keyNumberWordLabelScale + 0.001),
+          reason: reason,
+        );
+        expect(
+          m.numberOperatorLabelFontSize / m.numberMainLabelFontSize,
+          moreOrLessEquals(
+            CalcTheme.keyNumberOperatorLabelScale,
+            epsilon: 0.01,
+          ),
+          reason: reason,
+        );
       }
     });
 
-    test('실물 크기 키패드(480×640dp)의 글자는 상한 이하이고, 상한은 그 글자를 크게 넘지 않는다', () {
-      // 상한의 근거 (CalcTheme.keyMainLabelMaxFontSize): #141 전 최대 키패드의 글자 크기를 올림한 값이다.
+    test('#264 전보다 글자가 커졌다 — 폰 360×780 키패드(344×458.67)의 실측값', () {
       final m = KeypadMetrics.compute(
-        const Size(480, 640),
+        const Size(344, 344 / 0.75),
         TextScaler.noScaling,
       );
-      expect(
-        m.mainLabelFontSize,
-        inInclusiveRange(
-          CalcTheme.keyMainLabelMaxFontSize - 0.5,
-          CalcTheme.keyMainLabelMaxFontSize,
-        ),
-      );
-      expect(
-        m.legendFontSize,
-        inInclusiveRange(
-          CalcTheme.keyLegendMaxFontSize - 0.5,
-          CalcTheme.keyLegendMaxFontSize,
-        ),
-      );
+      // #264 전: 메인 11.79 · 숫자 18.62 · 각인 8.73dp (CalcTheme "글자 크기 실물 대조 (#264)" 절)
+      expect(m.mainLabelFontSize, closeTo(15.07, 0.05));
+      expect(m.numberMainLabelFontSize, closeTo(29.79, 0.05));
+      expect(m.legendFontSize, closeTo(10.26, 0.05));
     });
   });
 }

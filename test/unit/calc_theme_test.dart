@@ -1211,17 +1211,27 @@ void main() {
       expect(CalcTheme.keyMinTouchTargetHeight, greaterThanOrEqualTo(44));
     });
 
-    test('키 글자 크기 상한: 양수이고 각인이 메인 라벨보다 작다 (#141)', () {
-      expect(CalcTheme.keyMainLabelMaxFontSize, greaterThan(0));
-      expect(CalcTheme.keyLegendMaxFontSize, greaterThan(0));
+    test('키 글자 크기 비율은 실물 비율이다 (#264 — 상한은 없다)', () {
+      // 각인 글꼴 Saira의 대문자·숫자 잉크 높이 (글자 크기 대비, CalcTheme "메인 각인 세로 위치" 절)
+      const capInk = 0.688;
+      // 함수 키: 실물 대문자 높이 ÷ 키 높이(테두리 포함) 0.38~0.42 — 앱은 폭에 걸리기 전 목표가 그 위쪽 끝이다
       expect(
-        CalcTheme.keyLegendMaxFontSize,
-        lessThan(CalcTheme.keyMainLabelMaxFontSize),
+        CalcTheme.keyMainLabelFontRatio * capInk,
+        inInclusiveRange(0.40, 0.44),
       );
-      // 폰에 걸리지 않는지·태블릿에서 멈추는지는 calc_keypad_test가 번들 글꼴로 실측한다.
+      // 숫자 키: 실물 숫자 높이 ÷ 흰 키 높이 0.55~0.57
+      expect(
+        CalcTheme.keyNumberMainLabelFontRatio * capInk,
+        inInclusiveRange(0.54, 0.57),
+      );
+      // 키 위 각인: 줄 상자가 각인 띠보다 낮다(띠 높이의 비율), 기준선은 키캡 위끝에서 띄운다(실물 0.05~0.15)
+      expect(CalcTheme.keyLegendFontRatio, inExclusiveRange(0.8, 1.0));
+      expect(CalcTheme.keyLegendBaselineGapRatio, inInclusiveRange(0.05, 0.15));
+      // 크기가 실제로 실물 비율로 나오는지·태블릿에서도 멈추지 않는지는 calc_keypad_test가 번들 글꼴로 실측한다.
     });
 
     test('통일 글자 하한 비율은 0.5~1, 커서 패드 경계선은 양수 두께다', () {
+      // (#264에서 0.75 → 0.5 — 높이 목표를 올린 만큼 낮췄다)
       expect(CalcTheme.keypadUniformFontMinRatio, inInclusiveRange(0.5, 1.0));
       expect(CalcTheme.cursorPadDividerWidth, greaterThan(0));
       expect(CalcTheme.keyLegendPriorityMaxRunes, inInclusiveRange(1, 3));
@@ -1290,17 +1300,15 @@ void main() {
       }
     });
 
-    test('숫자부 메인 각인 크기 (#225): 숫자 키캡 비율은 실물 글자/키캡 비로 함수부 비율에서 이끈 값이다', () {
-      // 근접 사진(같은 모양 글자끼리): 숫자 / 숫자 키캡 45/80, 대문자 / 함수 키캡 26/55. Saira는 숫자·대문자 잉크 높이가 같다.
-      const derived = CalcTheme.keyMainLabelFontRatio * (45 / 80) / (26 / 55);
-      expect(CalcTheme.keyNumberMainLabelFontRatio, closeTo(derived, 0.005));
+    test('숫자부 메인 각인 크기 (#225·#264): 숫자 키캡 비율은 실물 숫자/키캡 비이고 함수부 비율보다 크다', () {
+      // 근접 사진: 숫자 / 숫자 키캡 45/80(제품 사진 23.3/42.6). Saira 숫자 잉크 0.688em.
+      expect(
+        CalcTheme.keyNumberMainLabelFontRatio * 0.688,
+        closeTo(45 / 80, 0.02),
+      );
       expect(
         CalcTheme.keyNumberMainLabelFontRatio,
         greaterThan(CalcTheme.keyMainLabelFontRatio),
-      );
-      expect(
-        CalcTheme.keyNumberMainLabelMaxFontSize,
-        greaterThan(CalcTheme.keyMainLabelMaxFontSize),
       );
       // 글자 각인은 숫자보다 작고(실물 약 0.83), 연산 기호는 숫자 대비 크게 키운다(실물/Mono 비 1.38~1.47 — 평균은 number_label_size_test가 고정한다)
       expect(CalcTheme.keyNumberWordLabelScale, inExclusiveRange(0.8, 0.86));

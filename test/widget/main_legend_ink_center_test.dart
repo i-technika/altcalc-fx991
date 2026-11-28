@@ -437,6 +437,75 @@ void main() {
       },
     );
 
+    testWidgets(
+      'boxHeight를 주면 상자 높이만 줄고 잉크 가운데는 그대로 상자 가운데다 (#264 — 숫자부 연산 기호)',
+      (tester) async {
+        const legend = LegendText('×');
+        const fontSize = 40.0;
+        final style = CalcTheme.keyMainLabelStyleFor(legend)
+            .copyWith(fontSize: fontSize);
+        final inkCenter = mainLegendInkCenter(legend, style) * fontSize;
+        final inkHeight = mainLegendInkHeight(legend, style) * fontSize;
+        Future<RenderInkCenteredLabel> pump(double? boxHeight) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Center(
+                child: InkCenteredLabel(
+                  inkCenter: inkCenter,
+                  boxHeight: boxHeight,
+                  child: Text(
+                    legend.text,
+                    style: style,
+                    strutStyle: keyLabelStrut(style),
+                  ),
+                ),
+              ),
+            ),
+          );
+          return tester.renderObject<RenderInkCenteredLabel>(
+            find.byType(InkCenteredLabel),
+          );
+        }
+
+        /// 상자 위끝에서 잉크 가운데까지 (그린 기준선 − 잉크 가운데 높이)
+        double inkCenterInBox(RenderInkCenteredLabel render) {
+          final child = render.child!;
+          // 배치 밖에서는 dry 기준선으로 잰다 (배치 중에만 쓸 수 있는 조회 대신)
+          final baseline = child.getDryBaseline(
+            BoxConstraints.loose(const Size(400, 400)),
+            TextBaseline.alphabetic,
+          )!;
+          return render.shift + drawnBaselineOf(child, baseline) - inkCenter;
+        }
+
+        final full = await pump(null);
+        final fullSize = full.size;
+        // 기호 잉크는 글자 크기의 절반쯤이다 — 줄 상자(글자 크기)보다 훨씬 낮다
+        expect(inkHeight, inInclusiveRange(fontSize * 0.4, fontSize * 0.5));
+        expect(fullSize.height, greaterThan(inkHeight * 1.8));
+        expect(inkCenterInBox(full), moreOrLessEquals(fullSize.height / 2));
+
+        final tight = await pump(inkHeight);
+        expect(tight.size.width, fullSize.width);
+        expect(tight.size.height, moreOrLessEquals(inkHeight));
+        expect(inkCenterInBox(tight), moreOrLessEquals(inkHeight / 2));
+        // dry 배치도 같은 크기·기준선을 보고한다
+        final constraints = BoxConstraints.loose(const Size(400, 400));
+        expect(tight.getDryLayout(constraints), tight.size);
+        expect(
+          tight.getDryBaseline(constraints, TextBaseline.alphabetic),
+          moreOrLessEquals(
+            tight.child!.getDryBaseline(constraints, TextBaseline.alphabetic)! +
+                tight.shift,
+            epsilon: 1e-9,
+          ),
+        );
+        // 자식보다 높은 boxHeight는 상자를 키우지 않는다
+        final loose = await pump(fullSize.height * 2);
+        expect(loose.size, fullSize);
+      },
+    );
+
     testWidgets('dry 기준선은 실제 기준선과 같다 — 옮긴 거리를 함께 더한다 (글자·2차원 각인)', (
       tester,
     ) async {
