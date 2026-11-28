@@ -12,9 +12,9 @@ import 'package:meta/meta.dart';
 //   그리는 쪽은 `presentation/widgets/key_legend_view.dart`(`KeyLegendView`)다.
 // - 이 파일은 도메인 계층에서도 쓰도록 UI 패키지에 의존하지 않는다.
 //
-// M2의 LCD 수식 렌더링(`MathNodeWidget`)과의 관계: 이 모델은 키캡 각인 전용이다. 입력 칸은 자리별 모양을 가진
+// M3의 LCD 수식 렌더링(`MathNodeWidget`)과의 관계: 이 모델은 키캡 각인 전용이다. 입력 칸은 자리별 모양을 가진
 // 그림([LegendBox])이고 커서·편집 정보가 없다. LCD 수식 AST(`domain/models/math_node.dart`)와 노드 종류(분수·첨자·근호)는
-// 겹치므로, M2에서 같은 배치 규칙(첨자 크기·분수 막대 높이 등)을 공유할지 정한다.
+// 겹치므로, M3에서 같은 배치 규칙(첨자 크기·분수 막대 높이 등)을 공유할지 정한다.
 
 /// 키캡 각인(메인·SHIFT·ALPHA 한 층)의 구조.
 ///
@@ -263,7 +263,7 @@ final class LegendLimits extends KeyLegend {
 ///
 /// 실물 칸은 자리마다 가로세로 비가 다르다. 비(사진 원본 픽셀)는 `CalcTheme.keyLegendBoxAspectRatio`에,
 /// 크기 규칙은 그리는 쪽(`KeyLegendView`)에 있다. 값 하나가 키캡 각인의 자리 하나를 가리킨다(테스트로 고정) —
-/// 자리마다 잰 비가 다르므로 같은 모양을 다른 각인에 돌려 쓰지 않는다. M2의 LCD 수식 렌더링이 입력 칸을 그릴 때는
+/// 자리마다 잰 비가 다르므로 같은 모양을 다른 각인에 돌려 쓰지 않는다. M3의 LCD 수식 렌더링이 입력 칸을 그릴 때는
 /// 이 키캡 전용 자리 이름이 아니라 칸 종류(비·높이 규칙)를 따로 정한다. 아래 픽셀은 실물 키패드 근접 사진(가로 2048px, 메인 각인 글자
 /// 크기 약 33px·SHIFT 각인 약 22px)에서 잰 가로×세로다(#186 — ∑ 칸은 Quick Start Guide 1쪽 제품 사진, #169).
 enum LegendBoxShape {

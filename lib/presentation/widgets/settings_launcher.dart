@@ -7,7 +7,7 @@ import '../../core/layout/form_factor.dart';
 import 'handedness_dialog.dart';
 
 /// 설정 키(ON, #190)로 설정을 연다 — 키패드 위치(손잡이) 선택 대화상자([HandednessDialog], #24)를 띄운다. 계산기
-/// SETUP 항목과 앱 설정을 담은 설정 팝업은 M4(에픽 #191)에서 만든다.
+/// SETUP 항목과 앱 설정을 담은 설정 팝업은 M5(에픽 #191)에서 만든다.
 ///
 /// 이 위젯은 그리지 않는다. 계산기 화면(`CalculatorScreen`)이 본체 전체를 이 위젯으로 감싸고, 키패드의 설정 키가
 /// [openFrom]에 자기 context를 넘겨 연다. 대화상자는 그 키(이하 "ON 키")의 위치를 기준으로 띄운다. 예전에는 LCD 위
