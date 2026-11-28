@@ -113,8 +113,11 @@ const _windows = <_Window>[
 /// 그려진 폭의 차
 const _tolerance = 0.05;
 
-/// 지금 띄운 화면의 배포 목록 (#267) — [_pump]·[_pumpButton]이 정한다
+/// 지금 띄운 화면의 배포 목록 (#267) — [_pump]·[_pumpButton]이 정한다. 테스트마다 실물 인쇄 전체로 되돌린다(`setUp`).
 Set<KeyFeature> _released = allKeyFeatures;
+
+/// v1.0의 배포 목록 — 상수 [releasedKeyFeatures]와 따로 적는다(버전을 올려도 "v1.0" 검사는 그대로 돈다)
+const _v10 = {KeyFeature.complex};
 
 /// [def] 키의 각인 띠에 그려진 각인 (지금 띄운 화면의 배포 목록 기준)
 List<BandLegend> _band(CalcKeyDef def) => def.bandLegendsIn(_released);
@@ -338,6 +341,8 @@ Future<void> _pumpButton(
 
 void main() {
   setUpAll(loadBundledFonts);
+  // 앞 테스트가 띄운 화면의 배포 목록이 넘어오지 않게 한다
+  setUp(() => _released = allKeyFeatures);
 
   group('들이는 거리 계산', () {
     test('상한은 키캡 폭의 비율과 모서리 반경 가운데 큰 쪽이다', () {
@@ -899,13 +904,7 @@ void main() {
               expect(find.text(text), findsOneWidget, reason: text);
             }
 
-            await _pump(
-              tester,
-              window,
-              textScale: textScale,
-              released: releasedKeyFeatures,
-            );
-            expect(releasedKeyFeatures, isNot(contains(KeyFeature.baseN)));
+            await _pump(tester, window, textScale: textScale, released: _v10);
             // 숨긴 각인은 그려지지 않는다 — 괄호는 ENG의 ∠(Complex) 하나뿐이다
             for (final text in ['QR', 'DEC', 'HEX', 'BIN', 'OCT']) {
               expect(find.text(text), findsNothing, reason: text);
@@ -1061,9 +1060,7 @@ void main() {
   }
 
   group('배포 목록 (#267)', () {
-    testWidgets('앱 기본값: 아무것도 바꾸지 않은 앱은 배포 목록(v1.0)대로 그린다 — QR·파랑 각인이 없다', (
-      tester,
-    ) async {
+    testWidgets('앱 기본값: 아무것도 바꾸지 않은 앱은 배포 목록 상수대로 그린다', (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(360, 780);
       addTearDown(tester.view.reset);
@@ -1087,21 +1084,96 @@ void main() {
         tester.widget<CalcKeypad>(find.byType(CalcKeypad)).releasedFeatures,
         releasedKeyFeatures,
       );
+      // 그려진 각인이 키마다 배포 목록의 각인 그대로다 (상수가 바뀌어도 이 검사는 그 값을 따라간다)
       for (final button in tester.widgetList<CalcKeyButton>(
         find.byType(CalcKeyButton),
       )) {
+        final def = button.keyDef;
         expect(
           button.releasedFeatures,
           releasedKeyFeatures,
-          reason: button.keyDef.id.name,
+          reason: def.id.name,
+        );
+        if (def.face != KeyFace.keycap) continue;
+        for (final item in def.printedBandLegends) {
+          final shown = def.bandLegends.any((b) => b.legend == item.legend);
+          expect(
+            find.descendant(
+              of: _button(def.id),
+              matching: findLegend(item.legend),
+            ),
+            shown ? findsOneWidget : findsNothing,
+            reason: '${def.id.name} $item',
+          );
+        }
+        expect(
+          find.descendant(
+            of: _button(def.id),
+            matching: find.byType(LegendBrackets),
+          ),
+          findsNWidgets(def.bandLegends.where((b) => b.bracketed).length),
+          reason: def.id.name,
         );
       }
-      for (final text in ['QR', 'DEC', 'HEX', 'BIN', 'OCT']) {
-        expect(find.text(text), findsNothing, reason: text);
-      }
-      // ENG의 보라 괄호 하나뿐이다 (A~F의 파란 괄호가 없다)
-      expect(find.byType(LegendBrackets), findsOneWidget);
+      // 숨긴 것이 하나라도 있어야 위 검사가 뜻이 있다 (QR은 배포 계획이 없다)
+      expect(find.text('QR'), findsNothing);
       expect(find.text('SOLVE'), findsOneWidget);
+    });
+
+    test('숨긴 각인은 키패드 치수·글자 크기를 바꾸지 않는다 (배열 2종 × 창 크기 × 글자 배율 1.0·1.3·2.0)', () {
+      // 배포 목록을 바꿔도(버전을 올려도) 키 크기·글자 크기가 달라지지 않아야 한다 — 숨긴 각인의 폭이 통일 글자 크기를
+      // 정하지 않는다. 다른 값이 나오면 그 버전에서 화면 전체의 각인 크기가 바뀐다는 뜻이다.
+      for (final arrangement in KeypadArrangement.values) {
+        for (final size in const [
+          Size(280, 330),
+          Size(320, 380),
+          Size(360, 420),
+          Size(411, 520),
+          Size(600, 700),
+          Size(800, 900),
+          Size(760, 300),
+          Size(1240, 520),
+        ]) {
+          for (final scale in [1.0, 1.3, 2.0]) {
+            KeypadMetrics metrics(Set<KeyFeature> released) =>
+                KeypadMetrics.compute(
+                  size,
+                  TextScaler.linear(scale),
+                  arrangement: arrangement,
+                  releasedFeatures: released,
+                );
+            final base = metrics(_v10);
+            for (final released in [
+              allKeyFeatures,
+              const {KeyFeature.complex, KeyFeature.baseN},
+              const <KeyFeature>{},
+            ]) {
+              final other = metrics(released);
+              final reason = '${arrangement.name} $size 배율 $scale $released';
+              expect(other.size, base.size, reason: reason);
+              expect(other.legendFontSize, base.legendFontSize, reason: reason);
+              expect(other.legendBaseLift, base.legendBaseLift, reason: reason);
+              expect(
+                other.legendBandHeight,
+                base.legendBandHeight,
+                reason: reason,
+              );
+              for (final id in [
+                CalcKeyId.sin,
+                CalcKeyId.num7,
+                CalcKeyId.del,
+                CalcKeyId.add,
+              ]) {
+                expect(
+                  other.mainLabelFontSizeOf(keyDefOf(id)),
+                  base.mainLabelFontSizeOf(keyDefOf(id)),
+                  reason: '$reason ${id.name}',
+                );
+              }
+            }
+          }
+        }
+      }
     });
 
     testWidgets('키패드가 받은 배포 목록을 글자 크기 계산과 모든 키 버튼에 그대로 넘긴다', (tester) async {

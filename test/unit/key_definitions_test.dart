@@ -60,8 +60,9 @@ void main() {
     test('메인 라벨은 비어 있지 않고, SHIFT/ALPHA 라벨은 null이거나 비어 있지 않다', () {
       for (final key in allKeys) {
         expect(key.mainLabel.trim(), isNotEmpty, reason: '$key');
-        if (key.shiftLabel != null) {
-          expect(key.shiftLabel!.trim(), isNotEmpty, reason: '$key');
+        // 명세 전체를 본다 — 배포 전이라 숨긴 SHIFT 각인(#267)도 포함
+        if (key.printedShiftLegend case final shift?) {
+          expect(shift.plainText.trim(), isNotEmpty, reason: '$key');
         }
         if (key.alphaLabel != null) {
           expect(key.alphaLabel!.trim(), isNotEmpty, reason: '$key');
@@ -76,7 +77,7 @@ void main() {
 
     test('SHIFT 각인은 키 간에 중복되지 않는다', () {
       final labels = allKeys
-          .map((k) => k.shiftLabel)
+          .map((k) => k.printedShiftLegend?.plainText)
           .whereType<String>()
           .toList();
       expect(labels.toSet().length, labels.length);
@@ -149,7 +150,11 @@ void main() {
       // 노란색(SHIFT)·빨간색(ALPHA) 각인 자리에는 두지 않는다 — 모드 전용 각인 자리가 따로 있다(#266, 아래 그룹).
       const modeOnly = {'∠', 'i', 'DEC', 'HEX', 'BIN', 'OCT'};
       for (final key in allKeys) {
-        expect(modeOnly, isNot(contains(key.shiftLabel)), reason: '$key');
+        expect(
+          modeOnly,
+          isNot(contains(key.printedShiftLegend?.plainText)),
+          reason: '$key',
+        );
         expect(modeOnly, isNot(contains(key.alphaLabel)), reason: '$key');
       }
     });
@@ -371,7 +376,7 @@ void main() {
 
       for (final key in allKeys) {
         add(key.mainLabel, key, 'main');
-        add(key.shiftLabel, key, 'shift');
+        add(key.printedShiftLegend?.plainText, key, 'shift');
         add(key.alphaLabel, key, 'alpha');
       }
       final shared = {
@@ -419,7 +424,7 @@ void main() {
           for (final k in allKeys)
             for (final (layer, legend) in [
               ('main', k.mainLegend),
-              ('shift', k.shiftLegend),
+              ('shift', k.printedShiftLegend),
               ('alpha', k.alphaLegend),
             ])
               if (legend != null && !legend.isPlain) (k.id, layer),
@@ -547,6 +552,9 @@ void main() {
         (CalcKeyId.tan, '┌F┐', KeyFeature.baseN),
       ];
 
+      // v1.0의 배포 목록 — 상수 [releasedKeyFeatures]와 따로 적는다. 버전을 올려 상수가 바뀌어도 "v1.0" 검사는 그대로 돈다
+      const v10 = {KeyFeature.complex};
+
       /// [released]에서 인쇄하는 것 — 각인은 한 줄 표기, 괄호는 `┌A┐`처럼 따로 센다
       Set<String> printed(CalcKeyDef key, Set<KeyFeature> released) => {
         for (final b in key.bandLegendsIn(released)) ...[
@@ -565,43 +573,33 @@ void main() {
             (key.id, item),
       ];
 
-      test('배포 목록은 v1.0이다 — Complex는 들어가고 Base-N·QR은 아니다', () {
-        expect(releasedKeyFeatures, {KeyFeature.complex});
+      test('배포 목록은 지금 v1.0이다 — Complex는 들어가고 Base-N·QR은 아니다', () {
+        // 상수 값을 고정하는 곳은 여기 하나다
+        expect(
+          releasedKeyFeatures,
+          v10,
+          reason:
+              '배포 버전을 올렸으면 이 기대값을 새 목록으로 고친다(예: v1.3은 {complex, baseN}). '
+              'milestone.md의 그 모드 절 "숨겨 둔 각인 되살리기"도 체크한다. "v1.0"이라 이름 붙인 다른 검사는 그대로 둔다',
+        );
         expect(allKeyFeatures, KeyFeature.values.toSet());
         expect(KeyLegendMode.complex.feature, KeyFeature.complex);
         expect(KeyLegendMode.baseN.feature, KeyFeature.baseN);
       });
 
       test('v1.0에서 숨는 각인은 QR과 Base-N 파랑 각인(DEC·HEX·BIN·OCT, A~F의 괄호)뿐이다', () {
-        expect(hidden(releasedKeyFeatures), [
+        expect(hidden(v10), [
           for (final (id, item, _) in hiddenInV10) (id, item),
         ]);
-        // 앱이 쓰는 값(bandLegends)이 그 목록이다
-        for (final key in allKeys) {
-          expect(
-            key.bandLegends,
-            key.bandLegendsIn(releasedKeyFeatures),
-            reason: key.id.name,
-          );
-          expect(
-            key.printedBandLegends,
-            key.bandLegendsIn(allKeyFeatures),
-            reason: key.id.name,
-          );
-        }
       });
 
       test('기능을 배포 목록에 더하면 그 기능의 각인만 되살아난다', () {
         for (final feature in KeyFeature.values) {
           final expected = [
             for (final (id, item, f) in hiddenInV10)
-              if (f != feature && !releasedKeyFeatures.contains(f)) (id, item),
+              if (f != feature && !v10.contains(f)) (id, item),
           ];
-          expect(
-            hidden({...releasedKeyFeatures, feature}),
-            expected,
-            reason: feature.name,
-          );
+          expect(hidden({...v10, feature}), expected, reason: feature.name);
         }
         // v1.3: Base-N을 더하면 파랑 각인이 모두 되살아나고 QR만 남는다
         expect(hidden({KeyFeature.complex, KeyFeature.baseN}), [
@@ -618,7 +616,7 @@ void main() {
 
       test('v1.0의 각인 띠: 숨긴 자리는 남은 각인이 다시 놓인다 (하나면 가운데, 괄호만 빠지면 쌍 그대로)', () {
         List<String> band(CalcKeyId id) => [
-          for (final b in keyDefOf(id).bandLegends) '$b',
+          for (final b in keyDefOf(id).bandLegendsIn(v10)) '$b',
         ];
         // 파랑 각인이 빠지면 노랑 각인 하나뿐이다 — 각인 줄이 하나는 키캡 가운데에 놓는다(#265)
         expect(band(CalcKeyId.square), ['BandLegend("x³", shift)']);
@@ -640,6 +638,8 @@ void main() {
       });
 
       test('숨긴 SHIFT 각인의 키는 SHIFT 기능이 없는 키다 — 명세에는 실물 인쇄가 남는다', () {
+        // QR 코드 기능은 넣을 계획이 없다 — 어느 버전의 배포 목록에도 없으므로 앱이 쓰는 값(getter)으로 본다
+        expect(releasedKeyFeatures, isNot(contains(KeyFeature.qrCode)));
         final optn = keyDefOf(CalcKeyId.optn);
         expect(optn.printedShiftLegend?.plainText, 'QR');
         expect(optn.shiftFeature, KeyFeature.qrCode);
@@ -715,7 +715,7 @@ void main() {
         for (final key in allKeys)
           for (final (layer, label) in [
             ('main', key.mainLabel),
-            ('shift', key.shiftLabel),
+            ('shift', key.printedShiftLegend?.plainText),
             ('alpha', key.alphaLabel),
           ])
             if (label == 'SETUP') (key.id, layer),
@@ -724,7 +724,11 @@ void main() {
       expect(keyDefOf(CalcKeyId.menu).hasShift, isFalse);
       expect(keyDefOf(CalcKeyId.ac).hasShift, isFalse);
       for (final key in allKeys) {
-        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+        for (final label in [
+          key.mainLabel,
+          key.printedShiftLegend?.plainText,
+          key.alphaLabel,
+        ]) {
           expect(
             label,
             isNot(anyOf('ON', 'OFF', 'SETTING')),
@@ -824,9 +828,13 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.equals: ('=', '≈', null), // G7
 };
 
-/// 50키의 모든 각인 (메인·SHIFT·ALPHA)
+/// 50키의 모든 각인 (메인·SHIFT·ALPHA) — 명세 전체(배포 전이라 숨긴 SHIFT 각인 포함, #267)
 Iterable<KeyLegend> _allLegends() => [
-  for (final k in allKeys) ...[k.mainLegend, ?k.shiftLegend, ?k.alphaLegend],
+  for (final k in allKeys) ...[
+    k.mainLegend,
+    ?k.printedShiftLegend,
+    ?k.alphaLegend,
+  ],
 ];
 
 /// 실물 키캡에 2차원 모양(분수·위첨자·아래첨자·근호)으로 인쇄된 각인 — 이슈 #155 "대상 각인" 표.

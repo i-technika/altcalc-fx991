@@ -174,7 +174,11 @@ void main() {
       // 키캡에서는 그림으로 바꾼 `√`·`∛`·위첨자도 여기서는 글자로 그린다.
       final missing = <String>{};
       for (final key in allKeys) {
-        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+        for (final label in [
+          key.mainLabel,
+          key.printedShiftLegend?.plainText,
+          key.alphaLabel,
+        ]) {
           for (final code in (label ?? '').runes) {
             if (!mono.contains(code) && !fallback.contains(code)) {
               missing.add('${key.id.name}: ${_describe(code)}');

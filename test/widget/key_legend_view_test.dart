@@ -22,7 +22,7 @@ List<(CalcKeyDef, KeyLegend, TextStyle)> _twoDimensional() => [
   for (final k in allKeys)
     for (final (legend, style) in [
       (k.mainLegend, CalcTheme.keyMainLabelStyle),
-      (k.shiftLegend, CalcTheme.keyShiftLabelStyle),
+      (k.printedShiftLegend, CalcTheme.keyShiftLabelStyle),
       (k.alphaLegend, CalcTheme.keyAlphaLabelStyle),
     ])
       if (legend != null && !legend.isPlain) (k, legend, style),
@@ -185,7 +185,7 @@ void main() {
       final overhanging = {
         for (final k in allKeys)
           for (final (legend, style) in [
-            (k.shiftLegend, CalcTheme.keyShiftLabelStyle),
+            (k.printedShiftLegend, CalcTheme.keyShiftLabelStyle),
             (k.alphaLegend, CalcTheme.keyAlphaLabelStyle),
           ])
             if (legend != null && KeyLegendView.overhangsLine(legend, style))

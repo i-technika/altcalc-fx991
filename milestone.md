@@ -149,7 +149,7 @@
 - [ ] 이 모드에서 쓸 수 없는 메모리·함수는 실물대로 막는다
 - [ ] 숨겨 둔 Base-N 각인 되살리기 (#267): 배포 목록 `releasedKeyFeatures`(`lib/core/constants/key_definitions.dart`)에
   `KeyFeature.baseN`을 더한다 — 파랑 `DEC`·`HEX`·`BIN`·`OCT`와 `A`~`F`의 파란 괄호가 다시 인쇄되고, `x³`·`◼√◻`·`10^◼`·`e^◼`은
-  가운데에서 왼쪽으로 돌아간다
+  가운데에서 왼쪽으로 돌아간다. 지금 값을 고정한 테스트(`test/unit/key_definitions_test.dart` "배포 목록은 지금 v1.0이다")를 함께 고친다
 - [ ] 모드 공통 요구사항(위 절) — v1.3 배포
 
 ## [ ] M15: Matrix (행렬 계산) — v1.4, 에픽 #245

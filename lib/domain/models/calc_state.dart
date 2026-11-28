@@ -55,6 +55,8 @@ class KeyInput {
       );
 
   /// [layer]에 해당하는 각인. 해당 층에 기능이 없으면 `null`.
+  /// SHIFT 층은 배포된 기능만이다(#267 — [CalcKeyDef.shiftLabel]이 배포 목록 `releasedKeyFeatures`를 따른다). 배포 전이라
+  /// 숨긴 SHIFT 기능(OPTN의 `QR`)은 기능 없는 층이라 [CalcState.pressKey]가 입력을 만들지 않는다.
   static String? labelOf(CalcKeyId id, KeyLayer layer) {
     final def = keyDefOf(id);
     return switch (layer) {

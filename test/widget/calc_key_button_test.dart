@@ -630,9 +630,24 @@ void main() {
   });
 
   group('배포 기능에 따른 각인 (#267)', () {
+    // v1.0의 배포 목록 — 상수 `releasedKeyFeatures`와 따로 적는다(버전을 올려도 이 검사는 그대로 돈다)
+    const v10 = {KeyFeature.complex};
+
+    testWidgets('기본값은 배포 목록 상수다', (tester) async {
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.square))),
+      );
+      expect(
+        tester
+            .widget<CalcKeyButton>(find.byType(CalcKeyButton))
+            .releasedFeatures,
+        releasedKeyFeatures,
+      );
+    });
+
     Rect cap(WidgetTester tester, CalcKeyId id) => tester.getRect(_keycap(id));
 
-    testWidgets('v1.0(기본값): Base-N의 파랑 각인과 QR은 그리지 않고, 남은 노랑 각인 하나는 키캡 가운데다', (
+    testWidgets('v1.0: Base-N의 파랑 각인과 QR은 그리지 않고, 남은 노랑 각인 하나는 키캡 가운데다', (
       tester,
     ) async {
       for (final (id, hidden) in [
@@ -643,7 +658,10 @@ void main() {
       ]) {
         final def = keyDefOf(id);
         await tester.pumpWidget(
-          _host(CalcKeyButton(keyDef: def), size: const Size(80, 72)),
+          _host(
+            CalcKeyButton(keyDef: def, releasedFeatures: v10),
+            size: const Size(80, 72),
+          ),
         );
         expect(find.text(hidden), findsNothing, reason: id.name);
         final shift = findLegend(def.shiftLegend!);
@@ -656,13 +674,18 @@ void main() {
       }
       // OPTN: QR이 없다 — 각인 띠가 비어 있다
       await tester.pumpWidget(
-        _host(CalcKeyButton(keyDef: keyDefOf(CalcKeyId.optn))),
+        _host(
+          CalcKeyButton(
+            keyDef: keyDefOf(CalcKeyId.optn),
+            releasedFeatures: v10,
+          ),
+        ),
       );
       expect(find.text('QR'), findsNothing);
       expect(find.text('OPTN'), findsOneWidget);
     });
 
-    testWidgets('v1.0(기본값): A~F는 괄호 없이 빨강 글자만 그린다 — SHIFT 각인과 쌍으로 좌우에 놓인다', (
+    testWidgets('v1.0: A~F는 괄호 없이 빨강 글자만 그린다 — SHIFT 각인과 쌍으로 좌우에 놓인다', (
       tester,
     ) async {
       for (final id in [
@@ -675,7 +698,10 @@ void main() {
       ]) {
         final def = keyDefOf(id);
         await tester.pumpWidget(
-          _host(CalcKeyButton(keyDef: def), size: const Size(80, 72)),
+          _host(
+            CalcKeyButton(keyDef: def, releasedFeatures: v10),
+            size: const Size(80, 72),
+          ),
         );
         expect(find.byType(LegendBrackets), findsNothing, reason: id.name);
         final letter = find.text(def.alphaLabel!);
@@ -697,12 +723,10 @@ void main() {
       }
     });
 
-    testWidgets('v1.0(기본값): Complex의 보라 각인(ENG의 ∠ 괄호·i)은 그대로 그린다', (
-      tester,
-    ) async {
+    testWidgets('v1.0: Complex의 보라 각인(ENG의 ∠ 괄호·i)은 그대로 그린다', (tester) async {
       await tester.pumpWidget(
         _host(
-          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.eng)),
+          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.eng), releasedFeatures: v10),
           size: const Size(80, 72),
         ),
       );
@@ -768,10 +792,6 @@ void main() {
       final node = tester.getSemantics(find.byType(CalcKeyButton));
       expect(node.label, isNotEmpty);
       expect(node.hint, isEmpty);
-      expect(
-        '${node.label} ${node.value}'.toUpperCase(),
-        isNot(contains('QR')),
-      );
       // 비교: SHIFT 기능이 있는 키는 힌트가 있다
       await tester.pumpWidget(
         _host(

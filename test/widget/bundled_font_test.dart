@@ -238,7 +238,7 @@ void main() {
       for (final key in allKeys) {
         for (final legend in [
           key.mainLegend,
-          ?key.shiftLegend,
+          ?key.printedShiftLegend,
           ?key.alphaLegend,
         ]) {
           for (final piece in legend.texts) {

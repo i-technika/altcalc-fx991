@@ -127,7 +127,7 @@ class CalcKeyButton extends StatefulWidget {
   final double legendBaseLift;
 
   /// 각인 띠에 어느 기능의 각인까지 인쇄할지 (#267) — 기본은 배포된 기능([releasedKeyFeatures])이다. 키패드가 글자 크기를
-  /// 잰 목록과 같은 값을 준다(`CalcKeypad.releasedFeatures`). 테스트·미리보기는 다른 값을 주어 배포 뒤 모습을 그려 본다.
+  /// 잰 목록과 같은 값을 준다(`CalcKeypad.releasedFeatures`). 테스트는 다른 값을 주어 배포 뒤 모습을 그려 본다.
   /// 그리는 각인만 정한다 — 입력 해석과 스크린리더 문구는 [releasedKeyFeatures]를 따른다.
   final Set<KeyFeature> releasedFeatures;
 
