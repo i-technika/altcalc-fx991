@@ -249,12 +249,11 @@ void main() {
     });
   });
 
-  group('Fold 가로 접힘선: 위 패널 = 기록 | 활성 LCD, 아래 패널 = 넓은 배열 (#143 고정값)', () {
+  group('Fold 가로 접힘선: 위 패널 전체 = LCD, 아래 패널 = 넓은 배열 (#143·#284 고정값)', () {
     // Galaxy Z Fold 내부 가로 841×673, 인셋 24/24: 본체 825 폭, 접힘선 336.5(본체 304.5) — 위 패널 296.5.
-    // 넓은 배열 블록 825 / 2.06 = 400.5. 활성 LCD는 숫자부 블록 위, 기록 영역은 함수부 블록 위이고 둘 다 400.5×296.5(위 패널
-    // 높이 전체, #232 — 그 전에는 활성 LCD가 400.5×228.8(블록 폭 / 1.75)로 접힘선 쪽에 붙고 그 위 67.7dp가 비었다). 줄 글자는
-    // 폭에 묶여 32.1dp 그대로다. #143 전(테이블톱 폭 상한)에는 LCD 480×273.5가 손 쪽 끝에 붙고 반대쪽은 빈 여백이었다.
-    // 펼침·반 접힘이 같은 배치다.
+    // LCD는 위 패널 전체 825×296.5다(#284). #284 전에는 넓은 배열 블록(825 / 2.06 = 400.5) 폭의 활성 LCD가 숫자부 위, 기록 영역이
+    // 함수부 위였고(둘 다 400.5×296.5, #232), #232 전에는 활성 LCD가 400.5×228.8로 접힘선 쪽에 붙고 그 위 67.7dp가 비었다.
+    // #143 전(테이블톱 폭 상한)에는 LCD 480×273.5가 손 쪽 끝에 붙고 반대쪽은 빈 여백이었다. 펼침·반 접힘이 같은 배치다.
     for (final handedness in Handedness.values) {
       for (final state in const [
         DisplayFeatureState.postureHalfOpened,
@@ -274,7 +273,7 @@ void main() {
           expect(drawnArrangementOf(tester), DrawnArrangement.tabletop);
           final lcd = tester.getRect(_lcd);
           final keypad = tester.getRect(_keypad);
-          final history = tester.getRect(_history);
+          expect(_history, findsNothing);
           expect(
             keypad,
             rectMoreOrLessEquals(
@@ -287,19 +286,10 @@ void main() {
             KeypadArrangement.wide,
           );
           expect(_numbersOnLeft(tester), !handedness.keypadOnRight);
-          const block = 825 / 2.06;
-          expect(lcd.size, sizeMoreOrLessEquals(const Size(block, 296.5)));
-          expect(lcd.top, moreOrLessEquals(32));
-          expect(lcd.bottom, moreOrLessEquals(336.5 - 8));
-          expect(history.size, sizeMoreOrLessEquals(const Size(block, 296.5)));
-          expect(history.top, moreOrLessEquals(32));
-          if (handedness.keypadOnRight) {
-            expect(lcd.right, moreOrLessEquals(833));
-            expect(history.left, moreOrLessEquals(8));
-          } else {
-            expect(lcd.left, moreOrLessEquals(8));
-            expect(history.right, moreOrLessEquals(833));
-          }
+          expect(
+            lcd,
+            rectMoreOrLessEquals(const Rect.fromLTRB(8, 32, 833, 336.5 - 8)),
+          );
           expect(
             KeypadMetrics.minKeyTouchHeightOf(
               keypad.size,
@@ -415,7 +405,7 @@ void main() {
           find.byKey(HandednessDialog.noteKey),
           numbersMove ? findsNothing : findsOneWidget,
         );
-        // 안내대로인지: 손잡이를 바꿨을 때 키패드 자리는 그대로이고, 넓은 배열만 숫자부·활성 LCD가 옮겨 간다
+        // 안내대로인지: 손잡이를 바꿨을 때 키패드·LCD 자리는 그대로이고, 넓은 배열만 숫자부가 옮겨 간다(#284 — LCD는 위 패널 전체)
         await tester.tap(_option(Handedness.left));
         await tester.pumpAndSettle();
         expect(tester.getRect(_keypad), before);
@@ -423,7 +413,7 @@ void main() {
           _numbersOnLeft(tester),
           numbersMove ? !numbersBefore : numbersBefore,
         );
-        expect(tester.getRect(_lcd) == lcdBefore, !numbersMove);
+        expect(tester.getRect(_lcd), lcdBefore);
       });
     }
 
@@ -460,11 +450,8 @@ void main() {
         KeypadArrangement arrangementNow() =>
             tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement;
         expect(arrangementNow(), KeypadArrangement.wide);
-        final rects = [
-          tester.getRect(_lcd),
-          tester.getRect(_keypad),
-          tester.getRect(_history),
-        ];
+        expect(_history, findsNothing); // 위 패널 전체가 LCD다(#284)
+        final rects = [tester.getRect(_lcd), tester.getRect(_keypad)];
         Finder button(CalcKeyId id) => find.byWidgetPredicate(
           (w) => w is CalcKeyButton && w.keyDef.id == id,
         );
@@ -486,11 +473,7 @@ void main() {
           displayFeatures: [_foldAt(const Rect.fromLTWH(0, 336.5, 841, 0))],
           container: container,
         );
-        expect([
-          tester.getRect(_lcd),
-          tester.getRect(_keypad),
-          tester.getRect(_history),
-        ], rects);
+        expect([tester.getRect(_lcd), tester.getRect(_keypad)], rects);
         // 접어 커버 화면으로 → 위아래 배치(실물 배열). 키 element·State가 그대로라 누른 채인 키가 이어진다.
         await _pump(
           tester,
@@ -1139,42 +1122,20 @@ void _hingeLayoutTests() {
                   keypad.top,
                   greaterThanOrEqualTo(hinge.bottom + m - 0.01),
                 );
-                if (arrangement == KeypadArrangement.wide) {
-                  // 위 패널 = 기록(함수부 위) | 활성 LCD(숫자부 위, 접힘선 쪽) — 숫자부는 주로 쓰는 손 쪽
-                  expect(_numbersOnLeft(tester), !handedness.keypadOnRight);
-                  expect(lcd.bottom, moreOrLessEquals(hinge.top - m));
-                  if (handedness.keypadOnRight) {
-                    expect(lcd.right, moreOrLessEquals(right));
-                  } else {
-                    expect(lcd.left, moreOrLessEquals(left));
-                  }
-                  if (history != null) {
-                    expect(history.top, moreOrLessEquals(top));
-                    expect(history.bottom, moreOrLessEquals(hinge.top - m));
-                    expect(
-                      handedness.keypadOnRight ? history.left : history.right,
-                      moreOrLessEquals(handedness.keypadOnRight ? left : right),
-                    );
-                  }
-                } else {
-                  // 위 패널 맨 위가 활성 LCD(패널 폭 전체), 그 아래가 기록(최근 것부터) — 손잡이와 무관하다
-                  expect(_numbersOnLeft(tester), isFalse);
-                  expect(lcd.top, moreOrLessEquals(top));
-                  expect(lcd.left, moreOrLessEquals(left));
-                  expect(lcd.right, moreOrLessEquals(right));
-                  expect(history, isNotNull);
-                  expect(
-                    history,
-                    rectMoreOrLessEquals(
-                      Rect.fromLTRB(
-                        left,
-                        lcd.bottom + CalcTheme.screenLcdHistoryGap,
-                        right,
-                        hinge.top - m,
-                      ),
-                    ),
-                  );
-                }
+                // 위 패널 전체가 LCD다 — 배열과 무관하다(#284). 넓은 배열의 숫자부는 주로 쓰는 손 쪽이다.
+                expect(_history, findsNothing);
+                expect(history, isNull);
+                expect(
+                  lcd,
+                  rectMoreOrLessEquals(
+                    Rect.fromLTRB(left, top, right, hinge.top - m),
+                  ),
+                );
+                expect(
+                  _numbersOnLeft(tester),
+                  arrangement == KeypadArrangement.wide &&
+                      !handedness.keypadOnRight,
+                );
                 // 설정 키(ON)는 아래 패널 키패드 안에서 눌린다 (#190).
                 expect(
                   keypad.inflate(0.01).contains(settings.topLeft) &&
@@ -1240,15 +1201,12 @@ void _hingeLayoutTests() {
           moreOrLessEquals(touch, epsilon: 0.05),
         );
         expect(tester.getSize(_keypad).width, moreOrLessEquals(395));
-        // 위 패널: 활성 LCD 395×225.7(폭 / 1.75), 그 아래 기록 영역 약 221dp
+        // 위 패널 전체가 LCD다(#284): 395×(503 − 8 − 40) = 395×455. #284 전에는 활성 LCD 395×225.7(폭 / 1.75), 그 아래 기록 약 221dp였다.
         expect(
           tester.getSize(_lcd),
-          sizeMoreOrLessEquals(const Size(395, 395 / 1.75)),
+          sizeMoreOrLessEquals(const Size(395, 503 - 8 - 40)),
         );
-        expect(
-          tester.getSize(_history).height,
-          moreOrLessEquals(503 - 8 - 40 - 395 / 1.75 - 8),
-        );
+        expect(_history, findsNothing);
       });
     }
   });
@@ -1983,11 +1941,13 @@ void _hingeLayoutTests() {
       final opened = tester.getRect(_dialogSurface);
       expect(opened.center.dx, moreOrLessEquals(size.width / 2));
 
-      final lcdBefore = tester.getRect(_lcd);
+      // 숫자부가 옮겨 간다(#284부터 LCD는 본체 폭 전체라 그대로다).
+      final seven = find.byKey(CalcKeyButton.keycapKeyOf(CalcKeyId.num7));
+      final sevenBefore = tester.getRect(seven);
       await tester.tap(_option(Handedness.left));
       await tester.pumpAndSettle();
       expect(container.read(handednessProvider), Handedness.left);
-      expect(tester.getRect(_lcd), isNot(lcdBefore));
+      expect(tester.getRect(seven), isNot(sevenBefore));
       expect(tester.getRect(_dialogSurface), opened);
     });
   });
@@ -4236,7 +4196,7 @@ void _hingeLayoutTests() {
         for (final h in Handedness.values) {
           final l = CalcTabletopLayout.of(body, hinge, h);
           final reason = '$body $hinge $h $l';
-          final rects = [l.lcd, l.keypad, ?l.history];
+          final rects = [l.lcd, l.keypad];
           expectSane(body, rects, reason);
           for (final r in rects) {
             if (r.isEmpty) continue;
@@ -4284,11 +4244,10 @@ void _hingeLayoutTests() {
       }
     });
 
-    test('가로 접힘선·넓은 배열: 위 패널은 가로형의 위 띠처럼 기록 | 활성 LCD로 나뉜다 (Fold 가로 고정값)', () {
+    test('가로 접힘선·넓은 배열: 위 패널 전체가 LCD다 (Fold 가로 고정값, #284)', () {
       // Fold 가로 본체 825×609(인셋 24/24), 접힘선 304.5: 위 패널 296.5, 아래 패널 296.5 → 넓은 배열 825×267(폭에 묶임).
       const body = Size(825, 609);
       const hinge = Rect.fromLTWH(0, 304.5, 825, 0);
-      const block = 825 / 2.06;
       final r = CalcTabletopLayout.of(body, hinge, Handedness.right);
       expect(r.keypadArrangement, KeypadArrangement.wide);
       expect(
@@ -4298,36 +4257,29 @@ void _hingeLayoutTests() {
           epsilon: 0.1,
         ),
       );
-      // 활성 LCD는 기록 영역처럼 위 패널 높이 전체다(#232).
+      // #284 전에는 숫자부 위 블록 폭(400.5)이 활성 LCD, 함수부 위가 기록 영역이었다.
       expect(
         r.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTRB(825 - block, 0, 825, 296.5)),
+        rectMoreOrLessEquals(const Rect.fromLTRB(0, 0, 825, 296.5)),
       );
-      expect(
-        r.history,
-        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, block, 296.5)),
-      );
-      // 왼손잡이는 좌우 대칭이고, 키패드는 그대로(숫자부만 왼쪽)
+      // 왼손잡이는 숫자부만 왼쪽이고 LCD·키패드 자리는 같다
       final l = CalcTabletopLayout.of(body, hinge, Handedness.left);
       expect(l.numbersOnLeft, isTrue);
       expect(l.keypad, r.keypad);
-      expect(l.lcd, rectMoreOrLessEquals(mirrorIn(body, r.lcd)));
-      expect(l.history, rectMoreOrLessEquals(mirrorIn(body, r.history!)));
+      expect(l.lcd, rectMoreOrLessEquals(r.lcd));
     });
 
-    test('가로 접힘선·넓은 배열: 위 패널이 낮으면 가로형처럼 기록 없이 활성 LCD가 폭 전체다', () {
-      // 위 패널 120 < 기록 문턱 128 → 기록 없음, 활성 LCD 825×120(접힘선 쪽)
+    test('가로 접힘선·넓은 배열: 위 패널이 낮아도 LCD는 위 패널 전체다', () {
       const body = Size(825, 380);
       const hinge = Rect.fromLTWH(0, 128, 825, 0);
       final l = CalcTabletopLayout.of(body, hinge, Handedness.right);
       expect(l.keypadArrangement, KeypadArrangement.wide);
-      expect(l.history, isNull);
       expect(l.lcd, rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 825, 120)));
     });
 
-    test('가로 접힘선·실물 배열: 위 패널 맨 위가 활성 LCD, 그 아래가 기록 영역이다 (Flip 고정값)', () {
-      // Flip 내부 본체 395×934(인셋 32/24), 접힘선 463: 위 패널 455 → 활성 LCD 395×225.7(폭 / 1.75), 간격 8, 기록 221.3.
-      // 아래 패널 463 → 실물 배열 키패드 395×463(높이에 묶임).
+    test('가로 접힘선·실물 배열: 위 패널 전체가 LCD다 (Flip 고정값, #284)', () {
+      // Flip 내부 본체 395×934(인셋 32/24), 접힘선 463: 위 패널 455 → LCD 395×455. #284 전에는 활성 LCD 395×225.7(폭 / 1.75),
+      // 간격 8, 그 아래 기록 221.3이었다. 아래 패널 463 → 실물 배열 키패드 395×463(높이에 묶임).
       const body = Size(395, 934);
       const hinge = Rect.fromLTWH(0, 463, 395, 0);
       for (final h in Handedness.values) {
@@ -4341,53 +4293,37 @@ void _hingeLayoutTests() {
         );
         expect(
           l.lcd,
-          rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 395, 395 / 1.75)),
-          reason: '$h',
-        );
-        expect(
-          l.history,
-          rectMoreOrLessEquals(
-            const Rect.fromLTRB(0, 395 / 1.75 + 8, 395, 455),
-          ),
+          rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, 395, 455)),
           reason: '$h',
         );
       }
     });
 
-    test('가로 접힘선·실물 배열: 기록이 최소 높이에 못 미치면 기록 없이 활성 LCD가 위 패널 전체를 쓴다 (#232)', () {
-      // 폭 404: 활성 LCD 404 / 1.75 = 230.9. 위 패널이 230.9 + 8 + 112 = 350.9 이상이어야 기록을 둔다.
-      const width = 404.0;
-      const lcdHeight = width / 1.75;
-      const threshold =
-          lcdHeight +
-          CalcTheme.screenLcdHistoryGap +
-          CalcTheme.screenHistoryBelowLcdMinHeight;
-      CalcTabletopLayout at(double upper) => CalcTabletopLayout.of(
-        Size(width, upper + 16 + 520),
-        Rect.fromLTWH(0, upper + 8, width, 0),
-        Handedness.right,
-      );
-      final withHistory = at(threshold);
-      expect(withHistory.keypadArrangement, KeypadArrangement.standard);
-      expect(withHistory.history, isNotNull);
-      expect(
-        withHistory.history!.height,
-        moreOrLessEquals(CalcTheme.screenHistoryBelowLcdMinHeight),
-      );
-      expect(withHistory.lcd.height, moreOrLessEquals(lcdHeight));
-      final without = at(threshold - 0.5);
-      expect(without.history, isNull);
-      // #232 전에는 상한 높이 273.5까지만 써서 그 아래가 비었다.
-      expect(
-        without.lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, width, threshold - 0.5)),
-      );
-      // 위 패널이 더 낮아도 LCD는 위 패널 전체다
-      expect(
-        at(200).lcd,
-        rectMoreOrLessEquals(const Rect.fromLTWH(0, 0, width, 200)),
-      );
-    });
+    test(
+      '가로 접힘선·실물 배열: 위 패널 높이와 무관하게 LCD가 위 패널 전체다 — #284 전의 기록 문턱 경계에서도 튀지 않는다',
+      () {
+        // #284 전에는 위 패널이 활성 LCD(404 / 1.75 = 230.9) + 8 + 112 = 350.9 이상이면 LCD가 230.9로 줄고 그 아래가 기록이었다.
+        const width = 404.0;
+        CalcTabletopLayout at(double upper) => CalcTabletopLayout.of(
+          Size(width, upper + 16 + 520),
+          Rect.fromLTWH(0, upper + 8, width, 0),
+          Handedness.right,
+        );
+        for (final upper in const [200.0, 350.4, 350.9, 351.4, 600.0]) {
+          final l = at(upper);
+          expect(
+            l.keypadArrangement,
+            KeypadArrangement.standard,
+            reason: '$upper',
+          );
+          expect(
+            l.lcd,
+            rectMoreOrLessEquals(Rect.fromLTWH(0, 0, width, upper)),
+            reason: '$upper',
+          );
+        }
+      },
+    );
 
     test('가로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
@@ -4400,7 +4336,7 @@ void _hingeLayoutTests() {
           const Rect.fromLTWH(0, double.nan, 500, 0),
           Handedness.right,
         );
-        for (final r in [l.lcd, l.keypad, ?l.history]) {
+        for (final r in [l.lcd, l.keypad]) {
           expect(
             [
               r.left,

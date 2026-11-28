@@ -1559,18 +1559,6 @@ void main() {
   });
 
   group('가로형·접힘선 기준 배치 (#142, #25)', () {
-    test(
-      '가로형 기록 영역 문턱: LCD 최소 높이보다 높다 — 가로 폰처럼 위 띠가 LCD 최소 높이에 묶인 창에는 두지 않는다',
-      () {
-        expect(
-          CalcTheme.screenLandscapeHistoryMinHeight,
-          greaterThan(CalcTheme.screenLcdMinHeight),
-        );
-        // 문턱이 최소 높이보다 높아야 기록이 생기고 없어지는 경계에서 활성 LCD가 최대 높이에 걸리지 않는다 — 최대 높이가
-        // 최소 높이로 올려진 좁은 블록은 위 띠가 최소 높이라 문턱에 닿지 않는다(CalcLandscapeLayout, screen_layout_test).
-      },
-    );
-
     test('키 터치 하한: 터치 확장 기준 이하의 양수 (#25)', () {
       expect(CalcTheme.keyTouchHeightFloor, greaterThan(0));
       expect(
@@ -1579,13 +1567,16 @@ void main() {
       );
     });
 
-    test('Flip 위 패널 기록 영역 (#143): 간격은 0 이상, 문턱은 LCD 최소 높이 이상', () {
-      expect(CalcTheme.screenLcdHistoryGap, greaterThanOrEqualTo(0));
-      expect(
-        CalcTheme.screenHistoryBelowLcdMinHeight,
-        greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
-      );
-    });
+    test(
+      '짧은 손 쪽 패널 책 자세의 기록 영역 (#143, #285 전까지): 간격은 0 이상, 문턱은 LCD 최소 높이 이상',
+      () {
+        expect(CalcTheme.screenLcdHistoryGap, greaterThanOrEqualTo(0));
+        expect(
+          CalcTheme.screenHistoryBelowLcdMinHeight,
+          greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
+        );
+      },
+    );
 
     test('넓은 키패드 배열 블록 간격: 키 사이 가로 간격보다 넓고 블록 폭보다 훨씬 좁다 (#80)', () {
       expect(

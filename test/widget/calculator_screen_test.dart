@@ -424,12 +424,13 @@ void main() {
       recordPlatformCalls(tester);
       await app.main();
       await tester.pump();
-      // 가로형(#142): 숫자부와 활성 LCD가 왼쪽이다.
+      // 가로형(#142): 숫자부가 왼쪽이다. LCD는 본체 폭 전체라 손잡이와 무관하다(#284).
       Rect key(CalcKeyId id) =>
           tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
       expect(key(CalcKeyId.num7).right, lessThan(key(CalcKeyId.sin).left));
       final lcd = tester.getRect(find.byType(LcdDisplay));
-      expect(lcd.right, lessThanOrEqualTo(key(CalcKeyId.sin).left));
+      expect(lcd.left, lessThanOrEqualTo(key(CalcKeyId.num7).left));
+      expect(lcd.right, greaterThanOrEqualTo(key(CalcKeyId.sin).right));
     });
 
     /// 기기 채널: 폴더블 판정은 "폴더블 아님", 여러 창 모드 조회(#137)는 [multiWindow]()의 값이다. [fail]()이 참이면
