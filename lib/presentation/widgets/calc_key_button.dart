@@ -920,7 +920,7 @@ class _ShapeClipper extends CustomClipper<Path> {
       !identical(oldClipper.path, path);
 }
 
-/// 키캡 위 본체 영역의 각인 띠 — SHIFT·ALPHA 각인과 모드 전용 각인(#266, [CalcKeyDef.bandLegends]).
+/// 키캡 위 본체 영역의 각인 띠 — SHIFT·ALPHA 각인과 모드 전용 각인(#266, [CalcKeyDef.bandLegendsIn]).
 ///
 /// 각인이 둘이면 자연 폭(2차원 각인·괄호 포함, [bandLegendEmWidth])에 비례해 폭을 나눠, 넘치면 함께
 /// 같은 비율로 줄어든다. 단, 짧은 쪽이 한 줄 표기로 [CalcTheme.keyLegendPriorityMaxRunes]글자 이하(변수 이름
@@ -945,7 +945,7 @@ class _ShapeClipper extends CustomClipper<Path> {
 /// 짝 각인(`:`)과 함께 높이 [height] 안에서 더 올린다([KeyLegendView.bandLifts], #260 — 그리는 자리만 옮긴다. 폭 배분·줄임
 /// 배율은 그대로다).
 class _LegendRow extends StatelessWidget {
-  /// 인쇄할 각인 — 왼쪽부터 ([CalcKeyDef.bandLegends])
+  /// 인쇄할 각인 — 왼쪽부터 ([CalcKeyDef.bandLegendsIn] — `CalcKeyButton.releasedFeatures` 기준)
   final List<BandLegend> legends;
 
   /// 셀 폭 (dp) — 각인이 쓸 수 있는 폭

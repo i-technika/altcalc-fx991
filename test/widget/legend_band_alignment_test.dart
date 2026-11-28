@@ -1120,21 +1120,40 @@ void main() {
       expect(find.text('SOLVE'), findsOneWidget);
     });
 
-    test('숨긴 각인은 키패드 치수·글자 크기를 바꾸지 않는다 (배열 2종 × 창 크기 × 글자 배율 1.0·1.3·2.0)', () {
-      // 배포 목록을 바꿔도(버전을 올려도) 키 크기·글자 크기가 달라지지 않아야 한다 — 숨긴 각인의 폭이 통일 글자 크기를
-      // 정하지 않는다. 다른 값이 나오면 그 버전에서 화면 전체의 각인 크기가 바뀐다는 뜻이다.
-      for (final arrangement in KeypadArrangement.values) {
-        for (final size in const [
-          Size(280, 330),
-          Size(320, 380),
-          Size(360, 420),
-          Size(411, 520),
-          Size(600, 700),
-          Size(800, 900),
-          Size(760, 300),
-          Size(1240, 520),
-        ]) {
-          for (final scale in [1.0, 1.3, 2.0]) {
+    test('숨긴 각인은 각인 글자 크기를 정하지 않는다 — 배포 목록을 바꿔도 화면의 글자 크기가 같다', () {
+      // 각인 글자 크기는 높이 기준과 폭 기준(키마다 `쓸 수 있는 폭 ÷ 각인의 em 폭`의 최솟값) 가운데 작은 쪽이다. 배포 목록이
+      // 바꾸는 것은 폭 기준에 들어가는 각인뿐이다(키패드 크기·띠 높이·메인 글자는 배포 목록을 읽지 않는다).
+      // 그래서 "숨긴 각인이 있는 키들의 폭 한계가, 실물 인쇄 전체를 그릴 때도 v1.0 전체의 폭 한계보다 넉넉하다"가 성립하면
+      // 숨긴 각인은 어느 화면에서도 글자 크기를 정하지 못한다. 폭 한계의 키 사이 비는 창 크기와 거의 무관하므로(둘 다 폭에
+      // 비례) 배열마다 대표 크기 몇 개로 본다.
+      bool hasHidden(CalcKeyDef def) =>
+          def.bandLegendsIn(allKeyFeatures).toString() !=
+          def.bandLegendsIn(_v10).toString();
+      expect(allKeys.where(hasHidden).map((d) => d.id), [
+        CalcKeyId.optn,
+        CalcKeyId.square,
+        CalcKeyId.power,
+        CalcKeyId.logBase,
+        CalcKeyId.ln,
+        CalcKeyId.negative,
+        CalcKeyId.degMinSec,
+        CalcKeyId.reciprocal,
+        CalcKeyId.sin,
+        CalcKeyId.cos,
+        CalcKeyId.tan,
+      ]);
+      for (final (arrangement, sizes) in const [
+        (
+          KeypadArrangement.standard,
+          [Size(320, 380), Size(360, 420), Size(600, 700), Size(800, 900)],
+        ),
+        (
+          KeypadArrangement.wide,
+          [Size(760, 300), Size(800, 330), Size(1240, 520)],
+        ),
+      ]) {
+        for (final size in sizes) {
+          for (final scale in [1.0, 1.3]) {
             KeypadMetrics metrics(Set<KeyFeature> released) =>
                 KeypadMetrics.compute(
                   size,
@@ -1143,37 +1162,41 @@ void main() {
                   releasedFeatures: released,
                 );
             final base = metrics(_v10);
+            final reason = '${arrangement.name} $size 배율 $scale';
+            // 1) 구조: 숨긴 각인이 있는 키들의 폭 한계(실물 인쇄 전체) > v1.0 전체의 폭 한계
+            final hiddenKeys = KeypadMetrics.debugWidthLimits(
+              base,
+              where: hasHidden,
+              releasedFeatures: allKeyFeatures,
+            ).legend;
+            final v10All = KeypadMetrics.debugWidthLimits(
+              base,
+              releasedFeatures: _v10,
+            ).legend;
+            expect(hiddenKeys, greaterThan(v10All * 1.05), reason: reason);
+            // 2) 결과: 어느 배포 목록에서도 각인 글자 크기와 올림이 같다
             for (final released in [
               allKeyFeatures,
               const {KeyFeature.complex, KeyFeature.baseN},
               const <KeyFeature>{},
             ]) {
               final other = metrics(released);
-              final reason = '${arrangement.name} $size 배율 $scale $released';
-              expect(other.size, base.size, reason: reason);
-              expect(other.legendFontSize, base.legendFontSize, reason: reason);
-              expect(other.legendBaseLift, base.legendBaseLift, reason: reason);
               expect(
-                other.legendBandHeight,
-                base.legendBandHeight,
-                reason: reason,
+                other.legendFontSize,
+                base.legendFontSize,
+                reason: '$reason $released',
               );
-              for (final id in [
-                CalcKeyId.sin,
-                CalcKeyId.num7,
-                CalcKeyId.del,
-                CalcKeyId.add,
-              ]) {
-                expect(
-                  other.mainLabelFontSizeOf(keyDefOf(id)),
-                  base.mainLabelFontSizeOf(keyDefOf(id)),
-                  reason: '$reason ${id.name}',
-                );
-              }
+              expect(
+                other.legendBaseLift,
+                base.legendBaseLift,
+                reason: '$reason $released',
+              );
             }
           }
         }
       }
+      // 글자 배율 2.0은 따로 보지 않는다 — 키패드가 글자 배율을 [CalcTheme.keyMaxTextScaleFactor]에서 묶는다
+      expect(CalcTheme.keyMaxTextScaleFactor, lessThan(2.0));
     });
 
     testWidgets('키패드가 받은 배포 목록을 글자 크기 계산과 모든 키 버튼에 그대로 넘긴다', (tester) async {
@@ -1213,6 +1236,7 @@ void main() {
       final withoutBrackets = KeypadMetrics.debugWidthLimits(
         metrics,
         where: bracketed,
+        releasedFeatures: _v10,
       ).legend;
       // 괄호가 있으면 그 키들의 폭 한계가 더 빠듯하다 (괄호까지가 각인의 폭)
       expect(withBrackets, lessThan(withoutBrackets));
@@ -1222,6 +1246,7 @@ void main() {
         KeypadMetrics.compute(
           const Size(360, 420),
           TextScaler.noScaling,
+          releasedFeatures: _v10,
         ).legendFontSize,
       );
     });

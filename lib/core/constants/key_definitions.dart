@@ -209,17 +209,17 @@ enum KeyFeature {
 /// 배포되는 기능 — **각인 표시를 정하는 한 곳** (#267).
 ///
 /// 지금 값은 v1.0(Calculate·Complex·Equation/Func·Table)이다. 숨는 각인은 OPTN 키의 `QR`과 Base-N의 파랑 각인이다
-/// (테스트 `key_definitions_test.dart` "배포 기능에 따른 각인 (#267)"이 목록을 고정한다).
+/// (v1.0에서 숨는 목록은 테스트 `key_definitions_test.dart` "배포 기능에 따른 각인 (#267)" 그룹이 고정한다).
 ///
 /// 버전을 올릴 때 그 버전의 기능을 여기에 더한다 — v1.3에서 [KeyFeature.baseN]을 더한다. 되살아나는 범위:
 /// - SHIFT 각인([CalcKeyDef.shiftFeature] — 지금은 OPTN의 `QR`뿐): 각인·입력 해석(SHIFT 층)·스크린리더 문구가 함께.
 /// - 모드 전용 각인(Complex·Base-N): **인쇄만**. 그 모드에서의 키 기능과 스크린리더 문구는 그 모드 마일스톤이 만든다.
-/// 값을 바꾸면 지금 값을 고정한 테스트 하나("배포 목록은 지금 v1.0이다")를 함께 고친다. "v1.0"이라 이름 붙인 나머지
-/// 검사는 v1.0 목록을 따로 적어 두어 그대로 돈다.
+/// 값을 바꾸면 같은 그룹에서 지금 값을 고정한 테스트 하나("배포 목록은 지금 v1.0이다")를 함께 고친다. "v1.0"이라 이름
+/// 붙인 나머지 검사는 v1.0 목록을 따로 적어 두어 그대로 돈다.
 /// 여기에 없는 기능의 각인도 명세에는 남아 있다([CalcKeyDef.printedShiftLegend]·[CalcKeyDef.printedBandLegends]).
 const Set<KeyFeature> releasedKeyFeatures = {KeyFeature.complex};
 
-/// 모든 기능 — 실물 인쇄 전체를 볼 때 쓴다([CalcKeyDef.printedBandLegends], 테스트·미리보기)
+/// 모든 기능 — 실물 인쇄 전체를 볼 때 쓴다([CalcKeyDef.printedBandLegends], 테스트)
 const Set<KeyFeature> allKeyFeatures = {
   KeyFeature.complex,
   KeyFeature.baseN,
@@ -276,7 +276,7 @@ enum BandLegendRole {
   mode,
 }
 
-/// 키캡 위 각인 띠에 인쇄하는 각인 하나 (#266) — [CalcKeyDef.bandLegends]가 왼쪽부터 순서대로 돌려준다.
+/// 키캡 위 각인 띠에 인쇄하는 각인 하나 (#266) — [CalcKeyDef.bandLegendsIn]이 왼쪽부터 순서대로 돌려준다.
 ///
 /// 각인 띠를 그리는 쪽(`CalcKeyButton`)과 글자 크기를 재는 쪽(`KeypadMetrics`)이 같은 목록을 쓴다 — 한쪽만 아는 각인이
 /// 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
@@ -321,7 +321,9 @@ class BandLegend {
 /// 단일 키의 3단 각인(메인·SHIFT·ALPHA)과 모드 전용 각인, 카테고리를 정의하는 불변 모델.
 ///
 /// 명세는 실물 인쇄 그대로다. 그 가운데 아직 배포되지 않은 기능의 각인은 숨긴다(#267, [releasedKeyFeatures]):
-/// - 앱이 쓰는 값: [shiftLegend]·[shiftLabel]·[hasShift]·[bandLegends] — 배포된 기능의 각인만이다.
+/// - 배포된 기능만: [shiftLegend]·[shiftLabel]·[hasShift]·[bandLegends]. 입력 해석과 스크린리더가 SHIFT 층을 이 값으로
+///   가른다. 화면의 각인 띠는 키패드가 받은 배포 목록으로 [bandLegendsIn]을 불러 그린다 — 그 목록의 기본값이
+///   [releasedKeyFeatures]라 [bandLegends]와 같다.
 /// - 실물 인쇄 그대로: [printedShiftLegend]·[printedBandLegends]와 모드 전용 각인 필드([modeShiftLegend]·[modeLegend]·
 ///   [alphaBracketMode]).
 /// - 배포 목록을 바꿔 볼 때: [shiftLegendIn]·[bandLegendsIn].

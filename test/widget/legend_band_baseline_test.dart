@@ -391,7 +391,7 @@ enum _Raise {
 /// 한도를 다시 정해야 한다("넘치는 각인이 있는 키의 위 키는 원형 버튼이다" 검사).
 final Map<String, KeyLegend> _overflowingLegends = {
   for (final id in CalcKeyId.values)
-    if (keyDefOf(id).shiftLegend case final l?
+    if (keyDefOf(id).printedShiftLegend case final l?
         when l.plainText == 'd/dx◼' || l.plainText.startsWith('∑'))
       l.plainText: l,
 };
@@ -942,11 +942,12 @@ void main() {
   });
 
   test('넘치는 각인이 있는 키의 위 키는 원형 버튼이다 (#264 — 위 키 쪽 간격까지 올려도 키캡·그림자와 겹치지 않는다)', () {
-    // 키 버튼과 같은 판정으로 모은다 — SHIFT·ALPHA 각인 가운데 하나라도 한 줄 아래로 넘치는 키
+    // 키 버튼과 같은 판정으로 모은다 — SHIFT·ALPHA 각인 가운데 하나라도 한 줄 아래로 넘치는 키.
+    // 명세 전체(실물 인쇄)를 본다 — 배포 전이라 숨긴 각인(#267)이 되살아날 때도 이 불변식이 지켜져야 한다
     final overhanging = [
       for (final def in allKeys)
         if ([
-          (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
+          (def.printedShiftLegend, CalcTheme.keyShiftLabelStyle),
           (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
         ].any((e) => e.$1 != null && KeyLegendView.overhangsLine(e.$1!, e.$2)))
           def,
@@ -954,13 +955,13 @@ void main() {
     // 모드 전용 각인(#266)에는 넘치는 각인이 없다 — 키 버튼은 각인 띠 목록 전체로 판정한다
     expect([
       for (final def in allKeys)
-        if (def.bandLegends.any(
+        if (def.printedBandLegends.any(
           (b) => KeyLegendView.overhangsLine(b.legend, bandLegendStyle(b)),
         ))
           def.id,
     ], overhanging.map((d) => d.id));
     expect(
-      overhanging.map((d) => d.shiftLegend?.plainText),
+      overhanging.map((d) => d.printedShiftLegend?.plainText),
       unorderedEquals(_overflowingLegends.keys),
     );
     // 화면의 열 맞춤 — 상단 조작부 두 행(왼쪽 2열·커서 패드 2열·오른쪽 2열)과 함수부가 한 블록이다. 숫자부는 구역 사이

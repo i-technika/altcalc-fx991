@@ -582,9 +582,28 @@ void main() {
               '배포 버전을 올렸으면 이 기대값을 새 목록으로 고친다(예: v1.3은 {complex, baseN}). '
               'milestone.md의 그 모드 절 "숨겨 둔 각인 되살리기"도 체크한다. "v1.0"이라 이름 붙인 다른 검사는 그대로 둔다',
         );
+      });
+
+      test('모든 기능 목록은 KeyFeature 전체이고, 모드마다 배포 단위가 있다', () {
+        // 배포 목록 상수와 무관하다 — KeyFeature에 값을 더하면 allKeyFeatures도 함께 늘려야 한다
         expect(allKeyFeatures, KeyFeature.values.toSet());
         expect(KeyLegendMode.complex.feature, KeyFeature.complex);
         expect(KeyLegendMode.baseN.feature, KeyFeature.baseN);
+      });
+
+      test('한 키 안에서 메인 각인과 각인 띠 각인은 서로 겹치지 않는다 (실물 인쇄 전체)', () {
+        // 화면에서 "이 키에 이 각인이 그려졌는가"를 각인으로 찾는 검사들이 기대는 불변식이다
+        for (final key in allKeys) {
+          final legends = [
+            key.mainLegend,
+            for (final b in key.printedBandLegends) b.legend,
+          ];
+          expect(
+            legends.map((l) => l.plainText).toSet().length,
+            legends.length,
+            reason: '${key.id.name}: ${legends.map((l) => l.plainText)}',
+          );
+        }
       });
 
       test('v1.0에서 숨는 각인은 QR과 Base-N 파랑 각인(DEC·HEX·BIN·OCT, A~F의 괄호)뿐이다', () {
