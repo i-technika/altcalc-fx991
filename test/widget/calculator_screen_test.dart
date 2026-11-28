@@ -185,23 +185,31 @@ void main() {
             keypad.width / keypad.height,
             greaterThanOrEqualTo(CalcTheme.keypadMinAspectRatio - 1e-6),
           );
-          // 키가 넓어져도 각인 글자는 상한에서 멈춘다.
-          // 숫자부 메인 라벨은 함수부보다 크다(#156) — 구역마다 상한이 있고, 숫자부 글자 각인·연산 기호는 숫자 상한의
+          // 키가 넓어져도 각인 글자는 키 높이의 실물 비율을 넘지 않는다(#264 — 가로로만 넓어지면 글자는 커지지 않는다.
+          // #141의 dp 상한은 없앴다). 숫자부 메인 라벨은 함수부보다 크고(#156), 숫자부 글자 각인·연산 기호는 숫자의
           // 배수다(#225).
+          final metrics = KeypadMetrics.compute(
+            keypad.size,
+            TextScaler.noScaling,
+            arrangement: tester
+                .widget<CalcKeypad>(find.byType(CalcKeypad))
+                .arrangement,
+          );
+          final digitTarget =
+              metrics.numberCapHeight * CalcTheme.keyNumberMainLabelFontRatio;
           for (final button in tester.widgetList<CalcKeyButton>(
             find.byType(CalcKeyButton),
           )) {
             final max = switch (KeypadMetrics.numberLabelKindOf(
               button.keyDef,
             )) {
-              null => CalcTheme.keyMainLabelMaxFontSize,
-              NumberLabelKind.digit => CalcTheme.keyNumberMainLabelMaxFontSize,
+              null =>
+                metrics.functionCapHeight * CalcTheme.keyMainLabelFontRatio,
+              NumberLabelKind.digit => digitTarget,
               NumberLabelKind.word =>
-                CalcTheme.keyNumberMainLabelMaxFontSize *
-                    CalcTheme.keyNumberWordLabelScale,
+                digitTarget * CalcTheme.keyNumberWordLabelScale,
               NumberLabelKind.operator =>
-                CalcTheme.keyNumberMainLabelMaxFontSize *
-                    CalcTheme.keyNumberOperatorLabelScale,
+                digitTarget * CalcTheme.keyNumberOperatorLabelScale,
             };
             expect(
               button.mainLabelFontSize,
@@ -210,9 +218,16 @@ void main() {
             );
             expect(
               button.legendFontSize,
-              lessThanOrEqualTo(CalcTheme.keyLegendMaxFontSize),
+              lessThanOrEqualTo(
+                metrics.legendBandHeight * CalcTheme.keyLegendFontRatio + 1e-9,
+              ),
             );
           }
+          // 태블릿에서도 글자가 멈추지 않는다 — 숫자 잉크(0.688em)가 숫자 키캡 높이의 약 0.55다
+          expect(
+            metrics.numberMainLabelFontSize * 0.688 / metrics.numberCapHeight,
+            closeTo(0.55, 0.01),
+          );
         },
       );
     }

@@ -56,4 +56,63 @@ void main() {
       );
     });
   });
+
+  group('fitFontSizeScanning (#264 — 단조가 아닌 조건)', () {
+    // 줄 상자 반올림을 흉내 낸 조건: 5 이하이거나 8~9 사이에서만 참이다
+    bool bumpy(double scaled) => scaled <= 5 || (scaled >= 8 && scaled <= 9);
+
+    test('위쪽에 다시 참이 되는 구간이 있으면 그 구간의 가장 큰 크기를 찾는다 (이분 탐색은 지나친다)', () {
+      final scanned = fitFontSizeScanning(
+        10,
+        textScaler: TextScaler.noScaling,
+        fits: bumpy,
+      );
+      expect(scanned, closeTo(9, 1e-3));
+      expect(bumpy(scanned), isTrue);
+      // 같은 조건에 이분 탐색을 쓰면 아래 구간(5 이하)에서 멈춘다
+      final bisected = fitFontSize(
+        10,
+        textScaler: TextScaler.noScaling,
+        fits: bumpy,
+      );
+      expect(bisected, lessThanOrEqualTo(5 + 1e-6));
+    });
+
+    test('단조 조건에서는 이분 탐색과 같은 크기를 찾는다', () {
+      bool monotone(double scaled) => scaled <= 7.3;
+      for (final scaler in const <TextScaler>[
+        TextScaler.noScaling,
+        TextScaler.linear(1.3),
+        _NonLinearScaler(),
+      ]) {
+        expect(
+          fitFontSizeScanning(20, textScaler: scaler, fits: monotone),
+          closeTo(fitFontSize(20, textScaler: scaler, fits: monotone), 1e-3),
+          reason: '$scaler',
+        );
+      }
+    });
+
+    test('이미 만족하면 요청 크기 그대로, 어느 크기도 만족하지 않으면 하한이다', () {
+      expect(
+        fitFontSizeScanning(4, textScaler: TextScaler.noScaling, fits: bumpy),
+        4,
+      );
+      expect(
+        fitFontSizeScanning(
+          10,
+          textScaler: TextScaler.noScaling,
+          fits: (_) => false,
+        ),
+        minFittedFontSize,
+      );
+      // 배율을 반영한 크기로 판정한다 — 그리는 크기 9가 되는 6.92
+      final scaled = fitFontSizeScanning(
+        10,
+        textScaler: const TextScaler.linear(1.3),
+        fits: bumpy,
+      );
+      expect(scaled * 1.3, closeTo(9, 1e-2));
+    });
+  });
 }

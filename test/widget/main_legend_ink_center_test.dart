@@ -437,6 +437,84 @@ void main() {
       },
     );
 
+    testWidgets(
+      'boxHeight를 주면 상자 높이만 줄고 잉크 가운데는 그대로 상자 가운데다 (#264 — 숫자부 연산 기호)',
+      (tester) async {
+        const legend = LegendText('×');
+        const fontSize = 40.0;
+        final style = CalcTheme.keyMainLabelStyleFor(legend)
+            .copyWith(fontSize: fontSize);
+        final inkCenter = mainLegendInkCenter(legend, style) * fontSize;
+        final inkHeight = mainLegendInkHeight(legend, style) * fontSize;
+        Future<RenderInkCenteredLabel> pump(double? boxHeight) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Center(
+                child: InkCenteredLabel(
+                  inkCenter: inkCenter,
+                  boxHeight: boxHeight,
+                  child: Text(
+                    legend.text,
+                    style: style,
+                    strutStyle: keyLabelStrut(style),
+                  ),
+                ),
+              ),
+            ),
+          );
+          return tester.renderObject<RenderInkCenteredLabel>(
+            find.byType(InkCenteredLabel),
+          );
+        }
+
+        /// 상자 위끝에서 잉크 가운데까지 (그린 기준선 − 잉크 가운데 높이)
+        double inkCenterInBox(RenderInkCenteredLabel render) {
+          final child = render.child!;
+          // 배치 밖에서는 dry 기준선으로 잰다 (배치 중에만 쓸 수 있는 조회 대신)
+          final baseline = child.getDryBaseline(
+            BoxConstraints.loose(const Size(400, 400)),
+            TextBaseline.alphabetic,
+          )!;
+          return render.shift + drawnBaselineOf(child, baseline) - inkCenter;
+        }
+
+        final full = await pump(null);
+        final fullSize = full.size;
+        // 기호 잉크는 글자 크기의 절반쯤이다 — 줄 상자(글자 크기)보다 훨씬 낮다
+        expect(inkHeight, inInclusiveRange(fontSize * 0.4, fontSize * 0.5));
+        expect(fullSize.height, greaterThan(inkHeight * 1.8));
+        expect(inkCenterInBox(full), moreOrLessEquals(fullSize.height / 2));
+
+        final tight = await pump(inkHeight);
+        expect(tight.size.width, fullSize.width);
+        expect(tight.size.height, moreOrLessEquals(inkHeight));
+        expect(inkCenterInBox(tight), moreOrLessEquals(inkHeight / 2));
+        // dry 배치도 같은 크기·기준선을 보고한다
+        final constraints = BoxConstraints.loose(const Size(400, 400));
+        expect(tight.getDryLayout(constraints), tight.size);
+        expect(
+          tight.getDryBaseline(constraints, TextBaseline.alphabetic),
+          moreOrLessEquals(
+            tight.child!.getDryBaseline(constraints, TextBaseline.alphabetic)! +
+                tight.shift,
+            epsilon: 1e-9,
+          ),
+        );
+        // intrinsic 높이도 줄인 상자 높이다
+        expect(
+          tight.getMaxIntrinsicHeight(double.infinity),
+          moreOrLessEquals(inkHeight),
+        );
+        expect(
+          tight.getMinIntrinsicHeight(double.infinity),
+          moreOrLessEquals(inkHeight),
+        );
+        // 자식보다 높은 boxHeight는 상자를 키우지 않는다
+        final loose = await pump(fullSize.height * 2);
+        expect(loose.size, fullSize);
+      },
+    );
+
     testWidgets('dry 기준선은 실제 기준선과 같다 — 옮긴 거리를 함께 더한다 (글자·2차원 각인)', (
       tester,
     ) async {
@@ -546,7 +624,10 @@ void main() {
     // 약 0.012), 다른 조건에서는 허용폭 안일 수 있다. 4는 회귀를 잡지 못하는 사진 점검이다(#230 전 최대 차 0.043).
     // 1. 대문자·숫자·기호 각인은 0.5 − max(0.01, 1.5 물리 픽셀)~0.52 (사진 숫자·연산 기호·함수부 대문자 범위가 0.49~0.52 —
     //    잉크 위·아래 행이 안티에일리어싱으로 한 줄씩 달라지는 몫을 하한에 둔다)
-    // 2. 면 윤곽이 또렷한 흰 키의 구역 평균이 사진 평균과 0.02 안 — 숫자 0~9(사진 0.494), 연산 기호 다섯(사진 0.516)
+    // 2. 면 윤곽이 또렷한 흰 키의 구역 평균이 사진 평균과 0.025 안 — 숫자 0~9(사진 0.494), 연산 기호 다섯(사진 0.516).
+    //    (#264 전에는 0.02였다. 연산 기호가 실물 비율로 커지면서(360×800 26 → 42dp) 잉크 범위 표의 오차 — SemiBold·Medium
+    //    평균이라 Medium 글리프와 0.003em — 가 면 높이의 0.004로 커졌다. 앱은 면 가운데(0.5)에 두고 사진 평균 0.516에는
+    //    카메라 각도 몫이 있어, Linux CI의 래스터 결과 0.4958이 0.02를 0.0002 넘었다. 개별 키의 범위는 검사 1 그대로다.)
     // 3. 같은 행에서 기준선을 함께 써 잉크 가운데가 갈리는 짝의 비 차가 사진과 0.025 안(두 키의 1 물리 픽셀씩 — 함수 키 면
     //    약 27dp, 픽셀 비 2.625에서 각 약 0.014) — cos − sin(사진 0.046), log◼▯ − ln(사진 0.046). 각인마다 잉크를 가운데에
     //    두면 0, 기준선이 어긋나면(#230 전 log◼▯ − ln 0.012) 크게 달라진다
@@ -613,7 +694,7 @@ void main() {
           for (final group in [_photoDigits, _photoOperators]) {
             expect(
               mean(group, ratios),
-              closeTo(mean(group, _photoInkCenter), 0.02),
+              closeTo(mean(group, _photoInkCenter), 0.025),
               reason: '구역 평균 $group',
             );
           }

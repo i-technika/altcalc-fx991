@@ -117,6 +117,35 @@ class KeyLegendView extends LeafRenderObjectWidget {
   static final Map<(KeyLegend, TextStyle), KeyLegendEmMetrics> _emCache = {};
   static bool _listeningSystemFonts = false;
 
+  /// 한 줄 상자 치수 캐시 — (글자 크기·색을 뺀 스타일, 글자 크기)별 (기준선 위 높이, 아래 깊이). 각인 띠가 build마다
+  /// ([bandLifts]) 같은 크기를 다시 묻는다(#264 R1 — 키 50개가 화면의 각인 글자 크기 하나를 함께 쓴다). 글자 크기를 찾는
+  /// 탐색([tallestAt])은 한 번 쓰고 버리는 크기를 많이 물으므로 캐시를 거치지 않는다(R2). 시스템 글꼴이 바뀌면 비우고,
+  /// 창 크기·글자 배율이 바뀌며 쌓인 크기는 [_lineCacheLimit]개를 넘으면 비운다.
+  static final Map<(TextStyle, double), (double, double)> _lineCache = {};
+  static const int _lineCacheLimit = 64;
+
+  static void _listenSystemFonts() {
+    if (_listeningSystemFonts) return;
+    _listeningSystemFonts = true;
+    PaintingBinding.instance.systemFonts.addListener(() {
+      _emCache.clear();
+      _lineCache.clear();
+    });
+  }
+
+  /// [style]의 글꼴을 글자 크기 [fontSize]로 그릴 때 한 줄 상자의 (기준선 위 높이, 기준선 아래 깊이) — 캐시한다.
+  static (double, double) _lineMetricsOf(TextStyle style, double fontSize) {
+    _listenSystemFonts();
+    final key = (
+      style.copyWith(fontSize: 0, color: const Color(0xFF000000)),
+      fontSize,
+    );
+    final cached = _lineCache[key];
+    if (cached != null) return cached;
+    if (_lineCache.length >= _lineCacheLimit) _lineCache.clear();
+    return _lineCache[key] = _Builder(style).lineMetrics(fontSize);
+  }
+
   /// [legend]를 [style]로 그렸을 때의 크기를 글자 크기 1dp당 값(em)으로 잰다 (배율 반영 전).
   ///
   /// 키패드 통일 글자 크기 계산(`KeypadMetrics`)과 각인 띠 폭 배분이 쓴다. [style]의 `fontSize`·`color`는 무시한다.
@@ -143,6 +172,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
     TextStyle style,
     double scaledFontSize,
   ) {
+    // 글자 크기 탐색이 부른다 — 캐시하지 않는다([_lineCache] 설명)
     final (lineAscent, lineDescent) = _Builder(style)
         .lineMetrics(scaledFontSize);
     var tallest = 0.0;
@@ -180,23 +210,32 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// - 넘치는 각인([overhangsLine])이 없으면 모두 0이다 — 띠 아래끝에 정렬해 기준선을 함께 쓴다(#252).
   /// - 넘치는 각인이 있으면 그 잉크 아래끝이 띠 기준선(띠 아래끝에서 한 줄 상자 깊이만큼 위 — 이웃 키 각인의 기준선)에 오게
   ///   그 키의 각인을 모두 같은 기준선으로 올린다.
-  /// - 어느 각인도 위끝이 띠 위끝을 넘지 않는 만큼만 올린다 — 띠 높이는 그대로이고 각인 글자 크기도 줄지 않는다(`KeypadMetrics`의
-  ///   높이 기준은 각인이 띠에 들어가는지만 본다. 올릴 자리를 미리 떼어 두면 모든 SHIFT·ALPHA 각인이 그만큼 작아진다). 그래서
-  ///   띠 위쪽 여유가 한 줄 상자 깊이보다 작은 창은 여유만큼만 올라가고, 큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창은 아래 정렬
-  ///   그대로다(넘친 깊이만큼만 이웃보다 위 — #260 전과 같다). 창별 결과는 [CalcTheme] "2차원 각인 배치" 절에 있다.
+  /// - 어느 각인도 위끝이 [bandHeight] 위끝을 넘지 않는 만큼만 올린다. #264부터 키 버튼은 [bandHeight]로 각인 띠에 키 사이
+  ///   세로 간격을 더한 높이를 준다(넘치는 각인이 있는 키는 간격 전체, 없는 키는 절반 — `CalcKeyButton`). 그래서 키패드에서는
+  ///   넘치는 각인이 사진과 같은 자리까지 다 올라간다(#264 전에는 띠 높이뿐이라 폰에서는 여유만큼만 올라갔다 — [CalcTheme]
+  ///   "2차원 각인 배치" 절의 #260 기록). 여유가 모자란 경우(키패드 밖의 키 버튼)는 여유만큼만 올리고, 각인이 높이를 꽉
+  ///   채우면 아래 정렬 그대로다.
   ///
   /// 올리는 거리는 그리는 자리만 옮긴다(키 버튼의 각인 줄이 `FittedBox` 안에서 옮긴다) — 배치 제약을 건드리지 않아 `FittedBox`가
   /// 각인을 줄이지 않고, 줄어드는 각인(키패드 밖에서 좁게 쓰는 키 버튼)은 올린 거리도 같은 비율로 줄어든다. 줄어드는 비율이
   /// 각인마다 다르면 기준선이 그만큼 어긋난다(아래 정렬의 기준선도 그렇다 — 키패드에는 각인이 줄어드는 창이 없다,
   /// `test/widget/legend_band_baseline_test.dart`).
+  ///
+  /// [baseLift]는 넘치는 각인이 없어도 모든 각인을 띠 아래끝에서 띄우는 거리다 (dp, #264 — 실물처럼 각인 기준선을 키캡 위끝에서
+  /// 띄운다, [CalcTheme] "글자 크기 실물 대조 (#264)" 절). 띠 기준선이 그만큼 올라간 것으로 보고 위 규칙을 그대로 쓴다 —
+  /// 넘치는 각인의 잉크 아래끝은 띄운 기준선에 오고, 어느 각인도 위끝이 띠 위끝을 넘지 않는 만큼만 띄운다.
   static List<double> bandLifts(
     List<(KeyLegend, TextStyle)> legends,
-    double bandHeight,
-  ) {
+    double bandHeight, {
+    double baseLift = 0,
+  }) {
+    assert(baseLift >= 0, 'baseLift는 음수일 수 없다');
     final overhanging = [
       for (final (legend, style) in legends) overhangsLine(legend, style),
     ];
-    if (!overhanging.contains(true)) return List.filled(legends.length, 0.0);
+    if (!overhanging.contains(true) && baseLift <= 0) {
+      return List.filled(legends.length, 0.0);
+    }
     // (상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리, 잉크 아래끝 깊이)
     final boxes = [
       for (final (legend, style) in legends) _bandBox(legend, style),
@@ -205,11 +244,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
     // · 목표: 넘치는 각인의 잉크 깊이(잉크 아래끝이 띠 기준선에 온다)
     // · 상한: 어느 각인도 위끝이 띠 위끝을 넘지 않는다(각인마다 아래 정렬 자리 + 띠 위쪽 여유)
     // · 하한: 아래 정렬만으로 가장 높이 올라간 각인의 기준선(각인을 내릴 수는 없다)
-    var target = 0.0;
+    var target = baseLift;
     var highest = double.infinity;
     var lowest = 0.0;
     for (final (i, (height, natural, inkDepth)) in boxes.indexed) {
-      if (overhanging[i]) target = math.max(target, inkDepth);
+      if (overhanging[i]) target = math.max(target, baseLift + inkDepth);
       highest = math.min(highest, natural + math.max(0.0, bandHeight - height));
       lowest = math.max(lowest, natural);
     }
@@ -225,11 +264,16 @@ class KeyLegendView extends LeafRenderObjectWidget {
     ];
   }
 
+  /// [style]의 글꼴을 배율 반영 글자 크기 [scaledFontSize]로 그릴 때 한 줄 상자의 기준선 아래 깊이 (dp, #264).
+  /// 각인 띠가 각인 기준선을 키캡 위끝에서 띄울 거리를 정할 때 쓴다 — 아래 정렬한 글자 각인의 기준선은 띠 아래끝에서 이만큼 위다.
+  static double lineDepthAt(TextStyle style, double scaledFontSize) =>
+      _Builder(style).lineMetrics(scaledFontSize).$2;
+
   /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
   static (double, double, double) _bandBox(KeyLegend legend, TextStyle style) {
     final fontSize = style.fontSize ?? 14;
-    final (lineAscent, lineDescent) = _Builder(style).lineMetrics(fontSize);
+    final (lineAscent, lineDescent) = _lineMetricsOf(style, fontSize);
     final m = emMetrics(legend, style);
     if (m.plain) return (lineAscent + lineDescent, 0.0, 0.0);
     final inkDepth = -m.inkBottom * fontSize;
@@ -243,10 +287,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
 
   /// [emSize]와 함께, 위에서 기준선까지 거리와 잉크 범위(em)를 잰다.
   static KeyLegendEmMetrics emMetrics(KeyLegend legend, TextStyle style) {
-    if (!_listeningSystemFonts) {
-      _listeningSystemFonts = true;
-      PaintingBinding.instance.systemFonts.addListener(_emCache.clear);
-    }
+    _listenSystemFonts();
     final key = style.copyWith(
       fontSize: _probeFontSize,
       color: const Color(0xFF000000),

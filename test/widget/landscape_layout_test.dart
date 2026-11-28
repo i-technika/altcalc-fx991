@@ -692,8 +692,8 @@ void main() {
           .first
           .mainLabelFontSize!;
       // 활성 LCD 655×519.1(위 띠 전체, #232. #232 전에는 줄 글자 상한 높이 655×273.5, #189 전에는 블록 폭의 실물 비율 높이
-      // 655×374.5·54.7dp) — 줄 글자는 상한 40dp. 키 메인 각인은 상한 16.5dp.
-      expect(keyFont, moreOrLessEquals(CalcTheme.keyMainLabelMaxFontSize));
+      // 655×374.5·54.7dp) — 줄 글자는 상한 40dp. 키 메인 각인은 약 29.9dp다(#264 — 상한 16.5dp를 없앴다).
+      expect(keyFont, greaterThan(16.5));
       expect(lineFont, greaterThan(keyFont));
       expect(
         lineFont,

@@ -202,6 +202,34 @@ void main() {
       );
     });
 
+    test(
+      '그린 줄 상자의 깊이는 글자 크기에 단조가 아니다 (#264 R2 — 그래서 각인 높이 조건을 훑는 탐색으로 푼다)',
+      () {
+        const style = CalcTheme.keyShiftLabelStyle;
+        final line = KeyLegendView.emMetrics(const LegendText(' '), style);
+        final depthEm = line.size.height - line.baseline;
+        expect(depthEm, closeTo(0.215, 0.005));
+        var drops = 0;
+        var low = 0.0;
+        var high = 0.0;
+        var previous = KeyLegendView.lineDepthAt(style, 3.0);
+        // 각인 글자 크기 범위(작은 폰 ~ 큰 태블릿·데스크톱)를 0.01dp 간격으로 훑는다
+        for (var size = 3.01; size <= 60; size += 0.01) {
+          final depth = KeyLegendView.lineDepthAt(style, size);
+          if (depth < previous - 1e-9) drops++;
+          previous = depth;
+          final diff = depth - depthEm * size;
+          if (diff < low) low = diff;
+          if (diff > high) high = diff;
+        }
+        // 글자가 커지는데 깊이가 줄어드는 곳이 있다 (줄 상자 높이를 정수 dp로 반올림한다)
+        expect(drops, greaterThan(10));
+        // 비례 깊이에서 벗어나는 폭은 반올림 한 칸(0.5dp + 여유) 안이다
+        expect(-low, inInclusiveRange(0.1, 0.6), reason: '$low');
+        expect(high, inInclusiveRange(0.1, 0.6), reason: '$high');
+      },
+    );
+
     group('각인 띠에서 넘치는 각인 올리기 (bandLifts, #260)', () {
       // 11dp: 태블릿의 각인 글자 크기(상한), 9.35dp: 360×800 폰 글자 배율 1.3, 7.41dp: 320×568 폰 (줄 상자 높이를 정수 dp로
       // 반올림해 한 줄 상자 깊이가 글자 크기마다 다른 크기들)
@@ -241,6 +269,54 @@ void main() {
           );
           expect(KeyLegendView.bandLifts(const [], fontSize * 3), isEmpty);
         });
+
+        test(
+          '글자 크기 $fontSize: baseLift를 주면 넘치는 각인이 없는 키도 그만큼 올리고, 넘치는 각인은 올린 기준선에서 '
+          '다시 올린다 (#264)',
+          () {
+            final sin = keyDefOf(CalcKeyId.sin);
+            final (ascent, descent) = line();
+            // 키패드가 올리는 거리를 정할 때 쓰는 줄 상자 깊이는 그린 크기의 줄 상자에서 잰 값이다
+            expect(
+              KeyLegendView.lineDepthAt(shiftStyle, fontSize),
+              moreOrLessEquals(descent, epsilon: 1e-9),
+            );
+            // 여유가 넉넉하면 글자 각인·2차원 각인 모두 baseLift만큼 올린다 — 기준선이 함께 올라간다
+            final level = KeyLegendView.bandLifts(
+              [(sin.shiftLegend!, shiftStyle), (sin.alphaLegend!, alphaStyle)],
+              fontSize * 3,
+              baseLift: 2,
+            );
+            expect(level[0], moreOrLessEquals(2, epsilon: 1e-9));
+            expect(level[1], moreOrLessEquals(2, epsilon: 1e-9));
+            // 넘치는 각인이 있는 키: 잉크 아래끝이 올린 기준선에 온다 — baseLift 없이 올리던 거리에 baseLift를 더한 만큼
+            final inkDepth =
+                -KeyLegendView.emMetrics(derivative, shiftStyle).inkBottom *
+                fontSize;
+            final raised = KeyLegendView.bandLifts(
+              [(derivative, shiftStyle), (colon, alphaStyle)],
+              fontSize * 4,
+              baseLift: 2,
+            );
+            expect(raised[0], moreOrLessEquals(2 + descent, epsilon: 1e-9));
+            expect(raised[1], moreOrLessEquals(2 + inkDepth, epsilon: 1e-9));
+            // 위쪽 여유가 모자라면 그 여유까지만 올린다 (각인이 높이 밖으로 나가지 않는다)
+            final tight = KeyLegendView.bandLifts(
+              [(sin.alphaLegend!, alphaStyle)],
+              ascent + descent + 0.5,
+              baseLift: 2,
+            );
+            expect(tight.single, moreOrLessEquals(0.5, epsilon: 1e-9));
+            // baseLift가 0이면 예전과 같다
+            expect(
+              KeyLegendView.bandLifts([
+                (sin.shiftLegend!, shiftStyle),
+                (sin.alphaLegend!, alphaStyle),
+              ], fontSize * 3),
+              [0.0, 0.0],
+            );
+          },
+        );
 
         test('글자 크기 $fontSize: 띠에 여유가 있으면 넘치는 각인의 잉크 아래끝이 띠 기준선에 오고, '
             '짝 각인은 기준선이 같아지게 띄운다', () {
@@ -352,11 +428,10 @@ void main() {
       // - 고른 크기에서 모든 2차원 각인의 실제 높이 ≤ 띠(키캡 안쪽) 높이 — FittedBox가 높이 때문에 줄이지 않는다(#155 R2).
       // - 잉크 높이를 넣어 #155 이전(한 줄 높이만)보다 작아졌다면, 이전 크기에서는 어떤 각인이 실제로 넘친다
       //   — 높이 측정이 불필요하게 다른 키 글자를 줄이지 않는다(#155 R1).
-      for (final (style, ratio, maxFont, legends) in [
+      for (final (style, ratio, legends) in [
         (
           CalcTheme.keyShiftLabelStyle,
           CalcTheme.keyLegendFontRatio,
-          CalcTheme.keyLegendMaxFontSize,
           [
             for (final (k, l, _) in _twoDimensional())
               if (!identical(l, k.mainLegend)) l,
@@ -365,7 +440,6 @@ void main() {
         (
           CalcTheme.keyMainLabelStyle,
           CalcTheme.keyMainLabelFontRatio,
-          CalcTheme.keyMainLabelMaxFontSize,
           [
             for (final (k, l, _) in _twoDimensional())
               if (identical(l, k.mainLegend)) l,
@@ -397,10 +471,7 @@ void main() {
                       math.min(CalcTheme.keyPressedOffset, box) -
                       2 * CalcTheme.keyBorderWidth
                 : box;
-            final start = math.max(
-              minFittedFontSize,
-              math.min(box * ratio, maxFont),
-            );
+            final start = math.max(minFittedFontSize, box * ratio);
             final withInk = KeypadMetrics.fitToHeight(
               start,
               maxHeight: max,

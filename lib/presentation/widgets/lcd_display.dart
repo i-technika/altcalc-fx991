@@ -45,8 +45,8 @@ class LcdLineOverflow {
 /// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다.
 ///
 /// ## 상한 (#189)
-/// - 줄 글자는 배율 반영 후 크기가 [CalcTheme.lcdLineMaxFontSize]를 넘지 않는다. 큰 창에서 LCD 글자가 키 각인
-///   ([CalcTheme.keyMainLabelMaxFontSize])의 5~8배로 커지지 않게 한다.
+/// - 줄 글자는 배율 반영 후 크기가 [CalcTheme.lcdLineMaxFontSize]를 넘지 않는다(큰 창에서 LCD 글자가 한없이 커지지 않게
+///   한다 — 값의 근거는 그 상수의 설명).
 /// - 화면 배치는 LCD가 목표로 가져가는 높이를 [heightAtMaxLineFont]까지로 둔다. 키패드도 쓰지 못한 높이는 LCD가 받아 그보다
 ///   높아질 수 있다(#232 — LCD 위에 빈 곳을 두지 않는다). 그런 LCD는 글자가 상한(또는 폭)에 묶여 입력·결과 줄만 높아지고 식과
 ///   답 사이가 벌어진다(`CalculatorScreen`의 배치들, `CalcTheme` "LCD 내부 구성" 절).
