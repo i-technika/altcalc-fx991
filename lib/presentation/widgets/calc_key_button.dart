@@ -1214,7 +1214,8 @@ double bandLegendBracketHeightScale(BandLegend item) => item.legend.plainText
 ///
 /// [child](각인 글자 — 한 줄 상자) 양옆에 [CalcTheme.keyLegendBracketPad] × [fontSize]씩 자리를 더하고, 그 바깥 끝에 기준선에
 /// 걸친 모서리 표시를 [color]로 그린다. 상자 높이는 [child] 그대로다 — 괄호 아래끝은 줄 상자 아래로 나가 그려진다(자리를
-/// 차지하지 않는다). 기준선 아래로 [maxDrop]보다 깊이 내려가지는 않는다.
+/// 차지하지 않는다). 기준선 아래로 [maxDrop]보다 깊이 내려가지는 않는다 — [maxDrop]이 아주 작을 때만 세로 획을 남기려고
+/// 줄 상자 아래끝까지는 내려간다([LegendBracketPainter.strokesFor]).
 class LegendBrackets extends StatelessWidget {
   /// 괄호 색 — 모드 색 (`CalcPalette.modeLabelOf`)
   final Color color;
@@ -1292,9 +1293,10 @@ class LegendBracketPainter extends CustomPainter {
     );
     final top =
         baseline - fontSize * CalcTheme.keyLegendBracketRise * heightScale;
-    // 아래끝은 한도까지만 — 한도가 아주 작아도 가로 획 아래로 세로 획이 조금은 남는다
+    // 아래끝은 한도까지만. 한도가 아주 작아도 가로 획 아래로 세로 획이 조금은 남게 하되(┌ 모양), 그 하한은 줄 상자
+    // 아래끝을 넘지 않는다 — 줄 상자는 키캡 위끝 위에 있으므로 하한 때문에 키캡에 닿는 일은 없다(#266 R2).
     final bottom = math.max(
-      top + 2 * stroke,
+      math.min(top + 2 * stroke, size.height),
       baseline +
           math.min(
             fontSize * CalcTheme.keyLegendBracketDrop * heightScale,

@@ -475,6 +475,16 @@ void main() {
       // 한도가 0이어도 가로 획 아래로 세로 획이 남는다 (┌ 모양이 유지된다)
       final none = strokes(maxDrop: 0);
       expect(none[0].bottom, greaterThan(none[1].bottom));
+      // 그 하한도 줄 상자 아래끝은 넘지 않는다 — 줄 상자가 얕으면(깊이 1) 한도를 넘어도 상자 안이다
+      const shallow = LegendBracketPainter(
+        color: CalcTheme.baseNLabel,
+        fontSize: fontSize,
+        depth: 1,
+        maxDrop: 0.2,
+      );
+      final [stem, hook, _, _] = shallow.strokesFor(size);
+      expect(stem.bottom, lessThanOrEqualTo(size.height));
+      expect(stem.bottom, greaterThan(hook.bottom));
     });
 
     testWidgets('키 버튼: ∠의 괄호는 글리프 배율만큼 높고, 괄호 아래끝은 키캡 위끝 위에 있다', (

@@ -831,17 +831,39 @@ void main() {
                 ),
                 reason: '$reason · 괄호 아래끝 $bottom · 키캡 위끝 ${cap.top}',
               );
-              // 기준선 아래로 적어도 실물 치수의 절반은 내려간다 (띄운 거리가 작은 화면에서 줄어도)
+              // 기준선 아래 깊이 = 실물 치수와 키캡까지의 여유 가운데 작은 쪽 (화면 좌표로 따로 구한다 — 위젯에 넘긴
+              // 한도 `maxDrop`을 쓰지 않는다)
+              final baseline = box.bottom - widget.depth;
+              final full =
+                  widget.fontSize *
+                  CalcTheme.keyLegendBracketDrop *
+                  widget.heightScale;
+              final room =
+                  cap.top -
+                  baseline -
+                  widget.fontSize * CalcTheme.keyLegendBracketKeyGap;
+              final drop = bottom - baseline;
               expect(
-                strokes[0].bottom - (box.height - widget.depth),
-                greaterThanOrEqualTo(
-                  0.5 *
-                      widget.fontSize *
-                      CalcTheme.keyLegendBracketDrop *
-                      widget.heightScale,
-                ),
-                reason: reason,
+                drop,
+                closeTo(math.min(full, room), 0.01),
+                reason: '$reason · 온전한 깊이 $full · 여유 $room',
               );
+              // 실물 치수에 대한 비율 (CalcTheme "모드 전용 각인의 괄호" 절): `A`~`F`는 글자 배율 1.0에서 그대로, 1.3에서
+              // 0.9배 이상. `∠`는 키캡까지의 거리에 묶여 모든 화면에서 0.65~0.8배다
+              final ratio = drop / full;
+              if (item.legend.plainText == '∠') {
+                expect(widget.heightScale, CalcTheme.keyGlyphScale('∠'));
+                expect(ratio, inInclusiveRange(0.65, 0.8), reason: reason);
+              } else {
+                expect(widget.heightScale, 1.0, reason: reason);
+                expect(
+                  ratio,
+                  textScale == 1.0
+                      ? closeTo(1, 1e-6)
+                      : inInclusiveRange(0.9, 1.0),
+                  reason: reason,
+                );
+              }
             }
           },
         );
@@ -868,6 +890,7 @@ void main() {
               reason: reason,
             );
             expect(p.left, greaterThan(0.8 * p.radius), reason: reason);
+            expect(p.right, closeTo(p.left, 2 * _tolerance), reason: reason);
           } else {
             // 화면에서 잰 자리가 키캡 윗변의 곧은 구간(모서리 반경 안쪽)이다
             expect(
