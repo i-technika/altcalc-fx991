@@ -44,9 +44,10 @@ class LcdLineOverflow {
 ///
 /// 실물 Natural 표시처럼 입력·결과 줄은 같은 크기다.
 ///
-/// ## 상한 (#189)
-/// - 줄 글자는 배율 반영 후 크기가 [CalcTheme.lcdLineMaxFontSize]를 넘지 않는다(큰 창에서 LCD 글자가 한없이 커지지 않게
-///   한다 — 값의 근거는 그 상수의 설명).
+/// ## 상한 (#189, #270)
+/// - 줄 글자는 배율 반영 후 크기가 상한([forSize]의 `maxLineFontSize`)을 넘지 않는다(큰 창에서 LCD 글자가 한없이 커지지 않게
+///   한다). 상한은 기본 [CalcTheme.lcdLineMaxFontSize]이고, 계산기 화면은 키 숫자 글자를 따라 그보다 올린다
+///   ([lineMaxFontSizeFor], #270 — 큰 창에서도 LCD 글자 ÷ 키 숫자 비가 실물 아래로 내려가지 않게). 근거는 두 상수의 설명.
 /// - 화면 배치는 LCD가 목표로 가져가는 높이를 [heightAtMaxLineFont]까지로 둔다. 키패드도 쓰지 못한 높이는 LCD가 받아 그보다
 ///   높아질 수 있다(#232 — LCD 위에 빈 곳을 두지 않는다). 그런 LCD는 글자가 상한(또는 폭)에 묶여 입력·결과 줄만 높아지고 식과
 ///   답 사이가 벌어진다(`CalculatorScreen`의 배치들, `CalcTheme` "LCD 내부 구성" 절).
@@ -81,7 +82,18 @@ class LcdFontSizes {
   ///
   /// [textScaler]는 [LcdDisplay]가 실제로 쓰는 배율([CalcTheme.lcdMaxTextScaleFactor]로 제한한 값)이다.
   /// 크기가 무한·NaN인 축은 [LcdDisplay.fallbackSize]의 값을 쓴다.
-  factory LcdFontSizes.forSize(Size size, TextScaler textScaler) {
+  /// [maxLineFontSize]는 배율 반영 후 줄 글자의 상한이다 — 기본 [CalcTheme.lcdLineMaxFontSize], 계산기 화면은
+  /// [lineMaxFontSizeFor] (#270).
+  factory LcdFontSizes.forSize(
+    Size size,
+    TextScaler textScaler, {
+    double maxLineFontSize = CalcTheme.lcdLineMaxFontSize,
+  }) {
+    assert(
+      maxLineFontSize >= CalcTheme.lcdLineMaxFontSize &&
+          maxLineFontSize < double.infinity,
+      'maxLineFontSize는 기본 상한 이상의 유한한 값이다',
+    );
     double finite(double v, double fallback) =>
         v.isFinite ? math.max(0.0, v) : fallback;
     const chrome = 2 * (CalcTheme.lcdFrameWidth + CalcTheme.lcdInnerPadding);
@@ -105,7 +117,7 @@ class LcdFontSizes {
     // [line]: 배율 반영 전 줄 글자 크기
     bool fits(double line) {
       final scaledLine = textScaler.scale(line);
-      if (scaledLine > CalcTheme.lcdLineMaxFontSize) return false;
+      if (scaledLine > maxLineFontSize) return false;
       final height = _usedHeight(
         scaledLine: scaledLine,
         scaledStatus: textScaler.scale(statusOf(line)),
@@ -130,7 +142,7 @@ class LcdFontSizes {
       minFittedFontSize,
       innerWidth / (columns * CalcTheme.lcdLineCharWidthRatio),
     );
-    // 상한([CalcTheme.lcdLineMaxFontSize])도 같은 식으로 배율 반영 전 크기로 되돌려, 탐색 시작값이 상한을 크게 넘지 않게
+    // 상한([maxLineFontSize])도 같은 식으로 배율 반영 전 크기로 되돌려, 탐색 시작값이 상한을 크게 넘지 않게
     // 한다. 배율 1이면 상한에 걸리는 LCD가 정확히 상한 값을 얻는다.
     // 탐색은 시작값에서 아래로만 찾으므로, 시작값이 실제 최대 이상이어야 한다. 그러려면 배율 계수 scale(x) / x가 x에 대해
     // 줄지 않아야 한다(선형 배율, 큰 글자를 덜 키우는 Android 14 이상의 확대 배율은 만족한다). 큰 글자를 더 줄이는 축소 배율이면
@@ -141,15 +153,29 @@ class LcdFontSizes {
     }
 
     final line = fitFontSize(
-      math.min(unscaled(widthBound), unscaled(CalcTheme.lcdLineMaxFontSize)),
+      math.min(unscaled(widthBound), unscaled(maxLineFontSize)),
       textScaler: TextScaler.noScaling,
       fits: fits,
     );
     return LcdFontSizes(status: statusOf(line), input: line, result: line);
   }
 
+  /// 키 숫자 글자 크기 [keyNumberFontSize](배율 반영 전, `KeypadMetrics.numberMainLabelFontSize`)에 맞춘 줄 글자 상한 (dp,
+  /// #270) — 기본 상한 [CalcTheme.lcdLineMaxFontSize]와 키 숫자 × [CalcTheme.lcdLineKeyNumberFontRatio] 중 큰 쪽.
+  /// 키 글자는 키 높이의 실물 비율이라 상한이 없다(#264). 큰 창에서 키 숫자만 커지고 LCD 글자가 40dp에서 멈추면 LCD 글자가
+  /// 실물 비보다 작아지므로, 그 비까지는 상한을 키 숫자와 함께 올린다. 폰·보통 태블릿은 키 숫자 × 비가 40dp보다 작아 기본
+  /// 상한 그대로다.
+  static double lineMaxFontSizeFor(double keyNumberFontSize) {
+    final byKey = keyNumberFontSize * CalcTheme.lcdLineKeyNumberFontRatio;
+    return byKey.isFinite
+        ? math.max(CalcTheme.lcdLineMaxFontSize, byKey)
+        : CalcTheme.lcdLineMaxFontSize;
+  }
+
   /// 줄 글자가 [CalcTheme.lcdLineMaxFontSize](배율 1)에 닿는 가장 낮은 LCD 높이 (dp, 베젤 포함) — 화면 배치에서 LCD가 **목표로
-  /// 가져가는** 높이의 상한이다 (#189). 키패드도 쓰지 못한 높이를 받으면 LCD는 이보다 높아진다(#232). 이보다 높여도 줄 글자는
+  /// 가져가는** 높이의 상한이다 (#189). 키 숫자를 따라 올린 상한([lineMaxFontSizeFor], #270)이 아니라 기본 상한 기준이다 —
+  /// 배치는 LCD 높이를 정한 뒤 키패드 크기(와 키 숫자)가 정해지므로, 올린 상한은 LCD가 남는 높이를 받은 창(키패드가 세로·가로
+  /// 한계에 닿은 창 — 큰 가로형)에서만 글자를 키운다. 키패드도 쓰지 못한 높이를 받으면 LCD는 이보다 높아진다(#232). 이보다 높여도 줄 글자는
   /// 커지지 않고 입력·결과 줄 사이만 벌어진다.
   ///
   /// 폭이 충분하면(폭 기준 글자가 상한 이상) 이 높이의 LCD는 줄 글자가 정확히 상한이다. 상태 표시줄 + 4행 + 분수 막대를
@@ -295,6 +321,10 @@ class LcdDisplay extends StatelessWidget {
   /// 이때 [statusFontSize]·[inputFontSize]·[resultFontSize]는 주입할 수 없다.
   final bool fitFontsToSize;
 
+  /// [fitFontsToSize]일 때 줄 글자 상한 (배율 반영 후, dp) — 계산기 화면이 키 숫자를 따라 정한다
+  /// ([LcdFontSizes.lineMaxFontSizeFor], #270). 기본 [CalcTheme.lcdLineMaxFontSize].
+  final double maxLineFontSize;
+
   /// 제약이 무한한 축에 쓰는 기본 크기
   static const Size fallbackSize = Size(360, 160);
 
@@ -311,7 +341,13 @@ class LcdDisplay extends StatelessWidget {
     this.showInactiveIndicators = true,
     this.showDotMatrix = true,
     this.fitFontsToSize = false,
+    this.maxLineFontSize = CalcTheme.lcdLineMaxFontSize,
   }) : assert(
+         maxLineFontSize >= CalcTheme.lcdLineMaxFontSize &&
+             maxLineFontSize < double.infinity,
+         'maxLineFontSize는 기본 상한 이상의 유한한 값이다',
+       ),
+       assert(
          !fitFontsToSize ||
              (statusFontSize == null &&
                  inputFontSize == null &&
@@ -358,7 +394,11 @@ class LcdDisplay extends StatelessWidget {
         : fallbackSize.height;
 
     final fitted = fitFontsToSize
-        ? LcdFontSizes.forSize(Size(width, height), textScaler)
+        ? LcdFontSizes.forSize(
+            Size(width, height),
+            textScaler,
+            maxLineFontSize: maxLineFontSize,
+          )
         : null;
     final statusFontSize = fitted?.status ?? this.statusFontSize;
     final inputFontSize = fitted?.input ?? this.inputFontSize;
