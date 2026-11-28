@@ -56,9 +56,10 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- iPad: 멀티태스킹(Split View·Slide Over·Stage Manager) 요건이라 네 방향을 모두 허용한다.
+	     멀티태스킹을 지원하는 앱은 전체 화면에서도 방향 고정(앱의 가로 요청)이 반영되지 않으므로,
+	     화면 배치는 창 크기로 정한다 (#24, lib/core/layout/form_factor.dart). -->
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

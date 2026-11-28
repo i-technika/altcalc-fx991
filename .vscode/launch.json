@@ -1,0 +1,28 @@
+{
+  // VS Code Dart/Flutter 확장 실행 구성 (#21, 실제 동작 확인 #52).
+  // 준비 단계(pub get → 작업 영역 신뢰 → 확장 설치)와 SDK 탐지 순서는 README "VS Code에서 실행"에 있다.
+  // 구성 이름·진입점·기기는 README 표와 test/unit/vscode_config_test.dart가 함께 지킨다.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AltCalc (앱)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "Key Preview (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "preview/key_preview_main.dart",
+      "deviceId": "chrome"
+    },
+    {
+      "name": "Key Preview (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "program": "preview/key_preview_main.dart",
+      "deviceId": "windows"
+    }
+  ]
+}
