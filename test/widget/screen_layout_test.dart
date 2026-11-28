@@ -4325,6 +4325,52 @@ void _hingeLayoutTests() {
       },
     );
 
+    test('가로 접힘선: 접힘선을 아래로 옮기면 LCD는 한 걸음씩 연속으로 높아지고, 아래 패널 키는 커지지 않는다 (#284 R1)', () {
+      // #284 전에는 위 패널에서 기록 영역이 생기고 없어지는 경계에서 활성 LCD가 튀었다(실물 배열 230.9 ↔ 위 패널 전체,
+      // 넓은 배열 블록 폭 ↔ 폭 전체). 이제 LCD는 언제나 위 패널 전체다.
+      for (final body in const [
+        Size(825, 609),
+        Size(395, 934),
+        Size(685, 769),
+      ]) {
+        for (final h in Handedness.values) {
+          CalcTabletopLayout? previous;
+          for (var y = 140.0; y <= body.height - 140; y += 0.5) {
+            final l = CalcTabletopLayout.of(
+              body,
+              Rect.fromLTWH(0, y, body.width, 0),
+              h,
+            );
+            final reason = '$body y=$y $h $l';
+            expect(l.lcd.width, moreOrLessEquals(body.width), reason: reason);
+            final p = previous;
+            if (p != null) {
+              expect(
+                l.lcd.height - p.lcd.height,
+                moreOrLessEquals(0.5),
+                reason: reason,
+              );
+              expect(
+                KeypadMetrics.minKeyCellHeightOf(
+                  l.keypad.size,
+                  l.keypadArrangement,
+                ),
+                lessThanOrEqualTo(
+                  KeypadMetrics.minKeyCellHeightOf(
+                        p.keypad.size,
+                        p.keypadArrangement,
+                      ) +
+                      1e-9,
+                ),
+                reason: reason,
+              );
+            }
+            previous = l;
+          }
+        }
+      }
+    });
+
     test('가로 접힘선: 음수·비유한 크기는 0으로 본다', () {
       for (final body in const [
         Size(double.nan, double.nan),
