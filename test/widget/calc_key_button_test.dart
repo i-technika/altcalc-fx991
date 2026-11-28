@@ -357,6 +357,8 @@ void main() {
         color: widget.color,
         fontSize: widget.fontSize,
         depth: widget.depth,
+        heightScale: widget.heightScale,
+        maxDrop: widget.maxDrop,
       );
       final strokes = painter.strokesFor(size);
       expect(strokes, hasLength(4));
@@ -412,8 +414,8 @@ void main() {
         );
         expect(stem.top, lessThan(baseline));
         expect(stem.bottom, greaterThan(baseline));
-        // 줄 상자 안이다 (아래로 넘치면 키캡에 닿는다)
-        expect(stem.bottom, lessThanOrEqualTo(size.height));
+        // 실물처럼 줄 상자 아래로 나간다 (한도를 주지 않았을 때)
+        expect(stem.bottom, greaterThan(size.height));
       }
       // 가로 획: 세로 획 위끝에서 안쪽으로
       expect(leftHook.top, leftStem.top);
@@ -430,6 +432,119 @@ void main() {
       // 좌우 대칭
       expect(size.width - rightStem.right, leftStem.left);
       expect(size.width - rightHook.left, closeTo(leftHook.right, 1e-9));
+    });
+
+    test('괄호 높이 배율은 위·아래만 키우고, 아래끝은 한도까지만 내려간다', () {
+      const fontSize = 20.0;
+      const depth = 5.0;
+      const size = Size(40, 24);
+      const baseline = 19.0;
+      List<Rect> strokes({double heightScale = 1, double? maxDrop}) =>
+          LegendBracketPainter(
+            color: CalcTheme.complexLabel,
+            fontSize: fontSize,
+            depth: depth,
+            heightScale: heightScale,
+            maxDrop: maxDrop ?? double.infinity,
+          ).strokesFor(size);
+
+      final plain = strokes();
+      final tall = strokes(heightScale: 1.5);
+      // 위·아래 거리만 1.5배
+      expect(
+        baseline - tall[0].top,
+        closeTo(1.5 * (baseline - plain[0].top), 1e-9),
+      );
+      expect(
+        tall[0].bottom - baseline,
+        closeTo(1.5 * (plain[0].bottom - baseline), 1e-9),
+      );
+      // 두께·가로 획 길이는 그대로
+      expect(tall[0].width, closeTo(plain[0].width, 1e-9));
+      expect(tall[1].width, closeTo(plain[1].width, 1e-9));
+      expect(tall[1].height, closeTo(plain[1].height, 1e-9));
+      expect(tall[3].left, closeTo(plain[3].left, 1e-9));
+
+      // 한도: 기준선 아래로 그만큼만
+      final limited = strokes(heightScale: 1.5, maxDrop: 6);
+      expect(limited[0].bottom, closeTo(baseline + 6, 1e-9));
+      expect(limited[2].bottom, closeTo(baseline + 6, 1e-9));
+      expect(limited[0].top, tall[0].top);
+      // 한도가 넉넉하면 그대로
+      expect(strokes(maxDrop: 100)[0].bottom, plain[0].bottom);
+      // 한도가 0이어도 가로 획 아래로 세로 획이 남는다 (┌ 모양이 유지된다)
+      final none = strokes(maxDrop: 0);
+      expect(none[0].bottom, greaterThan(none[1].bottom));
+    });
+
+    testWidgets('키 버튼: ∠의 괄호는 글리프 배율만큼 높고, 괄호 아래끝은 키캡 위끝 위에 있다', (
+      tester,
+    ) async {
+      expect(
+        bandLegendBracketHeightScale(keyDefOf(CalcKeyId.eng).bandLegends.first),
+        CalcTheme.keyGlyphScale('∠'),
+      );
+      expect(
+        bandLegendBracketHeightScale(keyDefOf(CalcKeyId.sin).bandLegends.last),
+        1.0,
+      );
+      for (final (id, scale) in [
+        (CalcKeyId.eng, CalcTheme.keyGlyphScale('∠')),
+        (CalcKeyId.sin, 1.0),
+      ]) {
+        // 각인을 띄운 거리(legendBaseLift)가 없는 키와 넉넉한 키
+        for (final baseLift in [0.0, 4.0, 40.0]) {
+          await tester.pumpWidget(
+            _host(
+              // 각인이 줄지 않는 글자 크기를 준다 (키패드처럼)
+              CalcKeyButton(
+                keyDef: keyDefOf(id),
+                legendFontSize: 10,
+                legendBaseLift: baseLift,
+              ),
+              size: const Size(90, 120),
+            ),
+          );
+          final box = find.byType(LegendBrackets);
+          final widget = tester.widget<LegendBrackets>(box);
+          final reason = '${id.name} baseLift=$baseLift';
+          expect(widget.heightScale, scale, reason: reason);
+          final strokes = LegendBracketPainter(
+            color: widget.color,
+            fontSize: widget.fontSize,
+            depth: widget.depth,
+            heightScale: widget.heightScale,
+            maxDrop: widget.maxDrop,
+          ).strokesFor(tester.getSize(box));
+          expect(
+            tester.getRect(box).height,
+            closeTo(tester.getSize(box).height, 1e-6),
+            reason: '$reason: 각인이 줄었다',
+          );
+          final bottom = tester.getTopLeft(box).dy + strokes[0].bottom;
+          final capTop = tester.getRect(_keycap(id)).top;
+          final fullDrop =
+              widget.fontSize * CalcTheme.keyLegendBracketDrop * scale;
+          final keyGap = widget.fontSize * CalcTheme.keyLegendBracketKeyGap;
+          if (baseLift == 40.0) {
+            // 넉넉하면 실물 치수 그대로
+            expect(widget.maxDrop, greaterThan(fullDrop), reason: reason);
+          } else if (baseLift == 0.0) {
+            // 띄운 거리가 없으면 줄 상자 깊이 안으로 줄인다
+            expect(widget.maxDrop, lessThan(fullDrop), reason: reason);
+            expect(
+              bottom,
+              closeTo(capTop - keyGap, 0.01),
+              reason: '$reason: 괄호 아래끝 $bottom · 키캡 위끝 $capTop',
+            );
+          }
+          expect(
+            bottom,
+            lessThanOrEqualTo(capTop - keyGap + 0.01),
+            reason: reason,
+          );
+        }
+      }
     });
 
     test('괄호 획은 아주 작은 글자에서도 최소 두께보다 가늘지 않고, 값이 같으면 다시 그리지 않는다', () {
@@ -463,6 +578,18 @@ void main() {
           color: CalcTheme.baseNLabel,
           fontSize: 2,
           depth: 1,
+        ),
+        LegendBracketPainter(
+          color: CalcTheme.baseNLabel,
+          fontSize: 2,
+          depth: 0.5,
+          heightScale: 1.33,
+        ),
+        LegendBracketPainter(
+          color: CalcTheme.baseNLabel,
+          fontSize: 2,
+          depth: 0.5,
+          maxDrop: 1,
         ),
       ]) {
         expect(tiny.shouldRepaint(other), isTrue);

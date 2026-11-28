@@ -247,6 +247,28 @@ void main() {
           );
           // 각인 띠는 셋까지만 놓는다 (ENG 키) — 넷이면 배치 규칙이 없다
           expect(band.length, lessThanOrEqualTo(3), reason: key.id.name);
+          // 인쇄 순서 (getter와 따로 센다): 괄호 든 SHIFT(0) → SHIFT(1) → ALPHA(2) → 모드 색(3). 같은 자리는 하나뿐이다
+          final ranks = [
+            for (final b in band)
+              switch (b.role) {
+                BandLegendRole.shift => b.bracketed ? 0 : 1,
+                BandLegendRole.alpha => 2,
+                BandLegendRole.mode => 3,
+              },
+          ];
+          for (var i = 1; i < ranks.length; i++) {
+            expect(
+              ranks[i],
+              greaterThan(ranks[i - 1]),
+              reason: '${key.id.name} $band',
+            );
+          }
+          // 모드 색 각인은 괄호로 둘러싸지 않는다 (실물: 괄호는 SHIFT·ALPHA 색 글자만 둘러싼다)
+          for (final b in band) {
+            if (b.role == BandLegendRole.mode) {
+              expect(b.bracketed, isFalse, reason: '${key.id.name} $b');
+            }
+          }
           if (key.face == KeyFace.roundButton) {
             expect(band, isEmpty, reason: key.id.name);
           }

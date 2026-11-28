@@ -436,6 +436,63 @@ double _pixelInkBottom(
   fail('잉크를 찾지 못했다: $slot');
 }
 
+/// 영역 [area] 안에서 색 [ink]로 그린 잉크의 세로 범위 (위끝, 아래끝 — 이미지 좌표 dp, 픽셀 이하 보간).
+///
+/// 바탕색은 영역 맨 위 픽셀 행의 평균이다(잉크가 없는 행이어야 한다). [_pixelInkBottom]과 같은 방식으로 행마다 잉크 비율을
+/// 재고, 잉크가 있는 첫 행·마지막 행의 비율로 끝을 보간한다.
+(double, double) _pixelInkSpan(
+  ByteData data,
+  int width,
+  double pixelRatio,
+  Rect area,
+  Color ink,
+) {
+  (double, double, double) rgb(int x, int y) {
+    final i = (y * width + x) * 4;
+    return (
+      data.getUint8(i).toDouble(),
+      data.getUint8(i + 1).toDouble(),
+      data.getUint8(i + 2).toDouble(),
+    );
+  }
+
+  final x0 = (area.left * pixelRatio).ceil();
+  final x1 = (area.right * pixelRatio).floor();
+  final y0 = (area.top * pixelRatio).ceil();
+  final y1 = (area.bottom * pixelRatio).floor() - 1;
+  var (br, bg, bb) = (0.0, 0.0, 0.0);
+  for (var x = x0; x < x1; x++) {
+    final (r, g, b) = rgb(x, y0);
+    br += r;
+    bg += g;
+    bb += b;
+  }
+  final n = (x1 - x0).toDouble();
+  (br, bg, bb) = (br / n, bg / n, bb / n);
+  final (dr, dg, db) = (ink.r * 255 - br, ink.g * 255 - bg, ink.b * 255 - bb);
+  final norm = dr * dr + dg * dg + db * db;
+  double coverage(int y) {
+    var best = 0.0;
+    for (var x = x0; x < x1; x++) {
+      final (r, g, b) = rgb(x, y);
+      final c = ((r - br) * dr + (g - bg) * dg + (b - bb) * db) / norm;
+      if (c > best) best = c;
+    }
+    return best.clamp(0.0, 1.0);
+  }
+
+  double? top;
+  double? bottom;
+  for (var y = y0; y <= y1; y++) {
+    final c = coverage(y);
+    if (c <= 0.15) continue;
+    top ??= (y + 1 - c) / pixelRatio;
+    bottom = (y + c) / pixelRatio;
+  }
+  if (top == null || bottom == null) fail('잉크를 찾지 못했다: $area');
+  return (top, bottom);
+}
+
 void main() {
   setUpAll(loadBundledFonts);
 
@@ -553,6 +610,111 @@ void main() {
           },
         );
       }
+    }
+  });
+
+  group('그린 픽셀 — 모드 전용 각인의 괄호 (#266)', () {
+    // 괄호(`LegendBracketPainter`)는 글자와 따로 그린다 — 글자를 실제로 그린 기준선에 걸쳐 있는지 픽셀로 본다.
+    // 구성은 위 "그린 픽셀" 그룹과 같다(`Text`를 옮겨 그리는 거리가 큰 구성 — 괄호가 옮기기 전 자리를 기준으로 삼으면 어긋난다).
+    for (final (size, pixelRatio, scale) in const [
+      (Size(360, 800), 3.0, 1.3),
+      (Size(600, 960), 2.0, 1.3),
+      (Size(800, 1280), 2.0, 1.0),
+    ]) {
+      testWidgets(
+        '$size·픽셀 비 $pixelRatio·글자 배율 $scale: sin 키 D의 파란 괄호가 D의 그린 기준선을 실물 비율로 걸친다',
+        (tester) async {
+          await _pumpApp(tester, size, scale, pixelRatio: pixelRatio);
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find
+                .descendant(
+                  of: find.byType(AltCalcApp),
+                  matching: find.byType(RepaintBoundary),
+                )
+                .first,
+          );
+          final origin = boundary.localToGlobal(Offset.zero);
+          final image = (await tester.runAsync(
+            () => boundary.toImage(pixelRatio: pixelRatio),
+          ))!;
+          final data = (await tester.runAsync(
+            () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+          ))!;
+          final d = _bandLegends(
+            tester,
+            CalcKeyId.sin,
+          ).singleWhere((l) => l.text == 'D');
+          final box = tester.getRect(
+            find.descendant(
+              of: _button(CalcKeyId.sin),
+              matching: find.byType(LegendBrackets),
+            ),
+          );
+          final palette = CalcPalette.of(
+            tester.element(_button(CalcKeyId.sin)),
+          );
+          final fontSize = d.fontSize;
+          final hook = fontSize * CalcTheme.keyLegendBracketHook;
+          // 왼쪽 괄호(상자 왼쪽 끝의 가로 획 폭)와 오른쪽 괄호의 세로 범위 — 줄 상자 위끝부터 키캡 위끝까지 훑는다
+          (double, double) span(double left) {
+            final (top, bottom) = _pixelInkSpan(
+              data,
+              image.width,
+              pixelRatio,
+              Rect.fromLTRB(
+                left,
+                box.top,
+                left + hook,
+                d.keycapTop,
+              ).shift(-origin),
+              palette.baseNLabel,
+            );
+            return (top + origin.dy, bottom + origin.dy);
+          }
+
+          final (leftTop, leftBottom) = span(box.left);
+          final (rightTop, rightBottom) = span(box.right - hook);
+          image.dispose();
+          final reason =
+              '왼쪽 $leftTop~$leftBottom · 오른쪽 $rightTop~$rightBottom · 기준선 ${d.drawnBaseline} · '
+              '글자 $fontSize · 키캡 위끝 ${d.keycapTop}';
+          const eps = 0.2; // 픽셀 보간 오차
+          // 두 괄호의 높이가 같다
+          expect(
+            leftTop,
+            moreOrLessEquals(rightTop, epsilon: eps),
+            reason: reason,
+          );
+          expect(
+            leftBottom,
+            moreOrLessEquals(rightBottom, epsilon: eps),
+            reason: reason,
+          );
+          // 위끝: 그린 기준선 위 실물 비율
+          expect(
+            d.drawnBaseline - leftTop,
+            moreOrLessEquals(
+              fontSize * CalcTheme.keyLegendBracketRise,
+              epsilon: eps,
+            ),
+            reason: reason,
+          );
+          // 아래끝: 그린 기준선 아래 실물 비율 — 키캡 위끝 가까이에서는 그 앞에서 멈춘다
+          final drop = leftBottom - d.drawnBaseline;
+          final full = fontSize * CalcTheme.keyLegendBracketDrop;
+          final room =
+              d.keycapTop -
+              d.drawnBaseline -
+              fontSize * CalcTheme.keyLegendBracketKeyGap;
+          expect(
+            drop,
+            moreOrLessEquals(full < room ? full : room, epsilon: eps),
+            reason: reason,
+          );
+          expect(drop, greaterThan(0.5 * full), reason: reason);
+          expect(leftBottom, lessThan(d.keycapTop), reason: reason);
+        },
+      );
     }
   });
 
@@ -724,6 +886,14 @@ void main() {
         ].any((e) => e.$1 != null && KeyLegendView.overhangsLine(e.$1!, e.$2)))
           def,
     ];
+    // 모드 전용 각인(#266)에는 넘치는 각인이 없다 — 키 버튼은 각인 띠 목록 전체로 판정한다
+    expect([
+      for (final def in allKeys)
+        if (def.bandLegends.any(
+          (b) => KeyLegendView.overhangsLine(b.legend, bandLegendStyle(b)),
+        ))
+          def.id,
+    ], overhanging.map((d) => d.id));
     expect(
       overhanging.map((d) => d.shiftLegend?.plainText),
       unorderedEquals(_overflowingLegends.keys),

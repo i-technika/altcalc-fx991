@@ -754,68 +754,133 @@ void main() {
         );
       }
 
-      testWidgets('괄호로 둘러싼 각인은 글자 양옆에 괄호 자리가 똑같이 있다 (#266)', (tester) async {
-        await _pump(tester, window);
-        final bracketed = [
-          for (final def in _legendKeys)
-            for (final item in def.bandLegends)
-              if (item.bracketed) (def, item),
-        ];
-        // 실물: ENG의 ∠(Complex)와 A~F(Base-N)
-        expect(
-          bracketed.map((e) => e.$2.legend.plainText),
-          unorderedEquals(['∠', 'A', 'B', 'C', 'D', 'E', 'F']),
+      for (final textScale in [1.0, 1.3]) {
+        testWidgets(
+          '괄호로 둘러싼 각인 (글자 배율 $textScale): 글자 양옆에 괄호 자리가 똑같이 있고, 괄호 아래끝은 키캡 위에 있다 (#266)',
+          (tester) async {
+            await _pump(tester, window, textScale: textScale);
+            final bracketed = [
+              for (final def in _legendKeys)
+                for (final item in def.bandLegends)
+                  if (item.bracketed) (def, item),
+            ];
+            // 실물: ENG의 ∠(Complex)와 A~F(Base-N)
+            expect(
+              bracketed.map((e) => e.$2.legend.plainText),
+              unorderedEquals(['∠', 'A', 'B', 'C', 'D', 'E', 'F']),
+            );
+            for (final (def, item) in bracketed) {
+              final finder = _legendFinder(def, item.legend);
+              final box = _bandRect(tester, def, item);
+              final label = _legend(tester, def, item.legend);
+              final scale = label.height / tester.getSize(finder).height;
+              // 그리는 글자 크기 × 괄호 자리 비율 × 줄어든 비율
+              final widget = tester.widget<LegendBrackets>(
+                find.ancestor(
+                  of: finder,
+                  matching: find.byType(LegendBrackets),
+                ),
+              );
+              final pad =
+                  widget.fontSize * CalcTheme.keyLegendBracketPad * scale;
+              final reason = '${def.id.name} $item · 상자 $box · 글자 $label';
+              expect(
+                widget.fontSize,
+                closeTo(
+                  legendStyleOf(tester, finder).fontSize! * textScale,
+                  1e-6,
+                ),
+                reason: reason,
+              );
+              expect(
+                label.left - box.left,
+                closeTo(pad, _tolerance),
+                reason: reason,
+              );
+              expect(
+                box.right - label.right,
+                closeTo(pad, _tolerance),
+                reason: reason,
+              );
+              // 높이는 글자 줄 상자 그대로다 (글자는 그린 기준선에 맞추느라 1dp 안에서 옮겨 그린다 — #252)
+              expect(
+                box.height,
+                closeTo(label.height, _tolerance),
+                reason: reason,
+              );
+              expect((box.top - label.top).abs(), lessThan(1), reason: reason);
+              // 키패드에서는 각인이 줄지 않는다 — 괄호 획도 줄지 않는다
+              expect(scale, closeTo(1, 1e-3), reason: reason);
+              // 괄호 아래끝: 줄 상자 아래로 나가되(실물) 키캡 위끝에 닿지 않는다
+              final strokes = LegendBracketPainter(
+                color: widget.color,
+                fontSize: widget.fontSize,
+                depth: widget.depth,
+                heightScale: widget.heightScale,
+                maxDrop: widget.maxDrop,
+              ).strokesFor(box.size);
+              final bottom = box.top + strokes[0].bottom;
+              final cap = _keycap(tester, def.id);
+              expect(bottom, greaterThan(box.bottom), reason: reason);
+              expect(
+                bottom,
+                lessThanOrEqualTo(
+                  cap.top -
+                      widget.fontSize * CalcTheme.keyLegendBracketKeyGap +
+                      0.01,
+                ),
+                reason: '$reason · 괄호 아래끝 $bottom · 키캡 위끝 ${cap.top}',
+              );
+              // 기준선 아래로 적어도 실물 치수의 절반은 내려간다 (띄운 거리가 작은 화면에서 줄어도)
+              expect(
+                strokes[0].bottom - (box.height - widget.depth),
+                greaterThanOrEqualTo(
+                  0.5 *
+                      widget.fontSize *
+                      CalcTheme.keyLegendBracketDrop *
+                      widget.heightScale,
+                ),
+                reason: reason,
+              );
+            }
+          },
         );
-        for (final (def, item) in bracketed) {
-          final finder = _legendFinder(def, item.legend);
-          final box = _bandRect(tester, def, item);
-          final label = _legend(tester, def, item.legend);
-          final scale = label.height / tester.getSize(finder).height;
-          // 그리는 글자 크기(배율 1.0) × 괄호 자리 비율 × 줄어든 비율
-          final pad =
-              legendStyleOf(tester, finder).fontSize! *
-              CalcTheme.keyLegendBracketPad *
-              scale;
-          final reason = '${def.id.name} $item · 상자 $box · 글자 $label';
-          expect(
-            label.left - box.left,
-            closeTo(pad, _tolerance),
-            reason: reason,
-          );
-          expect(
-            box.right - label.right,
-            closeTo(pad, _tolerance),
-            reason: reason,
-          );
-          // 높이는 글자 줄 상자 그대로다 (글자는 그린 기준선에 맞추느라 1dp 안에서 옮겨 그린다 — #252)
-          expect(box.height, closeTo(label.height, _tolerance), reason: reason);
-          expect((box.top - label.top).abs(), lessThan(1), reason: reason);
-        }
-      });
+      }
 
       testWidgets('실물에서 바깥 끝이 들어와 있는 쌍은 둥근 모서리 안쪽까지 들인다', (tester) async {
         await _pump(tester, window);
-        // 실물에서 바깥 끝이 키캡 폭의 0.08~0.12만큼 들어와 있는 쌍 (CalcTheme "각인 띠 좌우 정렬 (#265)" 절)
+        // 실물에서 바깥 끝이 키캡 폭의 0.08~0.12만큼 들어와 있는 쌍 (CalcTheme "각인 띠 좌우 정렬 (#265)" 절).
+        // 괄호가 든 쌍(`log ┌A┐`·`x! ┌C┐`)은 괄호까지가 각인이라 넓다 — 상한(모서리 반경)에는 조금 못 미치고 두 각인 사이와
+        // 같은 거리만큼 들인다(실물은 괄호 끝 0.05~0.07·SHIFT 각인 0.04~0.13, CalcTheme "모드 전용 각인의 괄호" 절).
         for (final id in [
-          CalcKeyId.negative, // log · A
-          CalcKeyId.reciprocal, // x! · C
+          CalcKeyId.negative, // log · ┌A┐
+          CalcKeyId.reciprocal, // x! · ┌C┐
           CalcKeyId.parenClose, // , · x
           CalcKeyId.mPlus, // M− · M
           CalcKeyId.exp10, // π · e
         ]) {
           final p = _measure(tester, keyDefOf(id));
           final reason = _describe(p);
-          // 화면에서 잰 자리가 키캡 윗변의 곧은 구간(모서리 반경 안쪽)이다
-          expect(
-            p.left,
-            greaterThanOrEqualTo(p.radius - _tolerance),
-            reason: reason,
-          );
-          expect(
-            p.right,
-            greaterThanOrEqualTo(p.radius - _tolerance),
-            reason: reason,
-          );
+          if (keyDefOf(id).bandLegends.any((b) => b.bracketed)) {
+            expect(
+              p.left,
+              closeTo(_expectedInset(p), _tolerance),
+              reason: reason,
+            );
+            expect(p.left, greaterThan(0.8 * p.radius), reason: reason);
+          } else {
+            // 화면에서 잰 자리가 키캡 윗변의 곧은 구간(모서리 반경 안쪽)이다
+            expect(
+              p.left,
+              greaterThanOrEqualTo(p.radius - _tolerance),
+              reason: reason,
+            );
+            expect(
+              p.right,
+              greaterThanOrEqualTo(p.radius - _tolerance),
+              reason: reason,
+            );
+          }
           // 키캡 폭에 대한 비율: 실물 0.08~0.10, 반경이 큰 함수부 키는 0.12까지 (같은 절)
           expect(
             p.left / p.cap.width,

@@ -271,6 +271,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
   static double lineDepthAt(TextStyle style, double scaledFontSize) =>
       _Builder(style).lineMetrics(scaledFontSize).$2;
 
+  /// [lineDepthAt]과 같은 값 — 캐시를 거친다([_lineCache]). 화면의 각인 글자 크기 하나를 build마다 다시 묻는 곳(각인 띠의
+  /// 괄호, #266)이 쓴다. 글자 크기를 찾는 탐색은 [lineDepthAt]을 쓴다.
+  static double lineDepthOf(TextStyle style, double scaledFontSize) =>
+      _lineMetricsOf(style, scaledFontSize).$2;
+
   /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
   static (double, double, double) _bandBox(KeyLegend legend, TextStyle style) {
@@ -1072,6 +1077,10 @@ TextSpan keyLabelSpan(String text, TextStyle style) {
     // 글리프가 실물보다 작은 기호는 그 글자만 키운다 (#266 — 줄 상자는 strut로 고정이라 그대로다)
     final scale = CalcTheme.keyGlyphScale(text[i]);
     final fontSize = style.fontSize;
+    assert(
+      scale == 1.0 || fontSize != null,
+      '키워 그리는 기호(${text[i]})는 글자 크기를 준 스타일로 그린다 — 없으면 재는 쪽과 그리는 쪽의 폭이 달라진다',
+    );
     if (scale == 1.0 || fontSize == null) return base;
     return (base ?? style).copyWith(fontSize: fontSize * scale);
   }

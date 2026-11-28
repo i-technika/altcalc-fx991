@@ -68,35 +68,41 @@ void main() {
       }
     });
 
-    test('각인 네 색은 색조가 서로 40° 이상 떨어져 있다 — 보라는 보라, 파랑은 파랑으로 보인다 (#266)', () {
-      double hue(Color c) => HSVColor.fromColor(c).hue;
-      double apart(Color a, Color b) {
-        final d = (hue(a) - hue(b)).abs();
-        return math.min(d, 360 - d);
-      }
-
-      for (final palette in [CalcPalette.standard, CalcPalette.highContrast]) {
-        final colors = {
-          'SHIFT': palette.shiftLabel,
-          'ALPHA': palette.alphaLabel,
-          'Complex': palette.complexLabel,
-          'Base-N': palette.baseNLabel,
-        };
-        for (final a in colors.entries) {
-          for (final b in colors.entries) {
-            if (a.key == b.key) continue;
-            expect(
-              apart(a.value, b.value),
-              greaterThanOrEqualTo(40),
-              reason: '${a.key} ${hue(a.value)}° · ${b.key} ${hue(b.value)}°',
-            );
-          }
+    test(
+      '각인 네 색은 색조(HSV)가 서로 40° 이상 떨어져 있고, 모드 색은 실물 인쇄의 보라·파랑 색조 범위다 (#266)',
+      () {
+        double hue(Color c) => HSVColor.fromColor(c).hue;
+        double apart(Color a, Color b) {
+          final d = (hue(a) - hue(b)).abs();
+          return math.min(d, 360 - d);
         }
-        // 실물 인쇄 색조: 보라(파랑과 자홍 사이)·파랑(하늘색 쪽)
-        expect(hue(palette.complexLabel), inInclusiveRange(235, 275));
-        expect(hue(palette.baseNLabel), inInclusiveRange(190, 220));
-      }
-    });
+
+        for (final palette in [
+          CalcPalette.standard,
+          CalcPalette.highContrast,
+        ]) {
+          final colors = {
+            'SHIFT': palette.shiftLabel,
+            'ALPHA': palette.alphaLabel,
+            'Complex': palette.complexLabel,
+            'Base-N': palette.baseNLabel,
+          };
+          for (final a in colors.entries) {
+            for (final b in colors.entries) {
+              if (a.key == b.key) continue;
+              expect(
+                apart(a.value, b.value),
+                greaterThanOrEqualTo(40),
+                reason: '${a.key} ${hue(a.value)}° · ${b.key} ${hue(b.value)}°',
+              );
+            }
+          }
+          // 실물 인쇄 색조: 보라(파랑과 자홍 사이)·파랑(하늘색 쪽)
+          expect(hue(palette.complexLabel), inInclusiveRange(235, 275));
+          expect(hue(palette.baseNLabel), inInclusiveRange(190, 220));
+        }
+      },
+    );
 
     test('키캡 테두리는 본체 배경 대비 3:1 이상이다 (비텍스트 대비)', () {
       expect(
@@ -870,6 +876,25 @@ void main() {
       );
       expect(CalcTheme.keyLegendBracketRise, greaterThan(0));
       expect(CalcTheme.keyLegendBracketDrop, greaterThan(0));
+      expect(CalcTheme.keyLegendBracketKeyGap, greaterThan(0));
+      // 키워 그리는 기호는 글자만 있는 각인에만 있다 — 2차원 각인의 잉크 범위 표는 배율을 모른다
+      for (final key in allKeys) {
+        for (final legend in [
+          key.mainLegend,
+          for (final b in key.bandLegends) b.legend,
+        ]) {
+          if (legend.isPlain) continue;
+          for (final piece in legend.texts) {
+            for (final ch in piece.text.split('')) {
+              expect(
+                CalcTheme.keyGlyphScale(ch),
+                1.0,
+                reason: '${key.id.name} ${legend.plainText}의 $ch',
+              );
+            }
+          }
+        }
+      }
       expect(
         CalcTheme.keyLegendBracketHook,
         greaterThan(CalcTheme.keyLegendBracketStroke),

@@ -1030,18 +1030,25 @@ class _LegendRow extends StatelessWidget {
         textScaler,
         snapToDrawnBaseline: true,
       );
+      final lift = lifts[index];
       if (item.bracketed) {
+        final depth = KeyLegendView.lineDepthOf(
+          bandLegendStyle(item),
+          scaledFontSize,
+        );
         label = LegendBrackets(
           color: palette.modeLabelOf(item.mode!),
           fontSize: scaledFontSize,
-          depth: KeyLegendView.lineDepthAt(
-            bandLegendStyle(item),
-            scaledFontSize,
+          depth: depth,
+          heightScale: bandLegendBracketHeightScale(item),
+          // 줄 상자 아래끝은 키캡 위끝에서 [lift]만큼 위다 — 괄호가 키캡에 닿지 않게 한다
+          maxDrop: math.max(
+            0.0,
+            depth + lift - scaledFontSize * CalcTheme.keyLegendBracketKeyGap,
           ),
           child: label,
         );
       }
-      final lift = lifts[index];
       return lift > 0
           ? Transform.translate(offset: Offset(0, -lift), child: label)
           : label;
@@ -1196,10 +1203,18 @@ double bandLegendEmWidth(BandLegend item) =>
     KeyLegendView.emSize(item.legend, bandLegendStyle(item)).width +
     (item.bracketed ? 2 * CalcTheme.keyLegendBracketPad : 0.0);
 
+/// 괄호로 둘러싼 각인 [item]의 괄호 높이 배율 (#266) — 각인 글자 가운데 가장 크게 키워 그리는 글리프의 배율
+/// ([CalcTheme.keyGlyphScale])이다. 실물 `∠`의 괄호는 `A`~`F`의 괄호보다 높다([CalcTheme] "모드 전용 각인의 괄호" 절).
+double bandLegendBracketHeightScale(BandLegend item) => item.legend.plainText
+    .split('')
+    .map(CalcTheme.keyGlyphScale)
+    .fold(1.0, math.max);
+
 /// 모드 전용 각인을 둘러싼 ┌ ┐ 괄호 (#266, [CalcTheme] "모드 전용 각인의 괄호" 절).
 ///
 /// [child](각인 글자 — 한 줄 상자) 양옆에 [CalcTheme.keyLegendBracketPad] × [fontSize]씩 자리를 더하고, 그 바깥 끝에 기준선에
-/// 걸친 작은 모서리 표시를 [color]로 그린다. 높이는 [child] 그대로다 — 괄호 아래끝은 한 줄 상자 깊이 [depth] 안이다.
+/// 걸친 모서리 표시를 [color]로 그린다. 상자 높이는 [child] 그대로다 — 괄호 아래끝은 줄 상자 아래로 나가 그려진다(자리를
+/// 차지하지 않는다). 기준선 아래로 [maxDrop]보다 깊이 내려가지는 않는다.
 class LegendBrackets extends StatelessWidget {
   /// 괄호 색 — 모드 색 (`CalcPalette.modeLabelOf`)
   final Color color;
@@ -1209,6 +1224,12 @@ class LegendBrackets extends StatelessWidget {
 
   /// [child] 줄 상자의 기준선 아래 깊이 (dp) — 기준선은 상자 아래끝에서 이만큼 위다
   final double depth;
+
+  /// 괄호 높이(기준선 위·아래) 배율 — 키워 그리는 글리프의 괄호 ([bandLegendBracketHeightScale])
+  final double heightScale;
+
+  /// 괄호 아래끝이 기준선 아래로 내려갈 수 있는 한도 (dp) — 키캡 위끝까지의 거리에서 여유를 뺀 값. 없으면 제한하지 않는다
+  final double maxDrop;
   final Widget child;
 
   const LegendBrackets({
@@ -1216,6 +1237,8 @@ class LegendBrackets extends StatelessWidget {
     required this.color,
     required this.fontSize,
     required this.depth,
+    this.heightScale = 1,
+    this.maxDrop = double.infinity,
     required this.child,
   });
 
@@ -1225,6 +1248,8 @@ class LegendBrackets extends StatelessWidget {
       color: color,
       fontSize: fontSize,
       depth: depth,
+      heightScale: heightScale,
+      maxDrop: maxDrop,
     ),
     child: Padding(
       padding: EdgeInsets.symmetric(
@@ -1237,29 +1262,44 @@ class LegendBrackets extends StatelessWidget {
 
 /// [LegendBrackets]의 괄호 그림 — 왼쪽 끝에 `┌`, 오른쪽 끝에 `┐`.
 ///
-/// 세로 획은 기준선 위 [CalcTheme.keyLegendBracketRise]부터 기준선 아래 [CalcTheme.keyLegendBracketDrop]까지이고, 위끝에서
-/// 글자 쪽으로 [CalcTheme.keyLegendBracketHook] 길이의 가로 획이 나온다(모두 × [fontSize]). 획 두께는
-/// [CalcTheme.keyLegendBracketStroke] × [fontSize]이되 [CalcTheme.keyLegendMinStroke]보다 가늘지 않다.
+/// 세로 획은 기준선 위 [CalcTheme.keyLegendBracketRise]부터 기준선 아래 [CalcTheme.keyLegendBracketDrop]까지이고(× [fontSize]
+/// × [heightScale] — 아래는 [maxDrop]까지만), 위끝에서 글자 쪽으로 [CalcTheme.keyLegendBracketHook] × [fontSize] 길이의 가로
+/// 획이 나온다. 획 두께는 [CalcTheme.keyLegendBracketStroke] × [fontSize]이되 [CalcTheme.keyLegendMinStroke]보다 가늘지 않다
+/// (각인이 `FittedBox`로 줄면 획도 함께 준다 — [CalcTheme] "모드 전용 각인의 괄호" 절의 한계).
 @visibleForTesting
 class LegendBracketPainter extends CustomPainter {
   final Color color;
   final double fontSize;
   final double depth;
+  final double heightScale;
+  final double maxDrop;
 
   const LegendBracketPainter({
     required this.color,
     required this.fontSize,
     required this.depth,
+    this.heightScale = 1,
+    this.maxDrop = double.infinity,
   });
 
-  /// 상자 크기 [size]에서 괄호 두 개의 획 사각형 — (왼쪽 세로, 왼쪽 가로, 오른쪽 세로, 오른쪽 가로)
+  /// 상자 크기 [size]에서 괄호 두 개의 획 사각형 — (왼쪽 세로, 왼쪽 가로, 오른쪽 세로, 오른쪽 가로).
+  /// 아래끝은 상자 아래(`size.height`)를 넘을 수 있다.
   List<Rect> strokesFor(Size size) {
     final baseline = size.height - depth;
-    final top = baseline - fontSize * CalcTheme.keyLegendBracketRise;
-    final bottom = baseline + fontSize * CalcTheme.keyLegendBracketDrop;
     final stroke = math.max(
       fontSize * CalcTheme.keyLegendBracketStroke,
       CalcTheme.keyLegendMinStroke,
+    );
+    final top =
+        baseline - fontSize * CalcTheme.keyLegendBracketRise * heightScale;
+    // 아래끝은 한도까지만 — 한도가 아주 작아도 가로 획 아래로 세로 획이 조금은 남는다
+    final bottom = math.max(
+      top + 2 * stroke,
+      baseline +
+          math.min(
+            fontSize * CalcTheme.keyLegendBracketDrop * heightScale,
+            maxDrop,
+          ),
     );
     final hook = math.max(stroke, fontSize * CalcTheme.keyLegendBracketHook);
     return [
@@ -1282,7 +1322,9 @@ class LegendBracketPainter extends CustomPainter {
   bool shouldRepaint(LegendBracketPainter oldDelegate) =>
       oldDelegate.color != color ||
       oldDelegate.fontSize != fontSize ||
-      oldDelegate.depth != depth;
+      oldDelegate.depth != depth ||
+      oldDelegate.heightScale != heightScale ||
+      oldDelegate.maxDrop != maxDrop;
 }
 
 /// 각인 둘(SHIFT·ALPHA)의 바깥 끝을 키캡 끝에서 들이는 거리의 상한 (dp, #265) — 그린 키캡 폭 [faceWidth]의
