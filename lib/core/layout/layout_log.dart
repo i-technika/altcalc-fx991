@@ -207,7 +207,6 @@ abstract final class LayoutLog {
     required ScreenArrangement chosen,
     required ScreenArrangement drawn,
     required bool tooSmall,
-    bool lcdBesideKeypad = false,
     Rect? keypad,
     required Size window,
     required Iterable<DisplayFeature> features,
@@ -217,7 +216,6 @@ abstract final class LayoutLog {
     final line =
         '배치: ${drawn.name}'
         '${drawn == chosen ? '' : ' (고른 배치 ${chosen.name})'}'
-        '${lcdBesideKeypad ? ' (LCD 옆 패널)' : ''}'
         '${tooSmall ? ' 안내' : ''}'
         ' — 창 ${_size(window)}, '
         '${keypad == null ? '' : '키패드 ${_rect2(keypad)}, '}'

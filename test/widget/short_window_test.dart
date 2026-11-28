@@ -16,7 +16,6 @@ import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.d
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/settings_launcher.dart';
 import 'package:material_ui/material_ui.dart';
@@ -217,7 +216,6 @@ void main() {
               isTrue,
             );
             // 가로형은 기록 영역이 없고 LCD가 본체 폭 전체다(#284). 짧은 창에서도 최소 높이 아래로 줄지 않는다.
-            expect(find.byKey(HistoryPanel.panelKey), findsNothing);
             expect(lcd.width, moreOrLessEquals(keypad.width));
             expect(
               lcd.height,
@@ -346,13 +344,12 @@ void main() {
   });
 
   group('접힘선이 있는 짧은 창 (#38 R1)', () {
-    // 세로 접힘선: 접힘선 기준 배치(책 자세)는 키가 쓸 수 있는 크기(16dp) 이상이면 일반 하한(28dp) 미만이어도 쓴다(#143 —
-    // 접힘선은 언제나 경계다). 손 쪽 패널이 짧아 세로형의 키가 일반 하한 미만이면 활성 LCD를 반대쪽 패널로 옮겨 키패드가
-    // 패널 높이를 다 쓴다(#143 R1 사용자 결정) — 세로형 그대로면 LCD 최소 높이가 패널 높이를 먼저 가져가 키가 위아래 배치와
-    // 같았다(640×360: 17.0dp, 700×392: 17.7dp).
+    // 세로 접힘선: 접힘선 기준 배치(책 자세)는 키가 쓸 수 있는 크기(16dp) 이상이면 쓴다(#143 — 접힘선은 언제나 경계다).
+    // #285부터 책 자세는 태블릿 가로형처럼 넓은 배열을 접힘선 양쪽에 두므로, 짧은 창에서도 가로형과 같은 크기의 키가 된다
+    // (640×360 34.0dp, 700×392 35.4dp — #285 전에는 손 쪽 패널이 짧은 변형으로 27.2·27.88dp, 세로형 그대로면 17.0·17.7dp였다).
     for (final (size, padding, hingeX, touch) in const [
-      (Size(640, 360), EdgeInsets.only(top: 24), 320.0, 27.2),
-      (Size(700, 392), EdgeInsets.only(top: 24, bottom: 24), 350.0, 27.88),
+      (Size(640, 360), EdgeInsets.only(top: 24), 320.0, 34.0),
+      (Size(700, 392), EdgeInsets.only(top: 24, bottom: 24), 350.0, 35.4),
     ]) {
       for (final handedness in Handedness.values) {
         testWidgets(
@@ -381,35 +378,31 @@ void main() {
               ScreenArrangement.hingeSplit,
             );
             final drawnTouch = _lowestDrawnTouch(tester);
-            expect(drawnTouch, lessThan(CalcTheme.keyTouchHeightFloor));
             expect(
               drawnTouch,
-              greaterThanOrEqualTo(CalcTheme.keyTouchHeightUsableMin),
+              greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor),
             );
-            expect(drawnTouch, moreOrLessEquals(touch, epsilon: 0.01));
+            expect(drawnTouch, moreOrLessEquals(touch, epsilon: 0.05));
             expect(
               drawnTouch,
               greaterThan(_stackedTouchOf(_bodyOf(size, padding))),
             );
-            // 활성 LCD는 반대쪽 패널 맨 위(본체 윗변)다.
+            // LCD는 본체 윗변부터 본체 폭 전체이고 폭 0 접힘선에 걸친다.
             final lcd = tester.getRect(_lcd);
             expect(
               lcd.top,
               moreOrLessEquals(padding.top + CalcTheme.screenPadding),
             );
-            expect(
-              handedness.keypadOnRight
-                  ? lcd.right <= hingeX
-                  : lcd.left >= hingeX,
-              isTrue,
-              reason: '$lcd',
-            );
-            // LCD·키패드·설정 키 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 키패드는 손 쪽 절반이다.
+            expect(lcd.left < hingeX && lcd.right > hingeX, isTrue);
+            // 설정 키·숫자부·함수부 키 어느 것도 접힘선(과 양쪽 간격)에 걸치지 않고, 숫자부는 손 쪽 패널이다.
             const m = CalcTheme.screenHingeMargin - 0.01;
+            Rect key(CalcKeyId id) =>
+                tester.getRect(find.byKey(CalcKeyButton.keycapKeyOf(id)));
             for (final rect in [
-              tester.getRect(_lcd),
-              tester.getRect(_keypad),
               tester.getRect(_settings),
+              key(CalcKeyId.num7),
+              key(CalcKeyId.ac),
+              key(CalcKeyId.sin),
             ]) {
               expect(
                 rect.right <= hingeX - m || rect.left >= hingeX + m,
@@ -417,22 +410,18 @@ void main() {
                 reason: '$rect',
               );
             }
-            final keypad = tester.getRect(_keypad);
             expect(
-              handedness.keypadOnRight
-                  ? keypad.left >= hingeX
-                  : keypad.right <= hingeX,
-              isTrue,
+              key(CalcKeyId.num7).center.dx > hingeX,
+              handedness.keypadOnRight,
             );
           },
         );
       }
     }
 
-    // #143 R1·R2: 세로 접힘선이 있는 창도 창을 키울 때 키가 줄지 않는다(부동소수점 오차만 허용). 손 쪽 패널이 짧으면 활성
-    // LCD를 반대쪽 패널로 옮기고(R1 — 쓸 수 있는 크기 경계에서 가로형과 키가 2배로 튀던 것: 841×350 → 355 31.6 → 16.2dp,
-    // 560×348 → 350 29.9 → 16.1dp), 그때 키패드는 키가 일반 하한을 넘지 않는 높이까지만 써서(R2 — 841×508 → 510 39.8 → 28.1dp)
-    // 세로형으로 돌아오는 경계에서도 이어진다.
+    // #143 R1·R2: 세로 접힘선이 있는 창도 창을 키울 때 키가 줄지 않는다(부동소수점 오차만 허용). #285 전에는 손 쪽 패널이
+    // 짧은 변형과 세로형 사이 경계(841×350 → 355, 560×348 → 350, 841×508 → 510)를 이 검사가 지켰다 — 지금은 책 자세가 가로형과
+    // 같은 모양이라 그 경계가 없고, 쓸 수 있는 크기 경계의 대체 배치(가로형)와도 키가 이어진다.
     Future<double> touchAt(
       WidgetTester tester,
       Size size,
@@ -496,9 +485,9 @@ void main() {
     }
 
     testWidgets(
-      '접힘선이 치우친 짧은 창(841×360, x=280)은 두 손잡이 모두 LCD를 옮겨 키가 같다 (#143 R2)',
+      '접힘선이 치우친 짧은 창(841×360, x=280)은 두 손잡이의 키가 같다 (#143 R2, #285 — 키패드가 접힘선 기준 대칭)',
       (tester) async {
-        // 반대쪽 패널: 오른손잡이 264dp, 왼손잡이 537dp — 둘 다 활성 LCD 최소 폭(200dp) 이상이다.
+        // 좁은 쪽(왼쪽) 패널 264dp가 블록 폭이다 — 손잡이와 무관하다.
         final right = await touchAt(
           tester,
           const Size(841, 360),
@@ -513,7 +502,7 @@ void main() {
           Handedness.left,
         );
         expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-        expect(right, moreOrLessEquals(27.2, epsilon: 0.05));
+        expect(right, greaterThanOrEqualTo(CalcTheme.keyTouchHeightFloor));
         expect(left, moreOrLessEquals(right));
       },
     );

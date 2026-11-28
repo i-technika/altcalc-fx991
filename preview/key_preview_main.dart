@@ -367,8 +367,8 @@ const List<PreviewDevice> previewDevices = [
     padding: _gestureNavPhonePadding,
     systemGestureInsets: _gestureNavPhoneInsets,
   ),
-  // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 나눈다 — 책 자세(손 쪽 패널에 LCD·키패드, 반대쪽
-  // 패널에 계산 기록, #143). 자세·방향을 고를 수 있다(#93) — 가로로 돌리면 자세와 무관하게 가로 접힘선 기준 배치다(#143).
+  // Galaxy Z Fold5 내부, 펼친 상태: 화면 가운데의 세로 접힘선을 기준으로 나눈다 — 책 자세(접힘선 양쪽에 함수부·숫자부, 위에
+  // 접힘선에 걸친 LCD, #285). 자세·방향을 고를 수 있다(#93) — 가로로 돌리면 자세와 무관하게 가로 접힘선 기준 배치다(#143).
   // 인셋·제스처 영역은 Pixel 대화면의 임시 작업 표시줄 실측을 빌려 근사했다(#118 — Galaxy 기기에서 잰 값이 아니다).
   // One UI의 작업 표시줄은 동작이 달라 아래 인셋이 다를 수 있다 — 실기기 값은 #177.
   PreviewDevice(

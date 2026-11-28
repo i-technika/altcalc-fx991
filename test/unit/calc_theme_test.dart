@@ -1567,17 +1567,6 @@ void main() {
       );
     });
 
-    test(
-      '짧은 손 쪽 패널 책 자세의 기록 영역 (#143, #285 전까지): 간격은 0 이상, 문턱은 LCD 최소 높이 이상',
-      () {
-        expect(CalcTheme.screenLcdHistoryGap, greaterThanOrEqualTo(0));
-        expect(
-          CalcTheme.screenHistoryBelowLcdMinHeight,
-          greaterThanOrEqualTo(CalcTheme.screenLcdMinHeight),
-        );
-      },
-    );
-
     test('넓은 키패드 배열 블록 간격: 키 사이 가로 간격보다 넓고 블록 폭보다 훨씬 좁다 (#80)', () {
       expect(
         CalcTheme.keypadWideSectionGapRatio,

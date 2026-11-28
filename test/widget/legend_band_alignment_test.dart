@@ -94,11 +94,11 @@ const _windows = <_Window>[
     arrangement: _wide,
   ),
   (
-    name: '폴드 책 자세 750×840 (세로 접힘선)',
+    name: '폴드 책 자세 750×840 (세로 접힘선 — #285부터 넓은 배열, 블록 사이에 접힘선)',
     size: Size(750, 840),
     handedness: Handedness.right,
     folds: [Rect.fromLTWH(375, 0, 0, 840)],
-    arrangement: _standard,
+    arrangement: _wide,
   ),
   (
     name: '폴드 가로 접힘선 840×750 (넓은 배열)',

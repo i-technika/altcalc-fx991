@@ -41,8 +41,7 @@ abstract class SettingsStrings {
   /// 손잡이 선택지 이름
   String handedness(Handedness value);
 
-  /// 손잡이 선택지 설명 (숫자 키가 어느 쪽에 오는지 — 가로형·가로 접힘선의 넓은 배열은 숫자부, 책 자세는 손 쪽 패널의
-  /// 키패드 전체가 그쪽이다)
+  /// 손잡이 선택지 설명 (숫자 키가 어느 쪽에 오는지 — 가로형·가로 접힘선의 넓은 배열·책 자세(#285) 모두 숫자부가 그쪽이다)
   String handednessDetail(Handedness value);
 
   /// 대화상자 닫기 버튼

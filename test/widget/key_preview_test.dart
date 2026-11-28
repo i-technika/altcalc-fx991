@@ -20,7 +20,6 @@ import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.d
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_status_icon.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1383,31 +1382,17 @@ void main() {
             bool inBackZone(double x) =>
                 x < gesture.left || x > device.size.width - gesture.right;
 
-            // 숫자부(가로형)·키패드(접힘선 기준 좌우 배치)가 주로 쓰는 손 쪽에 있다.
-            final keypad = tester.getRect(
-              find.byKey(const ValueKey('calc-keypad')),
+            // 숫자부가 주로 쓰는 손 쪽에 있다 — 가로형과 책 자세(#285) 모두 넓은 배열이다.
+            expect(
+              tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
+              KeypadArrangement.wide,
             );
-            final lcd = tester.getRect(find.byType(LcdDisplay));
-            if (tester
-                    .widget<CalcKeypad>(find.byType(CalcKeypad))
-                    .arrangement ==
-                KeypadArrangement.wide) {
-              // (축소 표시라 배치 판정 도우미의 간격 비교는 쓰지 않는다 — 넓은 배열이면 가로형이다)
-              final number = tester.getRect(_keycap(CalcKeyId.num7));
-              final function = tester.getRect(_keycap(CalcKeyId.sin));
-              expect(
-                number.center.dx > function.center.dx,
-                handedness.keypadOnRight,
-              );
-            } else {
-              // 책 자세(#143): LCD·키패드가 손 쪽 패널, 계산 기록이 반대쪽 패널
-              final history = tester.getRect(find.byType(HistoryPanel));
-              expect(
-                keypad.center.dx > history.center.dx,
-                handedness.keypadOnRight,
-              );
-              expect(lcd.center.dx, moreOrLessEquals(keypad.center.dx));
-            }
+            final number = tester.getRect(_keycap(CalcKeyId.num7));
+            final function = tester.getRect(_keycap(CalcKeyId.sin));
+            expect(
+              number.center.dx > function.center.dx,
+              handedness.keypadOnRight,
+            );
 
             // 키패드 왼쪽 끝 열(7)의 왼쪽 가장자리, 오른쪽 끝 열(AC)의 오른쪽 가장자리를 화면 안쪽으로 2dp 들어가 누른다.
             final num7 = tester.getRect(_keycap(CalcKeyId.num7));
@@ -1514,7 +1499,6 @@ void main() {
           tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
           KeypadArrangement.wide,
         );
-        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
         expect(
           tester.getRect(find.byType(LcdDisplay)).width,
           moreOrLessEquals(
@@ -1523,7 +1507,6 @@ void main() {
         );
         // 태블릿 가로: 기록 영역 없이 LCD가 본체 폭 전체다(#284 — 전에는 활성 LCD 옆에 기록 영역이 있었다).
         await _selectDevice(tester, indexOf('태블릿 가로'));
-        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
         expect(
           tester.getSize(find.byType(LcdDisplay)).width,
           moreOrLessEquals(
@@ -1550,7 +1533,6 @@ void main() {
           tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
           KeypadArrangement.wide,
         );
-        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
         // 미리보기는 큰 화면을 축소해 그리므로 화면 좌표(getRect)가 아니라 위젯 자신의 크기(getSize)로 잰다.
         final lcd = tester.getSize(find.byType(LcdDisplay));
         expect(lcd.width, moreOrLessEquals(1984, epsilon: 0.1));
@@ -1861,7 +1843,7 @@ void main() {
         final label =
             '${window.width.toInt()}×${window.height.toInt()}·${handedness.name}';
 
-        testWidgets('$label: 접힘선 양쪽으로 LCD·키패드가 나뉘고, 설정 대화상자도 접힘선을 넘지 않는다', (
+        testWidgets('$label: 접힘선 양쪽으로 함수부·숫자부가 나뉘고, 설정 대화상자도 접힘선을 넘지 않는다', (
           tester,
         ) async {
           await _pumpPreview(tester, window: window);
@@ -1887,43 +1869,51 @@ void main() {
             device,
             tester.getRect(find.byKey(const ValueKey('calc-keypad'))),
           );
-          final history = toScreen(
-            tester,
-            device,
-            tester.getRect(find.byType(HistoryPanel)),
-          );
           Rect keyOf(CalcKeyId id) =>
               toScreen(tester, device, tester.getRect(_keycap(id)));
           const e = 0.01;
-          // 책 자세(#143): LCD·키패드는 손 쪽 절반, 계산 기록은 반대쪽 절반
-          if (handedness == Handedness.right) {
-            // 바깥쪽 끝 열은 뒤로가기 영역에 걸린다.
-            expect(history.left, greaterThanOrEqualTo(-e));
-            expect(history.right, lessThanOrEqualTo(hingeX + e));
-            for (final r in [lcd, keypad]) {
-              expect(r.left, greaterThanOrEqualTo(hingeX - e));
-              expect(r.right, lessThanOrEqualTo(device.size.width + e));
-            }
+          // 책 자세(#285): LCD는 접힘선에 걸치고, 숫자부는 손 쪽 패널, 함수부는 반대쪽 패널이다. 어느 키도 접힘선을 넘지 않는다.
+          expect(lcd.left, lessThan(hingeX));
+          expect(lcd.right, greaterThan(hingeX));
+          expect(keypad.left, lessThan(hingeX));
+          expect(keypad.right, greaterThan(hingeX));
+          final numbersRight = handedness == Handedness.right;
+          for (final id in [CalcKeyId.num7, CalcKeyId.ac, CalcKeyId.equals]) {
+            final r = keyOf(id);
+            expect(
+              numbersRight ? r.left : r.right,
+              numbersRight
+                  ? greaterThanOrEqualTo(hingeX - e)
+                  : lessThanOrEqualTo(hingeX + e),
+              reason: id.name,
+            );
+          }
+          for (final id in [CalcKeyId.sin, CalcKeyId.shift, settingsKey]) {
+            final r = keyOf(id);
+            expect(
+              numbersRight ? r.right : r.left,
+              numbersRight
+                  ? lessThanOrEqualTo(hingeX + e)
+                  : greaterThanOrEqualTo(hingeX - e),
+              reason: id.name,
+            );
+          }
+          // 바깥쪽 끝 열은 뒤로가기 영역에 걸린다.
+          if (numbersRight) {
             expect(
               keyOf(CalcKeyId.ac).right,
               greaterThan(device.size.width - device.systemGestureInsets.right),
             );
           } else {
-            for (final r in [lcd, keypad]) {
-              expect(r.left, greaterThanOrEqualTo(-e));
-              expect(r.right, lessThanOrEqualTo(hingeX + e));
-            }
-            expect(history.left, greaterThanOrEqualTo(hingeX - e));
-            expect(history.right, lessThanOrEqualTo(device.size.width + e));
             expect(
               keyOf(CalcKeyId.num7).left,
               lessThan(device.systemGestureInsets.left),
             );
           }
 
-          // 설정 키(ON, #190)는 키패드 쪽 절반에 있고, 대화상자는 그 절반에 뜨며 접힘선을 넘지 않는다.
+          // 설정 키(ON, #190)는 함수부(숫자부 반대쪽) 패널에 있고, 대화상자는 그 절반에 뜨며 접힘선을 넘지 않는다.
           final button = toScreen(tester, device, tester.getRect(_settingsKey));
-          final buttonOnLeft = handedness == Handedness.left;
+          final buttonOnLeft = handedness == Handedness.right;
           expect(button.center.dx < hingeX, buttonOnLeft);
           await tester.tap(_settingsKey);
           await tester.pumpAndSettle();
@@ -2359,26 +2349,27 @@ void main() {
                   );
                   switch (arrangement) {
                     case ScreenArrangement.hingeSplit:
-                      // 책 자세(#143): LCD·키패드는 주로 쓰는 손 쪽 절반, 계산 기록은 다른 절반.
+                      // 책 자세(#285): 숫자부는 주로 쓰는 손 쪽 패널, 함수부는 다른 패널이고 키패드는 접힘선 양쪽에 걸친다.
                       final x = hinge.left;
                       final onRight = h == Handedness.right;
-                      final history = rectOf(find.byType(HistoryPanel));
-                      for (final r in [lcd, keypad]) {
-                        expect(
-                          onRight ? r.left : r.right,
-                          onRight
-                              ? greaterThanOrEqualTo(x - e)
-                              : lessThanOrEqualTo(x + e),
-                          reason: reason,
-                        );
-                      }
+                      final seven = rectOf(_keycap(CalcKeyId.num7));
+                      final sin = rectOf(_keycap(CalcKeyId.sin));
                       expect(
-                        onRight ? history.right : history.left,
+                        onRight ? seven.left : seven.right,
+                        onRight
+                            ? greaterThanOrEqualTo(x - e)
+                            : lessThanOrEqualTo(x + e),
+                        reason: reason,
+                      );
+                      expect(
+                        onRight ? sin.right : sin.left,
                         onRight
                             ? lessThanOrEqualTo(x + e)
                             : greaterThanOrEqualTo(x - e),
                         reason: reason,
                       );
+                      expect(keypad.left, lessThan(x), reason: reason);
+                      expect(keypad.right, greaterThan(x), reason: reason);
                     case ScreenArrangement.hingeStacked:
                       // 위 절반 LCD, 아래 절반 키패드(주로 쓰는 손 쪽). 키 터치 하한 때문에 위아래 배치로
                       // 되돌아가지 않았다는 것도 이것으로 확인된다.

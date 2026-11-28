@@ -12,7 +12,6 @@ import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/handedness_dialog.dart';
-import 'package:itechnika_altcalc_fx991/presentation/widgets/history_panel.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/lcd_display.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/round_key_face.dart';
 import 'package:material_ui/material_ui.dart';
@@ -108,16 +107,10 @@ void main() {
         expect(find.byIcon(Icons.settings), findsNothing);
         expect(find.byType(IconButton), findsNothing);
         expect(find.text('AltCalc'), findsNothing);
-        // LCD 쪽(LCD·기록 영역)이 본체 윗변부터다 — LCD 위에 빈 곳도 없다(#232).
+        // LCD가 본체 윗변부터다 — LCD 위에 빈 곳도 없다(#232).
         final bodyTop = padding.top + CalcTheme.screenPadding;
         final lcd = tester.getRect(_lcd);
         expect(lcd.top, moreOrLessEquals(bodyTop));
-        if (find.byKey(HistoryPanel.panelKey).evaluate().isNotEmpty) {
-          expect(
-            tester.getRect(find.byKey(HistoryPanel.panelKey)).top,
-            moreOrLessEquals(bodyTop),
-          );
-        }
       });
     }
   });
@@ -347,7 +340,7 @@ void main() {
       );
       expect(isStackedArrangement(tester), isTrue);
       await _open(tester);
-      // 세로로 돌림 → 세로 접힘선 기준 배치, 오른손잡이라 키패드·ON 키는 오른쪽 절반
+      // 세로로 돌림 → 세로 접힘선 기준 배치, 오른손잡이라 ON 키(함수부)는 왼쪽 절반(#285 — 숫자부가 손 쪽 오른쪽 패널)
       await _pump(
         tester,
         size: const Size(701, 841),
@@ -362,8 +355,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
-      expect(tester.getRect(_onKey).left, greaterThanOrEqualTo(350));
-      expect(tester.getRect(_surface).left, greaterThanOrEqualTo(350));
+      expect(tester.getRect(_onKey).right, lessThanOrEqualTo(350));
+      expect(tester.getRect(_surface).right, lessThanOrEqualTo(350));
       expect(tester.takeException(), isNull);
     });
 
@@ -382,8 +375,9 @@ void main() {
           displayFeatures: const [fold],
         );
         await _open(tester);
-        // 전제: 처음에는 대화상자가 ON 키 쪽(오른쪽) 절반에 갇혀 있다 — 나뉨이 바뀌어야 감싸는 위젯이 달라진다.
-        expect(tester.getRect(_surface).left, greaterThanOrEqualTo(420));
+        // 전제: 처음에는 대화상자가 ON 키 쪽(오른손잡이의 함수부 — 왼쪽, #285) 절반에 갇혀 있다 — 나뉨이 바뀌어야 감싸는 위젯이
+        // 달라진다.
+        expect(tester.getRect(_surface).right, lessThanOrEqualTo(420));
         final option = find.byKey(
           HandednessDialog.optionKeyOf(Handedness.values.first),
         );
@@ -449,12 +443,11 @@ void main() {
     }
 
     testWidgets(
-      '세로 접힘선 배치를 한쪽 손잡이로만 쓸 수 있는 화면: 안내 글을 보이지 않고, 대화상자를 좁은 절반에 가두지 않는다 (#41 R1·R2)',
+      '좁은 쪽 패널이 블록을 담지 못하는 세로 접힘선 화면: 두 손잡이 모두 위아래 배치라 안내 글을 보이고, 대화상자를 좁은 절반에 가두지 않는다 (#41 R1·R2, #285)',
       (tester) async {
-        // 세로 접힘선 x=654, 오른쪽 인셋 48 → 오른쪽 손 쪽 패널은 123dp뿐이다(키 13.9dp — 쓸 수 있는 크기 16dp 미만, #143).
-        // - 오른손잡이: 키패드가 오른쪽 절반에 들어가지 못해 위아래 배치로 대체한다. ON 키는 키패드 오른쪽 위(접힘선 오른쪽).
-        // - 왼손잡이: 키패드가 넓은 왼쪽 절반에 들어가 접힘선 기준 배치가 된다 — 그래서 손잡이 설정이 이 화면에
-        //   적용된다(위아래 배치로 그렸어도 안내 글을 보이면 안 된다).
+        // 세로 접힘선 x=654, 오른쪽 인셋 48 → 오른쪽 패널은 123dp뿐이라 책 자세의 블록 키가 쓸 수 있는 크기(16dp)보다 작다.
+        // 키패드가 접힘선 기준 대칭이라 두 손잡이 모두 위아래 배치다 — 손잡이 설정이 이 화면에 적용되지 않아 안내 글을
+        // 보인다. (#285 전에는 왼손잡이가 넓은 왼쪽 패널에 세로형으로 책 자세였고, 그래서 안내 글을 보이지 않았다.)
         const fold = DisplayFeature(
           bounds: Rect.fromLTWH(654, 0, 0, 701),
           type: DisplayFeatureType.fold,
@@ -482,20 +475,18 @@ void main() {
         Rect surface() => tester.getRect(_surface);
         expect(surface().width, greaterThanOrEqualTo(280));
         expect(surface().left, lessThan(654)); // 접힘선 오른쪽 좁은 절반에 갇히지 않았다
-        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+        expect(find.byKey(HandednessDialog.noteKey), findsOneWidget);
+        final opened = surface();
 
-        // 왼손잡이를 고르면 접힘선 기준 배치가 된다. 반대 손잡이로는 위아래 배치라 대화상자는 화면 전체에 그대로 둔다.
+        // 왼손잡이를 골라도 위아래 배치 그대로이고, 대화상자는 연 자리에 남는다.
         await tester.tap(
           find.byKey(HandednessDialog.optionKeyOf(Handedness.left)),
         );
         await tester.pumpAndSettle();
         expect(container.read(handednessProvider), Handedness.left);
-        expect(drawnArrangementOf(tester), DrawnArrangement.sideBySide);
+        expect(isStackedArrangement(tester), isTrue);
         expect(_dialog, findsOneWidget);
-        expect(surface().width, greaterThanOrEqualTo(280));
-        // 화면 전체(인셋 안) 가운데 그대로 — 왼쪽 절반에 가뒀다면 가운데가 접힘선 왼쪽 절반(0~654)의 가운데 327이다.
-        expect(surface().center.dx, moreOrLessEquals((841 - 48) / 2));
-        expect(find.byKey(HandednessDialog.noteKey), findsNothing);
+        expect(surface(), opened);
         expect(tester.takeException(), isNull);
       },
     );
