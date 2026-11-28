@@ -126,6 +126,11 @@ class CalcKeyButton extends StatefulWidget {
   /// 않는다(각인마다 그 여유까지만 올린다).
   final double legendBaseLift;
 
+  /// 각인 띠에 어느 기능의 각인까지 인쇄할지 (#267) — 기본은 배포된 기능([releasedKeyFeatures])이다. 키패드가 글자 크기를
+  /// 잰 목록과 같은 값을 준다(`CalcKeypad.releasedFeatures`). 테스트·미리보기는 다른 값을 주어 배포 뒤 모습을 그려 본다.
+  /// 그리는 각인만 정한다 — 입력 해석과 스크린리더 문구는 [releasedKeyFeatures]를 따른다.
+  final Set<KeyFeature> releasedFeatures;
+
   /// 그린 키캡의 가로/세로 비 상한 (#220). 키캡이 이보다 납작하면 셀 가운데에 폭을 줄여 그린다
   /// ([keyCapFaceWidth] — 셀 폭의 [CalcTheme.keyCapMinWidthRatio] 아래로는 줄이지 않는다). 터치 영역은 셀 폭 그대로다.
   /// `null`이면 셀 폭 전체에 그린다. 원형 버튼과 모양([shape])이 있는 키에는 쓰지 않는다.
@@ -187,6 +192,7 @@ class CalcKeyButton extends StatefulWidget {
     this.mainLabelFontSize,
     this.legendHeight,
     this.legendBaseLift = 0,
+    this.releasedFeatures = releasedKeyFeatures,
     this.keycapMaxAspectRatio,
     this.shape,
     this.hitShape,
@@ -666,7 +672,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                   // SHIFT·ALPHA 각인은 실물처럼 그린 키캡 폭에 맞춰 인쇄하고(#220 R1, 좌우 자리는 #265), 긴 쌍만 키캡 밖
                   // 셀 폭까지 쓴다(#264 — 실물 `Ran# RanInt`는 키캡보다 넓다).
                   : _LegendRow(
-                      legends: widget.keyDef.bandLegends,
+                      legends: widget.keyDef.bandLegendsIn(
+                        widget.releasedFeatures,
+                      ),
                       width: width,
                       faceWidth: faceWidth,
                       height: legendFullReach,

@@ -153,7 +153,7 @@ void main() {
       for (final k in allKeys) {
         for (final legend in [
           k.mainLegend,
-          for (final item in k.bandLegends) item.legend,
+          for (final item in k.printedBandLegends) item.legend,
         ]) {
           for (final piece in legend.texts) {
             for (var i = 0; i < piece.text.length; i++) {
@@ -195,7 +195,7 @@ void main() {
         for (final k in allKeys) {
           for (final legend in [
             k.mainLegend,
-            for (final item in k.bandLegends) item.legend,
+            for (final item in k.printedBandLegends) item.legend,
           ]) {
             for (final piece in legend.texts) {
               for (var i = 0; i < piece.text.length; i++) {

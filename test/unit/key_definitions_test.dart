@@ -208,7 +208,7 @@ void main() {
         '각인 띠 목록(bandLegends)은 실물 인쇄 순서다 — 괄호 SHIFT → SHIFT → ALPHA → 모드 색',
         () {
           List<String> describe(CalcKeyId id) => [
-            for (final b in keyDefOf(id).bandLegends) b.toString(),
+            for (final b in keyDefOf(id).printedBandLegends) b.toString(),
           ];
           expect(describe(CalcKeyId.eng), [
             'BandLegend("∠", shift, complex, 괄호)',
@@ -233,10 +233,11 @@ void main() {
 
       test('모든 키: 목록은 SHIFT·ALPHA 각인을 빠짐없이 담고, 원형 버튼·각인 없는 키는 비어 있다', () {
         for (final key in allKeys) {
-          final band = key.bandLegends;
+          // 실물 인쇄 전체 (배포 기능에 따라 숨는 것은 아래 "배포 기능에 따른 각인 (#267)" 그룹)
+          final band = key.printedBandLegends;
           final expected = [
             ?key.modeShiftLegend?.legend,
-            ?key.shiftLegend,
+            ?key.printedShiftLegend,
             ?key.alphaLegend,
             ?key.modeLegend?.legend,
           ];
@@ -350,12 +351,12 @@ void main() {
           isNot(const ModeLegend(LegendText('i'), baseN)),
         );
         expect(
-          keyDefOf(CalcKeyId.eng).bandLegends,
-          keyDefOf(CalcKeyId.eng).bandLegends,
+          keyDefOf(CalcKeyId.eng).printedBandLegends,
+          keyDefOf(CalcKeyId.eng).printedBandLegends,
         );
         expect(
-          keyDefOf(CalcKeyId.eng).bandLegends.first.hashCode,
-          keyDefOf(CalcKeyId.eng).bandLegends.first.hashCode,
+          keyDefOf(CalcKeyId.eng).printedBandLegends.first.hashCode,
+          keyDefOf(CalcKeyId.eng).printedBandLegends.first.hashCode,
         );
       });
     });
@@ -521,11 +522,155 @@ void main() {
       for (final key in allKeys) {
         final (main, shift, alpha) = _verifiedLegends[key.id]!;
         expect(
-          (key.mainLabel, key.shiftLabel, key.alphaLabel),
+          // 명세는 실물 인쇄 그대로다 — 배포 전이라 숨기는 SHIFT 각인(OPTN의 `QR`, #267)도 명세에는 있다
+          (key.mainLabel, key.printedShiftLegend?.plainText, key.alphaLabel),
           (main, shift, alpha),
           reason: key.id.name,
         );
       }
+    });
+
+    group('배포 기능에 따른 각인 (#267)', () {
+      // v1.0에 기능이 없는 각인 (이슈 #267의 표 — User's Guide 3쪽 "Key Markings"와 버전 구성):
+      // (키, 숨는 각인, 그 기능)
+      const hiddenInV10 = <(CalcKeyId, String, KeyFeature)>[
+        (CalcKeyId.optn, 'QR', KeyFeature.qrCode),
+        (CalcKeyId.square, 'DEC', KeyFeature.baseN),
+        (CalcKeyId.power, 'HEX', KeyFeature.baseN),
+        (CalcKeyId.logBase, 'BIN', KeyFeature.baseN),
+        (CalcKeyId.ln, 'OCT', KeyFeature.baseN),
+        (CalcKeyId.negative, '┌A┐', KeyFeature.baseN),
+        (CalcKeyId.degMinSec, '┌B┐', KeyFeature.baseN),
+        (CalcKeyId.reciprocal, '┌C┐', KeyFeature.baseN),
+        (CalcKeyId.sin, '┌D┐', KeyFeature.baseN),
+        (CalcKeyId.cos, '┌E┐', KeyFeature.baseN),
+        (CalcKeyId.tan, '┌F┐', KeyFeature.baseN),
+      ];
+
+      /// [released]에서 인쇄하는 것 — 각인은 한 줄 표기, 괄호는 `┌A┐`처럼 따로 센다
+      Set<String> printed(CalcKeyDef key, Set<KeyFeature> released) => {
+        for (final b in key.bandLegendsIn(released)) ...[
+          b.legend.plainText,
+          if (b.bracketed) '┌${b.legend.plainText}┐',
+        ],
+      };
+
+      /// [released]에서 숨는 것 (키, 각인)
+      List<(CalcKeyId, String)> hidden(Set<KeyFeature> released) => [
+        for (final key in allKeys)
+          for (final item in printed(
+            key,
+            allKeyFeatures,
+          ).difference(printed(key, released)))
+            (key.id, item),
+      ];
+
+      test('배포 목록은 v1.0이다 — Complex는 들어가고 Base-N·QR은 아니다', () {
+        expect(releasedKeyFeatures, {KeyFeature.complex});
+        expect(allKeyFeatures, KeyFeature.values.toSet());
+        expect(KeyLegendMode.complex.feature, KeyFeature.complex);
+        expect(KeyLegendMode.baseN.feature, KeyFeature.baseN);
+      });
+
+      test('v1.0에서 숨는 각인은 QR과 Base-N 파랑 각인(DEC·HEX·BIN·OCT, A~F의 괄호)뿐이다', () {
+        expect(hidden(releasedKeyFeatures), [
+          for (final (id, item, _) in hiddenInV10) (id, item),
+        ]);
+        // 앱이 쓰는 값(bandLegends)이 그 목록이다
+        for (final key in allKeys) {
+          expect(
+            key.bandLegends,
+            key.bandLegendsIn(releasedKeyFeatures),
+            reason: key.id.name,
+          );
+          expect(
+            key.printedBandLegends,
+            key.bandLegendsIn(allKeyFeatures),
+            reason: key.id.name,
+          );
+        }
+      });
+
+      test('기능을 배포 목록에 더하면 그 기능의 각인만 되살아난다', () {
+        for (final feature in KeyFeature.values) {
+          final expected = [
+            for (final (id, item, f) in hiddenInV10)
+              if (f != feature && !releasedKeyFeatures.contains(f)) (id, item),
+          ];
+          expect(
+            hidden({...releasedKeyFeatures, feature}),
+            expected,
+            reason: feature.name,
+          );
+        }
+        // v1.3: Base-N을 더하면 파랑 각인이 모두 되살아나고 QR만 남는다
+        expect(hidden({KeyFeature.complex, KeyFeature.baseN}), [
+          (CalcKeyId.optn, 'QR'),
+        ]);
+        // 모두 배포하면 실물 인쇄 그대로다
+        expect(hidden(allKeyFeatures), isEmpty);
+        // 아무것도 배포하지 않으면 ENG의 보라 각인도 숨는다 (Complex도 같은 규칙을 따른다)
+        expect(
+          keyDefOf(CalcKeyId.eng).bandLegendsIn(const {}).map((b) => '$b'),
+          ['BandLegend("←", shift)'],
+        );
+      });
+
+      test('v1.0의 각인 띠: 숨긴 자리는 남은 각인이 다시 놓인다 (하나면 가운데, 괄호만 빠지면 쌍 그대로)', () {
+        List<String> band(CalcKeyId id) => [
+          for (final b in keyDefOf(id).bandLegends) '$b',
+        ];
+        // 파랑 각인이 빠지면 노랑 각인 하나뿐이다 — 각인 줄이 하나는 키캡 가운데에 놓는다(#265)
+        expect(band(CalcKeyId.square), ['BandLegend("x³", shift)']);
+        expect(band(CalcKeyId.ln), ['BandLegend("e^◼", shift)']);
+        // 괄호만 빠진다 — 빨강 A~F는 변수라 남는다
+        expect(band(CalcKeyId.negative), [
+          'BandLegend("log", shift)',
+          'BandLegend("A", alpha)',
+        ]);
+        expect(band(CalcKeyId.tan).last, 'BandLegend("F", alpha)');
+        // QR이 빠진 OPTN은 각인이 없다
+        expect(band(CalcKeyId.optn), isEmpty);
+        // Complex(v1.0)의 보라 각인은 그대로다
+        expect(band(CalcKeyId.eng), [
+          'BandLegend("∠", shift, complex, 괄호)',
+          'BandLegend("←", shift)',
+          'BandLegend("i", mode, complex)',
+        ]);
+      });
+
+      test('숨긴 SHIFT 각인의 키는 SHIFT 기능이 없는 키다 — 명세에는 실물 인쇄가 남는다', () {
+        final optn = keyDefOf(CalcKeyId.optn);
+        expect(optn.printedShiftLegend?.plainText, 'QR');
+        expect(optn.shiftFeature, KeyFeature.qrCode);
+        expect(optn.shiftLegend, isNull);
+        expect(optn.shiftLabel, isNull);
+        expect(optn.hasShift, isFalse);
+        expect(optn.shiftLegendIn(allKeyFeatures)?.plainText, 'QR');
+        // 배포 단위가 붙은 SHIFT 각인은 QR뿐이다 — 나머지 키는 배포 목록과 무관하게 같다
+        for (final key in allKeys) {
+          if (key.id == CalcKeyId.optn) continue;
+          expect(key.shiftFeature, isNull, reason: key.id.name);
+          expect(key.shiftLegend, key.printedShiftLegend, reason: key.id.name);
+          expect(
+            key.shiftLegendIn(const {}),
+            key.printedShiftLegend,
+            reason: key.id.name,
+          );
+        }
+      });
+
+      test('SHIFT 각인 없이 배포 단위만 주면 assert로 막는다', () {
+        expect(
+          () => CalcKeyDef(
+            id: CalcKeyId.optn,
+            mainLegend: const LegendText('OPTN'),
+            shiftFeature: KeyFeature.qrCode,
+            category: KeyCategory.function,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
     });
 
     test('원형 버튼은 실물대로 SHIFT·ALPHA·MENU·ON(설정 키) 넷이다 (#190, #156)', () {

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/release_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
@@ -184,13 +185,26 @@ Future<void> _pumpApp(
   Size size,
   double textScale, {
   double pixelRatio = 2,
+
+  /// 각인 띠에 인쇄할 기능 (#267) — 기본은 앱 그대로(배포 목록). 실물 인쇄 전체를 보려면 [allKeyFeatures]를 준다.
+  Set<KeyFeature>? released,
 }) async {
   tester.view.devicePixelRatio = pixelRatio;
   tester.view.physicalSize = size * pixelRatio;
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-  await tester.pumpWidget(const ProviderScope(child: AltCalcApp()));
+  await tester.pumpWidget(
+    ProviderScope(
+      // override는 늘 둔다 — 한 테스트 안에서 값을 바꿔 다시 띄울 수 있게(override를 나중에 더하는 것은 받지 않는다)
+      overrides: [
+        releasedKeyFeaturesProvider.overrideWithValue(
+          released ?? releasedKeyFeatures,
+        ),
+      ],
+      child: const AltCalcApp(),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -532,6 +546,18 @@ void main() {
         expectRaise(scaledRaised, scaledRaise);
         // 세로 창은 글자 배율이 띠 글자 크기를 실제로 바꿔야 배율 검사가 뜻이 있다
         if (scales) expect(scaled, greaterThan(base + 0.1));
+
+        // 실물 인쇄 전체(#267 — 배포 전이라 숨긴 Base-N의 파랑 각인·괄호, `QR`까지 그린 화면)에서도 같다. 숨긴 각인은
+        // 띠 글자 크기를 바꾸지 않는다
+        await _pumpApp(tester, size, 1.0, released: allKeyFeatures);
+        expect(find.text('DEC'), findsOneWidget);
+        final (full, fullRaised) = _expectBandBaselines(tester);
+        expectRaise(fullRaised, raise);
+        expect(full, moreOrLessEquals(base, epsilon: 1e-9));
+        await _pumpApp(tester, size, 1.3, released: allKeyFeatures);
+        final (fullScaled, fullScaledRaised) = _expectBandBaselines(tester);
+        expectRaise(fullScaledRaised, scaledRaise);
+        expect(fullScaled, moreOrLessEquals(scaled, epsilon: 1e-9));
       });
     }
   });
@@ -633,7 +659,15 @@ void main() {
         testWidgets(
           '$size·픽셀 비 $pixelRatio·글자 배율 $scale: ${id.name} 키 $text의 괄호가 그린 기준선을 실물 비율로 걸친다',
           (tester) async {
-            await _pumpApp(tester, size, scale, pixelRatio: pixelRatio);
+            // sin 키 `D`의 파란 괄호(Base-N)는 배포 전이라 숨긴다(#267) — 실물 인쇄 전체를 그려 놓고 본다.
+            // ENG 키 `∠`의 보라 괄호(Complex)는 배포 목록 그대로의 화면에서 본다.
+            await _pumpApp(
+              tester,
+              size,
+              scale,
+              pixelRatio: pixelRatio,
+              released: id == CalcKeyId.sin ? allKeyFeatures : null,
+            );
             final boundary = tester.renderObject<RenderRepaintBoundary>(
               find
                   .descendant(

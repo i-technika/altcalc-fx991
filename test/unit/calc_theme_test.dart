@@ -724,7 +724,7 @@ void main() {
         for (final MapEntry(key: id, value: colors) in expected.entries) {
           expect(
             [
-              for (final b in keyDefOf(id).bandLegends)
+              for (final b in keyDefOf(id).printedBandLegends)
                 palette.bandLegendColorOf(b),
             ],
             colors,
@@ -881,7 +881,7 @@ void main() {
       for (final key in allKeys) {
         for (final legend in [
           key.mainLegend,
-          for (final b in key.bandLegends) b.legend,
+          for (final b in key.printedBandLegends) b.legend,
         ]) {
           if (legend.isPlain) continue;
           for (final piece in legend.texts) {

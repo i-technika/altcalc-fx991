@@ -185,12 +185,14 @@ class KeypadMetrics {
   debugWidthLimits(
     KeypadMetrics metrics, {
     bool Function(CalcKeyDef def)? where,
+    Set<KeyFeature> releasedFeatures = releasedKeyFeatures,
   }) {
     final limits = _LabelLimits.measure(
       functionKeyWidth: metrics.functionKeyWidth,
       numberKeyWidth: metrics.numberKeyWidth,
       functionCapWidth: metrics.functionCapWidth,
       numberCapWidth: metrics.numberCapWidth,
+      releasedFeatures: releasedFeatures,
       where: where,
     );
     return (
@@ -491,10 +493,13 @@ class KeypadMetrics {
   ///    아니라 잉크로 잰다(#264 — 기호 잉크는 글자 크기의 절반쯤이라, 줄 상자로 재면 숫자보다 훨씬 작아진다).
   ///
   /// 커서 패드 키(화살표 한 글자)는 키캡 상자(패드 반쪽)가 함수부 키캡보다 크므로 폭 계산에서 뺀다.
+  ///
+  /// 각인은 [releasedFeatures]가 배포됐을 때 인쇄하는 것만 잰다(#267 — 키 버튼이 그리는 목록과 같아야 한다).
   factory KeypadMetrics.compute(
     Size available,
     TextScaler textScaler, {
     KeypadArrangement arrangement = KeypadArrangement.standard,
+    Set<KeyFeature> releasedFeatures = releasedKeyFeatures,
   }) {
     final size = fitSize(available, arrangement);
     final (
@@ -540,6 +545,7 @@ class KeypadMetrics {
         capHeightOf(numberRowHeight),
         CalcTheme.keyCapNumberMaxAspectRatio,
       ),
+      releasedFeatures: releasedFeatures,
     );
 
     // 1. 높이 기준 — 실물 비율이고 상한은 없다 (#264). 가장 높은 각인(분수 등 2차원 각인, #155)까지
@@ -753,6 +759,7 @@ class _LabelLimits {
     required double numberKeyWidth,
     required double functionCapWidth,
     required double numberCapWidth,
+    required Set<KeyFeature> releasedFeatures,
     bool Function(CalcKeyDef def)? where,
   }) {
     var main = double.infinity;
@@ -808,9 +815,9 @@ class _LabelLimits {
           KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
         );
       }
-      // 각인 띠의 각인 — 키 버튼이 그리는 목록 그대로다(SHIFT·ALPHA·모드 전용 각인, #266 [CalcKeyDef.bandLegends]).
-      // 한쪽만 아는 각인이 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
-      final band = def.bandLegends;
+      // 각인 띠의 각인 — 키 버튼이 그리는 목록 그대로다(SHIFT·ALPHA·모드 전용 각인, #266 [CalcKeyDef.bandLegendsIn].
+      // 배포되지 않은 기능의 각인은 빠진다 — #267). 한쪽만 아는 각인이 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
+      final band = def.bandLegendsIn(releasedFeatures);
       for (final item in band) {
         if (!item.legend.isPlain) {
           tallLegends.add(
@@ -907,6 +914,10 @@ class CalcKeypad extends StatelessWidget {
   /// 스크린리더 읽기 순서(함수부 다음 숫자부)는 그대로이고 블록의 좌우만 바뀐다. [KeypadArrangement.standard]에서는 쓰지 않는다.
   final bool numbersOnLeft;
 
+  /// 각인 띠에 어느 기능의 각인까지 인쇄할지 (#267) — 기본은 배포된 기능([releasedKeyFeatures])이다. 글자 크기 계산
+  /// ([KeypadMetrics.compute])과 키 버튼이 같은 값을 쓴다. 그리는 각인만 정한다(`CalcKeyButton.releasedFeatures`).
+  final Set<KeyFeature> releasedFeatures;
+
   /// 제약이 무한한 축에 쓰는 기본 크기
   static const Size fallbackSize = Size(360, 420);
 
@@ -918,6 +929,7 @@ class CalcKeypad extends StatelessWidget {
     this.enableHaptics = true,
     this.arrangement = KeypadArrangement.standard,
     this.numbersOnLeft = false,
+    this.releasedFeatures = releasedKeyFeatures,
   });
 
   @override
@@ -947,6 +959,7 @@ class CalcKeypad extends StatelessWidget {
           available,
           textScaler,
           arrangement: arrangement,
+          releasedFeatures: releasedFeatures,
         );
         return Center(
           child: SizedBox.fromSize(
@@ -955,6 +968,7 @@ class CalcKeypad extends StatelessWidget {
             child: _KeypadBody(
               metrics: metrics,
               numbersOnLeft: numbersOnLeft,
+              releasedFeatures: releasedFeatures,
               onKeyPressed: onKeyPressed,
               onKeyRepeat: onKeyRepeat,
               onSettingsPressed: onSettingsPressed,
@@ -970,6 +984,7 @@ class CalcKeypad extends StatelessWidget {
 class _KeypadBody extends StatelessWidget {
   final KeypadMetrics metrics;
   final bool numbersOnLeft;
+  final Set<KeyFeature> releasedFeatures;
   final ValueChanged<CalcKeyId>? onKeyPressed;
   final ValueChanged<CalcKeyId>? onKeyRepeat;
   final ValueChanged<BuildContext>? onSettingsPressed;
@@ -978,6 +993,7 @@ class _KeypadBody extends StatelessWidget {
   const _KeypadBody({
     required this.metrics,
     required this.numbersOnLeft,
+    required this.releasedFeatures,
     required this.onKeyPressed,
     required this.onKeyRepeat,
     required this.onSettingsPressed,
@@ -1058,6 +1074,8 @@ class _KeypadBody extends StatelessWidget {
       legendHeight: metrics.legendBandHeight,
       // 각인 기준선을 키캡 위끝에서 띄운다 (#264)
       legendBaseLift: metrics.legendBaseLift,
+      // 글자 크기를 잰 각인 목록 그대로 그린다 (#267)
+      releasedFeatures: releasedFeatures,
       keycapMaxAspectRatio: KeypadMetrics.keycapMaxAspectRatioOf(def.id),
       focusable: def.id == settingsKey,
       gapInsets: gapInsets,

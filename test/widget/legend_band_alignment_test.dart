@@ -8,6 +8,7 @@ import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/device_provider.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/release_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
@@ -18,7 +19,11 @@ import '../support/bundled_fonts.dart';
 import '../support/key_legends.dart';
 
 /// 키캡 위 각인(SHIFT·ALPHA·모드 전용 각인)의 좌우 정렬 (#265, 모드 전용 각인은 #266) — 규칙과 실물 측정은 [CalcTheme]
-/// "각인 띠 좌우 정렬 (#265)" 절. 각인 목록은 [CalcKeyDef.bandLegends]다(왼쪽부터).
+/// "각인 띠 좌우 정렬 (#265)" 절. 각인 목록은 [CalcKeyDef.bandLegendsIn]이다(왼쪽부터).
+///
+/// 배포 목록(#267): 대부분의 검사는 실물 인쇄 전체([allKeyFeatures] — Base-N의 파랑 각인과 괄호, `QR`까지)를 그려 놓고
+/// 잰다. 그래야 배포 전이라 숨긴 각인의 배치도 계속 검사된다. 지금 배포 목록([releasedKeyFeatures], v1.0)의 화면은 창마다
+/// "v1.0 배포 목록" 검사가 따로 본다. 띄운 화면의 배포 목록은 [_released]에 둔다([_pump]·[_pumpButton]이 정한다).
 ///
 /// - 각인이 하나면 키캡 가운데다.
 /// - 둘이면 첫째(SHIFT)는 왼쪽·둘째(ALPHA 또는 모드 색 각인)는 오른쪽이고, 바깥 끝을 키캡 끝에서 똑같이 들인다. 들이는 거리는 키캡 폭의
@@ -108,23 +113,31 @@ const _windows = <_Window>[
 /// 그려진 폭의 차
 const _tolerance = 0.05;
 
+/// 지금 띄운 화면의 배포 목록 (#267) — [_pump]·[_pumpButton]이 정한다
+Set<KeyFeature> _released = allKeyFeatures;
+
+/// [def] 키의 각인 띠에 그려진 각인 (지금 띄운 화면의 배포 목록 기준)
+List<BandLegend> _band(CalcKeyDef def) => def.bandLegendsIn(_released);
+
 /// 각인 띠가 있는 키캡 키 (원형 버튼·커서 패드 제외)
-final _legendKeys = [
+List<CalcKeyDef> get _legendKeys => [
   for (final def in allKeys)
-    if (def.face == KeyFace.keycap && def.bandLegends.isNotEmpty) def,
+    if (def.face == KeyFace.keycap && _band(def).isNotEmpty) def,
 ];
 
 /// 각인이 둘(SHIFT·ALPHA 또는 SHIFT·모드 색 각인)인 키
-final _pairKeys = [
+List<CalcKeyDef> get _pairKeys => [
   for (final def in _legendKeys)
-    if (def.bandLegends.length == 2) def,
+    if (_band(def).length == 2) def,
 ];
 
 Future<void> _pump(
   WidgetTester tester,
   _Window window, {
   double textScale = 1.0,
+  Set<KeyFeature> released = allKeyFeatures,
 }) async {
+  _released = released;
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = window.size;
   tester.view.displayFeatures = [
@@ -146,6 +159,7 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        releasedKeyFeaturesProvider.overrideWithValue(released),
         if (window.folds.isNotEmpty)
           foldableDeviceProvider.overrideWithValue(ValueNotifier(true)),
       ],
@@ -230,7 +244,7 @@ double _gapOf(WidgetTester tester, Finder legend, Rect cap) => math.min(
 );
 
 _Pair _measure(WidgetTester tester, CalcKeyDef def) {
-  final band = def.bandLegends;
+  final band = _band(def);
   expect(band, hasLength(2), reason: def.id.name);
   final cap = _keycap(tester, def.id);
   final firstFinder = _legendFinder(def, band.first.legend);
@@ -296,27 +310,31 @@ String _describe(_Pair p) =>
     '상한 ${_sideInsetOf(p).toStringAsFixed(3)}';
 
 /// 키 버튼 하나를 [size] 상자에 띄운다 (키패드 밖 — 각인이 키캡 폭·띠 높이에 비해 큰 경우를 만든다).
-/// [legendFontSize]가 없으면 키 버튼 기본값(띠 높이의 비율)이다.
+/// [legendFontSize]가 없으면 키 버튼 기본값(띠 높이의 비율)이다. 실물 인쇄 전체를 그린다(괄호가 든 쌍 `sin⁻¹ ┌D┐` 포함).
 Future<void> _pumpButton(
   WidgetTester tester,
   CalcKeyId id, {
   required Size size,
   double? legendFontSize,
-}) => tester.pumpWidget(
-  MaterialApp(
-    home: Scaffold(
-      body: Center(
-        child: SizedBox.fromSize(
-          size: size,
-          child: CalcKeyButton(
-            keyDef: keyDefOf(id),
-            legendFontSize: legendFontSize,
+}) {
+  _released = allKeyFeatures;
+  return tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: SizedBox.fromSize(
+            size: size,
+            child: CalcKeyButton(
+              keyDef: keyDefOf(id),
+              legendFontSize: legendFontSize,
+              releasedFeatures: allKeyFeatures,
+            ),
           ),
         ),
       ),
     ),
-  ),
-);
+  );
+}
 
 void main() {
   setUpAll(loadBundledFonts);
@@ -587,7 +605,7 @@ void main() {
       testWidgets('각인이 하나뿐인 키: 키캡 가운데', (tester) async {
         await _pump(tester, window);
         // `x³`·`◼√◻`·`10^◼`·`e^◼`는 파란 Base-N 각인(`DEC`…)과 짝이라 하나뿐인 키가 아니다 — 실물처럼 왼쪽이다(#266).
-        final singles = _legendKeys.where((d) => d.bandLegends.length == 1);
+        final singles = _legendKeys.where((d) => _band(d).length == 1);
         for (final id in [
           CalcKeyId.square,
           CalcKeyId.power,
@@ -598,7 +616,7 @@ void main() {
         }
         // 실물에서 가운데인 각인이 빠지지 않았는지 (목록이 비면 아래 검사가 헛돈다)
         expect(
-          singles.map((d) => d.bandLegends.single.legend.plainText),
+          singles.map((d) => _band(d).single.legend.plainText),
           containsAll([
             'QR',
             'RECALL',
@@ -617,7 +635,7 @@ void main() {
         );
         for (final def in singles) {
           final cap = _keycap(tester, def.id);
-          final legend = _bandRect(tester, def, def.bandLegends.single);
+          final legend = _bandRect(tester, def, _band(def).single);
           expect(
             legend.center.dx,
             closeTo(cap.center.dx, _tolerance),
@@ -691,7 +709,7 @@ void main() {
           (tester) async {
             await _pump(tester, window, textScale: textScale);
             final def = keyDefOf(CalcKeyId.eng);
-            final band = def.bandLegends;
+            final band = _band(def);
             expect(band.map((b) => b.legend.plainText), ['∠', '←', 'i']);
             final cap = _keycap(tester, def.id);
             final cell = tester.getRect(_button(def.id));
@@ -761,7 +779,7 @@ void main() {
             await _pump(tester, window, textScale: textScale);
             final bracketed = [
               for (final def in _legendKeys)
-                for (final item in def.bandLegends)
+                for (final item in _band(def))
                   if (item.bracketed) (def, item),
             ];
             // 실물: ENG의 ∠(Complex)와 A~F(Base-N)
@@ -869,6 +887,128 @@ void main() {
         );
       }
 
+      for (final textScale in [1.0, 1.3]) {
+        testWidgets(
+          'v1.0 배포 목록 (글자 배율 $textScale): QR·파랑 각인 없이 — 남은 각인 하나는 가운데, 둘은 똑같이 들인다 (#267)',
+          (tester) async {
+            // 실물 인쇄 전체일 때의 각인 글자 크기 (숨긴 각인이 글자 크기를 바꾸지 않는지 견준다)
+            await _pump(tester, window, textScale: textScale);
+            final solve = find.text('SOLVE');
+            final fullFontSize = legendStyleOf(tester, solve).fontSize!;
+            for (final text in ['QR', 'DEC', 'HEX', 'BIN', 'OCT']) {
+              expect(find.text(text), findsOneWidget, reason: text);
+            }
+
+            await _pump(
+              tester,
+              window,
+              textScale: textScale,
+              released: releasedKeyFeatures,
+            );
+            expect(releasedKeyFeatures, isNot(contains(KeyFeature.baseN)));
+            // 숨긴 각인은 그려지지 않는다 — 괄호는 ENG의 ∠(Complex) 하나뿐이다
+            for (final text in ['QR', 'DEC', 'HEX', 'BIN', 'OCT']) {
+              expect(find.text(text), findsNothing, reason: text);
+            }
+            expect(find.byType(LegendBrackets), findsOneWidget);
+            expect(
+              find.descendant(
+                of: _button(CalcKeyId.eng),
+                matching: find.byType(LegendBrackets),
+              ),
+              findsOneWidget,
+            );
+            // 빨강 A~F는 그대로 있다
+            for (final (id, text) in [
+              (CalcKeyId.negative, 'A'),
+              (CalcKeyId.degMinSec, 'B'),
+              (CalcKeyId.reciprocal, 'C'),
+              (CalcKeyId.sin, 'D'),
+              (CalcKeyId.cos, 'E'),
+              (CalcKeyId.tan, 'F'),
+            ]) {
+              expect(
+                find.descendant(of: _button(id), matching: find.text(text)),
+                findsOneWidget,
+                reason: text,
+              );
+            }
+            // 각인 글자 크기는 그대로다
+            expect(
+              legendStyleOf(tester, solve).fontSize,
+              closeTo(fullFontSize, 1e-9),
+            );
+
+            // 하나뿐인 키: 파랑 각인의 짝이던 노랑 각인 넷이 들어오고, 각인이 없어진 OPTN은 빠진다
+            final singles = _legendKeys.where((d) => _band(d).length == 1);
+            expect(
+              singles.map((d) => d.id),
+              containsAll([
+                CalcKeyId.square,
+                CalcKeyId.power,
+                CalcKeyId.logBase,
+                CalcKeyId.ln,
+              ]),
+            );
+            expect(
+              _legendKeys.map((d) => d.id),
+              isNot(contains(CalcKeyId.optn)),
+            );
+            for (final def in singles) {
+              final cap = _keycap(tester, def.id);
+              final legend = _bandRect(tester, def, _band(def).single);
+              expect(
+                legend.center.dx,
+                closeTo(cap.center.dx, _tolerance),
+                reason:
+                    '${def.id.name} ${legend.left}~${legend.right} · 키캡 $cap',
+              );
+              expect(legend.left, greaterThanOrEqualTo(cap.left - _tolerance));
+              expect(legend.right, lessThanOrEqualTo(cap.right + _tolerance));
+            }
+
+            // 둘인 키: 괄호가 빠진 `log A`~`tan⁻¹ F`도 #265 규칙 그대로다
+            expect(
+              _pairKeys.map((d) => d.id),
+              containsAll([
+                CalcKeyId.calc,
+                CalcKeyId.negative,
+                CalcKeyId.degMinSec,
+                CalcKeyId.reciprocal,
+                CalcKeyId.sin,
+                CalcKeyId.cos,
+                CalcKeyId.tan,
+              ]),
+            );
+            for (final def in _pairKeys) {
+              final p = _measure(tester, def);
+              final reason = _describe(p);
+              expect(p.left, closeTo(p.right, 2 * _tolerance), reason: reason);
+              expect(
+                p.left,
+                closeTo(_expectedInset(p), _tolerance),
+                reason: reason,
+              );
+              expect(
+                p.middle,
+                greaterThanOrEqualTo(p.gap - _tolerance),
+                reason: reason,
+              );
+              expect(p.firstScale, closeTo(1, 1e-3), reason: reason);
+            }
+            // 괄호가 없으니 `log A`는 실물 인쇄 전체일 때보다 넉넉히 들인다 — 글자 배율 1.0에서는 모서리 반경까지
+            if (textScale == 1.0) {
+              final log = _measure(tester, keyDefOf(CalcKeyId.negative));
+              expect(
+                log.left,
+                greaterThanOrEqualTo(log.radius - _tolerance),
+                reason: _describe(log),
+              );
+            }
+          },
+        );
+      }
+
       testWidgets('실물에서 바깥 끝이 들어와 있는 쌍은 둥근 모서리 안쪽까지 들인다', (tester) async {
         await _pump(tester, window);
         // 실물에서 바깥 끝이 키캡 폭의 0.08~0.12만큼 들어와 있는 쌍 (CalcTheme "각인 띠 좌우 정렬 (#265)" 절).
@@ -883,7 +1023,7 @@ void main() {
         ]) {
           final p = _measure(tester, keyDefOf(id));
           final reason = _describe(p);
-          if (keyDefOf(id).bandLegends.any((b) => b.bracketed)) {
+          if (_band(keyDefOf(id)).any((b) => b.bracketed)) {
             expect(
               p.left,
               closeTo(_expectedInset(p), _tolerance),
@@ -919,6 +1059,101 @@ void main() {
       });
     });
   }
+
+  group('배포 목록 (#267)', () {
+    testWidgets('앱 기본값: 아무것도 바꾸지 않은 앱은 배포 목록(v1.0)대로 그린다 — QR·파랑 각인이 없다', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 780);
+      addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      late Set<KeyFeature> provided;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+          child: Consumer(
+            builder: (context, ref, child) {
+              provided = ref.watch(releasedKeyFeaturesProvider);
+              return child!;
+            },
+            child: const AltCalcApp(),
+          ),
+        ),
+      );
+      expect(provided, releasedKeyFeatures);
+      expect(
+        tester.widget<CalcKeypad>(find.byType(CalcKeypad)).releasedFeatures,
+        releasedKeyFeatures,
+      );
+      for (final button in tester.widgetList<CalcKeyButton>(
+        find.byType(CalcKeyButton),
+      )) {
+        expect(
+          button.releasedFeatures,
+          releasedKeyFeatures,
+          reason: button.keyDef.id.name,
+        );
+      }
+      for (final text in ['QR', 'DEC', 'HEX', 'BIN', 'OCT']) {
+        expect(find.text(text), findsNothing, reason: text);
+      }
+      // ENG의 보라 괄호 하나뿐이다 (A~F의 파란 괄호가 없다)
+      expect(find.byType(LegendBrackets), findsOneWidget);
+      expect(find.text('SOLVE'), findsOneWidget);
+    });
+
+    testWidgets('키패드가 받은 배포 목록을 글자 크기 계산과 모든 키 버튼에 그대로 넘긴다', (tester) async {
+      const v13 = {KeyFeature.complex, KeyFeature.baseN};
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 360,
+              height: 420,
+              child: CalcKeypad(releasedFeatures: v13),
+            ),
+          ),
+        ),
+      );
+      for (final button in tester.widgetList<CalcKeyButton>(
+        find.byType(CalcKeyButton),
+      )) {
+        expect(button.releasedFeatures, v13, reason: button.keyDef.id.name);
+      }
+      // Base-N만 더한 v1.3: 파랑 각인은 있고 QR은 없다
+      expect(find.text('DEC'), findsOneWidget);
+      expect(find.text('QR'), findsNothing);
+      expect(find.byType(LegendBrackets), findsNWidgets(7));
+      // 글자 크기 계산도 같은 목록을 잰다 — 폭 기준이 그 목록의 각인만 본다
+      final metrics = KeypadMetrics.compute(
+        const Size(360, 420),
+        TextScaler.noScaling,
+        releasedFeatures: v13,
+      );
+      bool bracketed(CalcKeyDef def) => def.alphaBracketMode != null;
+      final withBrackets = KeypadMetrics.debugWidthLimits(
+        metrics,
+        where: bracketed,
+        releasedFeatures: v13,
+      ).legend;
+      final withoutBrackets = KeypadMetrics.debugWidthLimits(
+        metrics,
+        where: bracketed,
+      ).legend;
+      // 괄호가 있으면 그 키들의 폭 한계가 더 빠듯하다 (괄호까지가 각인의 폭)
+      expect(withBrackets, lessThan(withoutBrackets));
+      // 그래도 키패드 전체 각인 글자 크기는 같다 — 괄호 키가 글자 크기를 정하지 않는다
+      expect(
+        metrics.legendFontSize,
+        KeypadMetrics.compute(
+          const Size(360, 420),
+          TextScaler.noScaling,
+        ).legendFontSize,
+      );
+    });
+  });
 
   group('글자 배율 1.3에서도 들인다', () {
     // 옛 배치(양 끝에 붙임)는 들인 거리가 0이다 — 배율을 키워도 대표 키는 상한까지, 가장 긴 쌍은 그보다 덜 들인다
