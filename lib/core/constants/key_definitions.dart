@@ -37,7 +37,7 @@ export 'key_legend.dart';
 //   - 파란색(또는 파란 괄호) = Base-N 모드 전용 (DEC·HEX·BIN·OCT).
 //     A~F는 빨간 글자(ALPHA 변수)에 파란 괄호가 둘러져 있어, Base-N에서는 16진 숫자로 바로 입력된다.
 //   모드 전용 각인도 이 명세에 담는다 (#266 — [CalcKeyDef.modeLegend]·[CalcKeyDef.modeShiftLegend]·
-//   [CalcKeyDef.alphaBracketMode]). 그 모드에서의 키 **기능**은 #33과 각 모드 마일스톤(Complex M7·Base-N M14)이 다룬다.
+//   [CalcKeyDef.alphaBracketMode]). 그 모드에서의 키 **기능**은 #33과 각 모드 마일스톤(Complex M8·Base-N M15)이 다룬다.
 //   숫자 1~6 키에는 각인이 없다.
 //
 // ※ 각인 표기 (#16에서 칸 규칙 확정, #155에서 2차원 모양으로 바꿈 — 실물 키캡 각인과 같은 규칙):

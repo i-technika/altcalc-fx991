@@ -59,7 +59,7 @@ class LcdLineOverflow {
 /// - 조건을 만족하는 크기가 없을 만큼 LCD가 작으면 하한([minFittedFontSize])을 돌려준다(이때는 넘쳐 잘린다).
 ///
 /// 분수 1단(분자·막대·분모)까지만 보장한다. 정적분·시그마·√ 안 분수처럼 그보다 높은 템플릿의
-/// 축소·세로 처리는 #36(M2)에서 정한다.
+/// 축소·세로 처리는 #36(M3)에서 정한다.
 @immutable
 class LcdFontSizes {
   /// 상태 표시 글자 크기 (dp)
@@ -241,7 +241,7 @@ class LcdFontSizes {
 ///   ([LcdFontSizes] 참고).
 /// - LCD는 실물처럼 항상 왼쪽 → 오른쪽(LTR)으로 배치한다.
 ///
-/// ## 줄 내용 계약 (M2 `MathNodeWidget` 연동)
+/// ## 줄 내용 계약 (M3 `MathNodeWidget` 연동)
 /// - [input]/[result]는 **제약 없이**(가로·세로 무한) 자기 크기대로 그려진다. 그 뒤 줄 영역에 맞춰
 ///   실물처럼 입력은 왼쪽 위, 결과는 오른쪽 아래로 정렬하고, 줄 밖으로 나간 부분은 잘라낸다(축소하지 않음).
 ///   (2행 줄에서 한 행짜리 입력은 입력 줄 위쪽, 결과는 결과 줄 아래쪽에 붙는다.)
@@ -249,9 +249,9 @@ class LcdFontSizes {
 /// - 줄 크기는 [LcdLineScope.maybeOf]로 알 수 있다. 커서 따라가기 같은 가로 스크롤은 내용 위젯이
 ///   이 크기를 기준으로 스스로 처리한다. 스크롤 뷰를 쓰려면 이 크기의 `SizedBox`로 감싼다.
 ///   [fitFontsToSize]이면 입력·결과 줄은 각각 분수 1단(분자·막대·분모)을 잘림 없이 담는다.
-///   그보다 세로로 큰 수식(정적분·시그마·겹분수 등)을 축소할지, 세로 스크롤할지는 #36(M2)에서 정한다.
+///   그보다 세로로 큰 수식(정적분·시그마·겹분수 등)을 축소할지, 세로 스크롤할지는 #36(M3)에서 정한다.
 /// - 가려진 쪽이 있으면 호출자가 [inputOverflow]/[resultOverflow]로 ◄/►를 켠다.
-///   ◄/► 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M2 스크롤 구현과 함께 정한다.
+///   ◄/► 자리는 항상 비워 두므로 켜고 꺼도 줄 폭이 같다. 자동 판정은 M3 스크롤 구현과 함께 정한다.
 /// - 일반 [Text]를 넘기면 입력 줄은 [CalcTheme.lcdInputStyle], 결과 줄은 [CalcTheme.lcdResultStyle]
 ///   (글자 크기는 위 규칙으로 조정)이 적용된다.
 class LcdDisplay extends StatelessWidget {
@@ -837,7 +837,7 @@ class _LcdLine extends StatelessWidget {
       textScaler.scale(style.fontSize!),
     );
     // 스크린리더: 줄 이름("입력"/"결과")과 ◄/► 표시·줄 내용을 한 덩어리로 읽는다.
-    // M2에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
+    // M3에서 줄 내용(MathNodeWidget)이 커서 위치·동작 같은 자체 시맨틱을 가지면, MergeSemantics가
     // 그것까지 흡수하므로 이 병합 방식을 다시 정한다.
     return MergeSemantics(
       child: Semantics(
@@ -900,7 +900,7 @@ class _LcdLine extends StatelessWidget {
 /// LCD 입력·결과 줄의 크기를 줄 내용 위젯에 알려 준다.
 ///
 /// 줄 내용은 제약 없이 그려지므로 `LayoutBuilder`로는 줄 크기를 알 수 없다.
-/// 가로 스크롤이나 넘침 판정이 필요한 내용 위젯(M2 `MathNodeWidget`)은 이 값을 기준으로 삼는다.
+/// 가로 스크롤이나 넘침 판정이 필요한 내용 위젯(M3 `MathNodeWidget`)은 이 값을 기준으로 삼는다.
 class LcdLineScope extends InheritedWidget {
   /// 줄 내용 영역 크기 (◄/► 자리 제외)
   final Size size;

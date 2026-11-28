@@ -170,7 +170,7 @@ void main() {
     });
 
     test('M1 LCD 임시 표시가 그리는 한 줄 표기(plainText) 글자도 모두 번들 글꼴에 있다', () {
-      // 마지막 입력 기능의 각인을 LCD에 한 줄 표기로 그린다(`_LcdPanel`, M2에서 수식 렌더링으로 대체).
+      // 마지막 입력 기능의 각인을 LCD에 한 줄 표기로 그린다(`_LcdPanel`, M3에서 수식 렌더링으로 대체).
       // 키캡에서는 그림으로 바꾼 `√`·`∛`·위첨자도 여기서는 글자로 그린다.
       final missing = <String>{};
       for (final key in allKeys) {
@@ -249,7 +249,7 @@ void main() {
       expect(missing, isEmpty);
     });
 
-    test('M2 이후 LCD 표시에 쓸 글자도 서브셋에 남아 있다', () {
+    test('M3 이후 LCD 표시에 쓸 글자도 서브셋에 남아 있다', () {
       // 서브셋 범위(assets/fonts/README.md)를 줄일 때 빠뜨리지 않도록 고정한다.
       // 고정폭 기본 글꼴: ħ(CONST), ȳ·ŷ·결합 매크론/서컴플렉스(x̄·x̂ 통계), μ(공학 기호), σ·θ,
       // ᵍ(그라디안 위첨자), █(커서 블록), 부등식

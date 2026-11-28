@@ -705,7 +705,7 @@ void main() {
       expect(tester.getRect(find.text('12')), before);
     });
 
-    testWidgets('줄 내용은 제약 없이 그려지고 줄 크기는 LcdLineScope로 안다 (M2 연동)', (
+    testWidgets('줄 내용은 제약 없이 그려지고 줄 크기는 LcdLineScope로 안다 (M3 연동)', (
       tester,
     ) async {
       final constraints = <String, BoxConstraints>{};

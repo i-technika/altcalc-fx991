@@ -841,7 +841,7 @@ class _BodyOriginCheck extends StatelessWidget {
 }
 
 /// 상태를 구독해 LCD를 그린다. M1에서는 마지막 입력 기능의 각인을 입력 줄에 보여준다.
-/// TODO(M2): 수식 AST(`MathNodeWidget`)와 결과 표시로 대체한다.
+/// TODO(M3): 수식 AST(`MathNodeWidget`)와 결과 표시로 대체한다.
 class _LcdPanel extends ConsumerWidget {
   const _LcdPanel();
 
