@@ -93,8 +93,9 @@ class KeypadMetrics {
   /// 키캡 위 각인의 줄 상자를 각인 띠 아래끝에서 올리는 거리 (dp, 글자 배율 반영, #264) — 모든 키에 같은 값을 주어
   /// ([CalcKeyButton.legendBaseLift]) 기준선이 한 줄이다(#252). 각인 기준선이 키캡 위끝에서 [legendBaselineGap]만큼 떨어지는
   /// 거리(목표 − 줄 상자 깊이)다. 각인 글자 크기의 높이 기준이 이 자리를 먼저 떼어 두므로 글자 배율이 커도 목표 그대로다
-  /// — 글자 크기 하한에 걸리는 아주 낮은 키패드에서만, 가장 높은 각인이 각인이 쓸 수 있는 높이([legendExtent])를 넘지 않는
-  /// 만큼으로 줄어든다. 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`, #260)은 키 버튼이 여기서 더 올린다(키 사이 간격 전체까지).
+  /// (글자 크기가 하한 1dp에서도 높이 조건을 만족하지 못할 때만, 가장 높은 각인이 [legendExtent]를 넘지 않는 만큼으로
+  /// 줄어든다 — 실제 키패드 크기에서는 닿지 않는다). 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`, #260)은 키 버튼이 여기서 더
+  /// 올린다(키 사이 간격 전체까지).
   final double legendBaseLift;
 
   /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
@@ -554,7 +555,7 @@ class KeypadMetrics {
       const LegendText(' '),
       legendStyle,
     );
-    // 그리는 글자 크기 [scaled]에서 올릴 거리(목표)와, 가장 높은 각인(한 줄 상자·2차원 각인)의 높이
+    // 그리는 글자 크기 [scaled]에서 올릴 거리(목표 − 그린 줄 상자 깊이)와, 가장 높은 각인(한 줄 상자·2차원 각인)의 높이
     double legendLiftAt(double scaled) => math.max(
       0.0,
       legendBaselineGap - KeyLegendView.lineDepthAt(legendStyle, scaled),
@@ -564,12 +565,14 @@ class KeypadMetrics {
       legendStyle,
       scaled,
     );
+    // 그린 줄 상자의 높이·깊이는 정수 dp로 반올림돼 이 조건은 글자 크기에 단조가 아니다 — 이분 탐색([fitFontSize])은 맞는
+    // 크기를 지나쳐 각인을 더 작게 정하므로(R2), 위에서부터 훑는 탐색([fitFontSizeScanning])을 쓴다.
     bool legendFitsHeight(double scaled) =>
         (scaled * (legendStyle.height ?? 1.0)).ceilToDouble() +
                 legendLiftAt(scaled) <=
             legendExtent &&
         tallestLegendAt(scaled) + legendLiftAt(scaled) <= legendExtent;
-    final legendByHeight = fitFontSize(
+    final legendByHeight = fitFontSizeScanning(
       math.max(minFittedFontSize, legendHeight * CalcTheme.keyLegendFontRatio),
       textScaler: scaler,
       fits: legendFitsHeight,
@@ -656,12 +659,13 @@ class KeypadMetrics {
       inkHeightEm: _tallestOperatorInkEm,
     );
 
-    // 키캡 위 각인을 띠 아래끝에서 올리는 거리 (#264) — 기준선이 키캡 위끝에서 목표만큼 떨어지는 거리다. 높이 기준이 그
-    // 자리를 떼어 두었으므로 목표 그대로이고, 글자 크기 하한([minFittedFontSize])에 걸린 아주 낮은 키패드에서만 가장 높은
-    // 각인이 쓸 수 있는 높이 안에 남는 만큼으로 줄어든다. 모든 키가 같은 거리라 기준선이 한 줄이다.
-    // 폭 기준으로 줄인 크기에서 높이 조건을 한 번 더 본다 — 줄 상자 높이·깊이는 정수 dp로 반올림돼 글자 크기에 단조가 아니라,
-    // 높이 기준 크기보다 작은 크기에서 올릴 자리가 조금(1dp 미만) 모자랄 수 있다(가로 태블릿 1280×800 배율 1.3에서 0.2dp).
-    final legendFontSize = fitFontSize(
+    // 키캡 위 각인을 띠 아래끝에서 올리는 거리 (#264) — 기준선이 키캡 위끝에서 목표만큼 떨어지는 거리(목표 − 그린 줄 상자
+    // 깊이)다. 높이 기준이 그 자리를 떼어 두었으므로 목표 그대로다. 모든 키가 같은 거리라 기준선이 한 줄이다.
+    // 폭 기준으로 줄인 크기에서 높이 조건을 한 번 더 본다 — 조건이 단조가 아니라, 높이 기준 크기보다 작은 크기에서 올릴
+    // 자리가 조금(1dp 미만) 모자랄 수 있다(가로 태블릿 1280×800 배율 1.3에서 0.2dp).
+    // (가장 높은 각인이 쓸 수 있는 높이를 넘지 않게 하는 상한은, 글자 크기가 하한 [minFittedFontSize]에서도 높이 조건을
+    // 만족하지 못하는 경우의 안전망이다 — 실제 키패드 크기에서는 닿지 않는다.)
+    final legendFontSize = fitFontSizeScanning(
       unify(legendByHeight, widths.legend),
       textScaler: scaler,
       fits: legendFitsHeight,

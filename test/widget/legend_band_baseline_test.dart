@@ -28,9 +28,10 @@ import '../support/bundled_fonts.dart';
 ///
 /// 한 줄 상자 아래로 잉크가 넘치는 2차원 각인(`d/dx◼`·`∑◻◻◼`)은 이웃과 기준선을 함께 쓰지 않는다 (#260). 실물은 그 각인의 잉크
 /// 아래끝(분모 `dx`·아래 끝 칸)을 이웃 각인 기준선에 두고 같은 키의 짝 각인 `:`도 함께 올려 인쇄한다([CalcTheme] "2차원 각인 배치"
-/// 절의 사진 실측). 앱은 띠 위쪽 여유만큼 그렇게 올린다([KeyLegendView.bandLifts]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
-/// (글자 배율 1.3에서 360×800 폰 0.94dp·800×1280 태블릿 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다. 띠 위쪽
-/// 여유가 없는 창(큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창)은 지금도 그렇다([_Raise.none]).
+/// 절의 사진 실측). 앱도 그렇게 올린다([KeyLegendView.bandLifts]) — #260 전에는 아래 정렬만 해, 넘친 만큼만
+/// (글자 배율 1.3에서 360×800 폰 0.94dp·800×1280 태블릿 1.20dp) 올라가고 분모·아래 끝 칸이 키캡 위끝에 닿아 있었다. #260은
+/// 각인 띠 위쪽 여유까지만 올려 폰에서는 다 올라가지 못했고, #264부터는 키 사이 세로 간격까지 써서 키패드의 모든 창에서 다
+/// 올라간다([_Raise.full]). 여유만큼만·올리지 못한 경우([_Raise.partial]·[_Raise.none])는 키패드 밖의 키 버튼에만 남는다.
 
 /// 각인 띠에 그린 각인 하나 (전역 좌표, dp)
 typedef _BandLegend = ({
@@ -713,25 +714,49 @@ void main() {
     );
   });
 
-  test(
-    '넘치는 각인이 있는 키의 위 키는 원형 버튼이다 (#264 — 위 키 쪽 간격까지 올려도 키캡·그림자와 겹치지 않는다)',
-    () {
-      final rows = controlRightRows;
-      for (final legend in _overflowingLegends.values) {
-        final (row, column) = [
-          for (final (r, defs) in rows.indexed)
-            for (final (c, def) in defs.indexed)
-              if (identical(def.shiftLegend, legend)) (r, c),
-        ].single;
-        expect(row, greaterThan(0), reason: legend.plainText);
-        expect(
-          rows[row - 1][column].face,
-          KeyFace.roundButton,
-          reason: '${legend.plainText} 위 키 ${rows[row - 1][column].id.name}',
+  test('넘치는 각인이 있는 키의 위 키는 원형 버튼이다 (#264 — 위 키 쪽 간격까지 올려도 키캡·그림자와 겹치지 않는다)', () {
+    // 키 버튼과 같은 판정으로 모은다 — SHIFT·ALPHA 각인 가운데 하나라도 한 줄 아래로 넘치는 키
+    final overhanging = [
+      for (final def in allKeys)
+        if ([
+          (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
+          (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
+        ].any((e) => e.$1 != null && KeyLegendView.overhangsLine(e.$1!, e.$2)))
+          def,
+    ];
+    expect(
+      overhanging.map((d) => d.shiftLegend?.plainText),
+      unorderedEquals(_overflowingLegends.keys),
+    );
+    // 화면의 열 맞춤 — 상단 조작부 두 행(왼쪽 2열·커서 패드 2열·오른쪽 2열)과 함수부가 한 블록이다. 숫자부는 구역 사이
+    // 간격으로 떨어진 다른 블록이라 위 키가 없는 것으로 본다.
+    final block = <List<CalcKeyDef?>>[
+      for (final (r, left) in controlLeftRows.indexed)
+        [...left, null, null, ...controlRightRows[r]],
+      ...functionRows,
+    ];
+    for (final def in overhanging) {
+      final where = [
+        for (final (r, row) in block.indexed)
+          for (final (c, cell) in row.indexed)
+            if (cell?.id == def.id) (r, c),
+      ];
+      if (where.length != 1 || where.single.$1 == 0) {
+        fail(
+          '${def.id.name}: 넘치는 각인이 있는 키가 상단 조작부·함수부 블록의 둘째 행 아래에 있지 않다 '
+          '($where) — 위 키 쪽 간격까지 올려도 되는지(CalcKeyButton의 legendFullReach) 다시 정해야 한다',
         );
       }
-    },
-  );
+      final (row, column) = where.single;
+      final above = block[row - 1][column];
+      expect(
+        above?.face,
+        KeyFace.roundButton,
+        reason:
+            '${def.id.name} 위 키 ${above?.id.name} — 키캡이면 그림자가 셀 아래로 번져 올린 각인과 겹칠 수 있다',
+      );
+    }
+  });
 
   group('각인 기준선과 키캡 사이 (#264)', () {
     // 실물은 키 위 각인이 키에 붙어 있지 않다 — 각인 줄을 띠 아래끝에서 올려 기준선을 키캡 위끝에서 함수부 행 간격의

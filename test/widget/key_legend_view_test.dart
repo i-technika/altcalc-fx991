@@ -202,6 +202,34 @@ void main() {
       );
     });
 
+    test(
+      '그린 줄 상자의 깊이는 글자 크기에 단조가 아니다 (#264 R2 — 그래서 각인 높이 조건을 훑는 탐색으로 푼다)',
+      () {
+        const style = CalcTheme.keyShiftLabelStyle;
+        final line = KeyLegendView.emMetrics(const LegendText(' '), style);
+        final depthEm = line.size.height - line.baseline;
+        expect(depthEm, closeTo(0.215, 0.005));
+        var drops = 0;
+        var low = 0.0;
+        var high = 0.0;
+        var previous = KeyLegendView.lineDepthAt(style, 3.0);
+        // 각인 글자 크기 범위(작은 폰 ~ 큰 태블릿·데스크톱)를 0.01dp 간격으로 훑는다
+        for (var size = 3.01; size <= 60; size += 0.01) {
+          final depth = KeyLegendView.lineDepthAt(style, size);
+          if (depth < previous - 1e-9) drops++;
+          previous = depth;
+          final diff = depth - depthEm * size;
+          if (diff < low) low = diff;
+          if (diff > high) high = diff;
+        }
+        // 글자가 커지는데 깊이가 줄어드는 곳이 있다 (줄 상자 높이를 정수 dp로 반올림한다)
+        expect(drops, greaterThan(10));
+        // 비례 깊이에서 벗어나는 폭은 반올림 한 칸(0.5dp + 여유) 안이다
+        expect(-low, inInclusiveRange(0.1, 0.6), reason: '$low');
+        expect(high, inInclusiveRange(0.1, 0.6), reason: '$high');
+      },
+    );
+
     group('각인 띠에서 넘치는 각인 올리기 (bandLifts, #260)', () {
       // 11dp: 태블릿의 각인 글자 크기(상한), 9.35dp: 360×800 폰 글자 배율 1.3, 7.41dp: 320×568 폰 (줄 상자 높이를 정수 dp로
       // 반올림해 한 줄 상자 깊이가 글자 크기마다 다른 크기들)

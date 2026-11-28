@@ -118,10 +118,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
   static bool _listeningSystemFonts = false;
 
   /// 한 줄 상자 치수 캐시 — (글자 크기·색을 뺀 스타일, 글자 크기)별 (기준선 위 높이, 아래 깊이). 각인 띠가 build마다
-  /// ([bandLifts]), 키패드가 글자 크기를 찾을 때마다(`KeypadMetrics`) 같은 크기를 다시 묻는다(#264 R1). 시스템 글꼴이 바뀌면
-  /// 비우고, 글자 크기를 찾는 이분 탐색이 크기를 많이 넣으므로 [_lineCacheLimit]개를 넘으면 비운다.
+  /// ([bandLifts]) 같은 크기를 다시 묻는다(#264 R1 — 키 50개가 화면의 각인 글자 크기 하나를 함께 쓴다). 글자 크기를 찾는
+  /// 탐색([tallestAt])은 한 번 쓰고 버리는 크기를 많이 물으므로 캐시를 거치지 않는다(R2). 시스템 글꼴이 바뀌면 비우고,
+  /// 창 크기·글자 배율이 바뀌며 쌓인 크기는 [_lineCacheLimit]개를 넘으면 비운다.
   static final Map<(TextStyle, double), (double, double)> _lineCache = {};
-  static const int _lineCacheLimit = 512;
+  static const int _lineCacheLimit = 64;
 
   static void _listenSystemFonts() {
     if (_listeningSystemFonts) return;
@@ -171,7 +172,9 @@ class KeyLegendView extends LeafRenderObjectWidget {
     TextStyle style,
     double scaledFontSize,
   ) {
-    final (lineAscent, lineDescent) = _lineMetricsOf(style, scaledFontSize);
+    // 글자 크기 탐색이 부른다 — 캐시하지 않는다([_lineCache] 설명)
+    final (lineAscent, lineDescent) = _Builder(style)
+        .lineMetrics(scaledFontSize);
     var tallest = 0.0;
     for (final m in legends) {
       final height = m.plain
@@ -207,10 +210,11 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// - 넘치는 각인([overhangsLine])이 없으면 모두 0이다 — 띠 아래끝에 정렬해 기준선을 함께 쓴다(#252).
   /// - 넘치는 각인이 있으면 그 잉크 아래끝이 띠 기준선(띠 아래끝에서 한 줄 상자 깊이만큼 위 — 이웃 키 각인의 기준선)에 오게
   ///   그 키의 각인을 모두 같은 기준선으로 올린다.
-  /// - 어느 각인도 위끝이 띠 위끝을 넘지 않는 만큼만 올린다 — 띠 높이는 그대로이고 각인 글자 크기도 줄지 않는다(`KeypadMetrics`의
-  ///   높이 기준은 각인이 띠에 들어가는지만 본다. 올릴 자리를 미리 떼어 두면 모든 SHIFT·ALPHA 각인이 그만큼 작아진다). 그래서
-  ///   띠 위쪽 여유가 한 줄 상자 깊이보다 작은 창은 여유만큼만 올라가고, 큰 글자 배율로 `d/dx◼`가 띠를 꽉 채우는 창은 아래 정렬
-  ///   그대로다(넘친 깊이만큼만 이웃보다 위 — #260 전과 같다). 창별 결과는 [CalcTheme] "2차원 각인 배치" 절에 있다.
+  /// - 어느 각인도 위끝이 [bandHeight] 위끝을 넘지 않는 만큼만 올린다. #264부터 키 버튼은 [bandHeight]로 각인 띠에 키 사이
+  ///   세로 간격을 더한 높이를 준다(넘치는 각인이 있는 키는 간격 전체, 없는 키는 절반 — `CalcKeyButton`). 그래서 키패드에서는
+  ///   넘치는 각인이 사진과 같은 자리까지 다 올라간다(#264 전에는 띠 높이뿐이라 폰에서는 여유만큼만 올라갔다 — [CalcTheme]
+  ///   "2차원 각인 배치" 절의 #260 기록). 여유가 모자란 경우(키패드 밖의 키 버튼)는 여유만큼만 올리고, 각인이 높이를 꽉
+  ///   채우면 아래 정렬 그대로다.
   ///
   /// 올리는 거리는 그리는 자리만 옮긴다(키 버튼의 각인 줄이 `FittedBox` 안에서 옮긴다) — 배치 제약을 건드리지 않아 `FittedBox`가
   /// 각인을 줄이지 않고, 줄어드는 각인(키패드 밖에서 좁게 쓰는 키 버튼)은 올린 거리도 같은 비율로 줄어든다. 줄어드는 비율이
@@ -263,7 +267,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// [style]의 글꼴을 배율 반영 글자 크기 [scaledFontSize]로 그릴 때 한 줄 상자의 기준선 아래 깊이 (dp, #264).
   /// 각인 띠가 각인 기준선을 키캡 위끝에서 띄울 거리를 정할 때 쓴다 — 아래 정렬한 글자 각인의 기준선은 띠 아래끝에서 이만큼 위다.
   static double lineDepthAt(TextStyle style, double scaledFontSize) =>
-      _lineMetricsOf(style, scaledFontSize).$2;
+      _Builder(style).lineMetrics(scaledFontSize).$2;
 
   /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
