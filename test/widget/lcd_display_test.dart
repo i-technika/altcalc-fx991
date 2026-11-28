@@ -1087,34 +1087,28 @@ void main() {
         );
       });
 
-      test(
-        '상수 관계 불변식: 상한 높이 > 기록 영역 문턱 > LCD 최소 높이, 상한 높이에 걸리는 폭에서는 글자가 아직 상한 미만',
-        () {
-          // 상한 높이가 LCD 최소 높이 이하면 배치의 max(최소 높이, …)가 상한을 조용히 무력화한다.
-          expect(
-            LcdFontSizes.heightAtMaxLineFont,
-            greaterThan(CalcTheme.screenLandscapeHistoryMinHeight),
-          );
-          expect(
-            CalcTheme.screenLandscapeHistoryMinHeight,
-            greaterThan(CalcTheme.screenLcdMinHeight),
-          );
-          // LCD가 폭 기준 최대 높이 대신 상한 높이에 걸리기 시작하는 폭(478.7)은 글자가 상한에 닿는 폭(489.6)보다 좁다 —
-          // 그 폭에서 글자는 아직 폭에 묶여 있으므로 높이 상한이 글자를 상한보다 작게 묶지 않는다.
-          final heightCapWidth =
-              LcdFontSizes.heightAtMaxLineFont *
-              CalcTheme.screenLcdMinAspectRatio;
-          expect(heightCapWidth, moreOrLessEquals(478.66, epsilon: 0.01));
-          expect(
-            LcdFontSizes.forSize(
-              Size(heightCapWidth, 10000),
-              TextScaler.noScaling,
-            ).input,
-            lessThan(cap),
-          );
-          // (#264 전에는 "상한이 키 각인 상한 16.5dp보다 크다"도 확인했다 — 키 각인 상한은 없앴다.)
-        },
-      );
+      test('상수 관계 불변식: 상한 높이 > LCD 최소 높이, 상한 높이에 걸리는 폭에서는 글자가 아직 상한 미만', () {
+        // 상한 높이가 LCD 최소 높이 이하면 배치의 max(최소 높이, …)가 상한을 조용히 무력화한다. (#284 전에는 그 사이에 가로형
+        // 기록 영역 문턱 128dp도 있었다.)
+        expect(
+          LcdFontSizes.heightAtMaxLineFont,
+          greaterThan(CalcTheme.screenLcdMinHeight),
+        );
+        // LCD가 폭 기준 최대 높이 대신 상한 높이에 걸리기 시작하는 폭(478.7)은 글자가 상한에 닿는 폭(489.6)보다 좁다 —
+        // 그 폭에서 글자는 아직 폭에 묶여 있으므로 높이 상한이 글자를 상한보다 작게 묶지 않는다.
+        final heightCapWidth =
+            LcdFontSizes.heightAtMaxLineFont *
+            CalcTheme.screenLcdMinAspectRatio;
+        expect(heightCapWidth, moreOrLessEquals(478.66, epsilon: 0.01));
+        expect(
+          LcdFontSizes.forSize(
+            Size(heightCapWidth, 10000),
+            TextScaler.noScaling,
+          ).input,
+          lessThan(cap),
+        );
+        // (#264 전에는 "상한이 키 각인 상한 16.5dp보다 크다"도 확인했다 — 키 각인 상한은 없앴다.)
+      });
 
       test('충분히 넓으면 상한 높이에서 줄 글자가 정확히 상한이고, 그보다 높여도 그대로, 낮추면 줄어든다', () {
         final h = LcdFontSizes.heightAtMaxLineFont;

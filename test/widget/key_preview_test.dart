@@ -1507,7 +1507,7 @@ void main() {
         expect(drawnArrangementOf(tester), DrawnArrangement.landscape);
         expect(find.byKey(WindowTooSmallNotice.noticeKey), findsNothing);
 
-        // 가로 폰: 가로형, 위 띠가 낮아 기록 영역 없이 활성 LCD가 띠 폭 전체다 (#142).
+        // 가로 폰: 가로형, LCD가 본체 폭 전체다 (#142, #284).
         await _selectDevice(tester, indexOf('가로 폰'));
         expect(tester.takeException(), isNull);
         expect(
@@ -1521,9 +1521,15 @@ void main() {
             tester.getRect(find.byKey(const ValueKey('calc-keypad'))).width,
           ),
         );
-        // 태블릿 가로: 기록 영역이 활성 LCD 옆에 있다.
+        // 태블릿 가로: 기록 영역 없이 LCD가 본체 폭 전체다(#284 — 전에는 활성 LCD 옆에 기록 영역이 있었다).
         await _selectDevice(tester, indexOf('태블릿 가로'));
-        expect(find.byKey(HistoryPanel.panelKey), findsOneWidget);
+        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
+        expect(
+          tester.getSize(find.byType(LcdDisplay)).width,
+          moreOrLessEquals(
+            tester.getSize(find.byKey(const ValueKey('calc-keypad'))).width,
+          ),
+        );
 
         await _selectDevice(tester, indexOf('작은 팝업 창'));
         expect(tester.takeException(), isNull);
@@ -1532,7 +1538,7 @@ void main() {
     );
 
     testWidgets(
-      '데스크톱 큰 창 프리셋: 가로형, 기록 영역이 있고 활성 LCD는 줄 글자 상한(#189)이며 위 띠 높이 전체다 (README, #232)',
+      '데스크톱 큰 창 프리셋: 가로형, LCD는 위 띠 전체(기록 영역 없음)이고 줄 글자 상한(#189)이다 (README, #232, #284)',
       (tester) async {
         await _pumpPreview(tester);
         await _selectDevice(
@@ -1544,15 +1550,11 @@ void main() {
           tester.widget<CalcKeypad>(find.byType(CalcKeypad)).arrangement,
           KeypadArrangement.wide,
         );
-        expect(find.byKey(HistoryPanel.panelKey), findsOneWidget);
+        expect(find.byKey(HistoryPanel.panelKey), findsNothing);
         // 미리보기는 큰 화면을 축소해 그리므로 화면 좌표(getRect)가 아니라 위젯 자신의 크기(getSize)로 잰다.
         final lcd = tester.getSize(find.byType(LcdDisplay));
-        expect(
-          lcd.height,
-          moreOrLessEquals(
-            tester.getSize(find.byKey(HistoryPanel.panelKey)).height,
-          ),
-        );
+        expect(lcd.width, moreOrLessEquals(1984, epsilon: 0.1));
+        expect(lcd.height, moreOrLessEquals(733.9, epsilon: 0.1));
         expect(lcd.height, greaterThan(LcdFontSizes.heightAtMaxLineFont));
         expect(
           LcdFontSizes.forSize(lcd, TextScaler.noScaling).input,

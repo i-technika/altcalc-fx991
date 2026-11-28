@@ -216,7 +216,7 @@ void main() {
                   : number.right < function.left,
               isTrue,
             );
-            // 위 띠가 낮아 기록 영역이 없고, 활성 LCD가 띠 폭 전체를 쓴다. 짧은 창에서도 최소 높이 아래로 줄지 않는다.
+            // 가로형은 기록 영역이 없고 LCD가 본체 폭 전체다(#284). 짧은 창에서도 최소 높이 아래로 줄지 않는다.
             expect(find.byKey(HistoryPanel.panelKey), findsNothing);
             expect(lcd.width, moreOrLessEquals(keypad.width));
             expect(

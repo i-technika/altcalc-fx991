@@ -280,7 +280,7 @@ final _cases = <_Case>[
       keyNodePx: 95,
     ),
   const _Case(
-    '7.6" Foldable 가로로 돌림 (넓은 배열 + 기록)',
+    '7.6" Foldable 가로로 돌림 (넓은 배열 — #284 전에는 기록 영역도 있었다)',
     density: _pf,
     windowPx: Size(2208, 1768),
     topPx: 63,
@@ -291,10 +291,10 @@ final _cases = <_Case>[
     line:
         'hingeStacked — 창 841.1x673.5, 키패드 8,366.49-833.14,633.52, '
         '화면 특징 [hinge postureFlat 0,336.4-841.1,336.8], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: true,
+    hasHistory: false,
     functionKeyTouch: 45.40,
     keyNodePx: 119,
-    talkBack: 'LCD→기록→함수부→숫자부',
+    talkBack: 'LCD→기록→함수부→숫자부 — #284 전 측정, 지금은 기록 없이 LCD→함수부→숫자부',
   ),
   for (final (state, stateName, posture) in [
     (_flat, 'postureFlat', '반 접힘 자세'),
@@ -332,10 +332,10 @@ final _cases = <_Case>[
     line:
         'hingeStacked — 창 360x878.7, 키패드 8,447.67-352,846.67, '
         '화면 특징 [hinge postureFlat 0,439.3-360,439.7], 가로지르는 접힘선 1, 폴더블=true',
-    hasHistory: true,
+    hasHistory: false,
     functionKeyTouch: 33.91,
     keyNodePx: 101,
-    talkBack: 'LCD→기록→함수부, 숫자부까지는 쓸지 않음',
+    talkBack: 'LCD→기록→함수부, 숫자부까지는 쓸지 않음 — #284 전 측정, 지금은 기록 없음',
   ),
   const _Case(
     'Flip 완전히 펼침 (에뮬레이터는 접힘 정보 없음)',
@@ -370,7 +370,7 @@ final _cases = <_Case>[
       line:
           'hingeStacked — 창 360x878.7, 키패드 8,447.33-352,846.67, '
           '화면 특징 [fold $stateName 0,439.3-360,439.3], 가로지르는 접힘선 1, 폴더블=true',
-      hasHistory: true,
+      hasHistory: false,
       functionKeyTouch: 33.94,
       keyNodePx: 101,
     ),
@@ -521,29 +521,10 @@ void main() {
             final lcdBeside = c.line.contains('(LCD 옆 패널)');
             expect(after(lcdRect), lcdBeside ? !keypadOnRight : keypadOnRight);
           } else {
-            // 가로 접힘선: 키패드는 아래 패널, 활성 LCD·기록은 위 패널
+            // 가로 접힘선: 키패드는 아래 패널, LCD는 위 패널 전체다(#284 — 기록 영역 없음)
             expect(after(keypadRect), isTrue);
             expect(before(lcdRect), isTrue);
-            if (historyRect != null) {
-              expect(before(historyRect), isTrue);
-              if (keypad.arrangement == KeypadArrangement.wide) {
-                // 넓은 배열: 기록은 함수부 위, 활성 LCD는 숫자부 위
-                double dx(Rect a, Rect b) => (a.center.dx - b.center.dx).abs();
-                expect(
-                  dx(historyRect, sin) < dx(historyRect, seven),
-                  isTrue,
-                  reason: '기록 $historyRect',
-                );
-                expect(
-                  dx(lcdRect, seven) < dx(lcdRect, sin),
-                  isTrue,
-                  reason: 'LCD $lcdRect',
-                );
-              } else {
-                // 실물 배열: 활성 LCD 아래에 기록
-                expect(historyRect.top, greaterThan(lcdRect.bottom));
-              }
-            }
+            expect(historyRect, isNull);
           }
         }
 
