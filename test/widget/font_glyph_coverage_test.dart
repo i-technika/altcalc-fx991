@@ -151,7 +151,10 @@ void main() {
       // 2차원 각인(#155)은 글자 조각(texts)만 글꼴로 그리고, 분수 가로줄·근호는 선으로 그린다.
       final missing = <String>{};
       for (final k in allKeys) {
-        for (final legend in [k.mainLegend, ?k.shiftLegend, ?k.alphaLegend]) {
+        for (final legend in [
+          k.mainLegend,
+          for (final item in k.bandLegends) item.legend,
+        ]) {
           for (final piece in legend.texts) {
             for (var i = 0; i < piece.text.length; i++) {
               if (await keyFamilyOf(piece.text, i) == null) {
@@ -183,14 +186,17 @@ void main() {
     });
 
     test(
-      '각인 글자가 어느 글꼴로 그려지는지 고정한다 — 수학 글꼴은 ∑·∫뿐, 이탤릭은 변수 글자뿐 (#156)',
+      '각인 글자가 어느 글꼴로 그려지는지 고정한다 — 수학 글꼴은 ∑·∫·⇔·←뿐, 이탤릭은 변수 글자뿐 (#156, #266)',
       () async {
-        // 대체 순서는 Saira → Noto Sans Mono → Noto Sans Math다(CalcTheme.keyFontFallback). `⇔`만 일부러 Noto Sans Math로 그린다
+        // 대체 순서는 Saira → Noto Sans Mono → Noto Sans Math다(CalcTheme.keyFontFallback). `⇔`·`←`만 일부러 Noto Sans Math로 그린다
         // (CalcTheme.isKeyMathSymbol, #156 R2). Noto Sans Math는 Regular뿐이라
         // 그 글꼴로 그리는 글자가 늘면 굵기 통일이 더 어긋나므로 목록을 고정해 둔다. (`∛`는 #155부터 그림으로 그린다.)
         final byFamily = <String, Set<String>>{};
         for (final k in allKeys) {
-          for (final legend in [k.mainLegend, ?k.shiftLegend, ?k.alphaLegend]) {
+          for (final legend in [
+            k.mainLegend,
+            for (final item in k.bandLegends) item.legend,
+          ]) {
             for (final piece in legend.texts) {
               for (var i = 0; i < piece.text.length; i++) {
                 final family = await keyFamilyOf(piece.text, i);
@@ -199,12 +205,19 @@ void main() {
             }
           }
         }
-        expect(byFamily[CalcTheme.mathFontFamily], {'∑', '∫', '⇔'});
-        expect(byFamily[CalcTheme.keyVariableFontFamily], {'x', 'y', 'e', 'π'});
+        expect(byFamily[CalcTheme.mathFontFamily], {'∑', '∫', '⇔', '←'});
+        // `i`는 ENG 키의 보라 각인(Complex 모드의 허수 단위, #266)이다
+        expect(byFamily[CalcTheme.keyVariableFontFamily], {
+          'x',
+          'y',
+          'e',
+          'π',
+          'i',
+        });
         // 연산 기호·입력 칸·화살표는 고정폭 글꼴의 큰 기호로 그린다(Saira 서브셋에서 뺐다)
         expect(
           byFamily[CalcTheme.monoFontFamily],
-          containsAll(['+', '=', '−', '×', '÷', '◼', '▲', '◄', '°']),
+          containsAll(['+', '=', '−', '×', '÷', '◼', '▲', '◄', '°', '∠']),
         );
         expect(byFamily.keys, isNot(contains('없음')));
         // 글자·숫자는 각인 글꼴로 그린다

@@ -146,12 +146,218 @@ void main() {
 
     test('SHIFT/ALPHA 층에 모드 전용(보라색·파란색) 각인이 섞이지 않는다', () {
       // 가이드 인쇄 3쪽 "Key Markings": 보라색 = Complex 모드, 파란색 = Base-N 모드 전용.
-      // 이 명세는 노란색(SHIFT)·빨간색(ALPHA) 각인만 담는다. 모드별 각인은 #33.
+      // 노란색(SHIFT)·빨간색(ALPHA) 각인 자리에는 두지 않는다 — 모드 전용 각인 자리가 따로 있다(#266, 아래 그룹).
       const modeOnly = {'∠', 'i', 'DEC', 'HEX', 'BIN', 'OCT'};
       for (final key in allKeys) {
         expect(modeOnly, isNot(contains(key.shiftLabel)), reason: '$key');
         expect(modeOnly, isNot(contains(key.alphaLabel)), reason: '$key');
       }
+    });
+
+    group('모드 전용 각인 (#266)', () {
+      // User's Guide 3쪽 "Key Markings"와 Quick Start Guide 1쪽 제품 사진 대조.
+      // (키, 괄호 SHIFT 각인, 모드 색 각인, ALPHA 괄호 모드)
+      const complex = KeyLegendMode.complex;
+      const baseN = KeyLegendMode.baseN;
+      const verified =
+          <
+            CalcKeyId,
+            ((String, KeyLegendMode)?, (String, KeyLegendMode)?, KeyLegendMode?)
+          >{
+            CalcKeyId.eng: (('∠', complex), ('i', complex), null),
+            CalcKeyId.square: (null, ('DEC', baseN), null),
+            CalcKeyId.power: (null, ('HEX', baseN), null),
+            CalcKeyId.logBase: (null, ('BIN', baseN), null),
+            CalcKeyId.ln: (null, ('OCT', baseN), null),
+            CalcKeyId.negative: (null, null, baseN),
+            CalcKeyId.degMinSec: (null, null, baseN),
+            CalcKeyId.reciprocal: (null, null, baseN),
+            CalcKeyId.sin: (null, null, baseN),
+            CalcKeyId.cos: (null, null, baseN),
+            CalcKeyId.tan: (null, null, baseN),
+          };
+
+      (String, KeyLegendMode)? pair(ModeLegend? m) =>
+          m == null ? null : (m.legend.plainText, m.mode);
+
+      test('모드 전용 각인이 있는 키와 그 각인은 실물 대조표와 일치한다', () {
+        for (final key in allKeys) {
+          expect(
+            (
+              pair(key.modeShiftLegend),
+              pair(key.modeLegend),
+              key.alphaBracketMode,
+            ),
+            verified[key.id] ?? (null, null, null),
+            reason: key.id.name,
+          );
+        }
+      });
+
+      test('파란 괄호가 둘러싸는 ALPHA 각인은 16진 숫자 A~F다', () {
+        expect(
+          [
+            for (final key in allKeys)
+              if (key.alphaBracketMode != null) key.alphaLabel,
+          ],
+          ['A', 'B', 'C', 'D', 'E', 'F'],
+        );
+      });
+
+      test(
+        '각인 띠 목록(bandLegends)은 실물 인쇄 순서다 — 괄호 SHIFT → SHIFT → ALPHA → 모드 색',
+        () {
+          List<String> describe(CalcKeyId id) => [
+            for (final b in keyDefOf(id).bandLegends) b.toString(),
+          ];
+          expect(describe(CalcKeyId.eng), [
+            'BandLegend("∠", shift, complex, 괄호)',
+            'BandLegend("←", shift)',
+            'BandLegend("i", mode, complex)',
+          ]);
+          expect(describe(CalcKeyId.square), [
+            'BandLegend("x³", shift)',
+            'BandLegend("DEC", mode, baseN)',
+          ]);
+          expect(describe(CalcKeyId.negative), [
+            'BandLegend("log", shift)',
+            'BandLegend("A", alpha, baseN, 괄호)',
+          ]);
+          expect(describe(CalcKeyId.calc), [
+            'BandLegend("SOLVE", shift)',
+            'BandLegend("=", alpha)',
+          ]);
+          expect(describe(CalcKeyId.num7), ['BandLegend("CONST", shift)']);
+        },
+      );
+
+      test('모든 키: 목록은 SHIFT·ALPHA 각인을 빠짐없이 담고, 원형 버튼·각인 없는 키는 비어 있다', () {
+        for (final key in allKeys) {
+          final band = key.bandLegends;
+          final expected = [
+            ?key.modeShiftLegend?.legend,
+            ?key.shiftLegend,
+            ?key.alphaLegend,
+            ?key.modeLegend?.legend,
+          ];
+          expect(
+            [for (final b in band) b.legend],
+            expected,
+            reason: key.id.name,
+          );
+          // 각인 띠는 셋까지만 놓는다 (ENG 키) — 넷이면 배치 규칙이 없다
+          expect(band.length, lessThanOrEqualTo(3), reason: key.id.name);
+          // 인쇄 순서 (getter와 따로 센다): 괄호 든 SHIFT(0) → SHIFT(1) → ALPHA(2) → 모드 색(3). 같은 자리는 하나뿐이다
+          final ranks = [
+            for (final b in band)
+              switch (b.role) {
+                BandLegendRole.shift => b.bracketed ? 0 : 1,
+                BandLegendRole.alpha => 2,
+                BandLegendRole.mode => 3,
+              },
+          ];
+          for (var i = 1; i < ranks.length; i++) {
+            expect(
+              ranks[i],
+              greaterThan(ranks[i - 1]),
+              reason: '${key.id.name} $band',
+            );
+          }
+          // 모드 색 각인은 괄호로 둘러싸지 않는다 (실물: 괄호는 SHIFT·ALPHA 색 글자만 둘러싼다)
+          for (final b in band) {
+            if (b.role == BandLegendRole.mode) {
+              expect(b.bracketed, isFalse, reason: '${key.id.name} $b');
+            }
+          }
+          if (key.face == KeyFace.roundButton) {
+            expect(band, isEmpty, reason: key.id.name);
+          }
+          for (final b in band) {
+            // 모드는 모드 색 각인이거나 괄호가 있을 때만 있다
+            expect(
+              b.mode != null,
+              b.role == BandLegendRole.mode || b.bracketed,
+              reason: '${key.id.name} $b',
+            );
+          }
+        }
+      });
+
+      test('잘못된 조합은 assert로 막는다', () {
+        const mode = ModeLegend(LegendText('DEC'), baseN);
+        // 원형 버튼의 각인 띠에는 메인 각인만 있다
+        expect(
+          () => CalcKeyDef(
+            id: CalcKeyId.menu,
+            mainLegend: const LegendText('MENU'),
+            modeLegend: mode,
+            category: KeyCategory.menu,
+            face: KeyFace.roundButton,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+        // 둘러쌀 ALPHA 각인이 없다
+        expect(
+          () => CalcKeyDef(
+            id: CalcKeyId.sin,
+            mainLegend: const LegendText('sin'),
+            alphaBracketMode: baseN,
+            category: KeyCategory.function,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+        // ALPHA 각인과 모드 색 각인은 같은 자리(오른쪽)다
+        expect(
+          () => CalcKeyDef(
+            id: CalcKeyId.sin,
+            mainLegend: const LegendText('sin'),
+            alphaLegend: const LegendText('D'),
+            modeLegend: mode,
+            category: KeyCategory.function,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+        // 모드 없는 괄호·모드 색 각인, 괄호도 모드 색도 아닌데 모드가 있는 각인
+        expect(
+          () => BandLegend(
+            const LegendText('A'),
+            BandLegendRole.alpha,
+            bracketed: true,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+        expect(
+          () => BandLegend(const LegendText('i'), BandLegendRole.mode),
+          throwsA(isA<AssertionError>()),
+        );
+        expect(
+          () => BandLegend(
+            const LegendText('A'),
+            BandLegendRole.alpha,
+            mode: baseN,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
+
+      test('ModeLegend·BandLegend는 값으로 비교한다', () {
+        expect(
+          const ModeLegend(LegendText('i'), complex),
+          const ModeLegend(LegendText('i'), complex),
+        );
+        expect(
+          const ModeLegend(LegendText('i'), complex),
+          isNot(const ModeLegend(LegendText('i'), baseN)),
+        );
+        expect(
+          keyDefOf(CalcKeyId.eng).bandLegends,
+          keyDefOf(CalcKeyId.eng).bandLegends,
+        );
+        expect(
+          keyDefOf(CalcKeyId.eng).bandLegends.first.hashCode,
+          keyDefOf(CalcKeyId.eng).bandLegends.first.hashCode,
+        );
+      });
     });
 
     test('층 간 라벨 겹침은 의도된 두 경우뿐이다', () {
@@ -439,7 +645,11 @@ const Map<CalcKeyId, (String, String?, String?)> _verifiedLegends = {
   CalcKeyId.tan: ('tan', 'tan⁻¹', 'F'),
   // 함수부 3행
   CalcKeyId.sto: ('STO', 'RECALL', null), // G13 변수 저장·호출
-  CalcKeyId.eng: ('ENG', '←', null), // G11 ←, ALPHA 없음은 사진
+  CalcKeyId.eng: (
+    'ENG',
+    '←',
+    null,
+  ), // G11 ←, ALPHA 없음은 사진. 보라 ∠·i는 모드 전용 각인(#266)
   CalcKeyId.parenOpen: ('(', 'Abs', null), // G16 Abs 예제
   CalcKeyId.parenClose: (')', ',', 'x'), // G14·G15 ,  G13 변수 x
   CalcKeyId.sdToggle: ('S⇔D', 'a b/c⇔d/c', 'y'), // G11 a b/c⇔d/c, G13 변수 y

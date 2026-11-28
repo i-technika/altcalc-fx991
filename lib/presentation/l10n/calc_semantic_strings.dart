@@ -6,6 +6,10 @@ import '../../domain/models/lcd_status.dart';
 import 'device_locale_scope.dart';
 
 /// 키 하나의 음성 라벨 (스크린리더용). 표시 라벨([CalcKeyDef])과 같은 층 구성을 갖는다.
+///
+/// 모드 전용 각인([CalcKeyDef.modeLegend]·[CalcKeyDef.modeShiftLegend]·[CalcKeyDef.alphaBracketMode], #266)의 기능은
+/// 읽지 않는다 — 인쇄만 있고 그 모드의 기능이 아직 없다. 기능이 생기는 마일스톤(Complex M7·Base-N M14)에서 그 모드에 있을
+/// 때의 문구를 더한다(#33).
 @immutable
 class KeySpeech {
   /// 키캡 메인 기능

@@ -266,6 +266,20 @@ abstract final class CalcTheme {
   static const Color alphaLabel = Color(0xFFF0679F);
 
   // ───────────────────────────────────────────
+  // 모드 전용 각인 색상 (#266)
+  // ───────────────────────────────────────────
+  // 실물은 SHIFT(노랑)·ALPHA(빨강) 말고 두 색을 더 쓴다 (User's Guide 3쪽 "Key Markings"): 보라(또는 보라 ┌ ┐ 괄호) =
+  // Complex 모드에서 쓰는 기능, 파랑(또는 파란 ┌ ┐ 괄호) = Base-N 모드에서 쓰는 기능. 사진의 색은 Quick Start Guide 1쪽 제품
+  // 사진·실물 키패드 근접 사진에서 채도 높은 픽셀을 평균한 값이다(어두운 노출) — 본체 대비가 2.0~4.3:1뿐이라, SHIFT·ALPHA
+  // 각인처럼 같은 색조로 밝혀 모든 본체 색 대비 4.5:1 이상으로 둔다(테스트로 검증).
+
+  /// Complex 모드 전용 각인 (보라 — ENG 키의 `i`, `∠`를 둘러싼 괄호). 실물 사진 #615899·#5C6293 부근.
+  static const Color complexLabel = Color(0xFF9B8CF0);
+
+  /// Base-N 모드 전용 각인 (파랑 — `DEC`·`HEX`·`BIN`·`OCT`, `A`~`F`를 둘러싼 괄호). 실물 사진 #3A83AF·#116186 부근.
+  static const Color baseNLabel = Color(0xFF4FA3DC);
+
+  // ───────────────────────────────────────────
   // 키 눌림 상태 (Pressed State)
   // ───────────────────────────────────────────
 
@@ -367,6 +381,12 @@ abstract final class CalcTheme {
 
   /// 고대비 ALPHA 각인 — 본체 색 모두에 7:1 이상 (자홍색을 밝게)
   static const Color alphaLabelHighContrast = Color(0xFFFFB8D6);
+
+  /// 고대비 Complex 모드 전용 각인 — 본체 색 모두에 7:1 이상 (보라를 밝게, #266)
+  static const Color complexLabelHighContrast = Color(0xFFCFC6FF);
+
+  /// 고대비 Base-N 모드 전용 각인 — 본체 색 모두에 7:1 이상 (파랑을 밝게, #266)
+  static const Color baseNLabelHighContrast = Color(0xFF9FD4FF);
 
   /// 고대비 키캡 테두리 — 본체 대비 6.5:1 (일반 [keyBorder] 3.6:1)
   static const Color keyBorderHighContrast = Color(0xFFA6A6A6);
@@ -539,11 +559,12 @@ abstract final class CalcTheme {
   /// Titillium Web·Rajdhani와 견주어 글자 모양(각진 `C`·`S`·`n`, 둥근 모서리, 굵기)이 가장 가까운 Saira를 골랐다.
   /// 서브셋은 ASCII에서 `+`·`=`를 뺀 글자뿐이다 — 연산 기호(`+`·`=`·`−`·`×`·`÷`)·입력 칸·방향 화살표는 Noto Sans Mono에서
   /// 찾는다(Saira의 `×`·`+`는 x높이 안의 작은 기호라 Mono가 실물에 더 가깝다. Mono의 기호도 실물보다 숫자 대비 작아, 숫자부
-  /// 연산 기호 키는 키워 그린다 — [keyNumberOperatorLabelScale], #225). `⇔`만 Noto Sans Math로 그린다([isKeyMathSymbol]).
+  /// 연산 기호 키는 키워 그린다 — [keyNumberOperatorLabelScale], #225). `⇔`·`←`만 Noto Sans Math로 그린다([isKeyMathSymbol]).
   /// 출처·서브셋은 `assets/fonts/README.md`.
   static const String keyFontFamily = 'Saira';
 
-  /// 키캡 각인에서 변수 글자(`x`·`y`·`π`, 한 글자 각인 `e`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156).
+  /// 키캡 각인에서 변수 글자(`x`·`y`·`π`, 한 글자 각인 `e`·`i`)를 그리는 이탤릭 세리프 글꼴 (번들 Noto Serif Bold Italic 서브셋, #156,
+  /// `i`는 #266).
   /// 실물은 변수를 교과서처럼 세리프 이탤릭으로 인쇄한다(근접 사진의 `x²`·`x!`·`×10ˣ`·ALPHA `y`·`e`). 어느 글자를 이탤릭으로
   /// 그리는지는 [isKeyVariableLetter]가 정한다.
   static const String keyVariableFontFamily = 'NotoSerifItalic';
@@ -560,18 +581,38 @@ abstract final class CalcTheme {
   /// - 소문자 `x`·`y`는 늘 변수다(`x²`·`x!`·`dx`·`×10ˣ`·ALPHA `x`·`y` — 각인에 단어 속 x·y가 없다).
   /// - `π`도 늘 이탤릭이다(SHIFT `π` — 근접 사진에서 `e`와 같은 세리프 이탤릭, #156 R1).
   /// - `e`는 각인 전체가 그 한 글자일 때만이다(자연로그 밑 `e`·`e^◼`) — `Rec`·`SETUP` 같은 단어 속 글자는 바로 쓴다.
-  /// (ENG 키 ALPHA의 허수 `i`는 모드별 각인 #33에서 정한다.)
+  /// - `i`도 각인 전체가 그 한 글자일 때만이다(ENG 키의 Complex 모드 전용 각인 허수 `i`, #266 — 실물은 보라 세리프
+  ///   이탤릭이다). `sin`·`RanInt` 같은 단어 속 글자는 바로 쓴다.
   static bool isKeyVariableLetter(String text, int index) {
     final ch = text[index];
     if (ch == 'x' || ch == 'y' || ch == 'π') return true;
-    return ch == 'e' && text.length == 1;
+    return (ch == 'e' || ch == 'i') && text.length == 1;
   }
 
   /// 키캡 각인에서 수학 글꼴([mathFontFamily])로 그리는 기호인지 (#156 R2) — `⇔`(S⇔D 키, `a b/c⇔d/c` 각인).
   /// Noto Sans Mono의 `⇔`는 x높이보다 낮은 작은 화살표(잉크 0.38em)에 좌우 여백이 커서 `S ⇔ D`처럼 벌어져 보였다.
   /// 실물은 대문자 높이의 굵은 이중 화살표가 글자에 붙어 있다(근접 사진). Noto Sans Math의 `⇔`는 잉크 0.62em, 좌우 여백
   /// 0.05em로 그에 가깝다. 다른 기호는 Noto Sans Mono 그대로다([keyFontFallback]).
-  static bool isKeyMathSymbol(String ch) => ch == '⇔';
+  /// `←`(ENG 키 SHIFT 각인)도 수학 글꼴로 그린다(#266) — Noto Sans Mono의 `←`는 폭 0.47em의 작은 화살표인데, 실물은 긴
+  /// 화살표다(Quick Start Guide 1쪽 제품 사진: 폭 약 1.15em). Noto Sans Math의 `←`(폭 0.91em)를 [keyGlyphScale]로 키운다.
+  static bool isKeyMathSymbol(String ch) => ch == '⇔' || ch == '←';
+
+  /// 키캡 각인에서 글자 [ch]만 따로 키워 그리는 배율 (#266) — 실물 인쇄 크기에 견줘 번들 글꼴의 글리프가 작은 기호다.
+  /// 줄 상자는 각인 줄 상자(strut)로 고정이라 키워도 줄 높이·기준선은 그대로다.
+  /// - `∠`(ENG 키의 Complex 모드 전용 SHIFT 각인): 실물은 대문자 높이(약 0.67em)다. Noto Sans Mono의 `∠`는 0.519em이라
+  ///   1.33배로 그린다(0.69em).
+  /// - `←`(ENG 키 SHIFT 각인): 실물 폭 약 1.15em. Noto Sans Math의 `←`는 0.91em이라 1.25배로 그린다(1.14em, 잉크 가운데가
+  ///   대문자 가운데 높이 0.35em에 온다).
+  ///
+  /// 배율은 글자 조각의 글자 크기에 곱한다(`keyLabelSpan`) — 글자 배율(`TextScaler`)은 그 뒤에 걸린다. Android의 비선형 글자
+  /// 배율(큰 글자를 덜 키운다)에서는 키운 기호가 이웃 글자보다 조금 덜 커진다(배율 1.3에서 `∠` 1.33배 → 약 1.30배, 폭 차
+  /// 0.2dp 미만). 재는 쪽(`bandLegendEmWidth`)은 선형으로 보므로 그려진 쪽이 그만큼 좁다 — 넘치지 않는 방향이다.
+  /// 이 기호들은 글자만 있는 각인에만 쓴다 — 2차원 각인의 잉크 범위 표(`KeyLegendView.glyphInk`)는 배율을 모른다(테스트로 고정).
+  static double keyGlyphScale(String ch) => switch (ch) {
+    '∠' => 1.33,
+    '←' => 1.25,
+    _ => 1.0,
+  };
 
   /// 수학 기호 스타일 — [base]의 크기·색을 그대로 두고 글꼴만 [mathFontFamily]로 바꾼다 (Regular 하나뿐이다)
   static TextStyle keyMathSymbolStyle(TextStyle base) => base.copyWith(
@@ -871,6 +912,60 @@ abstract final class CalcTheme {
   //   대조 (#264)" 절 4), 키캡 폭에 들어가지 않는 긴 쌍(`Ran#`·`RanInt`)은 들이는 거리가 키캡 옆 여백보다 작아지며 실물처럼
   //   키캡 밖으로 나간다.
   // 원형 버튼 위 인쇄(`SHIFT`·`ALPHA`·`MENU`·`SETUP`)는 버튼 가운데다(#190).
+
+  // ── 모드 전용 각인의 괄호 (#266) ──
+  // 실물은 그 모드에서 쓰는 각인을 모드 색 ┌ ┐ 괄호로 둘러싼다 — ENG 키의 노랑 `∠`(보라 괄호, Complex의 SHIFT+ENG),
+  // (−)·°'"·x⁻¹·sin·cos·tan 키의 빨강 `A`~`F`(파란 괄호, Base-N의 16진 숫자). 실물 키패드 근접 사진에서 쟀다(각인 대문자
+  // 높이 약 14.5px = 0.688em → 1em ≈ 21px. 색으로 가른 픽셀 범위에서 번짐 약 1px을 뺀 값, 읽기 오차 ±1px ≈ ±0.05em).
+  // Quick Start Guide 1쪽 제품 사진은 1em이 11.6px뿐이라 모양·순서만 대조했다(#266 R1 — 처음에는 그 사진으로 재어 괄호를
+  // 실물의 0.6배 높이로 그렸다).
+  // - 괄호는 글자 높이의 괄호가 아니라 기준선에 걸친 모서리 표시다. `A`~`F`의 괄호 여섯 쌍은 세로 획이 기준선 위 약 4.5px
+  //   (0.22em)에서 기준선 아래 약 7.5px(0.36em)까지 내려가고(높이 약 12px, 0.58em), 위끝에서 글자 쪽으로 가로 획(세로 획
+  //   포함 약 9px, 0.42em)이 나온다. 왼쪽은 `┌`, 오른쪽은 `┐` 모양이다. 획 두께 약 3.5px(0.16em).
+  // - 글자와 가로 획 끝 사이는 3~6px(0.15~0.3em)이고, 괄호의 바깥 폭은 여섯 쌍 모두 약 40px(1.9em)다 —
+  //   앱은 글자 폭 약 0.65em + 양쪽 [keyLegendBracketPad] 0.62em = 1.89em.
+  // - `∠`의 괄호는 더 높다: 기준선 위 약 7px·아래 약 10px(높이 약 18px, 0.85em — 그 줄은 초점이 조금 흐리다). `∠` 글리프를
+  //   [keyGlyphScale]배로 키워 그리므로 괄호의 높이(위·아래)도 그 배율로 키운다. 가로 획·두께는 그대로다(실물도 비슷하다).
+  // - 괄호 아래끝은 글자 줄 상자 아래로 나가 키캡 가장자리(어두운 틈) 가까이 내려온다 — 실물 `A` 괄호·`∠` 괄호 모두 그 틈까지
+  //   0~2px(키캡 면까지는 약 5px)이다. 앱도 줄 상자 밖으로 그리되 키캡 위끝에서 [keyLegendBracketKeyGap] 안으로는 내리지
+  //   않는다.
+  //   그래서 괄호 아래쪽은 각인 기준선을 키캡에서 띄운 거리(#264 — 키패드에서 글자 크기의 약 0.45em)에 묶인다:
+  //   · `A`~`F`: 글자 배율 1.0에서 0.36em 그대로, 글자 배율 1.3에서 그 0.93~0.97배(키캡까지 0.08em을 남긴다).
+  //   · `∠`: 온전한 0.36 × 1.33 = 0.48em에 못 미쳐 모든 화면에서 그 0.70~0.77배(약 0.35em)다 — 괄호 높이는 위 0.29em을
+  //     더해 약 0.65em이고(실물 0.85em), `A`~`F` 괄호(0.58em)보다 위쪽만큼 높다. 실물은 그 줄의 기준선이 키캡에서 더 떠
+  //     있다(약 0.57em). 각인을 더 띄우는 키 버튼(키패드 밖)에서는 온전한 높이로 그린다.
+  //   (이 사진의 척도는 행마다 다르다 — 위 "2차원 각인 배치" 절의 #260 기록은 둘째 행에서 대문자 15.8px, 여기 넷째 행은
+  //   14.5px이다. 그 기록의 "키캡 위끝"도 어두운 틈이다: 기준선에서 8.7px = 0.38em.)
+  // 앱은 괄호를 글자 줄 상자 양옆에 직접 그린다(`calc_key_button.dart`의 `LegendBracketPainter`) — 번들 글꼴에 이 모양의
+  // 글리프가 없다(Noto Sans Math의 `⌜`·`⌝`는 글자 위쪽 모서리 표시다).
+  // 각인 띠의 좌우 자리(#265)는 괄호까지 넣은 폭으로 잰다. 실물은 괄호의 바깥 끝이 키캡 끝에서 키캡 폭의 0.05~0.07 들어와
+  // 있고 왼쪽 SHIFT 각인은 0.04(`FACT`)~0.13(`log`)으로 제각각이다 — 앱은 #265 규칙대로 양쪽을 똑같이 들인다(괄호가 든
+  // 쌍은 넓어서 대개 상한보다 덜 들어온다).
+  // 한계: 각인이 셀 폭·띠 높이 때문에 줄어들면(`FittedBox`) 괄호 획도 함께 줄어 [keyLegendMinStroke]보다 가늘어질 수 있다 —
+  // 키패드는 줄지 않는 글자 크기를 준다(`KeypadMetrics`).
+
+  /// 모드 전용 각인 괄호의 가로 획 길이 (각인 글자 크기 대비, 세로 획 두께 포함, #266)
+  static const double keyLegendBracketHook = 0.42;
+
+  /// 모드 전용 각인 괄호와 글자 사이 (각인 글자 크기 대비, #266)
+  static const double keyLegendBracketGap = 0.2;
+
+  /// 모드 전용 각인 괄호의 획 두께 (각인 글자 크기 대비, #266) — [keyLegendMinStroke]보다 가늘면 그 두께로 그린다
+  static const double keyLegendBracketStroke = 0.16;
+
+  /// 모드 전용 각인 괄호의 위끝 — 기준선 위 높이 (각인 글자 크기 대비, #266). 키워 그리는 글리프(`∠`)의 괄호는 그 배율을 곱한다.
+  static const double keyLegendBracketRise = 0.22;
+
+  /// 모드 전용 각인 괄호의 아래끝 — 기준선 아래 깊이 (각인 글자 크기 대비, #266). 한 줄 상자 깊이(약 0.215em)보다 깊어
+  /// 줄 상자 아래로 나간다. 키워 그리는 글리프(`∠`)의 괄호는 그 배율을 곱한다.
+  static const double keyLegendBracketDrop = 0.36;
+
+  /// 모드 전용 각인 괄호 아래끝과 키캡 위끝 사이에 남기는 거리 (각인 글자 크기 대비, #266) — 실물 `∠` 괄호 약 0.1em
+  static const double keyLegendBracketKeyGap = 0.08;
+
+  /// 괄호로 둘러싼 각인이 한쪽에 더 차지하는 폭 (각인 글자 크기 대비, #266) — 가로 획 + 글자와의 사이
+  static const double keyLegendBracketPad =
+      keyLegendBracketHook + keyLegendBracketGap;
 
   /// 각인 둘(SHIFT·ALPHA)의 바깥 끝을 키캡 끝에서 들이는 거리 (그린 키캡 폭 대비, #265) — 실물 가운데값 0.08~0.10.
   /// 키캡 모서리 반경이 이보다 크면 반경만큼 들인다(위 절 — 함수부 키).
@@ -2106,6 +2201,12 @@ final class CalcPalette {
   /// ALPHA 각인 색
   final Color alphaLabel;
 
+  /// Complex 모드 전용 각인 색 (보라, #266)
+  final Color complexLabel;
+
+  /// Base-N 모드 전용 각인 색 (파랑, #266)
+  final Color baseNLabel;
+
   /// LCD 비활성 상태 표시기 색
   final Color lcdStatusInactive;
 
@@ -2132,6 +2233,8 @@ final class CalcPalette {
     required this.keyPressedBorder,
     required this.shiftLabel,
     required this.alphaLabel,
+    required this.complexLabel,
+    required this.baseNLabel,
     required this.lcdStatusInactive,
     required this.noticeForeground,
     required this.bodyPrint,
@@ -2146,6 +2249,8 @@ final class CalcPalette {
     keyPressedBorder: CalcTheme.keyPressedBorder,
     shiftLabel: CalcTheme.shiftLabel,
     alphaLabel: CalcTheme.alphaLabel,
+    complexLabel: CalcTheme.complexLabel,
+    baseNLabel: CalcTheme.baseNLabel,
     lcdStatusInactive: CalcTheme.lcdStatusInactive,
     noticeForeground: CalcTheme.noticeForeground,
     bodyPrint: CalcTheme.bodyPrint,
@@ -2160,6 +2265,8 @@ final class CalcPalette {
     keyPressedBorder: CalcTheme.keyPressedBorderHighContrast,
     shiftLabel: CalcTheme.shiftLabelHighContrast,
     alphaLabel: CalcTheme.alphaLabelHighContrast,
+    complexLabel: CalcTheme.complexLabelHighContrast,
+    baseNLabel: CalcTheme.baseNLabelHighContrast,
     lcdStatusInactive: CalcTheme.lcdStatusInactiveHighContrast,
     noticeForeground: CalcTheme.noticeForegroundHighContrast,
     bodyPrint: CalcTheme.bodyPrintHighContrast,
@@ -2208,6 +2315,20 @@ final class CalcPalette {
     KeyCategory.shift => shiftLabel,
     KeyCategory.alpha => alphaLabel,
     _ => bodyPrint,
+  };
+
+  /// [mode] 전용 각인의 색 (#266) — Complex 보라([complexLabel])·Base-N 파랑([baseNLabel])
+  Color modeLabelOf(KeyLegendMode mode) => switch (mode) {
+    KeyLegendMode.complex => complexLabel,
+    KeyLegendMode.baseN => baseNLabel,
+  };
+
+  /// 각인 띠 각인 [legend]의 글자 색 (#266) — SHIFT 노랑·ALPHA 빨강·모드 색. 괄호([BandLegend.bracketed])의 색은
+  /// [modeLabelOf]다.
+  Color bandLegendColorOf(BandLegend legend) => switch (legend.role) {
+    BandLegendRole.shift => shiftLabel,
+    BandLegendRole.alpha => alphaLabel,
+    BandLegendRole.mode => modeLabelOf(legend.mode!),
   };
 
   /// [category] 키가 눌릴 때 배경과 라벨을 반전하는지 여부 — 고대비 모드의 흰 라벨 키

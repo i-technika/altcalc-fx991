@@ -36,7 +36,8 @@ export 'key_legend.dart';
 //   - 보라색(또는 보라 괄호) = Complex 모드 전용 (ENG 키 위의 ∠·i)
 //   - 파란색(또는 파란 괄호) = Base-N 모드 전용 (DEC·HEX·BIN·OCT).
 //     A~F는 빨간 글자(ALPHA 변수)에 파란 괄호가 둘러져 있어, Base-N에서는 16진 숫자로 바로 입력된다.
-//   이 명세는 노란색·빨간색 각인만 담는다. 모드별 각인은 #33에서 다룬다.
+//   모드 전용 각인도 이 명세에 담는다 (#266 — [CalcKeyDef.modeLegend]·[CalcKeyDef.modeShiftLegend]·
+//   [CalcKeyDef.alphaBracketMode]). 그 모드에서의 키 **기능**은 #33과 각 모드 마일스톤(Complex M7·Base-N M14)이 다룬다.
 //   숫자 1~6 키에는 각인이 없다.
 //
 // ※ 각인 표기 (#16에서 칸 규칙 확정, #155에서 2차원 모양으로 바꿈 — 실물 키캡 각인과 같은 규칙):
@@ -190,7 +191,94 @@ enum KeyFace {
   roundButton,
 }
 
-/// 단일 키의 3단 각인(메인·SHIFT·ALPHA) 및 카테고리를 정의하는 불변 모델.
+/// 모드 전용 각인이 가리키는 계산 모드 (#266, User's Guide 3쪽 "Key Markings").
+///
+/// 실물은 SHIFT(노랑)·ALPHA(빨강) 말고 두 색을 더 쓴다 — 그 모드에 들어가야 쓸 수 있는 기능이다.
+enum KeyLegendMode {
+  /// Complex 모드 — 보라색 각인(ENG 키의 `i`) 또는 보라 괄호로 둘러싼 각인(ENG 키의 `∠`)
+  complex,
+
+  /// Base-N 모드 — 파란색 각인(`DEC`·`HEX`·`BIN`·`OCT`) 또는 파란 괄호로 둘러싼 각인(`A`~`F`)
+  baseN,
+}
+
+/// 모드 전용 각인 하나 — 각인과 그 모드 (#266)
+@immutable
+class ModeLegend {
+  /// 각인
+  final KeyLegend legend;
+
+  /// 이 각인의 기능을 쓸 수 있는 모드
+  final KeyLegendMode mode;
+
+  const ModeLegend(this.legend, this.mode);
+
+  @override
+  bool operator ==(Object other) =>
+      other is ModeLegend && other.legend == legend && other.mode == mode;
+
+  @override
+  int get hashCode => Object.hash(legend, mode);
+
+  @override
+  String toString() => 'ModeLegend("${legend.plainText}", ${mode.name})';
+}
+
+/// 키캡 위 각인 띠에 인쇄하는 각인의 역할 (#266) — 글자 색을 정한다
+enum BandLegendRole {
+  /// SHIFT를 누른 뒤의 기능 (노랑)
+  shift,
+
+  /// ALPHA를 누른 뒤의 기능 (빨강)
+  alpha,
+
+  /// 그 모드에서 키를 그냥 누를 때의 기능 (모드 색 — Complex 보라·Base-N 파랑)
+  mode,
+}
+
+/// 키캡 위 각인 띠에 인쇄하는 각인 하나 (#266) — [CalcKeyDef.bandLegends]가 왼쪽부터 순서대로 돌려준다.
+///
+/// 각인 띠를 그리는 쪽(`CalcKeyButton`)과 글자 크기를 재는 쪽(`KeypadMetrics`)이 같은 목록을 쓴다 — 한쪽만 아는 각인이
+/// 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
+@immutable
+class BandLegend {
+  /// 각인
+  final KeyLegend legend;
+
+  /// 역할 — 글자 색을 정한다
+  final BandLegendRole role;
+
+  /// 모드 전용 각인이면 그 모드. [role]이 [BandLegendRole.mode]이면 글자를 이 모드 색으로 인쇄하고, [bracketed]이면 괄호를
+  /// 이 모드 색으로 그린다. 둘 다 아니면 `null`이다.
+  final KeyLegendMode? mode;
+
+  /// 모드 색 ┌ ┐ 괄호로 둘러싸는지 — 글자 색은 [role] 색 그대로다(실물 ENG 키의 노랑 `∠`, 빨강 `A`~`F`)
+  final bool bracketed;
+
+  const BandLegend(this.legend, this.role, {this.mode, this.bracketed = false})
+    : assert(
+        (mode != null) == (role == BandLegendRole.mode || bracketed),
+        '모드는 모드 색 각인이거나 괄호가 있을 때만 준다',
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is BandLegend &&
+      other.legend == legend &&
+      other.role == role &&
+      other.mode == mode &&
+      other.bracketed == bracketed;
+
+  @override
+  int get hashCode => Object.hash(legend, role, mode, bracketed);
+
+  @override
+  String toString() =>
+      'BandLegend("${legend.plainText}", ${role.name}'
+      '${mode == null ? '' : ', ${mode!.name}'}${bracketed ? ', 괄호' : ''})';
+}
+
+/// 단일 키의 3단 각인(메인·SHIFT·ALPHA)과 모드 전용 각인, 카테고리를 정의하는 불변 모델.
 @immutable
 class CalcKeyDef {
   /// 키 고유 식별자
@@ -205,6 +293,18 @@ class CalcKeyDef {
   /// ALPHA 후 입력되는 기능의 빨간색 각인. 없으면 `null`.
   final KeyLegend? alphaLegend;
 
+  /// 그 모드에서 SHIFT 후 입력되는 기능의 각인 (#266) — SHIFT 색 글자를 모드 색 괄호가 둘러싼다. 실물 ENG 키의 `∠`
+  /// (Complex 모드의 SHIFT+ENG)뿐이다. [shiftLegend] 왼쪽에 인쇄한다. 없으면 `null`.
+  final ModeLegend? modeShiftLegend;
+
+  /// 그 모드에서 키를 그냥 누르면 입력되는 기능의 각인 (#266) — 모드 색으로 인쇄한다. 실물 ENG 키의 보라 `i`(Complex)와
+  /// x²·x^◼·log◼◻·ln 키의 파랑 `DEC`·`HEX`·`BIN`·`OCT`(Base-N)다. 각인 띠의 오른쪽 끝에 인쇄한다. 없으면 `null`.
+  final ModeLegend? modeLegend;
+
+  /// [alphaLegend]를 둘러싸는 괄호의 모드 (#266) — 그 모드에서는 키를 그냥 눌러 ALPHA 각인의 글자를 입력한다. 실물 (−)·
+  /// °'"·x⁻¹·sin·cos·tan 키의 빨강 `A`~`F`를 둘러싼 파란 괄호(Base-N의 16진 숫자)다. 없으면 `null`.
+  final KeyLegendMode? alphaBracketMode;
+
   /// 키 시각적 카테고리 (색상 테마 결정)
   final KeyCategory category;
 
@@ -216,12 +316,26 @@ class CalcKeyDef {
     required this.mainLegend,
     this.shiftLegend,
     this.alphaLegend,
+    this.modeShiftLegend,
+    this.modeLegend,
+    this.alphaBracketMode,
     required this.category,
     this.face = KeyFace.keycap,
   }) : assert(
          face != KeyFace.roundButton ||
-             (shiftLegend == null && alphaLegend == null),
+             (shiftLegend == null &&
+                 alphaLegend == null &&
+                 modeShiftLegend == null &&
+                 modeLegend == null),
          '원형 버튼 위 각인 띠에는 메인 각인만 인쇄한다 (#253)',
+       ),
+       assert(
+         alphaBracketMode == null || alphaLegend != null,
+         '괄호로 둘러쌀 ALPHA 각인이 있어야 한다',
+       ),
+       assert(
+         alphaLegend == null || modeLegend == null,
+         'ALPHA 각인과 모드 색 각인은 같은 자리(오른쪽)라 함께 두지 않는다',
        );
 
   /// 메인 각인의 한 줄 표기 ([KeyLegend.plainText] — 화면 각인에는 쓰지 않는다)
@@ -232,6 +346,25 @@ class CalcKeyDef {
 
   /// ALPHA 각인의 한 줄 표기. 없으면 `null`.
   String? get alphaLabel => alphaLegend?.plainText;
+
+  /// 키캡 위 각인 띠에 인쇄하는 각인 — 왼쪽부터 (#266). 원형 버튼(메인 각인을 띠에 인쇄한다)은 빈 목록이다.
+  ///
+  /// 순서는 실물 인쇄 순서다: 괄호로 둘러싼 모드 전용 SHIFT 각인([modeShiftLegend]) → SHIFT 각인 → ALPHA 각인(괄호는
+  /// [alphaBracketMode]) → 모드 색 각인([modeLegend]). 실물 ENG 키는 `┌∠┐ ← i`, x² 키는 `x³ DEC`, (−) 키는 `log ┌A┐`다.
+  List<BandLegend> get bandLegends => [
+    if (modeShiftLegend case final m?)
+      BandLegend(m.legend, BandLegendRole.shift, mode: m.mode, bracketed: true),
+    if (shiftLegend case final l?) BandLegend(l, BandLegendRole.shift),
+    if (alphaLegend case final l?)
+      BandLegend(
+        l,
+        BandLegendRole.alpha,
+        mode: alphaBracketMode,
+        bracketed: alphaBracketMode != null,
+      ),
+    if (modeLegend case final m?)
+      BandLegend(m.legend, BandLegendRole.mode, mode: m.mode),
+  ];
 
   /// SHIFT 기능 보유 여부
   bool get hasShift => shiftLegend != null;
@@ -544,24 +677,28 @@ const List<List<CalcKeyDef>> functionRows = [
       id: CalcKeyId.square,
       mainLegend: _square,
       shiftLegend: _cube,
+      modeLegend: ModeLegend(LegendText('DEC'), KeyLegendMode.baseN),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.power,
       mainLegend: _power,
       shiftLegend: _nthRoot,
+      modeLegend: ModeLegend(LegendText('HEX'), KeyLegendMode.baseN),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.logBase,
       mainLegend: _logBase,
       shiftLegend: _tenPower,
+      modeLegend: ModeLegend(LegendText('BIN'), KeyLegendMode.baseN),
       category: KeyCategory.function,
     ),
     CalcKeyDef(
       id: CalcKeyId.ln,
       mainLegend: LegendText('ln'),
       shiftLegend: _ePower,
+      modeLegend: ModeLegend(LegendText('OCT'), KeyLegendMode.baseN),
       category: KeyCategory.function,
     ),
   ],
@@ -572,6 +709,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: LegendText('(−)'),
       shiftLegend: LegendText('log'), // log(a,b) 입력, 밑 a 생략 시 10 (가이드 "log" 예제)
       alphaLegend: LegendText('A'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -579,6 +717,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: LegendText('°\'"'),
       shiftLegend: LegendText('FACT'),
       alphaLegend: LegendText('B'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -586,6 +725,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: _reciprocal,
       shiftLegend: LegendText('x!'),
       alphaLegend: LegendText('C'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -593,6 +733,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: LegendText('sin'),
       shiftLegend: _arcsin,
       alphaLegend: LegendText('D'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -600,6 +741,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: LegendText('cos'),
       shiftLegend: _arccos,
       alphaLegend: LegendText('E'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
     CalcKeyDef(
@@ -607,6 +749,7 @@ const List<List<CalcKeyDef>> functionRows = [
       mainLegend: LegendText('tan'),
       shiftLegend: _arctan,
       alphaLegend: LegendText('F'),
+      alphaBracketMode: KeyLegendMode.baseN, // Base-N의 16진 숫자
       category: KeyCategory.function,
     ),
   ],
@@ -621,8 +764,11 @@ const List<List<CalcKeyDef>> functionRows = [
     CalcKeyDef(
       id: CalcKeyId.eng,
       mainLegend: LegendText('ENG'),
-      // ALPHA 기능은 없다. 키 위의 보라색 ∠·i는 Complex 모드 전용 각인이다 (#33).
+      // ALPHA 기능은 없다. 키 위의 보라 괄호 ∠(Complex 모드의 SHIFT+ENG)와 보라 i(Complex 모드의 ENG)는 Complex 모드 전용
+      // 각인이다 (#266 — 실물은 왼쪽부터 ┌∠┐ ← i).
+      modeShiftLegend: ModeLegend(LegendText('∠'), KeyLegendMode.complex),
       shiftLegend: LegendText('←'),
+      modeLegend: ModeLegend(LegendText('i'), KeyLegendMode.complex),
       category: KeyCategory.function,
     ),
     CalcKeyDef(

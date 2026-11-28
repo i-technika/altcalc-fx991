@@ -808,12 +808,14 @@ class _LabelLimits {
           KeyLegendView.emMetrics(def.mainLegend, CalcTheme.keyMainLabelStyle),
         );
       }
-      for (final (l, style) in [
-        (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
-        (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
-      ]) {
-        if (l != null && !l.isPlain) {
-          tallLegends.add(KeyLegendView.emMetrics(l, style));
+      // 각인 띠의 각인 — 키 버튼이 그리는 목록 그대로다(SHIFT·ALPHA·모드 전용 각인, #266 [CalcKeyDef.bandLegends]).
+      // 한쪽만 아는 각인이 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
+      final band = def.bandLegends;
+      for (final item in band) {
+        if (!item.legend.isPlain) {
+          tallLegends.add(
+            KeyLegendView.emMetrics(item.legend, bandLegendStyle(item)),
+          );
         }
       }
 
@@ -822,30 +824,33 @@ class _LabelLimits {
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
       // 각인이 쓸 수 있는 폭은 셀 폭이다 (#264) — 각인은 그린 키캡에 맞춰 놓되(#220 R1, 좌우 자리 #265), 긴 각인은 실물
-      // `Ran# RanInt`처럼 키캡 밖 셀 폭까지 쓴다. 각인 둘의 바깥 끝을 들이는 거리(#265)는 떼어 두지 않는다 — 긴 쌍은 들이는
+      // `Ran# RanInt`처럼 키캡 밖 셀 폭까지 쓴다. 바깥 끝을 들이는 거리(#265)는 떼어 두지 않는다 — 긴 쌍은 들이는
       // 거리를 줄인다(`keyLegendPairInset`). 사이 간격 상한은 그린 키캡 폭 기준이다(CalcKeyButton과 같다).
-      final shift = def.shiftLegend;
-      final alpha = def.alphaLegend;
-      if (shift == null && alpha == null) continue;
-      if (shift == null || alpha == null) {
-        final (text, style) = shift != null
-            ? (shift, CalcTheme.keyShiftLabelStyle)
-            : (alpha!, CalcTheme.keyAlphaLabelStyle);
-        legend = math.min(legend, width / _emWidth(text, style));
+      // 각인의 폭은 괄호까지다([bandLegendEmWidth], #266).
+      if (band.isEmpty) continue;
+      if (band.length == 1) {
+        legend = math.min(legend, width / bandLegendEmWidth(band.single));
         continue;
       }
       final usable = math.max(
         0.0,
-        width - capWidth * CalcTheme.keyLegendGapMaxWidthRatio,
+        width -
+            capWidth * CalcTheme.keyLegendGapMaxWidthRatio * (band.length - 1),
       );
-      final shiftEm = _emWidth(shift, CalcTheme.keyShiftLabelStyle);
-      final alphaEm = _emWidth(alpha, CalcTheme.keyAlphaLabelStyle);
-      legend = math.min(legend, usable / (shiftEm + alphaEm));
-      final shiftRunes = shift.plainText.runes.length;
-      final alphaRunes = alpha.plainText.runes.length;
-      if (math.min(shiftRunes, alphaRunes) <=
+      final totalEm = band.fold(
+        0.0,
+        (sum, item) => sum + bandLegendEmWidth(item),
+      );
+      legend = math.min(legend, usable / totalEm);
+      // 셋 이상(ENG 키)은 함께 줄이므로 합 조건뿐이다. 둘이면 짧은 쪽의 우선 배분 조건을 더 본다.
+      if (band.length > 2) continue;
+      final firstRunes = band.first.legend.plainText.runes.length;
+      final lastRunes = band.last.legend.plainText.runes.length;
+      if (math.min(firstRunes, lastRunes) <=
           CalcTheme.keyLegendPriorityMaxRunes) {
-        final shortEm = shiftRunes <= alphaRunes ? shiftEm : alphaEm;
+        final shortEm = bandLegendEmWidth(
+          firstRunes <= lastRunes ? band.first : band.last,
+        );
         legend = math.min(legend, usable / 2 / shortEm);
       }
     }
