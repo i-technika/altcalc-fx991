@@ -2,9 +2,9 @@
 #
 # `test/unit/binary_assets_test.dart`가 `git ls-files`의 이미지·글꼴·소리 파일 목록과 이 목록이 같은지 검사한다.
 # 파일을 더하거나 지우거나 옮기면 이 목록도 함께 고친다 — 출처를 적지 않은 파일은 넣지 않는다.
-# 참고 자료(User's Guide·Quick Start Guide 쪽 이미지, 실물 사진)는 어떤 이름으로도 넣지 않는다(CLAUDE.md 4절).
+# 참고 자료(User's Guide·Quick Start Guide PDF·쪽 이미지, 실물 사진)는 어떤 이름으로도 넣지 않는다(CLAUDE.md 4절).
 #
-# 형식: 한 줄에 `<저장소 기준 경로> <출처>` — 경로는 공백 없이 정확히(glob 없음), 첫 공백 뒤 전부가 출처다.
+# 형식: 한 줄에 `<저장소 기준 경로> <출처>` — 경로는 공백 없이 정확히(glob 없음), 첫 공백 뒤 전부가 출처다(공백이 든 경로의 파일은 넣지 않는다 — 테스트가 막는다).
 # `#`으로 시작하는 줄과 빈 줄은 무시한다. 검사 대상 확장자는 테스트의 `binaryAssetExtensions`다.
 # 출처 기록 문서(#279)가 생기면 그 문서가 이 목록을 대신하거나 가리키게 한다.
 
@@ -19,6 +19,7 @@ assets/fonts/Saira-Medium.ttf Saira 가변 글꼴의 고정 인스턴스 서브�
 assets/fonts/Saira-SemiBold.ttf Saira 가변 글꼴의 고정 인스턴스 서브셋, SIL OFL 1.1 (assets/fonts/Saira-OFL.txt)
 
 # 런처 아이콘·시작 화면 — `flutter create`가 만든 Flutter 기본 템플릿 그대로(Flutter SDK BSD-3-Clause). 독자 아이콘으로 바꾸는 일은 #278
+# (#280에서 36개 모두 SHA-256이 Flutter 3.50 SDK의 `packages/flutter_tools/templates`·pub 패키지 `flutter_template_images` 5.0.0 파일과 같음을 확인했다)
 android/app/src/main/res/mipmap-hdpi/ic_launcher.png flutter create 기본 템플릿 (Flutter SDK, BSD-3-Clause)
 android/app/src/main/res/mipmap-mdpi/ic_launcher.png flutter create 기본 템플릿 (Flutter SDK, BSD-3-Clause)
 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png flutter create 기본 템플릿 (Flutter SDK, BSD-3-Clause)

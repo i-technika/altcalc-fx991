@@ -52,11 +52,15 @@ flutter analyze && flutter test
 - 에픽 이슈 본문의 체크리스트도 완료 항목을 `[x]`로 갱신한다 (`gh issue edit <번호> --body-file ...`).
 - **지식재산권 점검 (M2 이후 — M1은 규칙의 대상이 아니라 하지 않는다)**: CLAUDE.md "지식재산권 작업 규칙" 6·7번을 이 마일스톤 diff로 확인한다.
   ```bash
-  git diff --name-status origin/main...HEAD -- '*.png' '*.jpg' '*.jpeg' '*.webp' '*.gif' '*.bmp' '*.avif' '*.svg' '*.ico' '*.icns' '*.ttf' '*.otf' '*.woff' '*.woff2' '*.mp3' '*.wav' '*.ogg'
-  git diff origin/main...HEAD -- pubspec.yaml android/app/build.gradle.kts android/build.gradle.kts
+  git diff --name-status origin/main...HEAD -- ':(icase)*.png' ':(icase)*.jpg' ':(icase)*.jpeg' ':(icase)*.webp' ':(icase)*.gif' ':(icase)*.bmp' ':(icase)*.avif' ':(icase)*.svg' ':(icase)*.ico' ':(icase)*.icns' ':(icase)*.tif' ':(icase)*.tiff' ':(icase)*.heic' ':(icase)*.ttf' ':(icase)*.otf' ':(icase)*.ttc' ':(icase)*.woff' ':(icase)*.woff2' ':(icase)*.eot' ':(icase)*.mp3' ':(icase)*.wav' ':(icase)*.ogg' ':(icase)*.m4a' ':(icase)*.flac' ':(icase)*.mp4' ':(icase)*.webm' ':(icase)*.pdf'
+  git diff origin/main...HEAD -- pubspec.yaml pubspec.lock android/app/build.gradle.kts android/build.gradle.kts android/settings.gradle.kts \
+    ':(glob)android/gradle/*.toml' ios/Podfile macos/Podfile ':(glob)linux/**/CMakeLists.txt' ':(glob)windows/**/CMakeLists.txt'
+  git diff origin/main...HEAD -- lib/presentation/l10n android/app/src/main/AndroidManifest.xml ios/Runner/Info.plist \
+    macos/Runner/Info.plist web/manifest.json web/index.html windows/runner/Runner.rc linux/runner/my_application.cc
   ```
   - 새 바이너리 에셋·새 의존성이 출처 기록(#279가 만든 문서, 그 전에는 `.github/tracked-binary-assets`의 출처 줄)에 올라 있는지 본다.
-  - 사용자에게 보이는 문자열(`lib/presentation/l10n/`, 앱 이름·스토어 자료)에 다른 회사의 상호·제품 계열 이름·모델명이 새로 들어오지 않았는지 본다.
+  - 사용자에게 보이는 문자열(세 번째 diff — `lib/presentation/l10n/`, 플랫폼별 앱 이름)에 다른 회사의 상호·제품 계열 이름·모델명이 새로 들어오지 않았는지 본다.
+    스토어 자료는 저장소 밖이라 M12 #281에서 본다. 확장자 목록은 `test/unit/binary_assets_test.dart`의 `binaryAssetExtensions`와 같아야 한다.
   - 걸리는 것이 있으면 머지하지 않고 목록을 보여 준 뒤 단일 선택으로 묻는다: "고친 뒤 머지 (Recommended)" / "그대로 머지".
 
 ## 3. PR Ready 전환 및 전체 CI

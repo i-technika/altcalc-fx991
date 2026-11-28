@@ -13,10 +13,12 @@ import 'package:flutter_test/flutter_test.dart';
 const _listPath = '.github/tracked-binary-assets';
 
 /// 검사 대상 확장자 (소문자). `/close-ms` 2단계의 diff 점검 확장자와 같아야 한다.
+/// 참고 자료가 들어오는 가장 흔한 형식인 PDF(User's Guide·Quick Start Guide)도 넣는다(#280 R1).
 const binaryAssetExtensions = {
-  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'svg', 'ico', 'icns', //
-  'ttf', 'otf', 'woff', 'woff2', //
-  'mp3', 'wav', 'ogg',
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'svg', 'ico', 'icns', 'tif', 'tiff', 'heic', //
+  'ttf', 'otf', 'ttc', 'woff', 'woff2', 'eot', //
+  'mp3', 'wav', 'ogg', 'm4a', 'flac', 'mp4', 'webm', //
+  'pdf',
 };
 
 bool _isBinaryAsset(String path) {
@@ -69,7 +71,8 @@ void main() {
       Directory.current.resolveSymbolicLinksSync().toLowerCase(),
       reason: '패키지 루트에서 flutter test를 실행해야 한다',
     );
-    final ls = _runGit(['ls-files', '-z']);
+    // 추적 파일 + 아직 `git add` 하지 않은 새 파일(무시 목록 제외) — 커밋 전 로컬 `flutter test`에서 미리 잡는다(#280 R1).
+    final ls = _runGit(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
     expect(ls.exitCode, 0, reason: 'git ls-files 실패: ${ls.stderr}');
     tracked = (ls.stdout as String)
         .split('\u0000')
@@ -92,8 +95,14 @@ void main() {
     }
   });
 
-  test('추적 중인 이미지·글꼴·소리 파일은 목록과 정확히 같다', () {
+  test('추적 중인 이미지·글꼴·소리·PDF 파일은 목록과 정확히 같다', () {
     final actual = tracked.where(_isBinaryAsset).toSet();
+    // 목록 형식은 첫 공백에서 경로를 나누므로 공백이 든 경로는 적을 수 없다 — 그런 파일은 이름을 바꾼다
+    expect(
+      actual.where((p) => p.contains(RegExp(r'\s'))),
+      isEmpty,
+      reason: '공백이 든 경로는 $_listPath에 적을 수 없다 — 파일 이름을 바꾼다',
+    );
     final listed = entries.map((e) => e.path).toSet();
     expect(
       actual.difference(listed),
