@@ -229,6 +229,247 @@ void main() {
     });
   });
 
+  group('모드 전용 각인 (#266)', () {
+    for (final highContrast in [false, true]) {
+      final palette = highContrast
+          ? CalcPalette.highContrast
+          : CalcPalette.standard;
+
+      testWidgets('모든 키: 각인 띠 각인을 역할 색으로, 괄호를 모드 색으로 그린다 (고대비 $highContrast)', (
+        tester,
+      ) async {
+        var bracketed = 0;
+        for (final def in allKeys) {
+          if (def.bandLegends.isEmpty) continue;
+          await tester.pumpWidget(
+            _host(CalcKeyButton(keyDef: def), highContrast: highContrast),
+          );
+          for (final item in def.bandLegends) {
+            final legend = findLegend(item.legend);
+            expect(legend, findsOneWidget, reason: '$def $item');
+            expect(
+              legendStyleOf(tester, legend).color,
+              palette.bandLegendColorOf(item),
+              reason: '$def $item',
+            );
+            final brackets = find.ancestor(
+              of: legend,
+              matching: find.byType(LegendBrackets),
+            );
+            if (!item.bracketed) {
+              expect(brackets, findsNothing, reason: '$def $item');
+              continue;
+            }
+            bracketed++;
+            expect(
+              tester.widget<LegendBrackets>(brackets).color,
+              palette.modeLabelOf(item.mode!),
+              reason: '$def $item',
+            );
+          }
+        }
+        expect(bracketed, 7, reason: '∠와 A~F');
+      });
+    }
+
+    testWidgets('ENG 키: 보라 괄호 안의 노랑 ∠ · 노랑 ← · 보라 i가 왼쪽부터 놓인다', (tester) async {
+      final eng = keyDefOf(CalcKeyId.eng);
+      await tester.pumpWidget(
+        _host(CalcKeyButton(keyDef: eng), size: const Size(80, 72)),
+      );
+      final angle = tester.getRect(find.byType(LegendBrackets));
+      final arrow = tester.getRect(find.text('←'));
+      final i = tester.getRect(find.text('i'));
+      expect(angle.right, lessThanOrEqualTo(arrow.left));
+      expect(arrow.right, lessThanOrEqualTo(i.left));
+      expect(
+        tester.widget<Text>(find.text('∠')).style!.color,
+        CalcTheme.shiftLabel,
+      );
+      expect(
+        tester.widget<Text>(find.text('i')).style!.color,
+        CalcTheme.complexLabel,
+      );
+      expect(
+        tester.widget<LegendBrackets>(find.byType(LegendBrackets)).color,
+        CalcTheme.complexLabel,
+      );
+      // 키캡보다 위(각인 띠)에 있다 — 글자는 그린 기준선에 맞추느라 0.5dp까지 옮겨 그린다(#252)
+      final cap = tester.getRect(_keycap(CalcKeyId.eng));
+      for (final rect in [angle, arrow, i]) {
+        expect(rect.bottom, lessThanOrEqualTo(cap.top + 0.5));
+        expect(rect.top, lessThan(cap.top));
+      }
+    });
+
+    testWidgets('스크린리더: 모드 전용 각인은 읽지 않는다 (그 모드의 기능이 아직 없다)', (tester) async {
+      final handle = tester.ensureSemantics();
+      for (final (id, printed) in [
+        (CalcKeyId.eng, ['i', '∠']),
+        (CalcKeyId.square, ['DEC']),
+        (CalcKeyId.ln, ['OCT']),
+      ]) {
+        await tester.pumpWidget(
+          _host(CalcKeyButton(keyDef: keyDefOf(id), onPressed: (_) {})),
+        );
+        // 인쇄는 되어 있다
+        for (final text in printed) {
+          expect(find.text(text), findsOneWidget, reason: id.name);
+        }
+        // 키의 라벨·힌트에 모드 전용 기능 이름이 없다 (한 글자 각인 `i`는 낱말 속 글자와 겹쳐 낱말로 본다)
+        final node = tester.getSemantics(find.byType(CalcKeyButton));
+        final spoken = '${node.label} ${node.hint} ${node.value}';
+        for (final text in [
+          ...printed.where((t) => t.length > 1),
+          'Complex',
+          'Base-N',
+          'imaginary',
+          'angle',
+          '복소수',
+          '허수',
+          '진법',
+        ]) {
+          expect(
+            spoken.toLowerCase(),
+            isNot(contains(text.toLowerCase())),
+            reason: '${id.name}: $spoken',
+          );
+        }
+        // 각인 글자가 따로 읽히는 의미 노드도 없다
+        for (final text in printed) {
+          expect(find.bySemanticsLabel(text), findsNothing, reason: id.name);
+        }
+      }
+      handle.dispose();
+    });
+
+    testWidgets('괄호는 각인 양옆 바깥 끝에 모드 색 획 넷으로 그린다 (왼쪽 ┌, 오른쪽 ┐)', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CalcKeyButton(keyDef: keyDefOf(CalcKeyId.sin)),
+          size: const Size(80, 72),
+        ),
+      );
+      final box = find.byType(LegendBrackets);
+      final widget = tester.widget<LegendBrackets>(box);
+      final size = tester.getSize(box);
+      final painter = LegendBracketPainter(
+        color: widget.color,
+        fontSize: widget.fontSize,
+        depth: widget.depth,
+      );
+      final strokes = painter.strokesFor(size);
+      expect(strokes, hasLength(4));
+      final custom = find.descendant(
+        of: box,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is CustomPaint && w.foregroundPainter is LegendBracketPainter,
+        ),
+      );
+      expect(
+        tester.renderObject(custom),
+        paints
+          ..rect(rect: strokes[0], color: CalcTheme.baseNLabel)
+          ..rect(rect: strokes[1], color: CalcTheme.baseNLabel)
+          ..rect(rect: strokes[2], color: CalcTheme.baseNLabel)
+          ..rect(rect: strokes[3], color: CalcTheme.baseNLabel),
+      );
+      // 글자 D는 두 괄호 사이에 있고 괄호와 겹치지 않는다
+      final origin = tester.getTopLeft(box);
+      final letter = tester.getRect(find.text('D'));
+      expect(origin.dx + strokes[1].right, lessThan(letter.left));
+      expect(origin.dx + strokes[3].left, greaterThan(letter.right));
+    });
+
+    test('괄호 획: 세로 획은 기준선을 걸치고, 가로 획은 위끝에서 글자 쪽으로 나온다', () {
+      const fontSize = 20.0;
+      const depth = 5.0;
+      const size = Size(40, 24);
+      const painter = LegendBracketPainter(
+        color: CalcTheme.baseNLabel,
+        fontSize: fontSize,
+        depth: depth,
+      );
+      final [leftStem, leftHook, rightStem, rightHook] = painter.strokesFor(
+        size,
+      );
+      final baseline = size.height - depth;
+      const stroke = fontSize * CalcTheme.keyLegendBracketStroke;
+      // 세로 획: 상자 양 끝, 기준선 위아래로
+      expect(leftStem.left, 0);
+      expect(leftStem.width, closeTo(stroke, 1e-9));
+      expect(rightStem.right, size.width);
+      expect(rightStem.width, closeTo(stroke, 1e-9));
+      for (final stem in [leftStem, rightStem]) {
+        expect(
+          stem.top,
+          closeTo(baseline - fontSize * CalcTheme.keyLegendBracketRise, 1e-9),
+        );
+        expect(
+          stem.bottom,
+          closeTo(baseline + fontSize * CalcTheme.keyLegendBracketDrop, 1e-9),
+        );
+        expect(stem.top, lessThan(baseline));
+        expect(stem.bottom, greaterThan(baseline));
+        // 줄 상자 안이다 (아래로 넘치면 키캡에 닿는다)
+        expect(stem.bottom, lessThanOrEqualTo(size.height));
+      }
+      // 가로 획: 세로 획 위끝에서 안쪽으로
+      expect(leftHook.top, leftStem.top);
+      expect(leftHook.bottom, lessThan(baseline));
+      expect(leftHook.left, 0);
+      expect(
+        leftHook.width,
+        closeTo(fontSize * CalcTheme.keyLegendBracketHook, 1e-9),
+      );
+      expect(leftHook.height, closeTo(stroke, 1e-9));
+      expect(rightHook.top, rightStem.top);
+      expect(rightHook.right, size.width);
+      expect(rightHook.width, closeTo(leftHook.width, 1e-9));
+      // 좌우 대칭
+      expect(size.width - rightStem.right, leftStem.left);
+      expect(size.width - rightHook.left, closeTo(leftHook.right, 1e-9));
+    });
+
+    test('괄호 획은 아주 작은 글자에서도 최소 두께보다 가늘지 않고, 값이 같으면 다시 그리지 않는다', () {
+      const tiny = LegendBracketPainter(
+        color: CalcTheme.baseNLabel,
+        fontSize: 2,
+        depth: 0.5,
+      );
+      final [stem, hook, _, _] = tiny.strokesFor(const Size(6, 3));
+      expect(stem.width, CalcTheme.keyLegendMinStroke);
+      expect(hook.height, CalcTheme.keyLegendMinStroke);
+      expect(hook.width, greaterThanOrEqualTo(stem.width));
+      const same = LegendBracketPainter(
+        color: CalcTheme.baseNLabel,
+        fontSize: 2,
+        depth: 0.5,
+      );
+      expect(tiny.shouldRepaint(same), isFalse);
+      for (final other in const [
+        LegendBracketPainter(
+          color: CalcTheme.complexLabel,
+          fontSize: 2,
+          depth: 0.5,
+        ),
+        LegendBracketPainter(
+          color: CalcTheme.baseNLabel,
+          fontSize: 3,
+          depth: 0.5,
+        ),
+        LegendBracketPainter(
+          color: CalcTheme.baseNLabel,
+          fontSize: 2,
+          depth: 1,
+        ),
+      ]) {
+        expect(tiny.shouldRepaint(other), isTrue);
+      }
+    });
+  });
+
   group('고대비 모드 (#54)', () {
     const palette = CalcPalette.highContrast;
 

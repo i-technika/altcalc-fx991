@@ -17,13 +17,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/bundled_fonts.dart';
 import '../support/key_legends.dart';
 
-/// 키캡 위 각인(SHIFT·ALPHA)의 좌우 정렬 (#265) — 규칙과 실물 측정은 [CalcTheme] "각인 띠 좌우 정렬 (#265)" 절.
+/// 키캡 위 각인(SHIFT·ALPHA·모드 전용 각인)의 좌우 정렬 (#265, 모드 전용 각인은 #266) — 규칙과 실물 측정은 [CalcTheme]
+/// "각인 띠 좌우 정렬 (#265)" 절. 각인 목록은 [CalcKeyDef.bandLegends]다(왼쪽부터).
 ///
 /// - 각인이 하나면 키캡 가운데다.
-/// - 둘이면 SHIFT는 왼쪽·ALPHA는 오른쪽이고, 바깥 끝을 키캡 끝에서 똑같이 들인다. 들이는 거리는 키캡 폭의
+/// - 둘이면 첫째(SHIFT)는 왼쪽·둘째(ALPHA 또는 모드 색 각인)는 오른쪽이고, 바깥 끝을 키캡 끝에서 똑같이 들인다. 들이는 거리는 키캡 폭의
 ///   [CalcTheme.keyLegendSideInsetRatio]와 키캡 모서리 반경 가운데 큰 쪽까지이고, 두 각인 사이가 최소 간격·들이는 거리보다
 ///   좁아지지 않는 만큼만 들인다([_expectedInset]). 키캡 폭에 들어가지 않는 쌍은 키캡 가운데에 둔 채 양옆으로 셀 폭까지
 ///   나간다(#264 — 들인 거리가 음수다).
+/// - 셋이면(ENG 키의 `┌∠┐ ← i`) 첫째는 왼쪽 끝·마지막은 오른쪽 끝이고 사이를 똑같이 띄운다([_expectedTripleInset]).
+/// - 괄호로 둘러싼 각인(`┌∠┐`·`┌A┐`)은 괄호까지가 그 각인이다 — 바깥 끝은 괄호의 바깥 끝이다([_bandRect]).
 ///
 /// 실제 앱([AltCalcApp])을 번들 글꼴로 띄워 **그려진 자리(화면 좌표)** 를 잰다. 기대값은 그려진 키캡·각인 폭에서 이 파일의
 /// 식([_expectedInset])으로 따로 구한다 — 구현 함수(`keyLegendPairInset`·`keyLegendSideInset`)를 부르지 않는다.
@@ -108,13 +111,13 @@ const _tolerance = 0.05;
 /// 각인 띠가 있는 키캡 키 (원형 버튼·커서 패드 제외)
 final _legendKeys = [
   for (final def in allKeys)
-    if (def.face == KeyFace.keycap && (def.hasShift || def.hasAlpha)) def,
+    if (def.face == KeyFace.keycap && def.bandLegends.isNotEmpty) def,
 ];
 
-/// 각인이 둘(SHIFT·ALPHA)인 키
+/// 각인이 둘(SHIFT·ALPHA 또는 SHIFT·모드 색 각인)인 키
 final _pairKeys = [
   for (final def in _legendKeys)
-    if (def.hasShift && def.hasAlpha) def,
+    if (def.bandLegends.length == 2) def,
 ];
 
 Future<void> _pump(
@@ -175,6 +178,22 @@ Rect _legend(WidgetTester tester, CalcKeyDef def, KeyLegend legend) {
   return tester.getRect(finder);
 }
 
+/// [def] 키의 각인 띠 각인 [item]이 차지한 상자 (전역 dp) — 괄호로 둘러싼 각인은 괄호까지다(#266)
+Rect _bandRect(WidgetTester tester, CalcKeyDef def, BandLegend item) {
+  final label = _legendFinder(def, item.legend);
+  expect(label, findsOneWidget, reason: '${def.id.name} $item');
+  final brackets = find.ancestor(
+    of: label,
+    matching: find.byType(LegendBrackets),
+  );
+  expect(
+    brackets,
+    item.bracketed ? findsOneWidget : findsNothing,
+    reason: '${def.id.name} $item',
+  );
+  return tester.getRect(item.bracketed ? brackets : label);
+}
+
 /// 각인이 둘인 키 하나의 그려진 자리
 typedef _Pair = ({
   CalcKeyDef def,
@@ -182,10 +201,12 @@ typedef _Pair = ({
 
   /// 키 버튼(셀) 상자
   Rect cell,
-  Rect shift,
-  Rect alpha,
 
-  /// SHIFT 왼끝·ALPHA 오른끝을 키캡 끝에서 들인 거리 (dp)
+  /// 왼쪽(첫째)·오른쪽(둘째) 각인 상자 — 괄호 포함
+  Rect first,
+  Rect last,
+
+  /// 첫째 왼끝·둘째 오른끝을 키캡 끝에서 들인 거리 (dp)
   double left,
   double right,
 
@@ -195,46 +216,73 @@ typedef _Pair = ({
   /// 키캡 모서리 반경 (dp)
   double radius,
 
-  /// SHIFT·ALPHA 사이 최소 간격 (dp)
+  /// 두 각인 사이 최소 간격 (dp)
   double gap,
 
-  /// 각인이 줄어든 비율 (1 = 줄지 않음)
-  double shiftScale,
+  /// 첫째 각인이 줄어든 비율 (1 = 줄지 않음)
+  double firstScale,
 });
 
+/// 각인 사이 최소 간격 (dp) — 글자 크기의 비율이되 키캡 폭의 비율을 넘지 않는다
+double _gapOf(WidgetTester tester, Finder legend, Rect cap) => math.min(
+  legendStyleOf(tester, legend).fontSize! * CalcTheme.keyLegendGapRatio,
+  cap.width * CalcTheme.keyLegendGapMaxWidthRatio,
+);
+
 _Pair _measure(WidgetTester tester, CalcKeyDef def) {
+  final band = def.bandLegends;
+  expect(band, hasLength(2), reason: def.id.name);
   final cap = _keycap(tester, def.id);
-  final shiftFinder = _legendFinder(def, def.shiftLegend!);
-  final shift = _legend(tester, def, def.shiftLegend!);
-  final alpha = _legend(tester, def, def.alphaLegend!);
-  final fontSize = legendStyleOf(tester, shiftFinder).fontSize!;
+  final firstFinder = _legendFinder(def, band.first.legend);
+  final first = _bandRect(tester, def, band.first);
+  final last = _bandRect(tester, def, band.last);
   return (
     def: def,
     cap: cap,
     cell: tester.getRect(_button(def.id)),
-    shift: shift,
-    alpha: alpha,
-    left: shift.left - cap.left,
-    right: cap.right - alpha.right,
-    middle: alpha.left - shift.right,
+    first: first,
+    last: last,
+    left: first.left - cap.left,
+    right: cap.right - last.right,
+    middle: last.left - first.right,
     radius: keyCapCornerRadius(def.category, cap.height),
-    gap: math.min(
-      fontSize * CalcTheme.keyLegendGapRatio,
-      cap.width * CalcTheme.keyLegendGapMaxWidthRatio,
-    ),
-    shiftScale: shift.height / tester.getSize(shiftFinder).height,
+    gap: _gapOf(tester, firstFinder, cap),
+    firstScale:
+        tester.getRect(firstFinder).height / tester.getSize(firstFinder).height,
   );
 }
 
 /// 들이는 거리의 상한 (dp) — 키캡 폭의 비율과 모서리 반경 가운데 큰 쪽
-double _sideInsetOf(_Pair p) =>
-    math.max(p.cap.width * CalcTheme.keyLegendSideInsetRatio, p.radius);
+double _sideInsetOf(_Pair p) => _sideInsetFor(p.cap, p.radius);
+
+double _sideInsetFor(Rect cap, double radius) =>
+    math.max(cap.width * CalcTheme.keyLegendSideInsetRatio, radius);
+
+/// 각인이 셋인 키(ENG)의 들이는 거리 기대값 (dp, #266) — 사이가 둘이라 사이 하나(`최소 간격 + (남는 폭 − 2 × 들이는 거리) ÷ 2`)가
+/// 최소 간격보다도(남는 폭 ÷ 2) 들이는 거리보다도((남는 폭 + 최소 간격 × 2) ÷ 4) 좁아지지 않는 만큼 상한까지 들인다.
+/// 키캡 폭에 들어가지 않으면 양옆으로 똑같이 나가되 셀 끝을 넘지 않는다.
+double _expectedTripleInset({
+  required Rect cap,
+  required Rect cell,
+  required double radius,
+  required double gap,
+  required double total,
+}) {
+  final spare = cap.width - 2 * gap - total;
+  final margin = math.max(0.0, (cell.width - cap.width) / 2);
+  if (spare < 0) return math.max(-margin, spare / 2);
+  return [
+    _sideInsetFor(cap, radius),
+    spare / 2,
+    (spare + 2 * gap) / 4,
+  ].reduce(math.min);
+}
 
 /// 그려진 키캡·각인 폭에서 구한 들이는 거리의 기대값 (dp) — 상한까지 들이되, 두 각인 사이가 최소 간격보다도(남는 폭 ÷ 2)
 /// 들이는 거리보다도((남는 폭 + 최소 간격) ÷ 3) 좁아지지 않는 만큼. 키캡 폭에 들어가지 않으면 음수다 — 키캡 양옆으로 똑같이
 /// 나가되(남는 폭 ÷ 2) 셀 끝을 넘지 않는다(#264).
 double _expectedInset(_Pair p) {
-  final spare = p.cap.width - p.gap - p.shift.width - p.alpha.width;
+  final spare = p.cap.width - p.gap - p.first.width - p.last.width;
   if (spare < 0) return math.max(-_faceMarginOf(p), spare / 2);
   return [_sideInsetOf(p), spare / 2, (spare + p.gap) / 3].reduce(math.min);
 }
@@ -362,7 +410,7 @@ void main() {
       final reason = _describe(p);
       // 실물도 이 쌍은 키보다 넓다 (CalcTheme "글자 크기 실물 대조 (#264)" 절 4)
       expect(
-        p.shift.width + p.alpha.width + p.gap,
+        p.first.width + p.last.width + p.gap,
         greaterThan(p.cap.width),
         reason: reason,
       );
@@ -374,9 +422,9 @@ void main() {
         greaterThanOrEqualTo(-_faceMarginOf(p) - _tolerance),
         reason: reason,
       );
-      expect(p.shift.left, greaterThanOrEqualTo(p.cell.left - _tolerance));
-      expect(p.alpha.right, lessThanOrEqualTo(p.cell.right + _tolerance));
-      expect(p.shiftScale, closeTo(1, 1e-3), reason: reason);
+      expect(p.first.left, greaterThanOrEqualTo(p.cell.left - _tolerance));
+      expect(p.last.right, lessThanOrEqualTo(p.cell.right + _tolerance));
+      expect(p.firstScale, closeTo(1, 1e-3), reason: reason);
       // 이웃 키(0 키의 Rnd, ×10ˣ 키의 π)의 각인과 겹치지 않는다
       final rnd = _legend(
         tester,
@@ -388,8 +436,8 @@ void main() {
         keyDefOf(CalcKeyId.exp10),
         keyDefOf(CalcKeyId.exp10).shiftLegend!,
       );
-      expect(rnd.right, lessThan(p.shift.left));
-      expect(pi.left, greaterThan(p.alpha.right));
+      expect(rnd.right, lessThan(p.first.left));
+      expect(pi.left, greaterThan(p.last.right));
     });
   });
 
@@ -411,7 +459,7 @@ void main() {
         closeTo(_sideInsetOf(p), _tolerance),
         reason: _describe(p),
       );
-      expect(p.shiftScale, closeTo(1, 1e-6));
+      expect(p.firstScale, closeTo(1, 1e-6));
     });
 
     testWidgets('빠듯하면 들이는 거리를 양쪽 똑같이 줄이되 두 각인이 붙지 않고, 각인은 줄이지 않는다', (
@@ -432,7 +480,7 @@ void main() {
       expect(p.middle, greaterThanOrEqualTo(p.gap - _tolerance));
       expect(p.middle, greaterThanOrEqualTo(p.left - 3 * _tolerance));
       // 각인은 줄지 않는다 (부동소수 오차만큼)
-      expect(p.shiftScale, closeTo(1, 1e-3));
+      expect(p.firstScale, closeTo(1, 1e-3));
     });
 
     testWidgets('들어가지 않으면 들이지 않고 키캡 폭을 다 쓴 뒤 각인이 줄어든다', (tester) async {
@@ -440,19 +488,32 @@ void main() {
       final p = _measure(tester, def);
       expect(p.left, closeTo(0, _tolerance), reason: _describe(p));
       expect(p.right, closeTo(0, _tolerance), reason: _describe(p));
-      expect(p.shiftScale, lessThan(0.9));
+      expect(p.firstScale, lessThan(0.9));
     });
 
     testWidgets('띠 높이 때문에 줄어든 각인은 줄어든 폭으로 들인다 (글자 크기를 주입받지 않은 키 버튼)', (
       tester,
     ) async {
-      // sin⁻¹ · D: 글자 크기가 띠 높이보다 커서 각인이 높이에 맞춰 줄어든다 — 줄기 전 폭으로 재면 들일 자리가 없다고 본다
+      // sin⁻¹ · ┌D┐: 글자 크기가 띠 높이보다 커서 각인이 높이에 맞춰 줄어든다 — 줄기 전 폭으로 재면 들일 자리가 거의 없다고
+      // 본다. 괄호까지가 D의 폭이라(#266) 다른 검사보다 넓은 키에서 잰다 — 폭 60에서는 줄어든 폭으로도 키캡 폭을 다 쓴다.
       final sin = keyDefOf(CalcKeyId.sin);
-      await _pumpButton(tester, sin.id, size: size, legendFontSize: 20);
+      await _pumpButton(
+        tester,
+        sin.id,
+        size: const Size(80, 60),
+        legendFontSize: 20,
+      );
       final p = _measure(tester, sin);
-      expect(p.shiftScale, lessThan(0.9), reason: '각인이 높이 때문에 줄어야 한다');
-      // 줄어든(그려진) 폭에서 구한 기대값만큼 들인다 — 줄기 전 폭으로 재면 0.25dp쯤이다(#265 R1)
+      expect(p.firstScale, lessThan(0.9), reason: '각인이 높이 때문에 줄어야 한다');
+      // 줄어든(그려진) 폭에서 구한 기대값만큼 들인다 — 줄기 전 폭으로 재면 그 절반도 안 된다(#265 R1)
+      final naturalSpare =
+          p.cap.width - p.gap - (p.first.width + p.last.width) / p.firstScale;
       expect(p.left, greaterThan(2), reason: _describe(p));
+      expect(
+        p.left,
+        greaterThan(2 * math.max(0, naturalSpare / 2)),
+        reason: '줄기 전 폭으로 잰 값 ${naturalSpare / 2} · ${_describe(p)}',
+      );
       expect(
         p.left,
         closeTo(_expectedInset(p), _tolerance),
@@ -525,12 +586,19 @@ void main() {
     group(window.name, () {
       testWidgets('각인이 하나뿐인 키: 키캡 가운데', (tester) async {
         await _pump(tester, window);
-        // `x³`·`◼√◻`·`10^◼`·`e^◼`도 지금은 각인이 하나라 가운데다. 실물에서는 파란 Base-N 각인(`DEC`…)과 짝이라 왼쪽에
-        // 있다 — 파란 각인을 그리면(#266) 이 넷은 "각인이 하나뿐인 키"가 아니게 된다.
-        final singles = _legendKeys.where((d) => d.hasShift != d.hasAlpha);
+        // `x³`·`◼√◻`·`10^◼`·`e^◼`는 파란 Base-N 각인(`DEC`…)과 짝이라 하나뿐인 키가 아니다 — 실물처럼 왼쪽이다(#266).
+        final singles = _legendKeys.where((d) => d.bandLegends.length == 1);
+        for (final id in [
+          CalcKeyId.square,
+          CalcKeyId.power,
+          CalcKeyId.logBase,
+          CalcKeyId.ln,
+        ]) {
+          expect(singles.map((d) => d.id), isNot(contains(id)));
+        }
         // 실물에서 가운데인 각인이 빠지지 않았는지 (목록이 비면 아래 검사가 헛돈다)
         expect(
-          singles.map((d) => (d.shiftLabel ?? d.alphaLabel)!),
+          singles.map((d) => d.bandLegends.single.legend.plainText),
           containsAll([
             'QR',
             'RECALL',
@@ -549,11 +617,7 @@ void main() {
         );
         for (final def in singles) {
           final cap = _keycap(tester, def.id);
-          final legend = _legend(
-            tester,
-            def,
-            (def.shiftLegend ?? def.alphaLegend)!,
-          );
+          final legend = _bandRect(tester, def, def.bandLegends.single);
           expect(
             legend.center.dx,
             closeTo(cap.center.dx, _tolerance),
@@ -567,10 +631,22 @@ void main() {
 
       for (final textScale in [1.0, 1.3]) {
         testWidgets(
-          '각인이 둘인 키 (글자 배율 $textScale): SHIFT 왼쪽·ALPHA 오른쪽, 바깥 끝을 똑같이 들이고 사이가 더 좁지 않다',
+          '각인이 둘인 키 (글자 배율 $textScale): 첫째 왼쪽·둘째 오른쪽, 바깥 끝을 똑같이 들이고 사이가 더 좁지 않다',
           (tester) async {
             await _pump(tester, window, textScale: textScale);
-            expect(_pairKeys, isNotEmpty);
+            // SHIFT·ALPHA 쌍과 SHIFT·모드 색 각인 쌍(`x³ DEC`…), 괄호가 있는 쌍(`log ┌A┐`…)이 모두 들어 있다
+            expect(
+              _pairKeys.map((d) => d.id),
+              containsAll([
+                CalcKeyId.calc,
+                CalcKeyId.square,
+                CalcKeyId.power,
+                CalcKeyId.logBase,
+                CalcKeyId.ln,
+                CalcKeyId.negative,
+                CalcKeyId.tan,
+              ]),
+            );
             for (final def in _pairKeys) {
               final p = _measure(tester, def);
               final reason = _describe(p);
@@ -593,7 +669,7 @@ void main() {
                 greaterThanOrEqualTo(-_faceMarginOf(p) - _tolerance),
                 reason: reason,
               );
-              // SHIFT가 ALPHA 왼쪽이고, 사이는 최소 간격·들인 거리보다 좁지 않다 (바깥을 들이느라 붙지 않는다)
+              // 첫째가 둘째 왼쪽이고, 사이는 최소 간격·들인 거리보다 좁지 않다 (바깥을 들이느라 붙지 않는다)
               expect(
                 p.middle,
                 greaterThanOrEqualTo(p.gap - _tolerance),
@@ -608,6 +684,114 @@ void main() {
           },
         );
       }
+
+      for (final textScale in [1.0, 1.3]) {
+        testWidgets(
+          '각인이 셋인 키 ENG (글자 배율 $textScale): ┌∠┐ ← i 순서, 바깥 끝을 똑같이 들이고 사이가 같다 (#266)',
+          (tester) async {
+            await _pump(tester, window, textScale: textScale);
+            final def = keyDefOf(CalcKeyId.eng);
+            final band = def.bandLegends;
+            expect(band.map((b) => b.legend.plainText), ['∠', '←', 'i']);
+            final cap = _keycap(tester, def.id);
+            final cell = tester.getRect(_button(def.id));
+            final rects = [for (final b in band) _bandRect(tester, def, b)];
+            final gap = _gapOf(
+              tester,
+              _legendFinder(def, band.first.legend),
+              cap,
+            );
+            final radius = keyCapCornerRadius(def.category, cap.height);
+            final left = rects.first.left - cap.left;
+            final right = cap.right - rects.last.right;
+            final between = [
+              rects[1].left - rects[0].right,
+              rects[2].left - rects[1].right,
+            ];
+            final reason =
+                '왼쪽 ${left.toStringAsFixed(3)} · 사이 ${between.map((b) => b.toStringAsFixed(3))} · '
+                '오른쪽 ${right.toStringAsFixed(3)} · 키캡 폭 ${cap.width.toStringAsFixed(2)}';
+            expect(left, closeTo(right, 2 * _tolerance), reason: reason);
+            expect(
+              between[0],
+              closeTo(between[1], 2 * _tolerance),
+              reason: reason,
+            );
+            expect(
+              left,
+              closeTo(
+                _expectedTripleInset(
+                  cap: cap,
+                  cell: cell,
+                  radius: radius,
+                  gap: gap,
+                  total: rects.fold(0.0, (sum, r) => sum + r.width),
+                ),
+                _tolerance,
+              ),
+              reason: reason,
+            );
+            // 사이는 최소 간격·들인 거리보다 좁지 않고, 셀 폭 안이다
+            expect(
+              between[0],
+              greaterThanOrEqualTo(gap - _tolerance),
+              reason: reason,
+            );
+            expect(
+              between[0],
+              greaterThanOrEqualTo(left - 3 * _tolerance),
+              reason: reason,
+            );
+            expect(
+              rects.first.left,
+              greaterThanOrEqualTo(cell.left - _tolerance),
+            );
+            expect(
+              rects.last.right,
+              lessThanOrEqualTo(cell.right + _tolerance),
+            );
+          },
+        );
+      }
+
+      testWidgets('괄호로 둘러싼 각인은 글자 양옆에 괄호 자리가 똑같이 있다 (#266)', (tester) async {
+        await _pump(tester, window);
+        final bracketed = [
+          for (final def in _legendKeys)
+            for (final item in def.bandLegends)
+              if (item.bracketed) (def, item),
+        ];
+        // 실물: ENG의 ∠(Complex)와 A~F(Base-N)
+        expect(
+          bracketed.map((e) => e.$2.legend.plainText),
+          unorderedEquals(['∠', 'A', 'B', 'C', 'D', 'E', 'F']),
+        );
+        for (final (def, item) in bracketed) {
+          final finder = _legendFinder(def, item.legend);
+          final box = _bandRect(tester, def, item);
+          final label = _legend(tester, def, item.legend);
+          final scale = label.height / tester.getSize(finder).height;
+          // 그리는 글자 크기(배율 1.0) × 괄호 자리 비율 × 줄어든 비율
+          final pad =
+              legendStyleOf(tester, finder).fontSize! *
+              CalcTheme.keyLegendBracketPad *
+              scale;
+          final reason = '${def.id.name} $item · 상자 $box · 글자 $label';
+          expect(
+            label.left - box.left,
+            closeTo(pad, _tolerance),
+            reason: reason,
+          );
+          expect(
+            box.right - label.right,
+            closeTo(pad, _tolerance),
+            reason: reason,
+          );
+          // 높이는 글자 줄 상자 그대로다 (글자는 그린 기준선에 맞추느라 1dp 안에서 옮겨 그린다 — #252)
+          expect(box.height, closeTo(label.height, _tolerance), reason: reason);
+          expect((box.top - label.top).abs(), lessThan(1), reason: reason);
+        }
+      });
 
       testWidgets('실물에서 바깥 끝이 들어와 있는 쌍은 둥근 모서리 안쪽까지 들인다', (tester) async {
         await _pump(tester, window);
@@ -650,28 +834,42 @@ void main() {
 
   group('글자 배율 1.3에서도 들인다', () {
     // 옛 배치(양 끝에 붙임)는 들인 거리가 0이다 — 배율을 키워도 대표 키는 상한까지, 가장 긴 쌍은 그보다 덜 들인다
-    testWidgets('폰 세로 360×780: log · A와 M− · M은 상한까지, Ran# · RanInt는 그보다 덜', (
-      tester,
-    ) async {
-      await _pump(tester, _windows.first, textScale: 1.3);
-      for (final id in [CalcKeyId.negative, CalcKeyId.mPlus]) {
-        final p = _measure(tester, keyDefOf(id));
-        expect(p.left, greaterThan(1), reason: _describe(p));
+    testWidgets(
+      '폰 세로 360×780: π · e와 M− · M은 상한까지, log · ┌A┐·Ran# · RanInt는 그보다 덜',
+      (tester) async {
+        await _pump(tester, _windows.first, textScale: 1.3);
+        for (final id in [CalcKeyId.exp10, CalcKeyId.mPlus]) {
+          final p = _measure(tester, keyDefOf(id));
+          expect(p.left, greaterThan(1), reason: _describe(p));
+          expect(
+            p.left,
+            closeTo(_sideInsetOf(p), _tolerance),
+            reason: _describe(p),
+          );
+        }
+        // 괄호가 든 쌍은 괄호 자리만큼 덜 들인다 — 그래도 사이가 들인 거리보다 좁지 않게 (#266)
+        final log = _measure(tester, keyDefOf(CalcKeyId.negative));
+        expect(log.left, greaterThan(1), reason: _describe(log));
         expect(
-          p.left,
-          closeTo(_sideInsetOf(p), _tolerance),
-          reason: _describe(p),
+          log.left,
+          closeTo(_expectedInset(log), _tolerance),
+          reason: _describe(log),
         );
-      }
-      // 가장 긴 쌍은 상한에 못 미치고, 그려진 폭에서 구한 만큼만 들인다 (키캡 폭을 거의 다 쓴다)
-      final dot = _measure(tester, keyDefOf(CalcKeyId.dot));
-      expect(
-        dot.left,
-        closeTo(_expectedInset(dot), _tolerance),
-        reason: _describe(dot),
-      );
-      expect(dot.left, lessThan(_sideInsetOf(dot) / 2), reason: _describe(dot));
-      expect(dot.right, closeTo(dot.left, 2 * _tolerance));
-    });
+        expect(log.left, lessThan(_sideInsetOf(log)), reason: _describe(log));
+        // 가장 긴 쌍은 상한에 못 미치고, 그려진 폭에서 구한 만큼만 들인다 (키캡 폭을 거의 다 쓴다)
+        final dot = _measure(tester, keyDefOf(CalcKeyId.dot));
+        expect(
+          dot.left,
+          closeTo(_expectedInset(dot), _tolerance),
+          reason: _describe(dot),
+        );
+        expect(
+          dot.left,
+          lessThan(_sideInsetOf(dot) / 2),
+          reason: _describe(dot),
+        );
+        expect(dot.right, closeTo(dot.left, 2 * _tolerance));
+      },
+    );
   });
 }

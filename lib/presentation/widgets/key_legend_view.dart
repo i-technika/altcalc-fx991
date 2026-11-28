@@ -102,11 +102,13 @@ class KeyLegendView extends LeafRenderObjectWidget {
   };
 
   /// 변수 이탤릭 글자([CalcTheme.isKeyVariableLetter])의 세로 잉크 범위 — 번들 Noto Serif Bold Italic의 `glyf` 값 (#156).
-  /// [glyphInk]와 같은 규칙이고, 이탤릭으로 그리는 글자만 담는다(`y`는 지금 2차원 각인에 없지만 변수 글자라 함께 둔다).
+  /// [glyphInk]와 같은 규칙이고, 이탤릭으로 그리는 글자만 담는다(`y`와 ENG 키의 허수 `i`(#266)는 지금 2차원 각인에 없지만
+  /// 변수 글자라 함께 둔다).
   static const Map<String, (double, double)> variableGlyphInk = {
     'x': (0.0, 0.536),
     'y': (-0.24, 0.546),
     'e': (-0.01, 0.546),
+    'i': (-0.01, 0.77),
   };
 
   /// 측정 기준 글자 크기 — 크기는 글자 크기에 비례한다고 보고 1dp당 크기(em 크기)를 구한다.
@@ -1051,20 +1053,27 @@ class _Builder {
 }
 
 /// 키캡 각인 글자열 [text]를 [style]로 그리는 글자 조각 (#156). 변수 글자([CalcTheme.isKeyVariableLetter])는
-/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로, 수학 기호([CalcTheme.isKeyMathSymbol])는 수학 글꼴로 바꾸고, 나머지는
-/// [style] 그대로다. 바꾸는 글자가 없으면 글자열 하나다.
+/// 이탤릭 세리프([CalcTheme.keyVariableStyle])로, 수학 기호([CalcTheme.isKeyMathSymbol])는 수학 글꼴로 바꾸고, 글리프가
+/// 작은 기호([CalcTheme.keyGlyphScale] — `∠`·`←`, #266)는 그 글자만 키운다. 나머지는 [style] 그대로다. 바꾸는 글자가
+/// 없으면 글자열 하나다.
 ///
 /// 키 버튼의 `Text`(글자만 있는 각인)와 [KeyLegendView]의 글자 조각이 함께 쓴다 — 두 곳의 글자 모양이 같다.
 TextSpan keyLabelSpan(String text, TextStyle style) {
   // 글자마다 쓸 스타일: null이면 [style] 그대로
   TextStyle? styleAt(int i) {
+    final TextStyle? base;
     if (CalcTheme.isKeyVariableLetter(text, i)) {
-      return CalcTheme.keyVariableStyle(style);
+      base = CalcTheme.keyVariableStyle(style);
+    } else if (CalcTheme.isKeyMathSymbol(text[i])) {
+      base = CalcTheme.keyMathSymbolStyle(style);
+    } else {
+      base = null;
     }
-    if (CalcTheme.isKeyMathSymbol(text[i])) {
-      return CalcTheme.keyMathSymbolStyle(style);
-    }
-    return null;
+    // 글리프가 실물보다 작은 기호는 그 글자만 키운다 (#266 — 줄 상자는 strut로 고정이라 그대로다)
+    final scale = CalcTheme.keyGlyphScale(text[i]);
+    final fontSize = style.fontSize;
+    if (scale == 1.0 || fontSize == null) return base;
+    return (base ?? style).copyWith(fontSize: fontSize * scale);
   }
 
   final runs = <TextSpan>[];
