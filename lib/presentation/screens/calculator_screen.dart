@@ -946,16 +946,20 @@ class _Body extends ConsumerWidget {
       (l) => (l == null) == (hingeLayout == null),
     );
     // LCD 줄 글자 상한 (#270): 그린 키패드의 키 숫자(배율 1)를 따라 올린다 — 큰 창에서도 LCD 글자 ÷ 키 숫자가 실물 비 아래로
-    // 내려가지 않게. 글자 배율과 무관하게 정한다(배치처럼). `CalcKeypad`도 같은 크기로 한 번 더 재지만, 화면 크기·배치가 바뀔
-    // 때만이다(키 입력으로는 이 위젯이 다시 빌드되지 않는다).
-    final lineMaxFontSize = LcdFontSizes.lineMaxFontSizeFor(
-      KeypadMetrics.compute(
-        keypad.size,
-        TextScaler.noScaling,
-        arrangement: keypadArrangement,
-        minSectionGap: minSectionGap,
-      ).numberMainLabelFontSize,
-    );
+    // 내려가지 않게. 글자 배율과 무관하게 정한다(배치처럼). 키패드와 같은 크기·배열·배포 기능으로 잰다(`_KeypadPanel` — 다르면
+    // 그린 키 숫자와 어긋난다, #270 R1). `CalcKeypad`도 같은 값을 한 번 더 재지만, 이 위젯이 다시 빌드될 때(화면 크기·배치·손잡이·
+    // 배포 기능이 바뀔 때)뿐이다 — 키 입력 상태는 구독하지 않는다. 안내 화면(LCD를 숨김)에서는 재지 않는다.
+    final lineMaxFontSize = tooSmall
+        ? CalcTheme.lcdLineMaxFontSize
+        : LcdFontSizes.lineMaxFontSizeFor(
+            KeypadMetrics.compute(
+              keypad.size,
+              TextScaler.noScaling,
+              arrangement: keypadArrangement,
+              releasedFeatures: ref.watch(releasedKeyFeaturesProvider),
+              minSectionGap: minSectionGap,
+            ).numberMainLabelFontSize,
+          );
     // 안내 중에는 보이지 않게 하되 element·상태는 유지한다 (`maintainState` — 트리 모양이 바뀌지 않는다).
     Widget shown(Widget child, {bool visible = true}) => Visibility(
       visible: visible && !tooSmall,

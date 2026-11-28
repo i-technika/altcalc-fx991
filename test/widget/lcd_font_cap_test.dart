@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/release_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
@@ -47,13 +48,18 @@ Future<void> _pump(
   required Size size,
   EdgeInsets padding = EdgeInsets.zero,
   double textScale = 1.0,
+  Set<KeyFeature>? released,
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
-    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      if (released != null)
+        releasedKeyFeaturesProvider.overrideWithValue(released),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -515,6 +521,11 @@ void main() {
           final line = drawnLineFont(tester);
           final digit = digitFont(tester);
           final cap = LcdFontSizes.lineMaxFontSizeFor(digit);
+          // 화면이 LCD에 넘긴 상한은 그린 키 숫자로 정한 값이다(#270 R1 — 키패드와 같은 크기·배열·배포 기능으로 잰다).
+          expect(
+            tester.widget<LcdDisplay>(_lcd).maxLineFontSize,
+            moreOrLessEquals(cap, epsilon: 1e-9),
+          );
           expect(line, moreOrLessEquals(now, epsilon: 0.05));
           // 화면은 그린 키패드의 키 숫자로 정한 상한을 LCD에 넘긴다.
           expect(
@@ -557,6 +568,26 @@ void main() {
         },
       );
     }
+
+    testWidgets(
+      '배포 기능을 바꿔 그린 키패드도 LCD 상한은 그 키패드의 키 숫자를 따른다 (#270 R1 — 화면이 같은 배포 기능으로 잰다)',
+      (tester) async {
+        // 실물 인쇄 전체(배포 뒤 각인 포함, #267)를 그린 4K 가로 창
+        await _pump(
+          tester,
+          size: const Size(3840, 2160),
+          released: KeyFeature.values.toSet(),
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<LcdDisplay>(_lcd).maxLineFontSize,
+          moreOrLessEquals(
+            LcdFontSizes.lineMaxFontSizeFor(digitFont(tester)),
+            epsilon: 1e-9,
+          ),
+        );
+      },
+    );
 
     testWidgets(
       '폰 390×844는 상한에 닿지 않는다 (줄 글자 29.8dp — LCD는 상단 띠가 빠진 몫까지 받는다, #190)',
