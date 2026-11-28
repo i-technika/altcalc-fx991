@@ -21,8 +21,8 @@ import '../support/key_legends.dart';
 ///
 /// - 각인이 하나면 키캡 가운데다.
 /// - 둘이면 SHIFT는 왼쪽·ALPHA는 오른쪽이고, 바깥 끝을 키캡 끝에서 똑같이 들인다. 들이는 거리는 키캡 폭의
-///   [CalcTheme.keyLegendSideInsetRatio]와 키캡 모서리 반경 가운데 큰 쪽까지이고, 두 각인과 최소 사이 간격을 빼고 남는 폭이
-///   모자라면 남는 폭의 1/3로 줄어든다(왼쪽 여백·사이·오른쪽 여백이 똑같이 나눈다).
+///   [CalcTheme.keyLegendSideInsetRatio]와 키캡 모서리 반경 가운데 큰 쪽까지이고, 두 각인 사이가 최소 간격·들이는 거리보다
+///   좁아지지 않는 만큼만 들인다([_expectedInset]).
 ///
 /// 실제 앱([AltCalcApp])을 번들 글꼴로 띄워 **그려진 자리(화면 좌표)** 를 잰다. 기대값은 그려진 키캡·각인 폭에서 이 파일의
 /// 식([_expectedInset])으로 따로 구한다 — 구현 함수(`keyLegendPairInset`·`keyLegendSideInset`)를 부르지 않는다.
@@ -225,10 +225,14 @@ _Pair _measure(WidgetTester tester, CalcKeyDef def) {
 double _sideInsetOf(_Pair p) =>
     math.max(p.cap.width * CalcTheme.keyLegendSideInsetRatio, p.radius);
 
-/// 그려진 키캡·각인 폭에서 구한 들이는 거리의 기대값 (dp) — 남는 폭의 1/3, 상한까지
+/// 그려진 키캡·각인 폭에서 구한 들이는 거리의 기대값 (dp) — 상한까지 들이되, 두 각인 사이가 최소 간격보다도(남는 폭 ÷ 2)
+/// 들이는 거리보다도((남는 폭 + 최소 간격) ÷ 3) 좁아지지 않는 만큼
 double _expectedInset(_Pair p) {
   final spare = p.cap.width - p.gap - p.shift.width - p.alpha.width;
-  return math.max(0, math.min(_sideInsetOf(p), spare / 3));
+  return math.max(
+    0,
+    [_sideInsetOf(p), spare / 2, (spare + p.gap) / 3].reduce(math.min),
+  );
 }
 
 String _describe(_Pair p) =>
@@ -278,23 +282,40 @@ void main() {
       expect(keyLegendSideInset(faceWidth: -3, cornerRadius: 12), 0);
     });
 
-    test('남는 폭을 왼쪽 여백·사이·오른쪽 여백이 똑같이 나눈다 (상한까지)', () {
+    test('두 묶음 사이가 최소 간격·들이는 거리보다 좁아지지 않는 만큼만 들인다 (상한까지)', () {
+      const gap = 4.0;
       double inset(double left, double right) => keyLegendPairInset(
         width: 100,
-        gap: 4,
+        gap: gap,
         leftWidth: left,
         rightWidth: right,
         sideInset: 9,
       );
+      // 들인 뒤 두 묶음 사이
+      double middle(double left, double right) =>
+          100 - left - right - 2 * inset(left, right);
+
       // 넉넉하면 상한 — 나머지는 사이가 가져간다
       expect(inset(30, 10), 9);
-      expect(inset(50, 19), 9); // 남는 폭 27 = 상한의 세 배
-      // 빠듯하면 남는 폭의 1/3 (양쪽 똑같이, 사이도 그만큼 더 넓다)
-      expect(inset(60, 21), 5);
-      expect(inset(60, 33), 1);
+      expect(inset(50, 23), 9); // 남는 폭 23: (23 + 4) ÷ 3 = 상한
+      // 빠듯하면 사이가 들이는 거리와 같아질 때까지만 — (남는 폭 + 간격) ÷ 3
+      expect(inset(60, 25), 5); // 남는 폭 11
+      expect(middle(60, 25), 5);
+      expect(inset(60, 27), closeTo(13 / 3, 1e-9)); // 남는 폭 9
+      // 남는 폭이 간격의 두 배보다 작으면 남는 폭의 절반 — 사이는 최소 간격 그대로다
+      expect(inset(60, 34), 1); // 남는 폭 2
+      expect(middle(60, 34), gap);
       // 들어가지 않으면 들이지 않는다 (키캡 폭을 다 쓰고, 그래도 넘치면 각인 줄이 줄인다)
-      expect(inset(70, 26), 0);
+      expect(inset(60, 36), 0);
+      expect(inset(70, 30), 0);
       expect(inset(90, 40), 0);
+      // 어느 경우에도 사이는 최소 간격·들이는 거리보다 좁지 않다
+      for (var right = 0.0; right <= 36; right += 0.5) {
+        final i = inset(60, right);
+        expect(i, inInclusiveRange(0, 9));
+        expect(middle(60, right), greaterThanOrEqualTo(gap - 1e-9));
+        expect(middle(60, right), greaterThanOrEqualTo(i - 1e-9));
+      }
     });
   });
 
@@ -333,10 +354,11 @@ void main() {
       );
       expect(p.left, closeTo(_expectedInset(p), _tolerance));
       expect(p.right, closeTo(p.left, 2 * _tolerance), reason: _describe(p));
-      // 사이는 최소 간격에 들이는 거리만큼 더 넓다
-      expect(p.middle, closeTo(p.gap + p.left, 3 * _tolerance));
-      // 줄어도 폭 비례 배분의 반올림(1/1000)만큼이다
-      expect(p.shiftScale, closeTo(1, 2e-3));
+      // 사이는 최소 간격·들이는 거리보다 좁지 않다
+      expect(p.middle, greaterThanOrEqualTo(p.gap - _tolerance));
+      expect(p.middle, greaterThanOrEqualTo(p.left - 3 * _tolerance));
+      // 각인은 줄지 않는다 (부동소수 오차만큼)
+      expect(p.shiftScale, closeTo(1, 1e-3));
     });
 
     testWidgets('들어가지 않으면 들이지 않고 키캡 폭을 다 쓴 뒤 각인이 줄어든다', (tester) async {
@@ -357,9 +379,72 @@ void main() {
       expect(p.shiftScale, lessThan(0.9), reason: '각인이 높이 때문에 줄어야 한다');
       // 줄어든(그려진) 폭에서 구한 기대값만큼 들인다 — 줄기 전 폭으로 재면 0.25dp쯤이다(#265 R1)
       expect(p.left, greaterThan(2), reason: _describe(p));
-      expect(p.left, closeTo(_expectedInset(p), 0.3), reason: _describe(p));
-      expect(p.right, closeTo(p.left, 0.3), reason: _describe(p));
+      expect(
+        p.left,
+        closeTo(_expectedInset(p), _tolerance),
+        reason: _describe(p),
+      );
+      expect(p.right, closeTo(p.left, 2 * _tolerance), reason: _describe(p));
     });
+
+    // 글자 크기를 바꿔 가며 훑는다 — 우선 배분 쌍(SOLVE · =, M− · M: 짧은 쪽이 자연 폭을 먼저 쓴다)과 폭 비례 배분 쌍
+    // (Ran# · RanInt, INS · UNDO), 2차원 각인이 있는 쌍(sin⁻¹ · D)을 모두 본다. 글자 배율 1.3은 줄 상자 높이 반올림이
+    // 높이 맞춤 판정에 걸리는 크기를 만든다(#265 R2).
+    for (final id in [
+      CalcKeyId.calc,
+      CalcKeyId.mPlus,
+      CalcKeyId.dot,
+      CalcKeyId.del,
+      CalcKeyId.sin,
+    ]) {
+      for (final textScale in [1.0, 1.3]) {
+        testWidgets(
+          '${id.name} 글자 크기 3~24 (배율 $textScale): 좌우가 같고, 그려진 폭에서 구한 만큼 들이고, 사이가 더 좁지 않다',
+          (tester) async {
+            tester.platformDispatcher.textScaleFactorTestValue = textScale;
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            final regimes = <String>{};
+            for (var fontSize = 3.0; fontSize <= 24; fontSize += 0.5) {
+              await _pumpButton(
+                tester,
+                id,
+                size: const Size(64, 56),
+                legendFontSize: fontSize,
+              );
+              final p = _measure(tester, keyDefOf(id));
+              final reason = '글자 $fontSize · ${_describe(p)}';
+              expect(p.right, closeTo(p.left, 2 * _tolerance), reason: reason);
+              expect(
+                p.left,
+                closeTo(_expectedInset(p), _tolerance),
+                reason: reason,
+              );
+              expect(
+                p.middle,
+                greaterThanOrEqualTo(p.gap - _tolerance),
+                reason: reason,
+              );
+              expect(
+                p.middle,
+                greaterThanOrEqualTo(p.left - 3 * _tolerance),
+                reason: reason,
+              );
+              regimes.add(
+                p.left > _sideInsetOf(p) - _tolerance
+                    ? '상한'
+                    : p.left > _tolerance
+                    ? '줄어듦'
+                    : '0',
+              );
+            }
+            // 훑은 범위에 상한까지 들이는 크기와 덜 들이는 크기가 모두 있어야 한다 (검사가 한쪽만 보지 않게)
+            expect(regimes, containsAll(['상한', '줄어듦']), reason: '$regimes');
+          },
+        );
+      }
+    }
   });
 
   for (final window in _windows) {
@@ -408,7 +493,7 @@ void main() {
 
       for (final textScale in [1.0, 1.3]) {
         testWidgets(
-          '각인이 둘인 키 (글자 배율 $textScale): SHIFT 왼쪽·ALPHA 오른쪽, 바깥 끝을 똑같이 들이고 사이가 더 넓다',
+          '각인이 둘인 키 (글자 배율 $textScale): SHIFT 왼쪽·ALPHA 오른쪽, 바깥 끝을 똑같이 들이고 사이가 더 좁지 않다',
           (tester) async {
             await _pump(tester, window, textScale: textScale);
             expect(_pairKeys, isNotEmpty);
@@ -429,10 +514,15 @@ void main() {
                 reason: reason,
               );
               expect(p.left, greaterThanOrEqualTo(-_tolerance), reason: reason);
-              // SHIFT가 ALPHA 왼쪽이고, 사이는 최소 간격에 들인 거리만큼 더 넓다 (바깥을 들이느라 붙지 않는다)
+              // SHIFT가 ALPHA 왼쪽이고, 사이는 최소 간격·들인 거리보다 좁지 않다 (바깥을 들이느라 붙지 않는다)
               expect(
                 p.middle,
-                greaterThanOrEqualTo(p.gap + p.left - 3 * _tolerance),
+                greaterThanOrEqualTo(p.gap - _tolerance),
+                reason: reason,
+              );
+              expect(
+                p.middle,
+                greaterThanOrEqualTo(p.left - 3 * _tolerance),
                 reason: reason,
               );
             }
@@ -494,13 +584,15 @@ void main() {
           reason: _describe(p),
         );
       }
+      // 가장 긴 쌍은 상한에 못 미치고, 그려진 폭에서 구한 만큼만 들인다 (키캡 폭을 거의 다 쓴다)
       final dot = _measure(tester, keyDefOf(CalcKeyId.dot));
-      expect(dot.left, greaterThanOrEqualTo(-_tolerance));
       expect(
         dot.left,
-        lessThan(_sideInsetOf(dot) - _tolerance),
+        closeTo(_expectedInset(dot), _tolerance),
         reason: _describe(dot),
       );
+      expect(dot.left, lessThan(_sideInsetOf(dot) / 2), reason: _describe(dot));
+      expect(dot.right, closeTo(dot.left, 2 * _tolerance));
     });
   });
 }
