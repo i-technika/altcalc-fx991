@@ -117,6 +117,34 @@ class KeyLegendView extends LeafRenderObjectWidget {
   static final Map<(KeyLegend, TextStyle), KeyLegendEmMetrics> _emCache = {};
   static bool _listeningSystemFonts = false;
 
+  /// 한 줄 상자 치수 캐시 — (글자 크기·색을 뺀 스타일, 글자 크기)별 (기준선 위 높이, 아래 깊이). 각인 띠가 build마다
+  /// ([bandLifts]), 키패드가 글자 크기를 찾을 때마다(`KeypadMetrics`) 같은 크기를 다시 묻는다(#264 R1). 시스템 글꼴이 바뀌면
+  /// 비우고, 글자 크기를 찾는 이분 탐색이 크기를 많이 넣으므로 [_lineCacheLimit]개를 넘으면 비운다.
+  static final Map<(TextStyle, double), (double, double)> _lineCache = {};
+  static const int _lineCacheLimit = 512;
+
+  static void _listenSystemFonts() {
+    if (_listeningSystemFonts) return;
+    _listeningSystemFonts = true;
+    PaintingBinding.instance.systemFonts.addListener(() {
+      _emCache.clear();
+      _lineCache.clear();
+    });
+  }
+
+  /// [style]의 글꼴을 글자 크기 [fontSize]로 그릴 때 한 줄 상자의 (기준선 위 높이, 기준선 아래 깊이) — 캐시한다.
+  static (double, double) _lineMetricsOf(TextStyle style, double fontSize) {
+    _listenSystemFonts();
+    final key = (
+      style.copyWith(fontSize: 0, color: const Color(0xFF000000)),
+      fontSize,
+    );
+    final cached = _lineCache[key];
+    if (cached != null) return cached;
+    if (_lineCache.length >= _lineCacheLimit) _lineCache.clear();
+    return _lineCache[key] = _Builder(style).lineMetrics(fontSize);
+  }
+
   /// [legend]를 [style]로 그렸을 때의 크기를 글자 크기 1dp당 값(em)으로 잰다 (배율 반영 전).
   ///
   /// 키패드 통일 글자 크기 계산(`KeypadMetrics`)과 각인 띠 폭 배분이 쓴다. [style]의 `fontSize`·`color`는 무시한다.
@@ -143,8 +171,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
     TextStyle style,
     double scaledFontSize,
   ) {
-    final (lineAscent, lineDescent) = _Builder(style)
-        .lineMetrics(scaledFontSize);
+    final (lineAscent, lineDescent) = _lineMetricsOf(style, scaledFontSize);
     var tallest = 0.0;
     for (final m in legends) {
       final height = m.plain
@@ -236,13 +263,13 @@ class KeyLegendView extends LeafRenderObjectWidget {
   /// [style]의 글꼴을 배율 반영 글자 크기 [scaledFontSize]로 그릴 때 한 줄 상자의 기준선 아래 깊이 (dp, #264).
   /// 각인 띠가 각인 기준선을 키캡 위끝에서 띄울 거리를 정할 때 쓴다 — 아래 정렬한 글자 각인의 기준선은 띠 아래끝에서 이만큼 위다.
   static double lineDepthAt(TextStyle style, double scaledFontSize) =>
-      _Builder(style).lineMetrics(scaledFontSize).$2;
+      _lineMetricsOf(style, scaledFontSize).$2;
 
   /// [bandLifts]가 쓰는 각인 하나의 그린 치수 (dp): 상자 높이, 아래 정렬만으로 기준선이 띠 기준선보다 올라가는 거리
   /// (상자의 기준선 아래 깊이 − 한 줄 상자 깊이), 잉크 아래끝 깊이(기준선 아래가 +).
   static (double, double, double) _bandBox(KeyLegend legend, TextStyle style) {
     final fontSize = style.fontSize ?? 14;
-    final (lineAscent, lineDescent) = _Builder(style).lineMetrics(fontSize);
+    final (lineAscent, lineDescent) = _lineMetricsOf(style, fontSize);
     final m = emMetrics(legend, style);
     if (m.plain) return (lineAscent + lineDescent, 0.0, 0.0);
     final inkDepth = -m.inkBottom * fontSize;
@@ -256,10 +283,7 @@ class KeyLegendView extends LeafRenderObjectWidget {
 
   /// [emSize]와 함께, 위에서 기준선까지 거리와 잉크 범위(em)를 잰다.
   static KeyLegendEmMetrics emMetrics(KeyLegend legend, TextStyle style) {
-    if (!_listeningSystemFonts) {
-      _listeningSystemFonts = true;
-      PaintingBinding.instance.systemFonts.addListener(_emCache.clear);
-    }
+    _listenSystemFonts();
     final key = style.copyWith(
       fontSize: _probeFontSize,
       color: const Color(0xFF000000),

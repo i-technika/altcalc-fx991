@@ -370,6 +370,10 @@ enum _Raise {
 
 /// 각인 띠에서 한 줄 상자 아래로 잉크가 넘치는 각인 (한 줄 표기 → 각인) — 분모·아래 끝 칸이 기준선 아래로 내려간다.
 /// 그 밖의 각인이 넘치면 띠 기준선 검사가 실패한다.
+///
+/// 이 각인이 있는 키(∫·x)는 각인을 키 사이 세로 간격의 위 키 쪽 절반까지 올릴 수 있다(#264). 두 키 모두 위 키가 원형 버튼
+/// (MENU·SETUP)이라 그 셀 아래쪽이 비어 있다 — 키캡(그림자가 셀 아래로 번진다) 아래의 키에 넘치는 각인이 생기면 올리는
+/// 한도를 다시 정해야 한다("넘치는 각인이 있는 키의 위 키는 원형 버튼이다" 검사).
 final Map<String, KeyLegend> _overflowingLegends = {
   for (final id in CalcKeyId.values)
     if (keyDefOf(id).shiftLegend case final l?
@@ -474,11 +478,11 @@ void main() {
 
   group('그린 픽셀', () {
     // (창, 픽셀 비, 글자 배율) — `Text`의 반올림 차(띠 각인을 옮긴 거리)가 0.3dp 넘는 구성만 쓴다(#252 R2 — 차가 작으면 보정이
-    // 없어도 허용 오차 안이라 검사가 구별하지 못한다). 폰 +0.49dp·태블릿 −0.49dp로 옮기는 방향도 서로 반대다(#264에서 각인
+    // 없어도 허용 오차 안이라 검사가 구별하지 못한다). 폰 +0.49dp·600×960 −0.49dp로 옮기는 방향도 서로 반대다(#264에서 각인
     // 글자 크기가 바뀌어 구성을 다시 골랐다).
     for (final (size, pixelRatio, scale) in const [
       (Size(360, 800), 3.0, 1.3),
-      (Size(1024, 1366), 2.0, 1.3),
+      (Size(600, 960), 2.0, 1.3),
     ]) {
       {
         testWidgets(
@@ -709,15 +713,40 @@ void main() {
     );
   });
 
+  test(
+    '넘치는 각인이 있는 키의 위 키는 원형 버튼이다 (#264 — 위 키 쪽 간격까지 올려도 키캡·그림자와 겹치지 않는다)',
+    () {
+      final rows = controlRightRows;
+      for (final legend in _overflowingLegends.values) {
+        final (row, column) = [
+          for (final (r, defs) in rows.indexed)
+            for (final (c, def) in defs.indexed)
+              if (identical(def.shiftLegend, legend)) (r, c),
+        ].single;
+        expect(row, greaterThan(0), reason: legend.plainText);
+        expect(
+          rows[row - 1][column].face,
+          KeyFace.roundButton,
+          reason: '${legend.plainText} 위 키 ${rows[row - 1][column].id.name}',
+        );
+      }
+    },
+  );
+
   group('각인 기준선과 키캡 사이 (#264)', () {
     // 실물은 키 위 각인이 키에 붙어 있지 않다 — 각인 줄을 띠 아래끝에서 올려 기준선을 키캡 위끝에서 함수부 행 간격의
     // [CalcTheme.keyLegendBaselineGapRatio]만큼 띄운다. 모든 키가 같은 거리라 구역이 달라도(숫자부는 키캡이 더 높다) 같다.
+    // 각인 글자 크기를 정할 때 올릴 자리를 먼저 떼므로 글자 배율 1.3에서도 같은 거리다 — 짧은 창·넓은 배열의 낮은 키패드
+    // (360×420·640×300)는 떼지 않으면 올림이 0이 된다(#264 R1).
     for (final (name, size) in const [
       ('폰 360×800', Size(360, 800)),
       ('작은 폰 320×568', Size(320, 568)),
       ('태블릿 800×1280', Size(800, 1280)),
       ('가로 폰 800×360', Size(800, 360)),
       ('가로 태블릿 1280×800', Size(1280, 800)),
+      ('짧은 창 360×420', Size(360, 420)),
+      ('낮은 가로 창 640×300', Size(640, 300)),
+      ('Fold 내부 841×701', Size(841, 701)),
     ]) {
       for (final scale in [1.0, 1.3]) {
         testWidgets('$name 글자 배율 $scale: 키 위 각인의 기준선이 키캡 위끝에서 같은 거리만큼 떠 있다', (
@@ -768,16 +797,13 @@ void main() {
           for (final MapEntry(:key, :value) in gaps.entries) {
             expect(value, moreOrLessEquals(first, epsilon: 0.01), reason: key);
           }
-          // #264 전에는 줄 상자 깊이(약 0.215em)뿐이었다 — 지금은 목표 거리까지, 큰 글자 배율로 각인이 높아지면 그보다 덜
+          // #264 전에는 줄 상자 깊이(약 0.215em)뿐이었다 — 지금은 글자 배율과 상관없이 목표 거리다
           final depth = _lineDescent(
             CalcTheme.keyShiftLabelStyle,
             TextScaler.linear(scale).scale(m.legendFontSize),
           );
-          expect(first, greaterThan(depth + 0.5), reason: '$first · 깊이 $depth');
-          expect(first, lessThanOrEqualTo(target + 0.01));
-          if (scale == 1.0) {
-            expect(first, moreOrLessEquals(target, epsilon: 0.01));
-          }
+          expect(first, moreOrLessEquals(target, epsilon: 0.01));
+          expect(first, greaterThan(depth * 1.5), reason: '$first · 깊이 $depth');
         });
       }
     }
@@ -831,6 +857,61 @@ void main() {
           epsilon: 0.01,
         ),
       );
+    });
+  });
+
+  group('키패드 밖의 키 버튼: 올리는 한도 (#264 R1)', () {
+    // 키패드는 올리는 거리를 자기 몫(띠 + 간격의 절반) 안으로 정해 주지만, 따로 쓰는 키 버튼에 큰 값을 주어도 넘치지 않는
+    // 각인은 자기 몫까지만, 넘치는 각인이 있는 키만 간격 전체까지 올린다.
+    const gapTop = 4.0;
+    Future<List<_BandLegend>> pump(WidgetTester tester, CalcKeyId id) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 80,
+              height: 60,
+              child: CalcKeyButton(
+                keyDef: keyDefOf(id),
+                legendFontSize: 9,
+                legendBaseLift: 100,
+                gapInsets: const EdgeInsets.only(top: gapTop),
+                onPressed: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      return _bandLegends(tester, id);
+    }
+
+    testWidgets('넘치는 각인이 없는 키(sin⁻¹ · D)는 띠 위로 간격의 절반까지만 올린다', (tester) async {
+      final legends = await pump(tester, CalcKeyId.sin);
+      final cellTop = tester.getRect(_button(CalcKeyId.sin)).top;
+      expect(legends, hasLength(2));
+      for (final l in legends) {
+        expect(l.scale, moreOrLessEquals(1.0, epsilon: 1e-6), reason: l.text);
+        expect(
+          l.slot.top,
+          greaterThanOrEqualTo(cellTop - gapTop - 0.01),
+          reason: l.text,
+        );
+      }
+      // 가장 높은 각인(sin⁻¹)이 한도에 닿아 있다 — 올리는 거리가 실제로 잘렸다
+      expect(
+        legends.map((l) => l.slot.top).reduce((a, b) => a < b ? a : b),
+        moreOrLessEquals(cellTop - gapTop, epsilon: 0.01),
+      );
+    });
+
+    testWidgets('넘치는 각인이 있는 키(d/dx◼ · :)는 간격 전체까지 올린다', (tester) async {
+      final legends = await pump(tester, CalcKeyId.integral);
+      final cellTop = tester.getRect(_button(CalcKeyId.integral)).top;
+      final top = legends
+          .map((l) => l.slot.top)
+          .reduce((a, b) => a < b ? a : b);
+      expect(top, lessThan(cellTop - gapTop - 0.5));
+      expect(top, greaterThanOrEqualTo(cellTop - 2 * gapTop - 0.01));
     });
   });
 

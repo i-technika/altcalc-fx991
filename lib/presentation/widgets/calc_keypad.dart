@@ -92,9 +92,9 @@ class KeypadMetrics {
 
   /// 키캡 위 각인의 줄 상자를 각인 띠 아래끝에서 올리는 거리 (dp, 글자 배율 반영, #264) — 모든 키에 같은 값을 주어
   /// ([CalcKeyButton.legendBaseLift]) 기준선이 한 줄이다(#252). 각인 기준선이 키캡 위끝에서 [legendBaselineGap]만큼 떨어지는
-  /// 거리(목표 − 줄 상자 깊이)이되, 가장 높은 각인(2차원 각인 포함)이 각인이 쓸 수 있는 높이([legendExtent])를 넘지 않는
-  /// 만큼이다 — 글자 배율이 커서 각인이 높아지면 덜 올린다. 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`, #260)은 키 버튼이 여기서
-  /// 더 올린다(키 사이 간격 전체까지).
+  /// 거리(목표 − 줄 상자 깊이)다. 각인 글자 크기의 높이 기준이 이 자리를 먼저 떼어 두므로 글자 배율이 커도 목표 그대로다
+  /// — 글자 크기 하한에 걸리는 아주 낮은 키패드에서만, 가장 높은 각인이 각인이 쓸 수 있는 높이([legendExtent])를 넘지 않는
+  /// 만큼으로 줄어든다. 한 줄 아래로 넘치는 각인(`d/dx◼`·`∑◻◻◼`, #260)은 키 버튼이 여기서 더 올린다(키 사이 간격 전체까지).
   final double legendBaseLift;
 
   /// 상단 조작부·함수부(커서 패드 포함)에 통일해 주입하는 메인 라벨 글자 크기 (배율 반영 전, dp)
@@ -473,7 +473,8 @@ class KeypadMetrics {
   /// 각인·메인 라벨 글자 크기를 각각 하나로 정해 모든 키에 주입한다. 배율은 [CalcKeyButton]과 같이
   /// [CalcTheme.keyMaxTextScaleFactor]까지 반영하며, 다음 순서로 정한다.
   /// 1. **높이 기준**: 함수부 셀 높이에서 [CalcKeyButton]과 같은 비율(실물 비율, [CalcTheme] "글자 크기 실물 대조 (#264)"
-  ///    절)로 구한 크기를, 배율을 반영해도 각인이 쓸 수 있는 높이([legendExtent])·키캡 안쪽 높이를 넘지 않도록 줄인다.
+  ///    절)로 구한 크기를, 배율을 반영해도 각인이 쓸 수 있는 높이([legendExtent] — 각인을 키캡에서 띄울 자리
+  ///    [legendBaseLift]를 뺀 나머지)·키캡 안쪽 높이를 넘지 않도록 줄인다.
   ///    글자 크기 상한은 없다(#264, 사용자 결정 — 키가 커지면 글자도 실물 비율로 커진다. #141의 상한을 없앴다).
   ///    폭 기준은 줄이기만 하므로 키가 가로로 넓어져도 글자는 이 높이 기준보다 커지지 않는다.
   /// 2. **폭 기준**: 실제 글꼴로 모든 라벨의 폭을 재어, 배율을 반영해도 메인 라벨은 자기 키의 그린 키캡 폭(#220)에,
@@ -542,13 +543,36 @@ class KeypadMetrics {
 
     // 1. 높이 기준 — 실물 비율이고 상한은 없다 (#264). 가장 높은 각인(분수 등 2차원 각인, #155)까지
     //    띠·키캡 안에 들어가게 한다.
-    // 각인은 띠에 셀 위쪽 간격 몫을 더한 높이까지 쓴다 (#264 — CalcKeyButton의 각인 줄과 같다)
-    final legendByHeight = _fitToHeight(
+    // 각인은 띠에 셀 위쪽 간격 몫을 더한 높이까지 쓴다 (#264 — CalcKeyButton의 각인 줄과 같다). 그 높이에서 각인을 올릴
+    // 자리(기준선을 키캡 위끝에서 띄우는 거리 − 줄 상자 깊이)를 먼저 뗀 나머지에 가장 높은 각인이 들어가는 크기까지 줄인다
+    // — 글자 배율이 커도 각인이 키캡에 붙지 않는다(R1: 올릴 자리를 떼지 않으면 배율 1.3의 낮은 키패드에서 올림이 0이 된다).
+    const legendStyle = CalcTheme.keyShiftLabelStyle;
+    final legendExtent = legendHeight + verticalGap / 2;
+    final legendBaselineGap =
+        functionRowHeight * CalcTheme.keyLegendBaselineGapRatio;
+    final legendLine = KeyLegendView.emMetrics(
+      const LegendText(' '),
+      legendStyle,
+    );
+    // 그리는 글자 크기 [scaled]에서 올릴 거리(목표)와, 가장 높은 각인(한 줄 상자·2차원 각인)의 높이
+    double legendLiftAt(double scaled) => math.max(
+      0.0,
+      legendBaselineGap - KeyLegendView.lineDepthAt(legendStyle, scaled),
+    );
+    double tallestLegendAt(double scaled) => KeyLegendView.tallestAt(
+      [legendLine, ...limits.tallLegends],
+      legendStyle,
+      scaled,
+    );
+    bool legendFitsHeight(double scaled) =>
+        (scaled * (legendStyle.height ?? 1.0)).ceilToDouble() +
+                legendLiftAt(scaled) <=
+            legendExtent &&
+        tallestLegendAt(scaled) + legendLiftAt(scaled) <= legendExtent;
+    final legendByHeight = fitFontSize(
       math.max(minFittedFontSize, legendHeight * CalcTheme.keyLegendFontRatio),
-      maxHeight: legendHeight + verticalGap / 2,
       textScaler: scaler,
-      style: CalcTheme.keyShiftLabelStyle,
-      tallLegends: limits.tallLegends,
+      fits: legendFitsHeight,
     );
     // 키캡 안쪽 높이: 눌림 이동 여유와 테두리를 뺀다.
     final capInnerHeight =
@@ -632,26 +656,22 @@ class KeypadMetrics {
       inkHeightEm: _tallestOperatorInkEm,
     );
 
-    // 키캡 위 각인을 띠 아래끝에서 올리는 거리 (#264) — 기준선을 키캡 위끝에서 목표만큼 띄우되, 가장 높은 각인(2차원 각인
-    // 포함)이 쓸 수 있는 높이 안에 남는 만큼만. 모든 키가 같은 거리라 기준선이 한 줄이다.
-    final legendFontSize = unify(legendByHeight, widths.legend);
+    // 키캡 위 각인을 띠 아래끝에서 올리는 거리 (#264) — 기준선이 키캡 위끝에서 목표만큼 떨어지는 거리다. 높이 기준이 그
+    // 자리를 떼어 두었으므로 목표 그대로이고, 글자 크기 하한([minFittedFontSize])에 걸린 아주 낮은 키패드에서만 가장 높은
+    // 각인이 쓸 수 있는 높이 안에 남는 만큼으로 줄어든다. 모든 키가 같은 거리라 기준선이 한 줄이다.
+    // 폭 기준으로 줄인 크기에서 높이 조건을 한 번 더 본다 — 줄 상자 높이·깊이는 정수 dp로 반올림돼 글자 크기에 단조가 아니라,
+    // 높이 기준 크기보다 작은 크기에서 올릴 자리가 조금(1dp 미만) 모자랄 수 있다(가로 태블릿 1280×800 배율 1.3에서 0.2dp).
+    final legendFontSize = fitFontSize(
+      unify(legendByHeight, widths.legend),
+      textScaler: scaler,
+      fits: legendFitsHeight,
+    );
     final scaledLegendFontSize = scaler.scale(legendFontSize);
-    const legendStyle = CalcTheme.keyShiftLabelStyle;
     final legendBaseLift = math.max(
       0.0,
       math.min(
-        functionRowHeight * CalcTheme.keyLegendBaselineGapRatio -
-            KeyLegendView.lineDepthAt(legendStyle, scaledLegendFontSize),
-        legendHeight +
-            verticalGap / 2 -
-            KeyLegendView.tallestAt(
-              [
-                KeyLegendView.emMetrics(const LegendText(' '), legendStyle),
-                ...limits.tallLegends,
-              ],
-              legendStyle,
-              scaledLegendFontSize,
-            ),
+        legendLiftAt(scaledLegendFontSize),
+        legendExtent - tallestLegendAt(scaledLegendFontSize),
       ),
     );
 
@@ -722,8 +742,8 @@ class _LabelLimits {
       KeyLegendView.emSize(legend, style).width;
 
   /// [where]가 있으면 그 키만 잰다(테스트용 — [KeypadMetrics.debugWidthLimits]).
-  /// 메인 라벨과 SHIFT·ALPHA 각인은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220 — 각인 띠 폭도 키캡 폭이다)에,
-  /// 원형 버튼의 각인 줄은 셀 너비([functionKeyWidth]·[numberKeyWidth])에 맞춘다.
+  /// 메인 라벨은 그린 키캡 폭([functionCapWidth]·[numberCapWidth], #220)에, SHIFT·ALPHA 각인과 원형 버튼의 각인 줄은 셀
+  /// 너비([functionKeyWidth]·[numberKeyWidth])에 맞춘다(#264 — 각인은 그린 키캡에 맞춰 놓되 긴 쌍은 셀 폭까지 쓴다).
   static _LabelLimits measure({
     required double functionKeyWidth,
     required double numberKeyWidth,

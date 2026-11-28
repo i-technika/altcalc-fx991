@@ -500,6 +500,15 @@ void main() {
             epsilon: 1e-9,
           ),
         );
+        // intrinsic 높이도 줄인 상자 높이다
+        expect(
+          tight.getMaxIntrinsicHeight(double.infinity),
+          moreOrLessEquals(inkHeight),
+        );
+        expect(
+          tight.getMinIntrinsicHeight(double.infinity),
+          moreOrLessEquals(inkHeight),
+        );
         // 자식보다 높은 boxHeight는 상자를 키우지 않는다
         final loose = await pump(fullSize.height * 2);
         expect(loose.size, fullSize);

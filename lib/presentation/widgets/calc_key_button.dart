@@ -632,12 +632,15 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
 
     final legendFontSize =
         widget.legendFontSize ?? legendHeight * CalcTheme.keyLegendFontRatio;
-    // 각인을 놓을 수 있는 높이 (#264) — 띠에 키 사이 세로 간격(셀 위쪽 간격 몫의 두 배)을 더한다. 키캡 사이 빈 본체는 띠와
-    // 키 사이 간격을 합친 높이이고, 각인은 그 안에서 키캡 위끝에서 띄워 인쇄한다. 띠 위로 넘는 몫은 그리기만 넘는다(셀·터치
-    // 영역은 그대로다). 키패드는 각인 글자 크기와 올리는 거리를 띠 + 간격의 절반(자기 몫, `KeypadMetrics.legendExtent`)에
-    // 맞추므로, 나머지 절반까지 가는 것은 한 줄 아래로 넘쳐 더 올리는 각인(`d/dx◼`·`∑◻◻◼`, #260)뿐이다.
-    final legendExtent =
-        legendHeight + (hitMode ? 0.0 : 2 * widget.gapInsets.top);
+    // 각인을 놓을 수 있는 높이 (#264). 키캡 사이 빈 본체는 띠와 키 사이 간격을 합친 높이이고, 각인은 그 안에서 키캡
+    // 위끝에서 띄워 인쇄한다. 띠 위로 넘는 몫은 그리기만 넘는다(셀·터치 영역은 그대로다).
+    // - 자기 몫([legendOwnReach]): 띠 + 셀 위쪽 간격 몫(키 사이 세로 간격의 절반). 각인은 여기까지만 올린다 — 키패드도
+    //   각인 글자 크기와 올리는 거리를 이 높이에 맞춘다(`KeypadMetrics.legendExtent`).
+    // - 간격 전체([legendFullReach]): 띠 + 키 사이 세로 간격. 한 줄 아래로 넘쳐 더 올리는 각인(`d/dx◼`·`∑◻◻◼`, #260)이 있는
+    //   키만 나머지 절반까지 쓴다 — 그 두 키(∫·x) 위는 원형 버튼(MENU·SETUP)이라 셀 아래쪽이 비어 있다.
+    final gapTop = hitMode ? 0.0 : widget.gapInsets.top;
+    final legendOwnReach = legendHeight + gapTop;
+    final legendFullReach = legendHeight + 2 * gapTop;
     assert(widget.legendBaseLift >= 0, 'legendBaseLift는 음수일 수 없다');
     // 각인 줄 상자를 띠 아래끝에서 올릴 거리 — 각인마다 위쪽 여유까지만 올린다([KeyLegendView.bandLifts])
     final legendBaseLift = widget.showLegendBand ? widget.legendBaseLift : 0.0;
@@ -647,16 +650,16 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
           SizedBox(
             height: legendHeight,
             width: width,
-            // 각인 줄은 띠 아래끝에 맞춘 채 위로 [legendExtent]까지 쓴다 (넘는 몫은 셀 위쪽 간격에 그려진다)
+            // 각인 줄은 띠 아래끝에 맞춘 채 위로 [legendFullReach]까지 쓴다 (넘는 몫은 키 사이 간격에 그려진다)
             child: OverflowBox(
               alignment: Alignment.bottomCenter,
-              minHeight: legendExtent,
-              maxHeight: legendExtent,
+              minHeight: legendFullReach,
+              maxHeight: legendFullReach,
               child: round
                   ? _BodyPrintLabel(
                       keyDef: widget.keyDef,
                       fontSize: legendFontSize,
-                      height: legendExtent,
+                      height: legendOwnReach,
                       baseLift: legendBaseLift,
                       textScaler: textScaler,
                     )
@@ -667,7 +670,8 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                       alphaLegend: widget.keyDef.alphaLegend,
                       width: width,
                       faceWidth: faceWidth,
-                      height: legendExtent,
+                      height: legendFullReach,
+                      ownHeight: legendOwnReach,
                       fontSize: legendFontSize,
                       maxGap: faceWidth * CalcTheme.keyLegendGapMaxWidthRatio,
                       sideInset: keyLegendSideInset(
@@ -939,8 +943,13 @@ class _LegendRow extends StatelessWidget {
   /// 그린 키캡 폭 (dp, 셀 가운데) — 각인을 맞춰 놓는 기준
   final double faceWidth;
 
-  /// 각인을 놓을 수 있는 높이 (dp) — 각인 띠에 키 사이 세로 간격을 더한 값(#264). 각인을 올릴 수 있는 여유를 잰다
+  /// 각인 줄의 높이 (dp) — 각인 띠에 키 사이 세로 간격을 더한 값(#264). 한 줄 아래로 넘치는 각인이 있는 키가 각인을 올릴
+  /// 수 있는 여유다
   final double height;
+
+  /// 넘치는 각인이 없는 키가 각인을 올릴 수 있는 높이 (dp) — 각인 띠에 셀 위쪽 간격 몫(세로 간격의 절반)을 더한 값.
+  /// [height] 이하다
+  final double ownHeight;
   final double fontSize;
   final double maxGap;
 
@@ -957,6 +966,7 @@ class _LegendRow extends StatelessWidget {
     required this.width,
     required this.faceWidth,
     required this.height,
+    required this.ownHeight,
     required this.fontSize,
     required this.maxGap,
     required this.sideInset,
@@ -1020,20 +1030,25 @@ class _LegendRow extends StatelessWidget {
                 outerMargin: faceMargin,
               )
         : 0.0;
+    final styled = [
+      if (shift != null)
+        (
+          shift,
+          CalcTheme.keyShiftLabelStyle.copyWith(fontSize: scaledFontSize),
+        ),
+      if (alpha != null)
+        (
+          alpha,
+          CalcTheme.keyAlphaLabelStyle.copyWith(fontSize: scaledFontSize),
+        ),
+    ];
+    // 넘치는 각인이 있는 키만 키 사이 간격 전체까지, 나머지는 자기 몫(간격의 절반)까지 올린다 (#264)
+    final overhangs = styled.any(
+      (e) => KeyLegendView.overhangsLine(e.$1, e.$2),
+    );
     final lifts = KeyLegendView.bandLifts(
-      [
-        if (shift != null)
-          (
-            shift,
-            CalcTheme.keyShiftLabelStyle.copyWith(fontSize: scaledFontSize),
-          ),
-        if (alpha != null)
-          (
-            alpha,
-            CalcTheme.keyAlphaLabelStyle.copyWith(fontSize: scaledFontSize),
-          ),
-      ],
-      height,
+      styled,
+      overhangs ? height : ownHeight,
       baseLift: baseLift,
     );
 
@@ -1198,7 +1213,7 @@ class _BodyPrintLabel extends StatelessWidget {
   final CalcKeyDef keyDef;
   final double fontSize;
 
-  /// 각인을 놓을 수 있는 높이 (dp) — 각인 띠에 키 사이 세로 간격을 더한 값
+  /// 각인을 올릴 수 있는 높이 (dp) — 각인 띠에 셀 위쪽 간격 몫(세로 간격의 절반)을 더한 값
   final double height;
 
   /// 각인 줄 상자를 띠 아래끝에서 올리는 거리 (dp)
@@ -1695,6 +1710,20 @@ class RenderInkCenteredLabel extends RenderShiftedBox {
     // `Text`는 기준선 거리를 반올림한 곳에 글자를 그린다 (클래스 설명)
     return height / 2 - (drawnBaselineOf(child, baseline) - _inkCenter);
   }
+
+  /// 자식 높이 [height]를 [boxHeight]까지로 줄인다 (intrinsic 치수도 배치와 같은 높이를 보고한다)
+  double _limitHeight(double height) {
+    final limit = _boxHeight;
+    return limit == null ? height : math.min(height, limit);
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _limitHeight(super.computeMinIntrinsicHeight(width));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _limitHeight(super.computeMaxIntrinsicHeight(width));
 
   @override
   Size computeDryLayout(covariant BoxConstraints constraints) {
