@@ -1315,6 +1315,43 @@ void _hingeLayoutTests() {
 
   group('접힘선 기준 배치를 쓸 수 없는 창 (#25 R2, #143)', () {
     testWidgets(
+      '물리 힌지 책 자세: 숫자부 쪽 패널이 LCD 최소 폭(196dp)보다 좁으면 그 손잡이로는 쓰지 않는다 (#285 R1)',
+      (tester) async {
+        // 800×600, 힌지 x=580~614: 오른쪽 패널 170dp(블록 키는 쓸 수 있는 크기다). 오른손잡이는 LCD가 오른쪽 패널 170dp라 너무
+        // 좁아 쓰지 않고, 왼손잡이는 LCD가 왼쪽 패널 564dp라 책 자세다.
+        for (final (handedness, sideBySide) in const [
+          (Handedness.right, false),
+          (Handedness.left, true),
+        ]) {
+          await _pump(
+            tester,
+            size: const Size(800, 600),
+            handedness: handedness,
+            displayFeatures: [
+              _foldAt(
+                const Rect.fromLTWH(580, 0, 34, 600),
+                type: DisplayFeatureType.hinge,
+              ),
+            ],
+          );
+          expect(tester.takeException(), isNull);
+          expect(
+            drawnArrangementOf(tester) == DrawnArrangement.sideBySide,
+            sideBySide,
+            reason: handedness.name,
+          );
+          expect(
+            tester.getRect(_lcd).width,
+            greaterThanOrEqualTo(
+              CalcTheme.screenLcdMinHeight * CalcTheme.screenLcdMinAspectRatio,
+            ),
+            reason: handedness.name,
+          );
+        }
+      },
+    );
+
+    testWidgets(
       '세로 접힘선: 좁은 쪽 패널의 블록 키가 쓸 수 있는 크기보다 작으면 두 손잡이 모두 위아래 배치다 (#285)',
       (tester) async {
         // 접힘선 오른쪽 140dp(창 좌표로는 사전 판정 통과) + 오른쪽 인셋 48 → 좁은 쪽(오른쪽) 패널이 76dp라 블록 키가 너무 작다.
@@ -3917,6 +3954,43 @@ void _hingeLayoutTests() {
         }
       },
     );
+
+    test('세로 접힘선: 본체 폭·접힘선 자리·접힘선 폭을 쓸어도 두 블록은 접힘선 띠 밖이고 키패드는 접힘선 기준 대칭이다 (#285 R1)', () {
+      for (var width = 200.0; width <= 1600; width += 47) {
+        for (final ratio in const [0.1, 0.25, 0.4, 0.5, 0.63, 0.9]) {
+          for (final hingeWidth in const [0.0, 0.38, 20.0, 34.0]) {
+            final body = Size(width, 600);
+            final hinge = Rect.fromLTWH(width * ratio, 0, hingeWidth, 600);
+            for (final h in Handedness.values) {
+              final l = CalcHingeSplitLayout.of(body, hinge, h);
+              final reason = '$body $hinge $h $l';
+              final (function, number) = blocksOf(l);
+              for (final r in [function, number]) {
+                if (r.isEmpty) continue;
+                expect(
+                  _clearOfHinge(r, hinge, vertical: true),
+                  isTrue,
+                  reason: '$reason 블록 $r',
+                );
+              }
+              // 블록이 있으면(접힘선이 본체 가장자리에 붙어 한쪽 패널이 0이 아니면) 키패드는 접힘선 가운데 기준 대칭이다.
+              if (!function.isEmpty) {
+                expect(
+                  l.keypad.center.dx,
+                  moreOrLessEquals(hinge.center.dx, epsilon: 1e-6),
+                  reason: reason,
+                );
+              }
+              expect(
+                l.lcdOnNumberPanel,
+                hingeWidth > CalcHingeSplitLayout.occludingHingeWidth,
+                reason: reason,
+              );
+            }
+          }
+        }
+      }
+    });
 
     test(
       '세로 접힘선: 태블릿 가로형처럼 넓은 배열 키패드를 접힘선 기준 대칭으로 두고 LCD는 그 위다 (#285 고정값)',

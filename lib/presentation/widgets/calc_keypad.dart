@@ -28,10 +28,11 @@ enum KeypadArrangement {
   standard,
 
   /// 숫자부를 함수부 옆에 나란히 둔다. 가로형 배치(`CalcLandscapeLayout`, #142)와 가로 접힘선 기준 배치의 아래 패널
-  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 높이가 [standard]의 약 절반이라
+  /// (`CalcTabletopLayout`, #80·#143)처럼 낮고 넓은 영역에서 [standard]보다 키가 클 때 쓴다. 책 자세(`CalcHingeSplitLayout`,
+  /// #285)는 늘 이 배열이고 두 블록 사이에 접힘선이 온다(`CalcKeypad.minSectionGap`). 높이가 [standard]의 약 절반이라
   /// 같은 높이에서 키가 약 2배가 된다(#80 당시 Fold 가로 반 접힘 19.9 → 39.9dp).
   /// 숫자부는 기본으로 오른쪽이고(블록 순서는 실물의 "함수부 다음 숫자부"를 읽는 순서로 옮긴 것), `CalcKeypad.numbersOnLeft`로
-  /// 좌우를 맞바꿀 수 있다 — 두 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, 사용자 결정).
+  /// 좌우를 맞바꿀 수 있다 — 세 배치 모두 손잡이에 따라 숫자부를 주로 쓰는 손 쪽에 둔다(#142, #143, #285, 사용자 결정).
   wide,
 }
 

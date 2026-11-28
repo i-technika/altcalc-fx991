@@ -835,7 +835,11 @@ class _Body extends ConsumerWidget {
                 minSectionGap: regions.minSectionGap,
               ) >=
               CalcTheme.keyTouchHeightUsableMin &&
-          regions.lcd.height >= CalcTheme.screenLcdMinHeight - _epsilon;
+          regions.lcd.height >= CalcTheme.screenLcdMinHeight - _epsilon &&
+          // LCD가 본체보다 좁은 배치(물리 힌지의 책 자세 — 숫자부 쪽 패널에만 LCD, #285)는 LCD 최소 높이의 가로/세로 비 폭
+          // ([_lcdMinWidth] 196dp) 이상이어야 한다 — 그보다 좁으면 줄 글자가 LCD 최소 높이 글자보다 작다(#285 R1, 옛
+          // `screenShortBookLcdMinWidth` 200dp와 같은 생각).
+          regions.lcd.width >= math.min(body.width, _lcdMinWidth) - _epsilon;
       return usable ? regions : null;
     }
 
@@ -1000,6 +1004,10 @@ class _Body extends ConsumerWidget {
 
   /// 크기·위치 비교 허용 오차 (dp) — 부동소수점 오차
   static const double _epsilon = 0.01;
+
+  /// 접힘선 기준 배치에서 본체보다 좁은 LCD가 가져야 하는 폭 (dp, #285 R1) — LCD 최소 높이 × 최소 가로/세로 비(112 × 1.75).
+  static const double _lcdMinWidth =
+      CalcTheme.screenLcdMinHeight * CalcTheme.screenLcdMinAspectRatio;
 
   /// 손잡이를 바꿔도 키패드가 [a] → [b]로 같은 자리인지 (부동소수점 오차 [_epsilon] 안). #143 전에는 테이블톱 키패드
   /// 블록 폭 상한 때문에 몇 dp만 옮겨 가는 창이 있어 16dp까지 같은 자리로 봤다(#80 R2) — 이제 가로 접힘선의 키패드는 아래
