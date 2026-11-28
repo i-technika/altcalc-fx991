@@ -500,7 +500,8 @@ class CalcTabletopLayout {
 ///
 /// - 키패드는 스크롤 영역 밖에 고정 배치한다(`CalcKeyButton`은 누르는 순간 입력한다).
 /// - LCD만 상태를 구독하고 키패드는 notifier만 읽으므로, 키 입력으로 키패드 50개가 다시 그려지지 않는다.
-/// - LCD 글자 크기는 LCD가 자기 크기에서 [LcdFontSizes.forSize]로 산출한다 (`fitFontsToSize`).
+/// - LCD 글자 크기는 LCD가 자기 크기에서 [LcdFontSizes.forSize]로 산출한다 (`fitFontsToSize`). 줄 글자 상한은 그린 키패드의 키
+///   숫자를 따른다([LcdFontSizes.lineMaxFontSizeFor], #270).
 /// - 좌우 여백은 [CalcTheme.screenPadding]만 둔다. 가장자리 열의 바깥쪽 일부가 Android 제스처
 ///   내비게이션 영역에 걸릴 수 있지만, `CalcKeyButton`이 그 영역에서 시작한 터치를 손을 뗄 때
 ///   확정하므로 뒤로가기 제스처와 충돌하지 않는다. 제스처 폭만큼 여백을 두면 모든 폰에서 키패드가 좁아진다.
@@ -671,7 +672,10 @@ class _BodyOriginCheck extends StatelessWidget {
 /// 상태를 구독해 LCD를 그린다. M1에서는 마지막 입력 기능의 각인을 입력 줄에 보여준다.
 /// TODO(M3): 수식 AST(`MathNodeWidget`)와 결과 표시로 대체한다.
 class _LcdPanel extends ConsumerWidget {
-  const _LcdPanel();
+  /// 줄 글자 상한 (dp) — 키 숫자를 따른다 ([LcdFontSizes.lineMaxFontSizeFor], #270)
+  final double maxLineFontSize;
+
+  const _LcdPanel({required this.maxLineFontSize});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -682,6 +686,7 @@ class _LcdPanel extends ConsumerWidget {
     return LcdDisplay(
       status: status,
       fitFontsToSize: true,
+      maxLineFontSize: maxLineFontSize,
       input: Text(
         lastInput?.label ?? '',
         key: const ValueKey('lcd-input-text'),
@@ -940,6 +945,21 @@ class _Body extends ConsumerWidget {
     final handednessKeepsArrangement = hingeLayouts.values.every(
       (l) => (l == null) == (hingeLayout == null),
     );
+    // LCD 줄 글자 상한 (#270): 그린 키패드의 키 숫자(배율 1)를 따라 올린다 — 큰 창에서도 LCD 글자 ÷ 키 숫자가 실물 비 아래로
+    // 내려가지 않게. 글자 배율과 무관하게 정한다(배치처럼). 키패드와 같은 크기·배열·배포 기능으로 잰다(`_KeypadPanel` — 다르면
+    // 그린 키 숫자와 어긋난다, #270 R1). `CalcKeypad`도 같은 값을 한 번 더 재지만, 이 위젯이 다시 빌드될 때(화면 크기·배치·손잡이·
+    // 배포 기능이 바뀔 때)뿐이다 — 키 입력 상태는 구독하지 않는다. 안내 화면(LCD를 숨김)에서는 재지 않는다.
+    final lineMaxFontSize = tooSmall
+        ? CalcTheme.lcdLineMaxFontSize
+        : LcdFontSizes.lineMaxFontSizeFor(
+            KeypadMetrics.compute(
+              keypad.size,
+              TextScaler.noScaling,
+              arrangement: keypadArrangement,
+              releasedFeatures: ref.watch(releasedKeyFeaturesProvider),
+              minSectionGap: minSectionGap,
+            ).numberMainLabelFontSize,
+          );
     // 안내 중에는 보이지 않게 하되 element·상태는 유지한다 (`maintainState` — 트리 모양이 바뀌지 않는다).
     Widget shown(Widget child, {bool visible = true}) => Visibility(
       visible: visible && !tooSmall,
@@ -964,7 +984,9 @@ class _Body extends ConsumerWidget {
         children: [
           Positioned.fromRect(
             rect: lcd,
-            child: shown(ordered(_lcdOrder, const _LcdPanel())),
+            child: shown(
+              ordered(_lcdOrder, _LcdPanel(maxLineFontSize: lineMaxFontSize)),
+            ),
           ),
           Positioned.fromRect(
             rect: keypad,

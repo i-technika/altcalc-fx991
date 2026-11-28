@@ -1,9 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
+import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/domain/models/handedness.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/release_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/providers/settings_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/screens/calculator_screen.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
@@ -13,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/bundled_fonts.dart';
+import '../support/ttf_cmap.dart';
 
 /// 큰 창의 LCD 줄 글자 상한 (#189, 사용자 결정 "글자 + LCD 높이 상한, 40dp") — 기준은 `CalcTheme.lcdLineMaxFontSize`와
 /// "화면 배치"·"가로형 배치" 절.
@@ -21,6 +25,8 @@ import '../support/bundled_fonts.dart';
 ///   높이) — 그보다 남는 높이는 키패드가 세로 한계까지 받는다(태블릿 세로).
 /// - 키패드도 쓰지 못해 남는 높이는 LCD가 상한 높이를 넘어 모두 받는다(#232 — 전에는 LCD 위가 빈 곳이었다). 줄 글자는 상한
 ///   그대로이고 입력·결과 줄만 높아진다. 가로형·가로 접힘선은 LCD가 위 띠(위 패널) 전체다(#284).
+/// - 계산기 화면의 줄 글자 상한은 40dp와 키 숫자 × [CalcTheme.lcdLineKeyNumberFontRatio] 중 큰 쪽이다(#270, 사용자 결정 "키 숫자
+///   따라 올림" — [LcdFontSizes.lineMaxFontSizeFor]). 배치 계산(LCD 높이)은 40dp 기준 그대로다.
 
 final _lcd = find.byType(LcdDisplay);
 final _keypad = find.byKey(const ValueKey('calc-keypad'));
@@ -42,13 +48,18 @@ Future<void> _pump(
   required Size size,
   EdgeInsets padding = EdgeInsets.zero,
   double textScale = 1.0,
+  Set<KeyFeature>? released,
 }) async {
   tester.view.physicalSize = size * tester.view.devicePixelRatio;
   addTearDown(tester.view.resetPhysicalSize);
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
-    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      if (released != null)
+        releasedKeyFeaturesProvider.overrideWithValue(released),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -70,6 +81,100 @@ Future<void> _pump(
 }
 
 void main() {
+  group('키 숫자를 따르는 줄 글자 상한 (#270)', () {
+    test('상한은 40dp와 키 숫자 × 비 중 큰 쪽이고, 키 숫자에 대해 줄지 않는다', () {
+      const ratio = CalcTheme.lcdLineKeyNumberFontRatio;
+      // 키 숫자가 40 / 0.62 ≈ 64.5dp 아래면 40dp 그대로다(폰·보통 태블릿).
+      for (final digit in const [0.0, 10.0, 32.4, 60.3, 64.0]) {
+        expect(LcdFontSizes.lineMaxFontSizeFor(digit), _cap, reason: '$digit');
+      }
+      for (final digit in const [65.0, 85.0, 170.7]) {
+        expect(
+          LcdFontSizes.lineMaxFontSizeFor(digit),
+          moreOrLessEquals(digit * ratio),
+          reason: '$digit',
+        );
+      }
+      var previous = 0.0;
+      for (var digit = 0.0; digit <= 400; digit += 0.7) {
+        final cap = LcdFontSizes.lineMaxFontSizeFor(digit);
+        expect(cap, greaterThanOrEqualTo(previous), reason: '$digit');
+        expect(cap, greaterThanOrEqualTo(_cap), reason: '$digit');
+        previous = cap;
+      }
+      // 키 숫자가 무한·NaN이면 기본 상한이다(유한한 값만 LCD에 넘긴다).
+      expect(LcdFontSizes.lineMaxFontSizeFor(double.infinity), _cap);
+      expect(LcdFontSizes.lineMaxFontSizeFor(double.nan), _cap);
+    });
+
+    test('올린 상한은 상한일 뿐이다 — LCD가 담을 수 있는 크기를 넘지 않고, 기본 상한에 묶인 LCD만 더 커진다', () {
+      for (final size in const [
+        Size(374, 321.3), // 폰 — 폭에 묶인다
+        Size(784, 273.52), // 태블릿 세로 — 높이에 묶인다
+        Size(1904, 559.8), // 1920×1200 가로 — 기본 상한에 묶인다
+        Size(3824, 898.5),
+      ]) {
+        final base = LcdFontSizes.forSize(size, TextScaler.noScaling).input;
+        for (final cap in const [40.0, 52.7, 80.0, 200.0]) {
+          final raised = LcdFontSizes.forSize(
+            size,
+            TextScaler.noScaling,
+            maxLineFontSize: cap,
+          ).input;
+          expect(raised, lessThanOrEqualTo(cap + 1e-9), reason: '$size $cap');
+          expect(
+            raised,
+            // 글자 크기 탐색(`fitFontSize`)은 시작값에 따라 1e-3 안에서 다를 수 있다.
+            greaterThanOrEqualTo(base - 1e-3),
+            reason: '$size $cap',
+          );
+          // 기본 상한보다 작은 글자(폭·높이에 묶인 LCD)는 상한을 올려도 그대로다.
+          if (base < _cap - 0.01) {
+            expect(
+              raised,
+              moreOrLessEquals(base, epsilon: 1e-3),
+              reason: '$size $cap',
+            );
+          }
+        }
+      }
+      // 1920×1200 가로의 LCD는 올린 상한 52.7dp까지 커진다.
+      expect(
+        LcdFontSizes.forSize(
+          const Size(1904, 559.8),
+          TextScaler.noScaling,
+          maxLineFontSize: 52.7,
+        ).input,
+        moreOrLessEquals(52.7),
+      );
+    });
+
+    test(
+      '비는 실물 잉크 비(LCD 글자 M ÷ 키 숫자 7·8 ≈ 15 / 23.5)를 번들 글꼴의 글자 크기 비로 바꾼 값이다',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        // 줄 글자는 Noto Sans Mono Medium, 키 숫자는 Saira SemiBold다 — 굵기가 바뀌면 아래 글꼴 파일도 바꾼다.
+        expect(CalcTheme.lcdInputStyle.fontWeight, FontWeight.w500);
+        expect(CalcTheme.keyMainLabelStyle.fontWeight, FontWeight.w600);
+        final mono = await rootBundle.load(
+          'assets/fonts/NotoSansMono-Medium.ttf',
+        );
+        final saira = await rootBundle.load('assets/fonts/Saira-SemiBold.ttf');
+        double ink(ByteData font, String ch) {
+          final b = readGlyphYBounds(font, ch.runes.single)!;
+          return b.yMax - b.yMin;
+        }
+
+        final lcdInk = ink(mono, 'M');
+        final digitInk = (ink(saira, '7') + ink(saira, '8')) / 2;
+        expect(
+          CalcTheme.lcdLineKeyNumberFontRatio * lcdInk / digitInk,
+          moreOrLessEquals(15 / 23.5, epsilon: 0.005),
+        );
+      },
+    );
+  });
+
   group('배치 계산: LCD 높이·줄 글자 상한', () {
     test(
       '세로형: 줄 글자는 상한 이하이고, LCD가 상한 높이를 넘는 것은 키패드가 세로 한계에 닿았을 때뿐이다 (#232)',
@@ -365,58 +470,124 @@ void main() {
         .first
         .mainLabelFontSize!;
 
-    // (이름, 창, 인셋, #189 전 줄 글자) — 줄 글자는 모두 상한에 멈춘다. 기록 영역은 어느 창에도 없다(#284).
-    const windows = <(String, Size, EdgeInsets, double)>[
+    /// 그려진 키 숫자 글자 크기 (배율 반영 전 — 숫자 7 키)
+    double digitFont(WidgetTester tester) => tester
+        .widget<CalcKeyButton>(
+          find.byWidgetPredicate(
+            (w) => w is CalcKeyButton && w.keyDef.id == CalcKeyId.num7,
+          ),
+        )
+        .mainLabelFontSize!;
+
+    // (이름, 창, 인셋, #189 전 줄 글자, 지금 줄 글자) — 줄 글자는 LCD가 담을 수 있는 크기와 상한 중 작은 쪽이다. 상한은 40dp와
+    // 키 숫자 × 0.62 중 큰 쪽이다(#270 — 키 숫자 64.5dp부터 올라간다). 12.9인치 iPad 세로는 상한이 41.3dp로 올라가지만 LCD가
+    // 배치의 목표 높이(40dp 기준 273.5dp)에서 멈춰 40dp다. 기록 영역은 어느 창에도 없다(#284).
+    const windows = <(String, Size, EdgeInsets, double, double)>[
       (
         '10인치 Android 세로',
         Size(800, 1280),
         EdgeInsets.only(top: 24, bottom: 48),
         49.0,
+        40.0,
       ),
       (
         '12.9인치 iPad 세로',
         Size(1024, 1366),
         EdgeInsets.only(top: 24, bottom: 20),
         54.1,
+        40.0,
       ),
       (
         '12.9인치 iPad 가로',
         Size(1366, 1024),
         EdgeInsets.only(top: 24, bottom: 20),
         54.7,
+        40.0,
       ),
-      ('데스크톱 2000×1400', Size(2000, 1400), EdgeInsets.zero, 82.0),
-      ('4K 데스크톱 3840×2160', Size(3840, 2160), EdgeInsets.zero, 133.0),
-      ('세로 창 2160×3800', Size(2160, 3800), EdgeInsets.zero, 164.5),
+      ('데스크톱 2000×1400', Size(2000, 1400), EdgeInsets.zero, 82.0, 54.9),
+      ('4K 데스크톱 3840×2160', Size(3840, 2160), EdgeInsets.zero, 133.0, 105.8),
+      ('세로 창 2160×3800', Size(2160, 3800), EdgeInsets.zero, 164.5, 115.1),
     ];
 
-    for (final (name, size, padding, before) in windows) {
-      testWidgets('$name: 줄 글자는 상한(#189 전 ${before}dp → '
-          '${_cap}dp)이고 LCD는 본체 윗변부터 키패드 바로 위까지다', (tester) async {
-        await _pump(tester, size: size, padding: padding);
-        expect(tester.takeException(), isNull);
-        final lcd = tester.getRect(_lcd);
-        final keypad = tester.getRect(_keypad);
-        expect(drawnLineFont(tester), moreOrLessEquals(_cap, epsilon: 1e-6));
-        // LCD는 상한 높이 이상이고(목표가 상한 높이에서 멈춘 태블릿 세로는 정확히 상한 높이), 위에 빈 곳이 없다(#232).
-        expect(
-          lcd.height,
-          greaterThanOrEqualTo(LcdFontSizes.heightAtMaxLineFont - 1e-6),
-        );
-        expect(
-          lcd.top,
-          moreOrLessEquals(padding.top + CalcTheme.screenPadding),
-        );
-        expect(
-          keypad.top - lcd.bottom,
-          moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
-        );
-        // 줄 글자는 키 메인 각인의 2.5배 아래에서 멈춘다. (#264 전에는 키 메인 각인도 상한 16.5dp에서 멈춰 약 2.4배였다 —
-        // 지금 키 각인은 상한 없이 키 높이의 실물 비율이라 큰 창일수록 이 비가 더 작다.)
-        expect(keyFont(tester), greaterThan(16.5));
-        expect(drawnLineFont(tester) / keyFont(tester), lessThan(2.5));
-      });
+    for (final (name, size, padding, before, now) in windows) {
+      testWidgets(
+        '$name: 줄 글자는 #189 전 ${before}dp → ${now}dp(상한 40dp 또는 키 숫자 따라, #270)이고 '
+        'LCD는 본체 윗변부터 키패드 바로 위까지다',
+        (tester) async {
+          await _pump(tester, size: size, padding: padding);
+          expect(tester.takeException(), isNull);
+          final lcd = tester.getRect(_lcd);
+          final keypad = tester.getRect(_keypad);
+          final line = drawnLineFont(tester);
+          final digit = digitFont(tester);
+          final cap = LcdFontSizes.lineMaxFontSizeFor(digit);
+          // 화면이 LCD에 넘긴 상한은 그린 키 숫자로 정한 값이다(#270 R1 — 키패드와 같은 크기·배열·배포 기능으로 잰다).
+          expect(
+            tester.widget<LcdDisplay>(_lcd).maxLineFontSize,
+            moreOrLessEquals(cap, epsilon: 1e-9),
+          );
+          expect(line, moreOrLessEquals(now, epsilon: 0.05));
+          // 화면은 그린 키패드의 키 숫자로 정한 상한을 LCD에 넘긴다.
+          expect(
+            line,
+            moreOrLessEquals(
+              LcdFontSizes.forSize(
+                lcd.size,
+                TextScaler.noScaling,
+                maxLineFontSize: cap,
+              ).input,
+            ),
+          );
+          if (now > _cap) {
+            // 키 숫자를 따라 올린 상한에 멈춘다 — LCD 글자 ÷ 키 숫자가 실물 비(글자 크기 비 0.62)다.
+            expect(line, moreOrLessEquals(cap, epsilon: 1e-6));
+            expect(
+              line / digit,
+              moreOrLessEquals(CalcTheme.lcdLineKeyNumberFontRatio),
+            );
+          } else {
+            expect(line, lessThanOrEqualTo(cap + 1e-6));
+          }
+          // LCD는 상한 높이 이상이고(목표가 상한 높이에서 멈춘 태블릿 세로는 정확히 상한 높이), 위에 빈 곳이 없다(#232).
+          expect(
+            lcd.height,
+            greaterThanOrEqualTo(LcdFontSizes.heightAtMaxLineFont - 1e-6),
+          );
+          expect(
+            lcd.top,
+            moreOrLessEquals(padding.top + CalcTheme.screenPadding),
+          );
+          expect(
+            keypad.top - lcd.bottom,
+            moreOrLessEquals(CalcTheme.screenLcdKeypadGap),
+          );
+          // 줄 글자는 키 메인 각인의 2.5배 아래에서 멈춘다. (#264 전에는 키 메인 각인도 상한 16.5dp에서 멈춰 약 2.4배였다 —
+          // 지금 키 각인은 상한 없이 키 높이의 실물 비율이고, 줄 글자 상한도 큰 창에서 키 숫자를 따라 올라간다, #270.)
+          expect(keyFont(tester), greaterThan(16.5));
+          expect(drawnLineFont(tester) / keyFont(tester), lessThan(2.5));
+        },
+      );
     }
+
+    testWidgets(
+      '배포 기능을 바꿔 그린 키패드도 LCD 상한은 그 키패드의 키 숫자를 따른다 (#270 R1 — 화면이 같은 배포 기능으로 잰다)',
+      (tester) async {
+        // 실물 인쇄 전체(배포 뒤 각인 포함, #267)를 그린 4K 가로 창
+        await _pump(
+          tester,
+          size: const Size(3840, 2160),
+          released: KeyFeature.values.toSet(),
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<LcdDisplay>(_lcd).maxLineFontSize,
+          moreOrLessEquals(
+            LcdFontSizes.lineMaxFontSizeFor(digitFont(tester)),
+            epsilon: 1e-9,
+          ),
+        );
+      },
+    );
 
     testWidgets(
       '폰 390×844는 상한에 닿지 않는다 (줄 글자 29.8dp — LCD는 상단 띠가 빠진 몫까지 받는다, #190)',
