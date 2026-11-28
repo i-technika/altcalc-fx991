@@ -748,6 +748,8 @@ class _LabelLimits {
       // 글자 수 비례 배분은 고정폭 글꼴에서 합 조건과 같다. 사이 간격은 상한으로 잡는다.
       // (두 칸 폭 `⇔`이 든 `a b/c⇔d/c`는 한 글자 `y`와 짝이라 우선 배분을 받으므로 비례 배분을 쓰지 않는다.)
       // 각인 띠 폭은 그린 키캡 폭이다 (#220 R1 — 실물처럼 각인이 키캡 폭 안에 놓인다).
+      // 각인 둘의 바깥 끝을 들이는 거리(#265)는 떼어 두지 않는다 — 긴 쌍은 실물처럼 들이는 거리를 줄여 키캡 폭을 다 쓴다
+      // (`keyLegendPairInset`). 각인 글자를 키울 때(#264) 폭 기준을 어디에 둘지 다시 정한다.
       final shift = def.shiftLegend;
       final alpha = def.alphaLegend;
       if (shift == null && alpha == null) continue;
