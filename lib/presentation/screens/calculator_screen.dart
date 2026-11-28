@@ -14,6 +14,7 @@ import '../l10n/calc_semantic_strings.dart';
 import '../l10n/settings_strings.dart';
 import '../providers/calc_provider.dart';
 import '../providers/device_provider.dart';
+import '../providers/release_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/calc_body_background.dart';
 import '../widgets/calc_keypad.dart';
@@ -880,6 +881,8 @@ class _KeypadPanel extends ConsumerWidget {
     return CalcKeypad(
       arrangement: arrangement,
       numbersOnLeft: numbersOnLeft,
+      // 배포된 기능의 각인만 인쇄한다 (#267)
+      releasedFeatures: ref.watch(releasedKeyFeaturesProvider),
       onKeyPressed: (id) => ref.read(calcProvider.notifier).pressKey(id),
       onKeyRepeat: (id) => ref.read(calcProvider.notifier).repeatKey(id),
       // 설정 키(ON)는 계산기 입력 대신 설정을 연다 (#190). 상태 머신에도 알려 모디파이어 대기를 푼다 — 다른 키를 누른

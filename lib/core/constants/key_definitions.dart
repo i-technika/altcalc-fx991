@@ -191,15 +191,55 @@ enum KeyFace {
   roundButton,
 }
 
+/// 각인을 보일지 정하는 배포 단위 (#267) — 그 기능이 배포돼야([releasedKeyFeatures]) 그 기능의 각인을 인쇄한다.
+///
+/// 기능이 없는 각인은 눌러도 아무 일이 없어 사용자를 헷갈리게 하므로, 기능이 들어가는 버전까지 숨긴다. 키 명세
+/// ([CalcKeyDef])는 실물 인쇄 그대로 두고, 여기서 정한 단위로 보이는 것만 가른다.
+enum KeyFeature {
+  /// Complex 모드 (v1.0) — ENG 키의 보라 `i`·보라 괄호 `∠`
+  complex,
+
+  /// Base-N 모드 (v1.3, 에픽 #244) — 파랑 `DEC`·`HEX`·`BIN`·`OCT`, `A`~`F`를 둘러싼 파란 괄호
+  baseN,
+
+  /// QR 코드 표시 (SHIFT+OPTN) — 앱에 넣지 않는 기능이다(제조사 서버 연동). 배포 계획이 없다.
+  qrCode,
+}
+
+/// 배포되는 기능 — **각인 표시를 정하는 한 곳** (#267).
+///
+/// 지금 값은 v1.0(Calculate·Complex·Equation/Func·Table)이다. 숨는 각인은 OPTN 키의 `QR`과 Base-N의 파랑 각인이다
+/// (v1.0에서 숨는 목록은 테스트 `key_definitions_test.dart` "배포 기능에 따른 각인 (#267)" 그룹이 고정한다).
+///
+/// 버전을 올릴 때 그 버전의 기능을 여기에 더한다 — v1.3에서 [KeyFeature.baseN]을 더한다. 되살아나는 범위:
+/// - SHIFT 각인([CalcKeyDef.shiftFeature] — 지금은 OPTN의 `QR`뿐): 각인·입력 해석(SHIFT 층)·스크린리더 문구가 함께.
+/// - 모드 전용 각인(Complex·Base-N): **인쇄만**. 그 모드에서의 키 기능과 스크린리더 문구는 그 모드 마일스톤이 만든다.
+/// 값을 바꾸면 같은 그룹에서 지금 값을 고정한 테스트 하나("배포 목록은 지금 v1.0이다")를 함께 고친다. "v1.0"이라 이름
+/// 붙인 나머지 검사는 v1.0 목록을 따로 적어 두어 그대로 돈다.
+/// 여기에 없는 기능의 각인도 명세에는 남아 있다([CalcKeyDef.printedShiftLegend]·[CalcKeyDef.printedBandLegends]).
+const Set<KeyFeature> releasedKeyFeatures = {KeyFeature.complex};
+
+/// 모든 기능 — 실물 인쇄 전체를 볼 때 쓴다([CalcKeyDef.printedBandLegends], 테스트)
+const Set<KeyFeature> allKeyFeatures = {
+  KeyFeature.complex,
+  KeyFeature.baseN,
+  KeyFeature.qrCode,
+};
+
 /// 모드 전용 각인이 가리키는 계산 모드 (#266, User's Guide 3쪽 "Key Markings").
 ///
 /// 실물은 SHIFT(노랑)·ALPHA(빨강) 말고 두 색을 더 쓴다 — 그 모드에 들어가야 쓸 수 있는 기능이다.
 enum KeyLegendMode {
   /// Complex 모드 — 보라색 각인(ENG 키의 `i`) 또는 보라 괄호로 둘러싼 각인(ENG 키의 `∠`)
-  complex,
+  complex(KeyFeature.complex),
 
   /// Base-N 모드 — 파란색 각인(`DEC`·`HEX`·`BIN`·`OCT`) 또는 파란 괄호로 둘러싼 각인(`A`~`F`)
-  baseN,
+  baseN(KeyFeature.baseN);
+
+  const KeyLegendMode(this.feature);
+
+  /// 이 모드의 각인이 보이려면 배포돼 있어야 하는 기능 (#267)
+  final KeyFeature feature;
 }
 
 /// 모드 전용 각인 하나 — 각인과 그 모드 (#266)
@@ -236,7 +276,7 @@ enum BandLegendRole {
   mode,
 }
 
-/// 키캡 위 각인 띠에 인쇄하는 각인 하나 (#266) — [CalcKeyDef.bandLegends]가 왼쪽부터 순서대로 돌려준다.
+/// 키캡 위 각인 띠에 인쇄하는 각인 하나 (#266) — [CalcKeyDef.bandLegendsIn]이 왼쪽부터 순서대로 돌려준다.
 ///
 /// 각인 띠를 그리는 쪽(`CalcKeyButton`)과 글자 크기를 재는 쪽(`KeypadMetrics`)이 같은 목록을 쓴다 — 한쪽만 아는 각인이
 /// 생기면 그 키만 글자가 줄거나 기준선이 갈린다(#264 R1).
@@ -279,6 +319,14 @@ class BandLegend {
 }
 
 /// 단일 키의 3단 각인(메인·SHIFT·ALPHA)과 모드 전용 각인, 카테고리를 정의하는 불변 모델.
+///
+/// 명세는 실물 인쇄 그대로다. 그 가운데 아직 배포되지 않은 기능의 각인은 숨긴다(#267, [releasedKeyFeatures]):
+/// - 배포된 기능만: [shiftLegend]·[shiftLabel]·[hasShift]·[bandLegends]. 입력 해석과 스크린리더가 SHIFT 층을 이 값으로
+///   가른다. 화면의 각인 띠는 키패드가 받은 배포 목록으로 [bandLegendsIn]을 불러 그린다 — 그 목록의 기본값이
+///   [releasedKeyFeatures]라 [bandLegends]와 같다.
+/// - 실물 인쇄 그대로: [printedShiftLegend]·[printedBandLegends]와 모드 전용 각인 필드([modeShiftLegend]·[modeLegend]·
+///   [alphaBracketMode]).
+/// - 배포 목록을 바꿔 볼 때: [shiftLegendIn]·[bandLegendsIn].
 @immutable
 class CalcKeyDef {
   /// 키 고유 식별자
@@ -287,21 +335,29 @@ class CalcKeyDef {
   /// 키캡 중앙에 표시되는 메인 각인
   final KeyLegend mainLegend;
 
-  /// SHIFT 후 입력되는 기능의 금색 각인. 없으면 `null`.
-  final KeyLegend? shiftLegend;
+  /// SHIFT 후 입력되는 기능의 금색 각인 — 실물 인쇄 그대로. 없으면 `null`.
+  /// 앱은 배포된 기능의 각인만 돌려주는 [shiftLegend]를 쓴다.
+  final KeyLegend? printedShiftLegend;
+
+  /// [printedShiftLegend]의 기능이 속한 배포 단위 (#267). 그 기능이 배포되지 않았으면 SHIFT 각인을 숨기고 SHIFT 기능이
+  /// 없는 키로 다룬다. `null`이면 늘 있는 기능이다(대부분의 키).
+  final KeyFeature? shiftFeature;
 
   /// ALPHA 후 입력되는 기능의 빨간색 각인. 없으면 `null`.
   final KeyLegend? alphaLegend;
 
   /// 그 모드에서 SHIFT 후 입력되는 기능의 각인 (#266) — SHIFT 색 글자를 모드 색 괄호가 둘러싼다. 실물 ENG 키의 `∠`
   /// (Complex 모드의 SHIFT+ENG)뿐이다. [shiftLegend] 왼쪽에 인쇄한다. 없으면 `null`.
+  /// 이 필드와 [modeLegend]·[alphaBracketMode]는 실물 인쇄 그대로다 — 그 모드가 배포돼야 [bandLegends]에 들어간다(#267).
   final ModeLegend? modeShiftLegend;
 
-  /// 그 모드에서 키를 그냥 누르면 입력되는 기능의 각인 (#266) — 모드 색으로 인쇄한다. 실물 ENG 키의 보라 `i`(Complex)와
+  /// 그 모드에서 키를 그냥 누르면 입력되는 기능의 각인 (#266) — 모드 색으로 인쇄한다. **실물 인쇄 그대로다** — 그 모드가
+  /// 배포됐는지는 [bandLegendsIn]이 가른다(#267). 모드별 기능을 만들 때 이 필드만 읽어 배포 전 기능을 켜지 않는다. 실물 ENG 키의 보라 `i`(Complex)와
   /// x²·x^◼·log◼◻·ln 키의 파랑 `DEC`·`HEX`·`BIN`·`OCT`(Base-N)다. 각인 띠의 오른쪽 끝에 인쇄한다. 없으면 `null`.
   final ModeLegend? modeLegend;
 
-  /// [alphaLegend]를 둘러싸는 괄호의 모드 (#266) — 그 모드에서는 키를 그냥 눌러 ALPHA 각인의 글자를 입력한다. 실물 (−)·
+  /// [alphaLegend]를 둘러싸는 괄호의 모드 (#266) — 그 모드에서는 키를 그냥 눌러 ALPHA 각인의 글자를 입력한다.
+  /// **실물 인쇄 그대로다** — 그 모드가 배포됐는지는 [bandLegendsIn]이 가른다(#267). 실물 (−)·
   /// °'"·x⁻¹·sin·cos·tan 키의 빨강 `A`~`F`를 둘러싼 파란 괄호(Base-N의 16진 숫자)다. 없으면 `null`.
   final KeyLegendMode? alphaBracketMode;
 
@@ -314,14 +370,20 @@ class CalcKeyDef {
   const CalcKeyDef({
     required this.id,
     required this.mainLegend,
-    this.shiftLegend,
+    KeyLegend? shiftLegend,
+    this.shiftFeature,
     this.alphaLegend,
     this.modeShiftLegend,
     this.modeLegend,
     this.alphaBracketMode,
     required this.category,
     this.face = KeyFace.keycap,
-  }) : assert(
+  }) : printedShiftLegend = shiftLegend,
+       assert(
+         shiftFeature == null || shiftLegend != null,
+         '배포 단위는 SHIFT 각인이 있을 때만 준다',
+       ),
+       assert(
          face != KeyFace.roundButton ||
              (shiftLegend == null &&
                  alphaLegend == null &&
@@ -341,6 +403,15 @@ class CalcKeyDef {
   /// 메인 각인의 한 줄 표기 ([KeyLegend.plainText] — 화면 각인에는 쓰지 않는다)
   String get mainLabel => mainLegend.plainText;
 
+  /// SHIFT 후 입력되는 기능의 금색 각인 — 배포된 기능만이다(#267, [releasedKeyFeatures]). 없으면 `null`.
+  KeyLegend? get shiftLegend => shiftLegendIn(releasedKeyFeatures);
+
+  /// 기능 [released]가 배포됐을 때의 SHIFT 각인 (#267). 그 각인의 기능([shiftFeature])이 [released]에 없으면 `null`.
+  KeyLegend? shiftLegendIn(Set<KeyFeature> released) =>
+      shiftFeature == null || released.contains(shiftFeature)
+      ? printedShiftLegend
+      : null;
+
   /// SHIFT 각인의 한 줄 표기. 없으면 `null`.
   String? get shiftLabel => shiftLegend?.plainText;
 
@@ -351,22 +422,47 @@ class CalcKeyDef {
   ///
   /// 순서는 실물 인쇄 순서다: 괄호로 둘러싼 모드 전용 SHIFT 각인([modeShiftLegend]) → SHIFT 각인 → ALPHA 각인(괄호는
   /// [alphaBracketMode]) → 모드 색 각인([modeLegend]). 실물 ENG 키는 `┌∠┐ ← i`, x² 키는 `x³ DEC`, (−) 키는 `log ┌A┐`다.
-  List<BandLegend> get bandLegends => [
-    if (modeShiftLegend case final m?)
-      BandLegend(m.legend, BandLegendRole.shift, mode: m.mode, bracketed: true),
-    if (shiftLegend case final l?) BandLegend(l, BandLegendRole.shift),
-    if (alphaLegend case final l?)
-      BandLegend(
-        l,
-        BandLegendRole.alpha,
-        mode: alphaBracketMode,
-        bracketed: alphaBracketMode != null,
-      ),
-    if (modeLegend case final m?)
-      BandLegend(m.legend, BandLegendRole.mode, mode: m.mode),
-  ];
+  ///
+  /// 배포된 기능의 각인만이다(#267, [releasedKeyFeatures]) — v1.0에서는 x² 키가 `x³` 하나, (−) 키가 괄호 없는 `log A`다.
+  List<BandLegend> get bandLegends => bandLegendsIn(releasedKeyFeatures);
 
-  /// SHIFT 기능 보유 여부
+  /// 실물 인쇄 그대로의 각인 띠 — 모든 기능이 배포됐을 때의 [bandLegends] (#267)
+  List<BandLegend> get printedBandLegends => bandLegendsIn(allKeyFeatures);
+
+  /// 기능 [released]가 배포됐을 때 각인 띠에 인쇄하는 각인 — 왼쪽부터 (#267).
+  ///
+  /// 배포되지 않은 기능의 각인은 뺀다: SHIFT 각인([shiftFeature]), 모드 전용 각인([KeyLegendMode.feature]). 괄호의 모드가
+  /// 배포되지 않았으면 괄호만 빼고 ALPHA 각인은 남긴다(빨강 `A`~`F`는 변수다). 남은 각인은 그 수대로 다시 놓인다 —
+  /// 하나면 키캡 가운데다(`CalcKeyButton`의 각인 줄, #265).
+  List<BandLegend> bandLegendsIn(Set<KeyFeature> released) {
+    bool shown(KeyLegendMode mode) => released.contains(mode.feature);
+    final bracket = switch (alphaBracketMode) {
+      final mode? when shown(mode) => mode,
+      _ => null,
+    };
+    return [
+      if (modeShiftLegend case final m? when shown(m.mode))
+        BandLegend(
+          m.legend,
+          BandLegendRole.shift,
+          mode: m.mode,
+          bracketed: true,
+        ),
+      if (shiftLegendIn(released) case final l?)
+        BandLegend(l, BandLegendRole.shift),
+      if (alphaLegend case final l?)
+        BandLegend(
+          l,
+          BandLegendRole.alpha,
+          mode: bracket,
+          bracketed: bracket != null,
+        ),
+      if (modeLegend case final m? when shown(m.mode))
+        BandLegend(m.legend, BandLegendRole.mode, mode: m.mode),
+    ];
+  }
+
+  /// SHIFT 기능 보유 여부 — 배포된 기능만 센다(#267)
   bool get hasShift => shiftLegend != null;
 
   /// ALPHA 기능 보유 여부
@@ -556,7 +652,9 @@ const List<List<CalcKeyDef>> controlLeftRows = [
     CalcKeyDef(
       id: CalcKeyId.optn,
       mainLegend: LegendText('OPTN'),
+      // QR 코드 표시는 앱에 넣지 않는 기능이라 각인을 숨긴다 (#267 — 명세에는 실물 인쇄대로 남긴다)
       shiftLegend: LegendText('QR'),
+      shiftFeature: KeyFeature.qrCode,
       category: KeyCategory.function,
     ),
     CalcKeyDef(

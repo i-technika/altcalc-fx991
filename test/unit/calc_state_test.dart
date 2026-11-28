@@ -225,6 +225,26 @@ void main() {
     });
   });
 
+  group('배포 전이라 숨긴 SHIFT 기능 — SHIFT + OPTN(QR) (#267)', () {
+    test('SHIFT 층으로 입력을 만들 수 없고, SHIFT 대기 중에 누르면 대기만 풀린다', () {
+      expect(keyDefOf(CalcKeyId.optn).printedShiftLegend?.plainText, 'QR');
+      expect(KeyInput.labelOf(CalcKeyId.optn, KeyLayer.shift), isNull);
+      expect(
+        () => KeyInput(CalcKeyId.optn, KeyLayer.shift),
+        throwsA(isA<AssertionError>()),
+      );
+      final before = CalcState.initial.pressKey(CalcKeyId.num7);
+      final after = before.pressKey(CalcKeyId.shift).pressKey(CalcKeyId.optn);
+      expect(after.modifier, KeyModifier.none);
+      expect(after.inputCount, before.inputCount);
+      expect(after.lastInput, before.lastInput);
+      // 메인 기능(OPTN)은 그대로 입력된다
+      final main = after.pressKey(CalcKeyId.optn);
+      expect(main.lastInput, KeyInput(CalcKeyId.optn, KeyLayer.main));
+      expect(main.lastInput!.label, 'OPTN');
+    });
+  });
+
   group('반복 입력', () {
     test('모디파이어 없이 누른 반복 키는 메인 기능으로 반복된다', () {
       for (final id in autoRepeatKeys) {

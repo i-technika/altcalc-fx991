@@ -10,6 +10,9 @@ import 'device_locale_scope.dart';
 /// 모드 전용 각인([CalcKeyDef.modeLegend]·[CalcKeyDef.modeShiftLegend]·[CalcKeyDef.alphaBracketMode], #266)의 기능은
 /// 읽지 않는다 — 인쇄만 있고 그 모드의 기능이 아직 없다. 기능이 생기는 마일스톤(Complex M7·Base-N M14)에서 그 모드에 있을
 /// 때의 문구를 더한다(#33).
+///
+/// 문구 표는 실물 인쇄(키 명세)와 같은 층을 담는다 — 아직 배포되지 않은 기능의 문구(OPTN의 SHIFT `QR`)도 표에는 있다.
+/// 읽을 때는 배포된 기능만 읽는다([CalcSemanticStrings.keyFunction]·[CalcSemanticStrings.keyButtonHint], #267).
 @immutable
 class KeySpeech {
   /// 키캡 메인 기능
@@ -72,8 +75,12 @@ abstract class CalcSemanticStrings {
   /// ALPHA 기능 앞에 붙는 말
   String get alphaLayer;
 
-  /// [id] 키의 [layer] 기능 음성 라벨. 그 층에 기능이 없으면 `null`.
-  String? keyFunction(CalcKeyId id, KeyLayer layer) => keys[id]!.of(layer);
+  /// [id] 키의 [layer] 기능 음성 라벨. 그 층에 기능이 없으면 `null` — 아직 배포되지 않은 기능도 없는 것으로 본다
+  /// (#267, [CalcKeyDef.hasShift]).
+  String? keyFunction(CalcKeyId id, KeyLayer layer) =>
+      layer == KeyLayer.shift && !keyDefOf(id).hasShift
+      ? null
+      : keys[id]!.of(layer);
 
   /// 키 버튼의 시맨틱 라벨 — 메인 기능 (예: "사인").
   String keyButton(CalcKeyId id) => keys[id]!.main;
@@ -83,10 +90,11 @@ abstract class CalcSemanticStrings {
   /// iOS VoiceOver는 라벨을 먼저 읽고 잠시 뒤 힌트를 읽는다(힌트를 끈 사용자는 듣지 않는다).
   /// Android TalkBack은 라벨과 힌트를 이어 한 번에 읽는다 — 키를 훑을 때 낭독이 긴 문제는 #2에서 다룬다.
   String? keyButtonHint(CalcKeyId id) {
-    final speech = keys[id]!;
     final parts = [
-      if (speech.shift case final shift?) '$shiftLayer $shift',
-      if (speech.alpha case final alpha?) '$alphaLayer $alpha',
+      if (keyFunction(id, KeyLayer.shift) case final shift?)
+        '$shiftLayer $shift',
+      if (keyFunction(id, KeyLayer.alpha) case final alpha?)
+        '$alphaLayer $alpha',
     ];
     return parts.isEmpty ? null : parts.join(', ');
   }

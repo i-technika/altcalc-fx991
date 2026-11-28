@@ -153,7 +153,7 @@ void main() {
       for (final k in allKeys) {
         for (final legend in [
           k.mainLegend,
-          for (final item in k.bandLegends) item.legend,
+          for (final item in k.printedBandLegends) item.legend,
         ]) {
           for (final piece in legend.texts) {
             for (var i = 0; i < piece.text.length; i++) {
@@ -174,7 +174,11 @@ void main() {
       // 키캡에서는 그림으로 바꾼 `√`·`∛`·위첨자도 여기서는 글자로 그린다.
       final missing = <String>{};
       for (final key in allKeys) {
-        for (final label in [key.mainLabel, key.shiftLabel, key.alphaLabel]) {
+        for (final label in [
+          key.mainLabel,
+          key.printedShiftLegend?.plainText,
+          key.alphaLabel,
+        ]) {
           for (final code in (label ?? '').runes) {
             if (!mono.contains(code) && !fallback.contains(code)) {
               missing.add('${key.id.name}: ${_describe(code)}');
@@ -195,7 +199,7 @@ void main() {
         for (final k in allKeys) {
           for (final legend in [
             k.mainLegend,
-            for (final item in k.bandLegends) item.legend,
+            for (final item in k.printedBandLegends) item.legend,
           ]) {
             for (final piece in legend.texts) {
               for (var i = 0; i < piece.text.length; i++) {

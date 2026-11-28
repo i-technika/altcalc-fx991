@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itechnika_altcalc_fx991/core/constants/key_definitions.dart';
 import 'package:itechnika_altcalc_fx991/core/theme/calc_theme.dart';
 import 'package:itechnika_altcalc_fx991/main.dart';
+import 'package:itechnika_altcalc_fx991/presentation/providers/release_provider.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_key_button.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/calc_keypad.dart';
 import 'package:itechnika_altcalc_fx991/presentation/widgets/key_legend_view.dart';
@@ -184,13 +185,26 @@ Future<void> _pumpApp(
   Size size,
   double textScale, {
   double pixelRatio = 2,
+
+  /// 각인 띠에 인쇄할 기능 (#267) — 기본은 앱 그대로(배포 목록). 실물 인쇄 전체를 보려면 [allKeyFeatures]를 준다.
+  Set<KeyFeature>? released,
 }) async {
   tester.view.devicePixelRatio = pixelRatio;
   tester.view.physicalSize = size * pixelRatio;
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-  await tester.pumpWidget(const ProviderScope(child: AltCalcApp()));
+  await tester.pumpWidget(
+    ProviderScope(
+      // override는 늘 둔다 — 한 테스트 안에서 값을 바꿔 다시 띄울 수 있게(override를 나중에 더하는 것은 받지 않는다)
+      overrides: [
+        releasedKeyFeaturesProvider.overrideWithValue(
+          released ?? releasedKeyFeatures,
+        ),
+      ],
+      child: const AltCalcApp(),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -377,7 +391,7 @@ enum _Raise {
 /// 한도를 다시 정해야 한다("넘치는 각인이 있는 키의 위 키는 원형 버튼이다" 검사).
 final Map<String, KeyLegend> _overflowingLegends = {
   for (final id in CalcKeyId.values)
-    if (keyDefOf(id).shiftLegend case final l?
+    if (keyDefOf(id).printedShiftLegend case final l?
         when l.plainText == 'd/dx◼' || l.plainText.startsWith('∑'))
       l.plainText: l,
 };
@@ -532,6 +546,18 @@ void main() {
         expectRaise(scaledRaised, scaledRaise);
         // 세로 창은 글자 배율이 띠 글자 크기를 실제로 바꿔야 배율 검사가 뜻이 있다
         if (scales) expect(scaled, greaterThan(base + 0.1));
+
+        // 실물 인쇄 전체(#267 — 배포 전이라 숨긴 Base-N의 파랑 각인·괄호, `QR`까지 그린 화면)에서도 같다. 숨긴 각인은
+        // 띠 글자 크기를 바꾸지 않는다
+        await _pumpApp(tester, size, 1.0, released: allKeyFeatures);
+        expect(find.text('DEC'), findsOneWidget);
+        final (full, fullRaised) = _expectBandBaselines(tester);
+        expectRaise(fullRaised, raise);
+        expect(full, moreOrLessEquals(base, epsilon: 1e-9));
+        await _pumpApp(tester, size, 1.3, released: allKeyFeatures);
+        final (fullScaled, fullScaledRaised) = _expectBandBaselines(tester);
+        expectRaise(fullScaledRaised, scaledRaise);
+        expect(fullScaled, moreOrLessEquals(scaled, epsilon: 1e-9));
       });
     }
   });
@@ -633,7 +659,15 @@ void main() {
         testWidgets(
           '$size·픽셀 비 $pixelRatio·글자 배율 $scale: ${id.name} 키 $text의 괄호가 그린 기준선을 실물 비율로 걸친다',
           (tester) async {
-            await _pumpApp(tester, size, scale, pixelRatio: pixelRatio);
+            // sin 키 `D`의 파란 괄호(Base-N)는 배포 전이라 숨긴다(#267) — 실물 인쇄 전체를 그려 놓고 본다.
+            // ENG 키 `∠`의 보라 괄호(Complex)는 배포 목록 그대로의 화면에서 본다.
+            await _pumpApp(
+              tester,
+              size,
+              scale,
+              pixelRatio: pixelRatio,
+              released: id == CalcKeyId.sin ? allKeyFeatures : null,
+            );
             final boundary = tester.renderObject<RenderRepaintBoundary>(
               find
                   .descendant(
@@ -908,11 +942,12 @@ void main() {
   });
 
   test('넘치는 각인이 있는 키의 위 키는 원형 버튼이다 (#264 — 위 키 쪽 간격까지 올려도 키캡·그림자와 겹치지 않는다)', () {
-    // 키 버튼과 같은 판정으로 모은다 — SHIFT·ALPHA 각인 가운데 하나라도 한 줄 아래로 넘치는 키
+    // 키 버튼과 같은 판정으로 모은다 — SHIFT·ALPHA 각인 가운데 하나라도 한 줄 아래로 넘치는 키.
+    // 명세 전체(실물 인쇄)를 본다 — 배포 전이라 숨긴 각인(#267)이 되살아날 때도 이 불변식이 지켜져야 한다
     final overhanging = [
       for (final def in allKeys)
         if ([
-          (def.shiftLegend, CalcTheme.keyShiftLabelStyle),
+          (def.printedShiftLegend, CalcTheme.keyShiftLabelStyle),
           (def.alphaLegend, CalcTheme.keyAlphaLabelStyle),
         ].any((e) => e.$1 != null && KeyLegendView.overhangsLine(e.$1!, e.$2)))
           def,
@@ -920,13 +955,13 @@ void main() {
     // 모드 전용 각인(#266)에는 넘치는 각인이 없다 — 키 버튼은 각인 띠 목록 전체로 판정한다
     expect([
       for (final def in allKeys)
-        if (def.bandLegends.any(
+        if (def.printedBandLegends.any(
           (b) => KeyLegendView.overhangsLine(b.legend, bandLegendStyle(b)),
         ))
           def.id,
     ], overhanging.map((d) => d.id));
     expect(
-      overhanging.map((d) => d.shiftLegend?.plainText),
+      overhanging.map((d) => d.printedShiftLegend?.plainText),
       unorderedEquals(_overflowingLegends.keys),
     );
     // 화면의 열 맞춤 — 상단 조작부 두 행(왼쪽 2열·커서 패드 2열·오른쪽 2열)과 함수부가 한 블록이다. 숫자부는 구역 사이

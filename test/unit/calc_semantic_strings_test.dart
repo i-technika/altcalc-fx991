@@ -64,24 +64,22 @@ void main() {
         expect(strings.keys.keys.toSet(), CalcKeyId.values.toSet());
       });
 
-      test(
-        'SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다 (MENU·AC에는 SHIFT 기능이 없다, #253)',
-        () {
-          for (final def in allKeys) {
-            final speech = strings.keys[def.id]!;
-            expect(
-              speech.shift != null,
-              def.hasShift,
-              reason: '${def.id.name} SHIFT',
-            );
-            expect(
-              speech.alpha != null,
-              def.hasAlpha,
-              reason: '${def.id.name} ALPHA',
-            );
-          }
-        },
-      );
+      test('SHIFT/ALPHA 음성 라벨은 그 층에 각인이 있는 키에만 있다 (MENU·AC에는 SHIFT 기능이 없다, #253)', () {
+        for (final def in allKeys) {
+          final speech = strings.keys[def.id]!;
+          // 문구 표는 실물 인쇄(명세)의 층을 담는다 — 배포 전이라 숨긴 기능(OPTN의 QR, #267)의 문구도 표에는 있다
+          expect(
+            speech.shift != null,
+            def.printedShiftLegend != null,
+            reason: '${def.id.name} SHIFT',
+          );
+          expect(
+            speech.alpha != null,
+            def.hasAlpha,
+            reason: '${def.id.name} ALPHA',
+          );
+        }
+      });
 
       test('음성 라벨에는 표시용 기호가 없다', () {
         for (final speech in strings.keys.values) {
@@ -142,6 +140,23 @@ void main() {
         // 실물 SHIFT 각인을 뺀 MENU(SETUP)·AC(OFF)는 힌트가 없다 (#253)
         expect(strings.keyButtonHint(CalcKeyId.menu), isNull);
         expect(strings.keyButtonHint(CalcKeyId.ac), isNull);
+        // 배포 전이라 숨긴 기능은 읽지 않는다 (#267) — OPTN의 SHIFT `QR`
+        expect(strings.keys[CalcKeyId.optn]!.shift, isNotNull);
+        expect(strings.keyFunction(CalcKeyId.optn, KeyLayer.shift), isNull);
+        expect(strings.keyButtonHint(CalcKeyId.optn), isNull);
+        // 읽는 층은 키 명세의 배포된 층과 같다
+        for (final def in allKeys) {
+          expect(
+            strings.keyFunction(def.id, KeyLayer.shift) != null,
+            def.hasShift,
+            reason: def.id.name,
+          );
+          expect(
+            strings.keyFunction(def.id, KeyLayer.alpha) != null,
+            def.hasAlpha,
+            reason: def.id.name,
+          );
+        }
       });
 
       test('켜진 표시기는 모두 기호 없는 의미 라벨을 갖고, 꺼진 표시기는 읽지 않는다', () {
